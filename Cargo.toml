@@ -1,0 +1,15 @@
+[package]
+name = "pepe"
+version = "0.1.1"
+authors = ["Omar MHAIMDAT"]
+edition = "2021"
+
+[dependencies]
+clap = { version = "4.5.23", features = ["derive"] }
+tokio = { version = "1", features = ["full"] }
+reqwest = { version = "0.12.12", default-features = false, features = ["json", "rustls-tls"] }
+futures = "0.3.17"
+tokio-stream = "0.1"
+ratatui = "0.29.0"
+crossterm = "0.28.1"
+indicatif = "0.17"
