@@ -348,9 +348,17 @@ impl Dashboard {
     }
 
     fn render_progress(&self, f: &mut Frame, area: Rect) {
+        let chunks = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([Constraint::Percentage(20), Constraint::Percentage(80)])
+            .split(area);
+
         let percent = (self.stats.count * 100) / self.total_requests.max(1);
-        let bar_width = 50;
-        let filled = (percent * bar_width) / 100;
+
+        // Fixed elements: borders(2) + "Progress"(8) + "[]"(2) + "100%"(4) + safety margin(2)
+        let fixed_elements = 18;
+        let bar_width = chunks[1].width.saturating_sub(fixed_elements) as usize;
+        let filled = (percent as usize * bar_width) / 100;
         let progress_bar = format!(
             "{} [{}{}] {}%",
             "Progress",
@@ -359,11 +367,27 @@ impl Dashboard {
             percent
         );
 
+        // Duration widget remains unchanged
+        let formatted_duration = format!(
+            "{:02}:{:02}:{:02}",
+            self.elapsed as u64 / 3600,
+            self.elapsed as u64 % 3600 / 60,
+            self.elapsed as u64 % 60
+        );
+        f.render_widget(
+            Paragraph::new(vec![Line::from(vec![
+                Span::styled("Duration: ", Style::default().fg(Color::Yellow)),
+                Span::raw(formatted_duration),
+            ])])
+            .block(Block::default().borders(Borders::ALL)),
+            chunks[0],
+        );
+
         f.render_widget(
             Paragraph::new(progress_bar)
                 .style(Style::default().fg(Color::Green))
                 .block(Block::default().borders(Borders::ALL)),
-            area,
+            chunks[1],
         );
     }
 
@@ -535,7 +559,7 @@ impl Dashboard {
                 Constraint::Length(15), // Charts
                 Constraint::Min(0),     // Request Log
             ])
-            .split(f.size());
+            .split(f.area());
 
         self.render_header(f, chunks[0]);
         self.render_progress(f, chunks[1]);

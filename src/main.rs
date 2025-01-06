@@ -18,7 +18,7 @@ mod ui;
 
 #[derive(Parser, Debug, Clone)]
 #[command(name = "pepe")]
-#[command(version = "0.0.1")]
+#[command(version = env!("CARGO_PKG_VERSION"))]
 #[command(about = "HTTP load generator")]
 // #[command(long_about = USAGE)]
 #[clap(disable_help_flag = true)]
@@ -49,7 +49,7 @@ struct Args {
     body_file: Option<String>,
     #[clap(short = 'T', long, default_value = "text/html")]
     content_type: String,
-    #[clap(short, long, default_value = "pepe/0.0.1")]
+    #[clap(short, long, default_value = concat!("pepe/", env!("CARGO_PKG_VERSION")))]
     user_agent: String,
     #[clap(short, long)]
     basic_auth: Option<String>,
@@ -109,124 +109,129 @@ struct ResponseStats {
     partial_response: Option<String>,
 }
 
+// Add custom error type
+#[derive(Debug)]
+enum PepeError {
+    HeaderParseError(String),
+    RequestError(reqwest::Error),
+    IoError(std::io::Error),
+}
+
+impl std::fmt::Display for PepeError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::HeaderParseError(msg) => write!(f, "Header parse error: {}", msg),
+            Self::RequestError(e) => write!(f, "Request error: {}", e),
+            Self::IoError(e) => write!(f, "IO error: {}", e),
+        }
+    }
+}
+
+impl std::error::Error for PepeError {}
+
+// Modified request headers handling
 async fn run(
     args: &Args,
     tx: mpsc::Sender<ResponseStats>,
-) -> (Vec<ResponseStats>, std::time::Duration) {
-    // Clone values we need before spawning tasks
-    let number = args.number;
-    let url = args.url.clone();
-    let method = args.method.clone();
-    let user_agent = args.user_agent.clone();
-    let headers = args.headers.clone();
-    let concurrency = args.concurrency;
-
+) -> Result<(Vec<ResponseStats>, std::time::Duration), PepeError> {
     let mut request_headers = reqwest::header::HeaderMap::new();
-    // Add user agent if not present
-    request_headers.insert(USER_AGENT, user_agent.parse().unwrap());
-    request_headers.extend(
-        headers
-            .iter()
-            .map(|header| {
-                let parts: Vec<&str> = header.splitn(2, ':').collect();
-                if parts.len() == 2 {
-                    (
-                        reqwest::header::HeaderName::from_bytes(parts[0].as_bytes()).unwrap(),
-                        reqwest::header::HeaderValue::from_str(parts[1]).unwrap(),
-                    )
-                } else {
-                    (
-                        reqwest::header::HeaderName::from_bytes(parts[0].as_bytes()).unwrap(),
-                        reqwest::header::HeaderValue::from_str("").unwrap(),
-                    )
-                }
-            })
-            .collect::<reqwest::header::HeaderMap>(),
+
+    // Add user agent
+    request_headers.insert(
+        USER_AGENT,
+        args.user_agent
+            .parse::<reqwest::header::HeaderValue>()
+            .map_err(|e| PepeError::HeaderParseError(e.to_string()))?,
     );
-    
 
-    let semaphore = Arc::new(Semaphore::new(concurrency as usize));
+    // Parse headers safely
+    for header in &args.headers {
+        let parts: Vec<&str> = header.splitn(2, ':').collect();
+        if parts.len() == 2 {
+            let name = reqwest::header::HeaderName::from_bytes(parts[0].trim().as_bytes())
+                .map_err(|e| PepeError::HeaderParseError(e.to_string()))?;
+            let value = reqwest::header::HeaderValue::from_str(parts[1].trim())
+                .map_err(|e| PepeError::HeaderParseError(e.to_string()))?;
+            request_headers.insert(name, value);
+        }
+    }
+
+    let semaphore = Arc::new(Semaphore::new(args.concurrency as usize));
     let client = Arc::new(reqwest::Client::new());
-
     let all_start = std::time::Instant::now();
+
     // Spawn request handler
     let handler = tokio::spawn({
         let client = client.clone();
-
+        let args = args.clone();
         async move {
-            for _i in 0..number {
+            for _i in 0..args.number {
                 let sem = semaphore.clone();
                 let tx = tx.clone();
-                let permit = sem.acquire_owned().await.unwrap();
+                let permit = sem.acquire_owned().await.expect("Semaphore acquire failed");
                 let client = client.clone();
-                let url = url.clone();
-                let method = method.clone();
+                let url = args.url.clone();
+                let method = args.method.clone();
                 let headers = request_headers.clone();
 
                 tokio::spawn(async move {
                     let start = std::time::Instant::now();
+                    let method = reqwest::Method::from_bytes(method.as_bytes())
+                        .unwrap_or(reqwest::Method::GET);
+
                     let response = client
-                        .request(
-                            reqwest::Method::from_bytes(method.as_bytes()).unwrap(),
-                            &url,
-                        )
-                        .headers(
-                            headers
-                        )
+                        .request(method.clone(), &url)
+                        .headers(headers)
                         .send()
                         .await;
 
                     let stats = match response {
-                        Ok(resp) => ResponseStats {
-                            duration: start.elapsed(),
-                            status_code: resp.status(),
-                            content_length: resp.content_length(),
-                            url,
-                            method,
-                            elapsed: all_start.elapsed(),
-                            total_requests: number as usize,
-                            concurrency: concurrency as usize,
-                            // Add partial response if it's not too long max 1000 chars
-                            partial_response: resp
-                                .text()
-                                .await
-                                .ok()
-                                .map(|text| text.replace("\n", " ").replace("\r", " "))
-                                .map(|text| {
-                                    if text.len() > 100 {
-                                        text[..100].to_string()
-                                    } else {
-                                        text
-                                    }
-                                }),
-                        },
-                        Err(e) => ResponseStats {
-                            duration: start.elapsed(),
-                            status_code: reqwest::StatusCode::INTERNAL_SERVER_ERROR,
-                            content_length: None,
-                            url,
-                            method,
-                            elapsed: all_start.elapsed(),
-                            total_requests: number as usize,
-                            concurrency: concurrency as usize,
-                            partial_response: Some(e.to_string()),
-                        },
+                        Ok(resp) => {
+                            let status_code = resp.status();
+                            let content_length = resp.content_length();
+                            let text = resp.text().await.unwrap_or_default();
+                            let truncated_text = if text.len() > 100 {
+                                text[..100].to_string()
+                            } else {
+                                text
+                            };
+
+                            ResponseStats {
+                                duration: start.elapsed(),
+                                status_code,
+                                content_length,
+                                url,
+                                method: method.to_string(),
+                                elapsed: all_start.elapsed(),
+                                total_requests: args.number as usize,
+                                concurrency: args.concurrency as usize,
+                                partial_response: Some(truncated_text),
+                            }
+                        }
+                        Err(e) => {
+                            return Err(PepeError::RequestError(e));
+                        }
                     };
 
                     drop(permit);
-                    let _ = tx.send(stats).await;
+                    if tx.send(stats).await.is_err() {
+                        Ok(())
+                    } else {
+                        Ok(())
+                    }
                 });
             }
         }
     });
 
-    handler.await.unwrap();
+    handler.await.map_err(|e| {
+        PepeError::IoError(std::io::Error::new(
+            std::io::ErrorKind::Other,
+            e.to_string(),
+        ))
+    })?;
 
-    let elapsed = all_start.elapsed();
-
-    let responses = Vec::new();
-
-    return (responses, elapsed);
+    Ok((Vec::new(), all_start.elapsed()))
 }
 
 #[derive(Default)]
@@ -247,11 +252,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let interrupted = Arc::new(tokio::sync::Notify::new());
 
-    // Main application loop
     'main: loop {
         let (tx, mut rx) = mpsc::channel(args.number as usize);
 
-        // Spawn request handler
         let handler = tokio::spawn({
             let args = args.clone();
             async move { run(&args, tx).await }
