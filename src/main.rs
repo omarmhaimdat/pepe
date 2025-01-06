@@ -25,7 +25,7 @@ mod ui;
 struct Args {
     #[arg(long, action = HelpLong)]
     help: Option<bool>,
-    #[clap(short = 'n', long, default_value = "200")]
+    #[clap(short = 'n', long, default_value = "100")]
     number: u32,
     #[clap(short = 'c', long, default_value = "50")]
     concurrency: u32,
@@ -190,6 +190,7 @@ async fn run(
                             let status_code = resp.status();
                             let content_length = resp.content_length();
                             let text = resp.text().await.unwrap_or_default();
+                            let text = text.trim().replace("\n", " ").replace("\r", " ");
                             let truncated_text = if text.len() > 100 {
                                 text[..100].to_string()
                             } else {
@@ -234,12 +235,7 @@ async fn run(
     Ok((Vec::new(), all_start.elapsed()))
 }
 
-#[derive(Default)]
-struct Stats {
-    count: usize,
-    success: usize,
-    failed: usize,
-}
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = Args::parse();

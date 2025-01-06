@@ -14,7 +14,7 @@ use reqwest::StatusCode;
 use std::thread::available_parallelism;
 use tokio::sync::mpsc;
 
-use crate::{ResponseStats, Stats};
+use crate::ResponseStats;
 
 use ratatui::{
     style::{Color, Modifier, Style},
@@ -31,6 +31,18 @@ const LOGO: &str = r#"
     ██║     ███████╗██║     ███████╗
     ╚═╝     ╚══════╝╚═╝     ╚══════╝"#;
 
+#[derive(Default)]
+struct Stats {
+    count: usize,
+    success: usize,
+    failed: usize,
+    min: u64,
+    max: u64,
+    avg: u64,
+    std_dev: u64,
+    rps: u64,
+    data: u64,
+}
 pub struct Dashboard {
     // Add storage fields to hold the strings and data
     label_storage: Vec<String>,
@@ -44,6 +56,7 @@ pub struct Dashboard {
     status_codes: HashMap<StatusCode, usize>,
     stats: Stats,
     elapsed: f64,
+    data_transfer: f64,
 }
 
 impl Dashboard {
@@ -63,6 +76,13 @@ impl Dashboard {
         // Update status codes
         *self.status_codes.entry(stat.status_code).or_insert(0) += 1;
 
+        self.elapsed = stat.elapsed.as_secs_f64();
+        self.total_requests = stat.total_requests;
+        self.url = stat.url;
+        self.method = format!("{:?}", stat.method);
+        self.concurrency = stat.concurrency;
+        self.data_transfer += stat.content_length.unwrap_or(0) as f64;
+
         // Update stats
         self.stats.count += 1;
         if stat.status_code.is_success() {
@@ -71,12 +91,23 @@ impl Dashboard {
             self.stats.failed += 1;
         }
 
+        if self.stats.min == 0 || stat.duration.as_millis() < self.stats.min.into() {
+            self.stats.min = stat.duration.as_millis() as u64;
+        }
+
+        if stat.duration.as_millis() > self.stats.max.into() {
+            self.stats.max = stat.duration.as_millis() as u64;
+        }
+
+        self.stats.rps = if self.elapsed > 0.0 {
+            (self.stats.count as f64 / self.elapsed) as u64
+        } else {
+            0
+        };
+
+        self.stats.data = (self.data_transfer / self.elapsed) as u64;
+
         // Update elapsed time
-        self.elapsed = stat.elapsed.as_secs_f64();
-        self.total_requests = stat.total_requests;
-        self.url = stat.url;
-        self.method = format!("{:?}", stat.method);
-        self.concurrency = stat.concurrency;
     }
     pub fn new() -> Self {
         Self {
@@ -91,6 +122,7 @@ impl Dashboard {
             method: String::new(),
             concurrency: 0,
             label_storage: Vec::with_capacity(10),
+            data_transfer: 0.0,
         }
     }
 
@@ -128,47 +160,30 @@ impl Dashboard {
         }
     }
 
-    fn calculate_stats(&self, latencies: &[u64]) -> Vec<(&str, u64, Style)> {
+    fn calculate_stats(&mut self, latencies: &[u64]) {
         if latencies.is_empty() {
-            return vec![("No Data", 0, Style::default())];
+            return;
         }
 
         // sort the latencies
         let mut latencies = latencies.to_vec();
         latencies.sort_unstable();
 
-        let sum: u64 = latencies.iter().sum();
-        let len = latencies.len() as u64;
-        let avg = sum / len;
-        let min = *latencies.first().unwrap();
-        let max = *latencies.last().unwrap();
-
         // Calculate standard deviation
         let variance = latencies
             .iter()
             .map(|&x| {
-                let diff = x as i64 - avg as i64;
+                let diff = x as i64 - self.stats.avg as i64;
                 (diff * diff) as u64
             })
             .sum::<u64>()
-            / len;
+            / self.stats.count as u64;
         let std_dev = (variance as f64).sqrt() as u64;
+        self.stats.std_dev = std_dev;
 
-        vec![
-            ("Min", min, Style::default().fg(Color::Green)),
-            ("Avg", avg, Style::default().fg(Color::White)),
-            ("Max", max, Style::default().fg(Color::Red)),
-            ("StdDev", std_dev, Style::default().fg(Color::Yellow)),
-            (
-                "RPS",
-                if self.elapsed > 0.0 {
-                    (self.stats.count as f64 / self.elapsed as f64) as u64
-                } else {
-                    0
-                },
-                Style::default().fg(Color::Cyan),
-            ),
-        ]
+        // Calculate average
+        let avg = latencies.iter().sum::<u64>() / self.stats.count as u64;
+        self.stats.avg = avg;
     }
 
     fn format_request_item(&self, stat: &ResponseStats) -> ListItem {
@@ -203,6 +218,7 @@ impl Dashboard {
     fn render_latency_distribution<'a>(
         &'a mut self, // Changed to &mut self to modify label_storage
         latencies: &[u64],
+        area_width: u16,
     ) -> BarChart<'a> {
         let percentiles = [0, 10, 25, 50, 75, 90, 95, 99, 100];
         let mut sorted_latencies = latencies.to_vec();
@@ -241,10 +257,14 @@ impl Dashboard {
             .iter()
             .map(|(s, u)| (s.as_str(), *u))
             .collect();
+        
+        // Calculate the width of each bar, if it's not possible to divide equally, use the maximum width
+        // Make sure division lefts no remainder
+        let each_bar_width = (area_width as usize / data.len()) - 1;
 
         BarChart::default()
             .data(&data)
-            .bar_width(7)
+            .bar_width(each_bar_width as u16)
             .bar_gap(1)
             .bar_style(Style::default().fg(Color::Cyan))
             .value_style(Style::default().fg(Color::Yellow))
@@ -413,55 +433,94 @@ impl Dashboard {
         let chunks = Layout::default()
             .direction(Direction::Horizontal)
             .constraints([
+                Constraint::Percentage(25),
+                Constraint::Percentage(25),
                 Constraint::Percentage(50),
-                Constraint::Percentage(25),
-                Constraint::Percentage(25),
             ])
             .split(area);
 
         // Render latency distribution
         let latencies: Vec<u64> = self.histogram.iter().map(|(_, latency)| *latency).collect();
-        let latency_chart = self.render_latency_distribution(&latencies);
-        f.render_widget(latency_chart, chunks[0]);
+        let latency_chart = self.render_latency_distribution(&latencies, chunks[2].width);
+        f.render_widget(latency_chart, chunks[2]);
 
         // Render stats
-        let stats = self.calculate_stats(&latencies);
-        let stats = stats
-            .iter()
-            .map(|(label, value, style)| {
-                Line::from(vec![
-                    Span::styled(
-                        format!("{:<8}", *label),
-                        Style::default()
-                            .fg(Color::Yellow)
-                            .add_modifier(Modifier::BOLD),
-                    ),
-                    Span::raw(": "),
-                    Span::styled(
-                        format!("{:>8}", value.to_string()),
-                        style.clone().add_modifier(Modifier::BOLD),
-                    ),
-                ])
-            })
-            .collect::<Vec<_>>();
+        self.calculate_stats(&latencies);
+        
+        let statistics_chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+            Constraint::Percentage(40),
+            Constraint::Percentage(40),
+            Constraint::Min(0),         // Total data
+            ])
+            .split(chunks[0]);
 
-        let stats_paragraph = Paragraph::new(stats)
-            .block(Block::default().title("Stats").borders(Borders::ALL))
-            .wrap(ratatui::widgets::Wrap { trim: false });
+        let min_max_avg_chunks = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([
+                Constraint::Percentage(33),
+                Constraint::Percentage(33),
+                Constraint::Percentage(34),
+            ])
+            .split(statistics_chunks[0]);
+        
+        let data_chunks = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([
+                Constraint::Percentage(33),
+                Constraint::Percentage(33),
+                Constraint::Percentage(34),
+            ])
+            .split(statistics_chunks[1]);
 
-        f.render_widget(stats_paragraph, chunks[1]);
+        self.render_stat_widget(f, min_max_avg_chunks[0], "Min", format!("{:.2}ms", self.stats.min as f64), Color::Green);
+        self.render_stat_widget(f, min_max_avg_chunks[1], "Max", format!("{:.2}ms", self.stats.max as f64), Color::Red);
+        self.render_stat_widget(f, min_max_avg_chunks[2], "Avg", format!("{:.2}ms", self.stats.avg as f64), Color::Yellow);
+        self.render_stat_widget(f, data_chunks[0], "Std Dev", format!("{:.2}ms", self.stats.std_dev as f64), Color::Cyan);
+        self.render_stat_widget(f, data_chunks[1], "RPS", self.stats.rps.to_string(), Color::Magenta);
+        self.render_stat_widget(f, data_chunks[2], "Data", format!("{:.2}kb/s", (self.stats.data as f64) / 1024.0), Color::Yellow);
+        self.render_stat_widget(f, statistics_chunks[2], "Total data", format!("{:.2}kb", self.data_transfer / 1024.0), Color::LightYellow);
 
         // Render status codes distribution
-        let status_chart = self.render_status_codes();
-        f.render_widget(status_chart, chunks[2]);
+        let status_chart = self.render_status_codes(chunks[1].width);
+        f.render_widget(status_chart, chunks[1]);
     }
 
-    fn render_status_codes(&self) -> BarChart {
-        let data: Vec<(String, u64)> = self
+    fn render_stat_widget(&self, f: &mut Frame, area: Rect, title: &str, value: String, color: Color) {
+        f.render_widget(
+            Paragraph::new(vec![
+                Line::from(vec![
+                    Span::styled(value, Style::default().fg(color)),
+                ])
+            ])
+            .block(Block::default().borders(Borders::ALL).title(title)),
+            area,
+        );
+    }
+
+    fn render_status_codes(&self, area_width: u16) -> BarChart {
+        let mut data: Vec<(String, u64)> = self
             .status_codes
             .iter()
             .map(|(code, count)| (format!("{:?}", code), *count as u64))
             .collect();
+
+        let list_of_default_status = vec![
+            StatusCode::OK,
+            StatusCode::BAD_REQUEST,
+            StatusCode::NOT_FOUND,
+            StatusCode::INTERNAL_SERVER_ERROR,
+            StatusCode::SERVICE_UNAVAILABLE,
+        ];
+
+        // At least the ones in the default list should be present, if not, add them
+        for status in list_of_default_status {
+            if !self.status_codes.contains_key(&status) {
+                data.push((format!("{:?}", status), 0));
+            }
+        }
+        let each_bar_width = (area_width as usize / data.len()) - 1;
 
         BarChart::default()
             .data(
@@ -476,7 +535,7 @@ impl Dashboard {
                         .as_slice(),
                 ),
             )
-            .bar_width(7)
+            .bar_width(each_bar_width as u16)
             .bar_gap(1)
             .bar_style(Style::default().fg(Color::Cyan))
             .value_style(Style::default().fg(Color::Yellow))
@@ -555,8 +614,8 @@ impl Dashboard {
             .constraints([
                 Constraint::Length(8),  // Header
                 Constraint::Length(3),  // Progress
-                Constraint::Length(5),  // Stats
-                Constraint::Length(15), // Charts
+                Constraint::Length(3),  // Stats
+                Constraint::Length(20), // Charts
                 Constraint::Min(0),     // Request Log
             ])
             .split(f.area());
