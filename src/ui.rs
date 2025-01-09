@@ -14,7 +14,7 @@ use reqwest::StatusCode;
 use std::thread::available_parallelism;
 use tokio::sync::mpsc;
 
-use crate::ResponseStats;
+use crate::{Args, CacheCategory, ResponseStats, Sent};
 
 use ratatui::{
     style::{Color, Modifier, Style},
@@ -36,12 +36,19 @@ struct Stats {
     count: usize,
     success: usize,
     failed: usize,
+    timeouts: usize,
+    sent: usize,
     min: u64,
     max: u64,
     avg: u64,
     std_dev: u64,
     rps: u64,
     data: u64,
+    total_dns_lookup: Vec<u128>,
+    total_dns_resolution: Vec<u128>,
+    avg_dns_lookup: u128,
+    avg_dns_resolution: u128,
+    cache_categories: HashMap<CacheCategory, usize>,
 }
 pub struct Dashboard {
     // Add storage fields to hold the strings and data
@@ -49,13 +56,11 @@ pub struct Dashboard {
     bar_chart_data: Vec<(String, u64)>,
     histogram: Vec<(String, u64)>,
     requests: Vec<ResponseStats>,
-    total_requests: usize,
-    url: String,
-    method: String,
-    concurrency: usize,
+    args: Args,
     status_codes: HashMap<StatusCode, usize>,
     stats: Stats,
-    elapsed: f64,
+    elapsed: std::time::Instant,
+    final_duration: Option<std::time::Duration>,
     data_transfer: f64,
 }
 
@@ -73,22 +78,28 @@ impl Dashboard {
         }
         self.requests.push(stat.clone());
 
-        // Update status codes
-        *self.status_codes.entry(stat.status_code).or_insert(0) += 1;
+        // Update cache categories
+        if let Some(ref cache_status) = stat.cache_status {
+            *self
+                .stats
+                .cache_categories
+                .entry(CacheCategory::from_cache_status(&cache_status))
+                .or_insert(0) += 1;
+        }
 
-        self.elapsed = stat.elapsed.as_secs_f64();
-        self.total_requests = stat.total_requests;
-        self.url = stat.url;
-        self.method = format!("{:?}", stat.method);
-        self.concurrency = stat.concurrency;
-        self.data_transfer += stat.content_length.unwrap_or(0) as f64;
-
-        // Update stats
-        self.stats.count += 1;
-        if stat.status_code.is_success() {
-            self.stats.success += 1;
-        } else {
-            self.stats.failed += 1;
+        let dns_times = stat.dns_times;
+        if let Some(dns_times) = dns_times {
+            let (dns_lookup_time, dns_resolution_time) = dns_times;
+            self.stats
+                .total_dns_lookup
+                .push(dns_lookup_time.as_millis());
+            self.stats
+                .total_dns_resolution
+                .push(dns_resolution_time.as_millis());
+            self.stats.avg_dns_lookup = self.stats.total_dns_lookup.iter().sum::<u128>()
+                / self.stats.total_dns_lookup.len() as u128;
+            self.stats.avg_dns_resolution = self.stats.total_dns_resolution.iter().sum::<u128>()
+                / self.stats.total_dns_resolution.len() as u128;
         }
 
         if self.stats.min == 0 || stat.duration.as_millis() < self.stats.min.into() {
@@ -99,36 +110,56 @@ impl Dashboard {
             self.stats.max = stat.duration.as_millis() as u64;
         }
 
-        self.stats.rps = if self.elapsed > 0.0 {
-            (self.stats.count as f64 / self.elapsed) as u64
+        self.stats.rps = if self.elapsed.elapsed().as_secs() > 0 {
+            (self.stats.count as f64 / self.elapsed.elapsed().as_secs() as f64) as u64
         } else {
             0
         };
 
-        self.stats.data = (self.data_transfer / self.elapsed) as u64;
+        self.stats.data = (self.data_transfer / self.elapsed.elapsed().as_secs() as f64) as u64;
 
-        // Update elapsed time
+        // If status code is None, it means the request timed out
+        if stat.status_code.is_none() {
+            self.stats.timeouts += 1;
+            self.stats.count += 1;
+            self.requests.push(stat);
+            return;
+        }
+
+        let status_code = stat.status_code.unwrap();
+
+        // Update status codes
+        *self.status_codes.entry(status_code).or_insert(0) += 1;
+        self.data_transfer += stat.content_length.unwrap_or(0) as f64;
+
+        // Update stats
+        self.stats.count += 1;
+        if status_code.is_success() {
+            self.stats.success += 1;
+        } else {
+            self.stats.failed += 1;
+        }
     }
-    pub fn new() -> Self {
+
+    pub fn new(args: Args) -> Self {
         Self {
             bar_chart_data: Vec::new(),
             histogram: Vec::new(),
-            requests: Vec::with_capacity(100),
+            requests: Vec::with_capacity(args.number as usize),
             status_codes: HashMap::new(),
             stats: Stats::default(),
-            elapsed: 0.0,
-            total_requests: 0,
-            url: String::new(),
-            method: String::new(),
-            concurrency: 0,
+            elapsed: std::time::Instant::now(),
             label_storage: Vec::with_capacity(10),
             data_transfer: 0.0,
+            final_duration: None,
+            args,
         }
     }
 
     pub fn run(
         &mut self,
         rx: &mut mpsc::Receiver<ResponseStats>,
+        sent_rx: &mut mpsc::Receiver<Sent>,
     ) -> Result<KeyCode, Box<dyn std::error::Error>> {
         enable_raw_mode()?;
         let mut terminal = Terminal::new(CrosstermBackend::new(std::io::stdout()))?;
@@ -137,6 +168,10 @@ impl Dashboard {
             // Update stats
             while let Ok(stat) = rx.try_recv() {
                 self.update_stats(stat);
+            }
+
+            while let Ok(sent) = sent_rx.try_recv() {
+                self.update_sent(sent);
             }
 
             terminal.draw(|f| {
@@ -158,6 +193,10 @@ impl Dashboard {
                 }
             }
         }
+    }
+
+    fn update_sent(&mut self, sent: Sent) {
+        self.stats.sent += sent.count;
     }
 
     fn calculate_stats(&mut self, latencies: &[u64]) {
@@ -187,14 +226,39 @@ impl Dashboard {
     }
 
     fn format_request_item(&self, stat: &ResponseStats) -> ListItem {
-        let style = if stat.status_code.is_success() {
+        if stat.status_code.is_none() {
+            return ListItem::new(Line::from(vec![
+                Span::styled("[TIMEOUT]", Style::default().fg(Color::Red)),
+                Span::raw(" "),
+                Span::styled(
+                    format!("{:.2}ms", stat.duration.as_millis()),
+                    Style::default().fg(Color::Yellow),
+                ),
+                Span::raw(" "),
+                Span::styled(
+                    format!("{}b", stat.content_length.unwrap_or(0)),
+                    Style::default().fg(Color::Blue),
+                ),
+                Span::raw(" "),
+                Span::styled(
+                    format!("{:?}", self.args.method),
+                    Style::default().fg(Color::Magenta),
+                ),
+                Span::raw(" "),
+                Span::styled(format!("{:?}", self.args.url), Style::default().fg(Color::White)),
+            ]));
+        }
+
+        let status_code = stat.status_code.unwrap();
+
+        let style = if status_code.is_success() {
             Style::default().fg(Color::Green)
         } else {
             Style::default().fg(Color::Red)
         };
 
         ListItem::new(Line::from(vec![
-            Span::styled(format!("[{}]", stat.status_code), style),
+            Span::styled(format!("[{}]", status_code), style),
             Span::raw(" "),
             Span::styled(
                 format!("{:.2}ms", stat.duration.as_millis()),
@@ -207,11 +271,11 @@ impl Dashboard {
             ),
             Span::raw(" "),
             Span::styled(
-                format!("{:?}", stat.method),
+                format!("{:?}", self.args.method),
                 Style::default().fg(Color::Magenta),
             ),
             Span::raw(" "),
-            Span::styled(stat.url.clone(), Style::default().fg(Color::White)),
+            Span::styled(format!("{:?}", self.args.url), Style::default().fg(Color::White)),
         ]))
     }
 
@@ -239,7 +303,7 @@ impl Dashboard {
                     };
 
                     let ms = sorted_latencies[idx] as f64 / 1000.0;
-                    let label = format!("P{:02}: {:.2}ms", p, ms);
+                    let label = format!("P{:02}: {:.2}s", p, ms);
                     self.label_storage.push(label);
                     (
                         self.label_storage.last().unwrap().clone(),
@@ -257,7 +321,7 @@ impl Dashboard {
             .iter()
             .map(|(s, u)| (s.as_str(), *u))
             .collect();
-        
+
         // Calculate the width of each bar, if it's not possible to divide equally, use the maximum width
         // Make sure division lefts no remainder
         let each_bar_width = (area_width as usize / data.len()) - 1;
@@ -339,19 +403,19 @@ impl Dashboard {
         let params = vec![
             Line::from(vec![
                 Span::styled("URL: ", Style::default().fg(Color::Yellow)),
-                Span::raw(&self.url),
+                Span::raw(&self.args.url),
             ]),
             Line::from(vec![
                 Span::styled("Method: ", Style::default().fg(Color::Yellow)),
-                Span::raw(&self.method),
+                Span::raw(&self.args.method),
             ]),
             Line::from(vec![
                 Span::styled("Concurrency: ", Style::default().fg(Color::Yellow)),
-                Span::raw(self.concurrency.to_string()),
+                Span::raw(self.args.concurrency.to_string()),
             ]),
             Line::from(vec![
                 Span::styled("Total Requests: ", Style::default().fg(Color::Yellow)),
-                Span::raw(self.total_requests.to_string()),
+                Span::raw(self.args.number.to_string()),
             ]),
         ];
 
@@ -367,13 +431,13 @@ impl Dashboard {
         );
     }
 
-    fn render_progress(&self, f: &mut Frame, area: Rect) {
+    fn render_progress(&mut self, f: &mut Frame, area: Rect) {
         let chunks = Layout::default()
             .direction(Direction::Horizontal)
             .constraints([Constraint::Percentage(20), Constraint::Percentage(80)])
             .split(area);
 
-        let percent = (self.stats.count * 100) / self.total_requests.max(1);
+        let percent = (self.stats.count * 100) / (self.args.number as usize).max(1);
 
         // Fixed elements: borders(2) + "Progress"(8) + "[]"(2) + "100%"(4) + safety margin(2)
         let fixed_elements = 18;
@@ -386,13 +450,42 @@ impl Dashboard {
             " ".repeat(bar_width - filled),
             percent
         );
+        if self.stats.count == (self.args.number as usize)  && self.final_duration.is_none() {
+            self.final_duration = Some(std::time::Instant::now() - self.elapsed);
+        }
 
         // Duration widget remains unchanged
+        if let Some(duration) = self.final_duration {
+            let formatted_duration = format!(
+                "{:02}h:{:02}m:{:02}s:{:03}ms",
+                duration.as_secs() as u64 / 3600,
+                duration.as_secs() as u64 % 3600 / 60,
+                duration.as_secs() as u64 % 60,
+                duration.subsec_millis()
+            );
+            f.render_widget(
+                Paragraph::new(vec![Line::from(vec![
+                    Span::styled("Duration: ", Style::default().fg(Color::Yellow)),
+                    Span::raw(formatted_duration),
+                ])])
+                .block(Block::default().borders(Borders::ALL)),
+                chunks[0],
+            );
+            f.render_widget(
+                Paragraph::new(progress_bar)
+                    .style(Style::default().fg(Color::Green))
+                    .block(Block::default().borders(Borders::ALL)),
+                chunks[1],
+            );
+            return;
+        }
         let formatted_duration = format!(
-            "{:02}:{:02}:{:02}",
-            self.elapsed as u64 / 3600,
-            self.elapsed as u64 % 3600 / 60,
-            self.elapsed as u64 % 60
+            "{:02}h:{:02}m:{:02}s:{:03}ms",
+            // Compute seconds from self.elapsed, now - self.elapsed
+            (std::time::Instant::now() - self.elapsed).as_secs() as u64 / 3600,
+            (std::time::Instant::now() - self.elapsed).as_secs() as u64 % 3600 / 60,
+            (std::time::Instant::now() - self.elapsed).as_secs() as u64 % 60,
+            (std::time::Instant::now() - self.elapsed).subsec_millis()
         );
         f.render_widget(
             Paragraph::new(vec![Line::from(vec![
@@ -416,11 +509,20 @@ impl Dashboard {
             Span::styled("Total: ", Style::default().fg(Color::Yellow)),
             Span::raw(self.stats.count.to_string()),
             Span::raw(" | "),
+            Span::styled("Remaining: ", Style::default().fg(Color::LightYellow)),
+            Span::raw(((self.args.number as usize) - self.stats.count).to_string()),
+            Span::raw(" | "),
             Span::styled("Success: ", Style::default().fg(Color::Green)),
             Span::raw(self.stats.success.to_string()),
             Span::raw(" | "),
-            Span::styled("Failed: ", Style::default().fg(Color::Red)),
+            Span::styled("Failed: ", Style::default().fg(Color::LightRed)),
             Span::raw(self.stats.failed.to_string()),
+            Span::raw(" | "),
+            Span::styled("Timeouts: ", Style::default().fg(Color::Red)),
+            Span::raw(self.stats.timeouts.to_string()),
+            Span::raw(" | "),
+            Span::styled("Sent: ", Style::default().fg(Color::Cyan)),
+            Span::raw(self.stats.sent.to_string()),
         ])];
 
         f.render_widget(
@@ -446,13 +548,14 @@ impl Dashboard {
 
         // Render stats
         self.calculate_stats(&latencies);
-        
+
         let statistics_chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
-            Constraint::Percentage(40),
-            Constraint::Percentage(40),
-            Constraint::Min(0),         // Total data
+                Constraint::Percentage(25),
+                Constraint::Percentage(25),
+                Constraint::Percentage(25),
+                Constraint::Percentage(25),
             ])
             .split(chunks[0]);
 
@@ -464,8 +567,8 @@ impl Dashboard {
                 Constraint::Percentage(34),
             ])
             .split(statistics_chunks[0]);
-        
-        let data_chunks = Layout::default()
+
+        let stats_chunks = Layout::default()
             .direction(Direction::Horizontal)
             .constraints([
                 Constraint::Percentage(33),
@@ -474,26 +577,124 @@ impl Dashboard {
             ])
             .split(statistics_chunks[1]);
 
-        self.render_stat_widget(f, min_max_avg_chunks[0], "Min", format!("{:.2}ms", self.stats.min as f64), Color::Green);
-        self.render_stat_widget(f, min_max_avg_chunks[1], "Max", format!("{:.2}ms", self.stats.max as f64), Color::Red);
-        self.render_stat_widget(f, min_max_avg_chunks[2], "Avg", format!("{:.2}ms", self.stats.avg as f64), Color::Yellow);
-        self.render_stat_widget(f, data_chunks[0], "Std Dev", format!("{:.2}ms", self.stats.std_dev as f64), Color::Cyan);
-        self.render_stat_widget(f, data_chunks[1], "RPS", self.stats.rps.to_string(), Color::Magenta);
-        self.render_stat_widget(f, data_chunks[2], "Data", format!("{:.2}kb/s", (self.stats.data as f64) / 1024.0), Color::Yellow);
-        self.render_stat_widget(f, statistics_chunks[2], "Total data", format!("{:.2}kb", self.data_transfer / 1024.0), Color::LightYellow);
+        let dns_chunks = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
+            .split(statistics_chunks[2]);
+
+        let data_chunks = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([Constraint::Percentage(50), Constraint::Percentage(50)])
+            .split(statistics_chunks[3]);
+
+        self.render_stat_widget(
+            f,
+            min_max_avg_chunks[0],
+            "Min",
+            format!("{:.2}ms", self.stats.min as f64),
+            Color::Green,
+        );
+        self.render_stat_widget(
+            f,
+            min_max_avg_chunks[1],
+            "Max",
+            format!("{:.2}ms", self.stats.max as f64),
+            Color::Red,
+        );
+        self.render_stat_widget(
+            f,
+            min_max_avg_chunks[2],
+            "Avg",
+            format!("{:.2}ms", self.stats.avg as f64),
+            Color::Yellow,
+        );
+        self.render_stat_widget(
+            f,
+            stats_chunks[0],
+            "Std Dev",
+            format!("{:.2}ms", self.stats.std_dev as f64),
+            Color::Cyan,
+        );
+        self.render_stat_widget(
+            f,
+            stats_chunks[1],
+            "RPS",
+            self.stats.rps.to_string(),
+            Color::Magenta,
+        );
+        self.render_stat_widget(
+            f,
+            stats_chunks[2],
+            "Cache Hit Rate",
+            if self.stats.count > 0 {
+                format!(
+                    "{:.2}%",
+                    (*self
+                        .stats
+                        .cache_categories
+                        .get(&CacheCategory::Hit)
+                        .unwrap_or(&0) as f64
+                        / self.stats.count as f64)
+                        * 100.0
+                )
+            } else {
+                "0%".to_string()
+            },
+            Color::Green,
+        );
+
+        self.render_stat_widget(
+            f,
+            dns_chunks[0],
+            "Avg DNS Lookup",
+            format!("{:.2}ms", self.stats.avg_dns_lookup as f64),
+            Color::LightMagenta,
+        );
+        self.render_stat_widget(
+            f,
+            dns_chunks[1],
+            "Avg DNS Resolution",
+            format!("{:.2}ms", self.stats.avg_dns_resolution as f64),
+            Color::LightMagenta,
+        );
+        self.render_stat_widget(
+            f,
+            data_chunks[0],
+            "Total data",
+            format!(
+                "{:.2}kb | {:.2}mb",
+                self.data_transfer / 1024.0,
+                self.data_transfer / 1024.0 / 1024.0
+            ),
+            Color::LightYellow,
+        );
+
+        self.render_stat_widget(
+            f,
+            data_chunks[1],
+            "Data Transfer",
+            format!("{:.2}kb/s", (self.stats.data as f64) / 1024.0),
+            Color::Yellow,
+        );
 
         // Render status codes distribution
         let status_chart = self.render_status_codes(chunks[1].width);
         f.render_widget(status_chart, chunks[1]);
     }
 
-    fn render_stat_widget(&self, f: &mut Frame, area: Rect, title: &str, value: String, color: Color) {
+    fn render_stat_widget(
+        &self,
+        f: &mut Frame,
+        area: Rect,
+        title: &str,
+        value: String,
+        color: Color,
+    ) {
         f.render_widget(
-            Paragraph::new(vec![
-                Line::from(vec![
-                    Span::styled(value, Style::default().fg(color)),
-                ])
-            ])
+            Paragraph::new(vec![Line::from(vec![Span::styled(
+                value,
+                Style::default().fg(color),
+            )])])
             .block(Block::default().borders(Borders::ALL).title(title)),
             area,
         );
@@ -575,15 +776,22 @@ impl Dashboard {
             .iter()
             .filter(|req| req.partial_response.is_some())
             .map(|req| {
+                let status_text = if req.status_code.is_none() {
+                    "[TIMEOUT]".to_string()
+                } else {
+                    let status_code = req.status_code.unwrap();
+                    format!("[{}]", status_code)
+                };
+
+                let status_style =
+                    if req.status_code.is_none() || !req.status_code.unwrap().is_success() {
+                        Style::default().fg(Color::Red)
+                    } else {
+                        Style::default().fg(Color::Green)
+                    };
+
                 ListItem::new(Line::from(vec![
-                    Span::styled(
-                        format!("[{}]", req.status_code),
-                        if req.status_code.is_success() {
-                            Style::default().fg(Color::Green)
-                        } else {
-                            Style::default().fg(Color::Red)
-                        },
-                    ),
+                    Span::styled(status_text, status_style),
                     Span::raw(" "),
                     Span::styled(
                         req.partial_response
@@ -597,13 +805,11 @@ impl Dashboard {
             .collect();
 
         f.render_widget(
-            List::new(partial_response_items)
-                .block(
-                    Block::default()
-                        .title("Partial Responses")
-                        .borders(Borders::ALL),
-                )
-                .highlight_style(Style::default().add_modifier(Modifier::BOLD)),
+            List::new(partial_response_items).block(
+                Block::default()
+                    .title("Partial Responses")
+                    .borders(Borders::ALL),
+            ),
             chunks[1],
         );
     }

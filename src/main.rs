@@ -8,8 +8,10 @@ use crossterm::{
         LeaveAlternateScreen,
     },
 };
+use hyper::{HeaderMap, Uri};
 use reqwest::header::USER_AGENT;
 use std::io::stdout;
+use std::str::FromStr;
 use std::sync::Arc;
 use std::{num::NonZeroUsize, thread::available_parallelism};
 use tokio::sync::{mpsc, Semaphore};
@@ -27,7 +29,7 @@ struct Args {
     help: Option<bool>,
     #[clap(short = 'n', long, default_value = "100")]
     number: u32,
-    #[clap(short = 'c', long, default_value = "50")]
+    #[clap(short = 'c', long, default_value_t = default_concurrency())]
     concurrency: u32,
     #[clap(short = 'q', long, default_value = "0")]
     rate_limit: u32,
@@ -63,58 +65,62 @@ struct Args {
     disable_keepalive: bool,
     #[clap(long)]
     disable_redirects: bool,
-    #[clap(long)]
-    cpus: Option<u32>,
     url: String,
 }
 
-fn default_values(args: &Args) {
-    if let Some(default_n_threads) = NonZeroUsize::new(8) {
-        let n_threads: usize = available_parallelism()
-            .unwrap_or(NonZeroUsize::new(8).unwrap_or(default_n_threads))
-            .get();
-        if args.cpus.is_none() {
+fn default_concurrency() -> u32 {
+    available_parallelism()
+        .unwrap_or(NonZeroUsize::new(8).unwrap())
+        .get() as u32
+}
+impl Args {
+    fn validate(&self) {
+        if self.concurrency > self.number {
             eprintln!(
-                "Warning: Number of CPUs not specified. Using {} CPUs.",
-                n_threads
+                "Error: Number of workers cannot be smaller than the number of requests. -c {} -n {}",
+                self.concurrency, self.number
             );
+            std::process::exit(1);
         }
-    }
-    if args.concurrency > args.number {
-        eprintln!(
-            "Error: Number of workers cannot be smaller than the number of requests. -c {} -n {}",
-            args.concurrency, args.number
-        );
-        std::process::exit(1);
-    }
 
-    // Check if method is valid
-    let method = reqwest::Method::from_bytes(args.method.as_bytes());
-    if !method.is_ok() {
-        eprintln!("Error: Invalid method: {}", args.method);
-        std::process::exit(1);
+        // Check if method is valid
+        let method = reqwest::Method::from_bytes(self.method.as_bytes());
+        if !method.is_ok() {
+            eprintln!("Error: Invalid method: {}", self.method);
+            std::process::exit(1);
+        }
+
+        // Verify Timeout
+        if self.timeout == 0 || self.timeout > 120 {
+            eprintln!("Error: Timeout cannot be 0, or greater than 120 seconds.");
+            std::process::exit(1);
+        }
     }
 }
 
 #[derive(Debug, Clone)]
 struct ResponseStats {
-    url: String,
-    method: String,
     duration: std::time::Duration,
-    status_code: reqwest::StatusCode,
+    status_code: Option<reqwest::StatusCode>,
     content_length: Option<u64>,
-    elapsed: std::time::Duration,
-    total_requests: usize,
-    concurrency: usize,
     partial_response: Option<String>,
+    dns_times: Option<(std::time::Duration, std::time::Duration)>,
+    cache_status: Option<CacheStatus>,
+}
+
+#[derive(Debug, Clone)]
+struct Sent {
+    count: usize,
 }
 
 // Add custom error type
 #[derive(Debug)]
 enum PepeError {
     HeaderParseError(String),
-    RequestError(reqwest::Error),
     IoError(std::io::Error),
+    RequestError(reqwest::Error),
+    UrlParseError(hyper::http::uri::InvalidUri),
+    HostParseError,
 }
 
 impl std::fmt::Display for PepeError {
@@ -123,16 +129,116 @@ impl std::fmt::Display for PepeError {
             Self::HeaderParseError(msg) => write!(f, "Header parse error: {}", msg),
             Self::RequestError(e) => write!(f, "Request error: {}", e),
             Self::IoError(e) => write!(f, "IO error: {}", e),
+            Self::UrlParseError(e) => write!(f, "URL parse error: {}", e),
+            Self::HostParseError => write!(f, "Host parse error"),
         }
     }
 }
 
 impl std::error::Error for PepeError {}
 
+// Compute dns resolution time, dns lookup time
+async fn resolve_dns(url: &str) -> Result<(std::time::Duration, std::time::Duration), PepeError> {
+    let uri = Uri::from_str(url).map_err(|e| PepeError::UrlParseError(e))?;
+    let host = uri.host().ok_or_else(|| PepeError::HostParseError)?;
+
+    let start = std::time::Instant::now();
+    let addrs = match tokio::net::lookup_host(format!("{}:0", host)).await {
+        Ok(addrs) => addrs,
+        Err(e) => {
+            // eprintln!("DNS lookup failed for host {}: {}", host, e);
+            return Err(PepeError::IoError(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                e,
+            )));
+        }
+    };
+    let dns_lookup_time = start.elapsed();
+
+    let start = std::time::Instant::now();
+    let _ = addrs.collect::<Vec<_>>();
+    let dns_resolution_time = start.elapsed();
+
+    Ok((dns_lookup_time, dns_resolution_time))
+}
+
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub enum CacheStatus {
+    Hit,
+    Miss,
+    Stale,
+    Expired,
+    Revalidated,
+    Bypass,
+    Dynamic,
+    Error,
+    Unknown,
+}
+
+#[derive(Hash, Debug, PartialEq, Eq, Clone)]
+pub enum CacheCategory {
+    Hit,
+    Miss,
+    Unknown,
+}
+
+impl CacheCategory {
+    pub fn from_cache_status(status: &CacheStatus) -> CacheCategory {
+        match status {
+            CacheStatus::Hit | CacheStatus::Revalidated | CacheStatus::Stale => CacheCategory::Hit,
+            CacheStatus::Miss
+            | CacheStatus::Expired
+            | CacheStatus::Bypass
+            | CacheStatus::Dynamic => CacheCategory::Miss,
+            CacheStatus::Error | CacheStatus::Unknown => CacheCategory::Unknown,
+        }
+    }
+}
+
+impl CacheStatus {
+    // Parse a cache status string into the CacheStatus enum
+    pub fn from_str(status: &str) -> CacheStatus {
+        match status.to_lowercase().as_str() {
+            "hit" => CacheStatus::Hit,
+            "miss" => CacheStatus::Miss,
+            "stale" => CacheStatus::Stale,
+            "expired" => CacheStatus::Expired,
+            "revalidated" => CacheStatus::Revalidated,
+            "bypass" => CacheStatus::Bypass,
+            "dynamic" => CacheStatus::Dynamic,
+            "error" => CacheStatus::Error,
+            _ => CacheStatus::Unknown,
+        }
+    }
+}
+
+/// Function to parse cache status from `reqwest` headers
+pub fn parse_cache_status(headers: &HeaderMap) -> Option<CacheStatus> {
+    let cache_headers = [
+        "x-cache",
+        "x-cache-status",
+        "cf-cache-status",
+        "x-cache-lookup",
+        "x-cdn-cache-status",
+        "x-backend-cache-status",
+    ];
+
+    for header in cache_headers {
+        if let Some(value) = headers.get(header) {
+            if let Ok(value_str) = value.to_str() {
+                return Some(CacheStatus::from_str(value_str));
+            }
+        }
+    }
+
+    None
+}
+
 // Modified request headers handling
 async fn run(
     args: &Args,
     tx: mpsc::Sender<ResponseStats>,
+    sent_tx: mpsc::Sender<Sent>,
 ) -> Result<(Vec<ResponseStats>, std::time::Duration), PepeError> {
     let mut request_headers = reqwest::header::HeaderMap::new();
 
@@ -173,17 +279,36 @@ async fn run(
                 let url = args.url.clone();
                 let method = args.method.clone();
                 let headers = request_headers.clone();
+                let timeout = std::time::Duration::from_secs(args.timeout as u64);
+
+                let sent_tx = sent_tx.clone();
 
                 tokio::spawn(async move {
                     let start = std::time::Instant::now();
                     let method = reqwest::Method::from_bytes(method.as_bytes())
                         .unwrap_or(reqwest::Method::GET);
 
+                    // Send a message to the sent channel that a request has been sent
+                    let _ = sent_tx.send(Sent { count: 1 }).await;
+
+                    // Compute dns resolution time, dns lookup time
+                    let dns_times: (std::time::Duration, std::time::Duration) =
+                        resolve_dns(&url).await.unwrap_or_default();
+
                     let response = client
                         .request(method.clone(), &url)
                         .headers(headers)
+                        .timeout(timeout)
                         .send()
                         .await;
+
+                    let response_headers = response
+                        .as_ref()
+                        .map(|r| r.headers().clone())
+                        .unwrap_or_default();
+
+                    // Parse cache status
+                    let cache_status = parse_cache_status(&response_headers);
 
                     let stats = match response {
                         Ok(resp) => {
@@ -199,24 +324,32 @@ async fn run(
 
                             ResponseStats {
                                 duration: start.elapsed(),
-                                status_code,
+                                status_code: Some(status_code),
                                 content_length,
-                                url,
-                                method: method.to_string(),
-                                elapsed: all_start.elapsed(),
-                                total_requests: args.number as usize,
-                                concurrency: args.concurrency as usize,
                                 partial_response: Some(truncated_text),
+                                dns_times: Some(dns_times),
+                                cache_status,
                             }
                         }
                         Err(e) => {
-                            return Err(PepeError::RequestError(e));
+                            // Capture timeout errors
+                            let status_code = e.status();
+                            let content_length = None;
+                            let partial_response = None;
+                            ResponseStats {
+                                duration: start.elapsed(),
+                                status_code,
+                                content_length,
+                                partial_response,
+                                dns_times: Some(dns_times),
+                                cache_status,
+                            }
                         }
                     };
 
                     drop(permit);
                     if tx.send(stats).await.is_err() {
-                        Ok(())
+                        Ok::<(), ()>(())
                     } else {
                         Ok(())
                     }
@@ -235,13 +368,11 @@ async fn run(
     Ok((Vec::new(), all_start.elapsed()))
 }
 
-
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = Args::parse();
-    default_values(&args);
+    args.validate();
 
-    // Setup terminal
     enable_raw_mode()?;
     let mut stdout = stdout();
     execute!(stdout, EnterAlternateScreen, Clear(ClearType::All), Hide)?;
@@ -250,17 +381,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     'main: loop {
         let (tx, mut rx) = mpsc::channel(args.number as usize);
+        let (sent_tx, mut sent_rx) = mpsc::channel(args.number as usize);
 
         let handler = tokio::spawn({
             let args = args.clone();
-            async move { run(&args, tx).await }
+            async move { run(&args, tx, sent_tx).await }
         });
 
-        // Run dashboard
-        let mut dashboard = ui::Dashboard::new();
-        let result: Result<KeyCode, Box<dyn std::error::Error>> = dashboard.run(&mut rx);
+        let mut dashboard = ui::Dashboard::new(args.clone());
 
-        // Handle restart command
+        let result: Result<KeyCode, Box<dyn std::error::Error>> =
+            dashboard.run(&mut rx, &mut sent_rx);
+
         match result {
             Ok(KeyCode::Char('r')) => {
                 handler.abort();
@@ -270,7 +402,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             Ok(KeyCode::Esc) => break,
             Ok(KeyCode::Enter) => break,
             Ok(KeyCode::Char('i')) => {
-                // Interrupt all tasks and keep the dashboard running
                 interrupted.notify_one();
                 handler.abort();
             }
@@ -283,7 +414,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
-    // Cleanup
     execute!(stdout, LeaveAlternateScreen, Show)?;
     disable_raw_mode()?;
     Ok(())

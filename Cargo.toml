@@ -1,15 +1,21 @@
 [package]
 name = "pepe"
-version = "0.1.3"
+version = "0.1.4"
 authors = ["Omar MHAIMDAT"]
 edition = "2021"
-description = "HTTP load generator"
+description = "HTTP load generator and performance testing tool"
+readme = "README.md"
+homepage = "https://github.com/omarmhaimdat/pepe"
+repository = "https://github.com/omarmhaimdat/pepe"
+keywords = ["http", "load", "testing", "performance", "benchmark", "stress", "tool"]
+categories = ["command-line-utilities", "network-programming"]
 license = "MIT"
 
 [dependencies]
-clap = { version = "4.5.23", features = ["derive"] }
-tokio = { version = "1", features = ["full"] }
-reqwest = { version = "0.12.12", default-features = false, features = ["json", "rustls-tls"] }
+clap = { version = "4.5.24", features = ["derive"] }
+tokio = { version = "1.42.0", features = ["full"] }
+reqwest = { version = "0.12.12", default-features = false, features = ["json", "rustls-tls", "hickory-dns"] }
+hyper = "1.5.2"
 futures = "0.3.17"
 tokio-stream = "0.1"
 ratatui = "0.29.0"
