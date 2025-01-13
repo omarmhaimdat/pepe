@@ -87,9 +87,9 @@ jobs:
           %:
           \tdh \$@
           override_dh_auto_build:
-          \tcargo build --release
+            cargo build --release
           override_dh_auto_install:
-          \tinstall -D target/release/pepe \$(DESTDIR)/usr/bin/pepe
+            install -D target/release/pepe \$(DESTDIR)/usr/bin/pepe
           EOF
 
           cat <<EOF > pepe/debian/changelog
