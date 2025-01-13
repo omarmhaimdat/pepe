@@ -55,20 +55,13 @@ jobs:
         env:
           RUSTFLAGS: "-C linker=clang"
 
-      - name: Debug Directory Structure
+      - name: Debug Repository Structure
         run: |
           echo "Current Directory: $(pwd)"
-          echo "Directory Structure:"
+          echo "Directory Contents:"
+          ls -la
+          echo "Recursive Directory Structure:"
           ls -R
-
-      - name: Check for Cargo.toml
-        run: |
-          if [ -f "/home/runner/work/pepe/Cargo.toml" ]; then
-            echo "Found Cargo.toml"
-          else
-            echo "Cargo.toml not found"
-            exit 1
-          fi
 
       - name: Package Debian (Ubuntu)
         if: matrix.os == 'ubuntu-latest' && (matrix.target == 'x86_64-unknown-linux-gnu' || matrix.target == 'aarch64-unknown-linux-gnu')
@@ -87,17 +80,17 @@ jobs:
           Package: pepe
           Architecture: any
           Description: HTTP load generator
-           Pepe is a command-line HTTP load generator." > pepe/debian/control
+          Pepe is a command-line HTTP load generator." > pepe/debian/control
 
-          printf "#!/usr/bin/make -f\n%%:\n\tdh \$@\n\noverride_dh_auto_build:\n\techo 'Building the Rust binary...'\n\tcargo build --manifest-path=/home/runner/work/pepe/Cargo.toml --release\n\tls -l /home/runner/work/pepe/target/release\n\noverride_dh_auto_install:\n\techo 'Installing pepe binary...'\n\tinstall -D /home/runner/work/pepe/target/release/pepe \$(DESTDIR)/usr/bin/pepe\n" > pepe/debian/rules
+          printf "#!/usr/bin/make -f\n%%:\n\tdh \$@\n\noverride_dh_auto_build:\n\techo 'Building the Rust binary...'\n\tcargo build --manifest-path=\$(CURDIR)/../../Cargo.toml --release\n\tls -l ../../target/release\n\noverride_dh_auto_install:\n\techo 'Installing pepe binary...'\n\tinstall -D ../../target/release/pepe \$(DESTDIR)/usr/bin/pepe\n" > pepe/debian/rules
 
           echo "pepe (0.1.0) unstable; urgency=low
             * Initial release
-           -- Omar MHAIMDAT <omarmhaimdat@gmail.com>  $(date -R)" > pepe/debian/changelog
+          -- Omar MHAIMDAT <omarmhaimdat@gmail.com>  $(date -R)" > pepe/debian/changelog
 
           chmod +x pepe/debian/rules
           cd pepe
-          dpkg-buildpackage -us -uc
+          dpkg-buildpackage -us -uc -b
 
       - name: Package Homebrew (macOS)
         if: matrix.os == 'macos-latest' && (matrix.target == 'x86_64-apple-darwin' || matrix.target == 'aarch64-apple-darwin')
