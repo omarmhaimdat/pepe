@@ -29,7 +29,7 @@ jobs:
 
       - name: Install dependencies (Ubuntu)
         if: matrix.os == 'ubuntu-latest'
-        run: sudo apt-get install -y build-essential devscripts debhelper gcc-aarch64-linux-gnu gcc-multilib g++-multilib
+        run: sudo apt-get install -y build-essential devscripts debhelper gcc-aarch64-linux-gnu gcc-x86-64-linux-gnu
 
       - name: Build project
         run: cargo build --release --target ${{ matrix.target }}
@@ -44,7 +44,7 @@ jobs:
           echo "Source: pepe" > pepe/debian/control
           echo "Section: utils" >> pepe/debian/control
           echo "Priority: optional" >> pepe/debian/control
-          echo "Maintainer: Your Name <your.email@example.com>" >> pepe/debian/control
+          echo "Maintainer: Omar MHAIMDAT <omarmhaimdat@gmail.com>" >> pepe/debian/control
           echo "Build-Depends: debhelper (>= 9), cargo" >> pepe/debian/control
           echo "Standards-Version: 3.9.6" >> pepe/debian/control
           echo "Homepage: https://github.com/omarmhaimdat/pepe" >> pepe/debian/control
@@ -82,6 +82,7 @@ jobs:
           path: pepe-macos.tar.gz
 
   release:
+    if: github.ref == 'refs/heads/master'
     needs: build
     runs-on: ubuntu-latest
 
