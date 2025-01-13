@@ -101,6 +101,7 @@ jobs:
       - name: Package Homebrew (macOS)
         if: matrix.os == 'macos-latest' && (matrix.target == 'x86_64-apple-darwin' || matrix.target == 'aarch64-apple-darwin')
         run: |
+          ls target/release
           tar -czvf pepe-macos.tar.gz -C target/release pepe
 
       - name: Upload Homebrew Package
