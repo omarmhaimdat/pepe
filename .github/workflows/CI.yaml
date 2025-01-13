@@ -59,7 +59,7 @@ jobs:
         if: matrix.os == 'ubuntu-latest' && (matrix.target == 'x86_64-unknown-linux-gnu' || matrix.target == 'aarch64-unknown-linux-gnu')
         run: |
           mkdir -p pepe/debian/source
-          echo "3.0 (quilt)" > pepe/debian/source/format
+          echo "3.0 (native)" > pepe/debian/source/format
 
           echo "Source: pepe
           Section: utils
