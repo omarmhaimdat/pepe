@@ -74,7 +74,7 @@ jobs:
 
           echo "#!/usr/bin/make -f
           %:
-          \tdh \$@" > pepe/debian/rules
+          dh \$@" > pepe/debian/rules
 
           echo "pepe (0.1.0) unstable; urgency=low
             * Initial release
