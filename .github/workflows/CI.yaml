@@ -63,7 +63,7 @@ jobs:
           echo "Recursive Directory Structure:"
           ls -R
 
-      - name: Package Debian (Ubuntu)
+      - name: Debug Debian Files
         if: matrix.os == 'ubuntu-latest' && (matrix.target == 'x86_64-unknown-linux-gnu' || matrix.target == 'aarch64-unknown-linux-gnu')
         run: |
           mkdir -p pepe/debian/source
@@ -105,8 +105,20 @@ jobs:
           EOF
 
           chmod +x pepe/debian/rules
+
+          # Debug the generated files
+          echo "=== debian/changelog ==="
+          cat pepe/debian/changelog
+
+          echo "=== debian/control ==="
+          cat pepe/debian/control
+
+          echo "=== debian/rules ==="
+          cat pepe/debian/rules
+
+          # Build the package
           cd pepe
-          dpkg-buildpackage -us -uc -b
+          dpkg-buildpackage -us -uc
 
       - name: Package Homebrew (macOS)
         if: matrix.os == 'macos-latest' && (matrix.target == 'x86_64-apple-darwin' || matrix.target == 'aarch64-apple-darwin')
