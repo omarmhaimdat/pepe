@@ -91,7 +91,6 @@ jobs:
           \tinstall -D target/release/pepe \$(DESTDIR)/usr/bin/pepe
           EOF
 
-          mkdir -p pepe/debian
           cat <<EOF > pepe/debian/changelog
           pepe (0.1.4) unstable; urgency=low
             * Initial release
@@ -99,7 +98,8 @@ jobs:
           EOF
 
           chmod +x pepe/debian/rules
-          debuild -us -uc 
+          cd pepe
+          debuild -us -uc
 
       - name: Upload Debian Package
         if: matrix.os == 'ubuntu-latest' && (matrix.target == 'x86_64-unknown-linux-gnu' || matrix.target == 'aarch64-unknown-linux-gnu')
