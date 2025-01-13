@@ -1,0 +1,133 @@
+name: CI
+
+on:
+  pull_request:
+    branches:
+      - '**'
+  push:
+    branches:
+      - master
+
+jobs:
+  build:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        target: [x86_64-unknown-linux-gnu, aarch64-unknown-linux-gnu, x86_64-apple-darwin, aarch64-apple-darwin]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Set up Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          target: ${{ matrix.target }}
+          override: true
+
+      - name: Install dependencies (Ubuntu)
+        if: matrix.os == 'ubuntu-latest'
+        run: sudo apt-get install -y build-essential devscripts debhelper
+
+      - name: Build project
+        run: cargo build --release --target ${{ matrix.target }}
+
+      - name: Run tests
+        run: cargo test --release --target ${{ matrix.target }}
+
+      - name: Package Debian (Ubuntu)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          mkdir -p pepe/debian
+          echo "Source: pepe" > pepe/debian/control
+          echo "Section: utils" >> pepe/debian/control
+          echo "Priority: optional" >> pepe/debian/control
+          echo "Maintainer: Your Name <your.email@example.com>" >> pepe/debian/control
+          echo "Build-Depends: debhelper (>= 9), cargo" >> pepe/debian/control
+          echo "Standards-Version: 3.9.6" >> pepe/debian/control
+          echo "Homepage: https://github.com/omarmhaimdat/pepe" >> pepe/debian/control
+          echo "Package: pepe" >> pepe/debian/control
+          echo "Architecture: any" >> pepe/debian/control
+          echo "Depends: \${shlibs:Depends}, \${misc:Depends}" >> pepe/debian/control
+          echo "Description: HTTP load generator" >> pepe/debian/control
+          echo " Pepe is a command-line HTTP load generator." >> pepe/debian/control
+          echo "#!/usr/bin/make -f" > pepe/debian/rules
+          echo "%:" >> pepe/debian/rules
+          echo "	dh \$@" >> pepe/debian/rules
+          echo "override_dh_auto_build:" >> pepe/debian/rules
+          echo "	cargo build --release" >> pepe/debian/rules
+          echo "override_dh_auto_install:" >> pepe/debian/rules
+          echo "	install -D target/release/pepe \$(DESTDIR)/usr/bin/pepe" >> pepe/debian/rules
+          debuild -us -uc
+
+      - name: Upload Debian Package
+        if: matrix.os == 'ubuntu-latest'
+        uses: actions/upload-artifact@v2
+        with:
+          name: pepe-debian
+          path: ../pepe_*.deb
+
+      - name: Package Homebrew (macOS)
+        if: matrix.os == 'macos-latest'
+        run: |
+          tar -czvf pepe-macos.tar.gz -C target/release pepe
+
+      - name: Upload Homebrew Package
+        if: matrix.os == 'macos-latest'
+        uses: actions/upload-artifact@v2
+        with:
+          name: pepe-homebrew
+          path: pepe-macos.tar.gz
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Download Debian Package
+        uses: actions/download-artifact@v2
+        with:
+          name: pepe-debian
+          path: ./artifacts
+
+      - name: Download Homebrew Package
+        uses: actions/download-artifact@v2
+        with:
+          name: pepe-homebrew
+          path: ./artifacts
+
+      - name: Create Release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ github.sha }}
+          release_name: Release ${{ github.sha }}
+          draft: false
+          prerelease: false
+
+      - name: Upload Debian Package to Release
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./artifacts/pepe_*.deb
+          asset_name: pepe_ubuntu.deb
+          asset_content_type: application/octet-stream
+
+      - name: Upload Homebrew Package to Release
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./artifacts/pepe-macos.tar.gz
+          asset_name: pepe_macos.tar.gz
+          asset_content_type: application/octet-stream
