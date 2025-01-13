@@ -40,6 +40,7 @@ jobs:
         if: matrix.os == 'macos-latest'
         run: |
           brew install gcc aarch64-elf-gcc
+          xcode-select --install || true
 
       - name: Set environment variables (macOS)
         if: matrix.os == 'macos-latest'
