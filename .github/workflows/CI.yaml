@@ -71,7 +71,7 @@ jobs:
           Section: utils
           Priority: optional
           Maintainer: Omar MHAIMDAT <omarmhaimdat@gmail.com>
-          Build-Depends: debhelper (>= 9), cargo
+          Build-Depends: debhelper (>= 9), cargo, build-essential
           Standards-Version: 3.9.6
           Homepage: https://github.com/omarmhaimdat/pepe
 
