@@ -32,7 +32,7 @@ jobs:
           target: ${{ matrix.target }}
           override: true
 
-      - name: Install dependencies
+      - name: Install dependencies (Ubuntu)
         if: matrix.os == 'ubuntu-latest'
         run: sudo apt-get install -y build-essential devscripts debhelper gcc-aarch64-linux-gnu gcc-x86-64-linux-gnu
 
@@ -41,11 +41,26 @@ jobs:
         run: |
           brew install gcc aarch64-elf-gcc
 
+      - name: Set environment variables (macOS)
+        if: matrix.os == 'macos-latest'
+        run: |
+          echo "CC=clang" >> $GITHUB_ENV
+          echo "CARGO_TARGET_X86_64_APPLE_DARWIN_LINKER=clang" >> $GITHUB_ENV
+          echo "CARGO_TARGET_AARCH64_APPLE_DARWIN_LINKER=clang" >> $GITHUB_ENV
+
+      - name: Skip cross-compiler checks (macOS)
+        if: matrix.os == 'macos-latest'
+        run: echo "RING_PREGENERATE_ASM=true" >> $GITHUB_ENV
+
       - name: Build project
         run: cargo build --release --target ${{ matrix.target }}
+        env:
+          RUSTFLAGS: "-C linker=clang"
 
       - name: Run tests
         run: cargo test --release --target ${{ matrix.target }}
+        env:
+          RUSTFLAGS: "-C linker=clang"
 
       - name: Package Debian (Ubuntu)
         if: matrix.os == 'ubuntu-latest'
