@@ -64,7 +64,7 @@ jobs:
 
       - name: Upload Debian Package
         if: matrix.os == 'ubuntu-latest'
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v4
         with:
           name: pepe-debian
           path: ../pepe_*.deb
@@ -76,7 +76,7 @@ jobs:
 
       - name: Upload Homebrew Package
         if: matrix.os == 'macos-latest'
-        uses: actions/upload-artifact@v2
+        uses: actions/upload-artifact@v4
         with:
           name: pepe-homebrew
           path: pepe-macos.tar.gz
