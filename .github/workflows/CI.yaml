@@ -33,11 +33,11 @@ jobs:
           override: true
 
       - name: Install dependencies (Ubuntu)
-        if: matrix.os == 'ubuntu-latest'
+        if: matrix.os == 'ubuntu-latest' && (matrix.target == 'x86_64-unknown-linux-gnu' || matrix.target == 'aarch64-unknown-linux-gnu')
         run: sudo apt-get update && sudo apt-get install -y build-essential devscripts debhelper cargo
 
       - name: Install dependencies (macOS)
-        if: matrix.os == 'macos-latest'
+        if: matrix.os == 'macos-latest' && (matrix.target == 'x86_64-apple-darwin' || matrix.target == 'aarch64-apple-darwin')
         run: |
           brew install gcc
           xcode-select --install || true
@@ -46,7 +46,7 @@ jobs:
         run: cargo build --release --target ${{ matrix.target }}
 
       - name: Package Debian (Ubuntu)
-        if: matrix.os == 'ubuntu-latest' && matrix.target == 'x86_64-unknown-linux-gnu'
+        if: matrix.os == 'ubuntu-latest' && (matrix.target == 'x86_64-unknown-linux-gnu' || matrix.target == 'aarch64-unknown-linux-gnu')
         run: |
           mkdir -p pepe/debian
           echo "Source: pepe
@@ -74,7 +74,7 @@ jobs:
           dpkg-buildpackage -us -uc
 
       - name: Package Homebrew (macOS)
-        if: matrix.os == 'macos-latest' && matrix.target == 'x86_64-apple-darwin'
+        if: matrix.os == 'macos-latest' && (matrix.target == 'x86_64-apple-darwin' || matrix.target == 'aarch64-apple-darwin')
         run: |
           mkdir -p dist
           tar -czvf dist/pepe-macos.tar.gz -C target/${{ matrix.target }}/release pepe
