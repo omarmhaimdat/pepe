@@ -72,9 +72,8 @@ jobs:
           Description: HTTP load generator
            Pepe is a command-line HTTP load generator." > pepe/debian/control
 
-          echo "#!/usr/bin/make -f
-          %:
-          dh \$@" > pepe/debian/rules
+          # Use `printf` to include a TAB character in debian/rules
+          printf "#!/usr/bin/make -f\n%%:\n\tdh \$@\n" > pepe/debian/rules
 
           echo "pepe (0.1.0) unstable; urgency=low
             * Initial release
