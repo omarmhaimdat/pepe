@@ -14,7 +14,12 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest, macos-latest]
-        target: [x86_64-unknown-linux-gnu, aarch64-unknown-linux-gnu, x86_64-apple-darwin, aarch64-apple-darwin]
+        target: [
+          x86_64-unknown-linux-gnu,
+          aarch64-unknown-linux-gnu,
+          x86_64-apple-darwin,
+          aarch64-apple-darwin
+        ]
 
     steps:
       - name: Checkout code
@@ -27,14 +32,14 @@ jobs:
           target: ${{ matrix.target }}
           override: true
 
-      - name: Install dependencies (Ubuntu)
+      - name: Install dependencies
         if: matrix.os == 'ubuntu-latest'
         run: sudo apt-get install -y build-essential devscripts debhelper gcc-aarch64-linux-gnu gcc-x86-64-linux-gnu
 
       - name: Install dependencies (macOS)
         if: matrix.os == 'macos-latest'
         run: |
-          brew install gcc aarch64-linux-gnu-gcc
+          brew install gcc aarch64-elf-gcc
 
       - name: Build project
         run: cargo build --release --target ${{ matrix.target }}
@@ -46,25 +51,32 @@ jobs:
         if: matrix.os == 'ubuntu-latest'
         run: |
           mkdir -p pepe/debian
-          echo "Source: pepe" > pepe/debian/control
-          echo "Section: utils" >> pepe/debian/control
-          echo "Priority: optional" >> pepe/debian/control
-          echo "Maintainer: Omar MHAIMDAT <omarmhaimdat@gmail.com>" >> pepe/debian/control
-          echo "Build-Depends: debhelper (>= 9), cargo" >> pepe/debian/control
-          echo "Standards-Version: 3.9.6" >> pepe/debian/control
-          echo "Homepage: https://github.com/omarmhaimdat/pepe" >> pepe/debian/control
-          echo "Package: pepe" >> pepe/debian/control
-          echo "Architecture: any" >> pepe/debian/control
-          echo "Depends: \${shlibs:Depends}, \${misc:Depends}" >> pepe/debian/control
-          echo "Description: HTTP load generator" >> pepe/debian/control
-          echo " Pepe is a command-line HTTP load generator." >> pepe/debian/control
-          echo "#!/usr/bin/make -f" > pepe/debian/rules
-          echo "%:" >> pepe/debian/rules
-          echo "	dh \$@" >> pepe/debian/rules
-          echo "override_dh_auto_build:" >> pepe/debian/rules
-          echo "	cargo build --release" >> pepe/debian/rules
-          echo "override_dh_auto_install:" >> pepe/debian/rules
-          echo "	install -D target/release/pepe \$(DESTDIR)/usr/bin/pepe" >> pepe/debian/rules
+          cat <<EOF > pepe/debian/control
+          Source: pepe
+          Section: utils
+          Priority: optional
+          Maintainer: Omar MHAIMDAT <omarmhaimdat@gmail.com>
+          Build-Depends: debhelper (>= 9), cargo
+          Standards-Version: 3.9.6
+          Homepage: https://github.com/omarmhaimdat/pepe
+          Package: pepe
+          Architecture: any
+          Depends: ${shlibs:Depends}, ${misc:Depends}
+          Description: HTTP load generator
+           Pepe is a command-line HTTP load generator.
+          EOF
+
+          cat <<EOF > pepe/debian/rules
+          #!/usr/bin/make -f
+          %:
+          \tdh $@
+          override_dh_auto_build:
+          \tcargo build --release
+          override_dh_auto_install:
+          \tinstall -D target/release/pepe $(DESTDIR)/usr/bin/pepe
+          EOF
+
+          chmod +x pepe/debian/rules
           debuild -us -uc
 
       - name: Upload Debian Package
