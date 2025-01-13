@@ -92,7 +92,7 @@ jobs:
 
           chmod +x pepe/debian/rules
           cd pepe
-          dpkg-buildpackage -us -uc -b
+          dpkg-buildpackage -us -uc
 
       - name: Package Homebrew (macOS)
         if: matrix.os == 'macos-latest' && (matrix.target == 'x86_64-apple-darwin' || matrix.target == 'aarch64-apple-darwin')
