@@ -108,8 +108,12 @@ jobs:
         if: matrix.os == 'macos-latest' && (matrix.target == 'x86_64-apple-darwin' || matrix.target == 'aarch64-apple-darwin')
         run: |
           cargo build --release --target ${{ matrix.target }}
-          ls target/release
-          tar -czvf pepe-macos.tar.gz -C target/release pepe
+          if [ -f target/${{ matrix.target }}/release/pepe ]; then
+            tar -czvf pepe-macos.tar.gz -C target/${{ matrix.target }}/release pepe
+          else
+            echo "Error: pepe binary not found"
+            exit 1
+          fi
 
       - name: Upload Homebrew Package
         if: matrix.os == 'macos-latest' && (matrix.target == 'x86_64-apple-darwin' || matrix.target == 'aarch64-apple-darwin')
