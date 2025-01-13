@@ -74,9 +74,10 @@ jobs:
           Build-Depends: debhelper (>= 9), cargo
           Standards-Version: 3.9.6
           Homepage: https://github.com/omarmhaimdat/pepe
+
           Package: pepe
           Architecture: any
-          Depends: ${shlibs:Depends}, ${misc:Depends}
+          Depends: \${shlibs:Depends}, \${misc:Depends}
           Description: HTTP load generator
            Pepe is a command-line HTTP load generator.
           EOF
@@ -84,7 +85,7 @@ jobs:
           cat <<EOF > pepe/debian/rules
           #!/usr/bin/make -f
           %:
-          \tdh $@
+          \tdh \$@
           override_dh_auto_build:
           \tcargo build --release
           override_dh_auto_install:
@@ -94,12 +95,12 @@ jobs:
           cat <<EOF > pepe/debian/changelog
           pepe (0.1.4) unstable; urgency=low
             * Initial release
-           -- Omar MHAIMDAT <omarmhaimdat@gmail.com>  $(date -R)
+           -- Omar MHAIMDAT <omarmhaimdat@gmail.com>  \$(date -R)
           EOF
 
           chmod +x pepe/debian/rules
           cd pepe
-          debuild -us -uc
+          dpkg-buildpackage -us -uc
 
       - name: Upload Debian Package
         if: matrix.os == 'ubuntu-latest' && (matrix.target == 'x86_64-unknown-linux-gnu' || matrix.target == 'aarch64-unknown-linux-gnu')
