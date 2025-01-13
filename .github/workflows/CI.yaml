@@ -94,8 +94,12 @@ jobs:
         with:
           name: pepe-${{ matrix.target }}
           path: |
-            ../pepe_*.deb
+            pepe_*.deb
             dist/pepe-macos.tar.gz
+          if-no-files-found: warn
+          compression-level: 6
+          overwrite: false
+          include-hidden-files: false
 
   release:
     if: github.ref == 'refs/heads/master'
