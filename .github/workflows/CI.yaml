@@ -83,10 +83,7 @@ jobs:
           Description: HTTP load generator
           Pepe is a command-line HTTP load generator for stress testing." > pepe/debian/control
 
-          echo "pepe (0.1.0) unstable; urgency=low
-            * Initial release.
-
-          -- Omar MHAIMDAT <omarmhaimdat@gmail.com>  $(date -R)" > pepe/debian/changelog
+          echo "pepe (0.1.0) unstable; urgency=low\n* Initial release.\n-- Omar MHAIMDAT <omarmhaimdat@gmail.com>  $(date -R)" > pepe/debian/changelog
 
           cat << 'EOF' > pepe/debian/rules
           #!/usr/bin/make -f
