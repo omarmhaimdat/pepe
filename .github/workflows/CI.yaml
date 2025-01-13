@@ -68,7 +68,7 @@ jobs:
           Homepage: https://github.com/omarmhaimdat/pepe
 
           Package: pepe
-          Architecture: amd64
+          Architecture: any
           Description: HTTP load generator
           Pepe is a command-line HTTP load generator." > pepe/debian/control
 
