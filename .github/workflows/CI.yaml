@@ -60,7 +60,7 @@ jobs:
           RUSTFLAGS: "-C linker=clang"
 
       - name: Package Debian (Ubuntu)
-        if: matrix.os == 'ubuntu-latest' && matrix.os == 'ubuntu-latest' && (matrix.target == 'x86_64-unknown-linux-gnu' || matrix.target == 'aarch64-unknown-linux-gnu')
+        if: matrix.os == 'ubuntu-latest' && (matrix.target == 'x86_64-unknown-linux-gnu' || matrix.target == 'aarch64-unknown-linux-gnu')
         run: |
           mkdir -p pepe/debian
           cat <<EOF > pepe/debian/control
@@ -85,7 +85,13 @@ jobs:
           override_dh_auto_build:
           \tcargo build --release
           override_dh_auto_install:
-          \tinstall -D target/release/pepe $(DESTDIR)/usr/bin/pepe
+          \tinstall -D target/release/pepe \$(DESTDIR)/usr/bin/pepe
+          EOF
+
+          cat <<EOF > pepe/debian/changelog
+          pepe (0.1.0) unstable; urgency=low
+            * Initial release
+           -- Omar MHAIMDAT <omarmhaimdat@gmail.com>  $(date -R)
           EOF
 
           chmod +x pepe/debian/rules
