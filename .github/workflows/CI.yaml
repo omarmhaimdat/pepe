@@ -70,7 +70,7 @@ jobs:
           Package: pepe
           Architecture: any
           Description: HTTP load generator
-          Pepe is a command-line HTTP load generator." > pepe/debian/control
+           Pepe is a command-line HTTP load generator." > pepe/debian/control
 
           echo "#!/usr/bin/make -f
           %:
