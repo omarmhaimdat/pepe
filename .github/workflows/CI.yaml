@@ -1,12 +1,12 @@
 name: CI
 
 on:
-  pull_request:
-    branches:
-      - '**'
   push:
     branches:
       - master
+  pull_request:
+    branches:
+      - '**'
 
 jobs:
   build:
@@ -34,98 +34,58 @@ jobs:
 
       - name: Install dependencies (Ubuntu)
         if: matrix.os == 'ubuntu-latest'
-        run: sudo apt-get install -y build-essential devscripts debhelper gcc-aarch64-linux-gnu gcc-x86-64-linux-gnu cargo
+        run: sudo apt-get update && sudo apt-get install -y build-essential devscripts debhelper cargo
 
       - name: Install dependencies (macOS)
         if: matrix.os == 'macos-latest'
         run: |
-          brew install gcc aarch64-elf-gcc
+          brew install gcc
           xcode-select --install || true
 
-      - name: Set environment variables (macOS)
-        if: matrix.os == 'macos-latest'
-        run: |
-          echo "CC=clang" >> $GITHUB_ENV
-          echo "CARGO_TARGET_X86_64_APPLE_DARWIN_LINKER=clang" >> $GITHUB_ENV
-          echo "CARGO_TARGET_AARCH64_APPLE_DARWIN_LINKER=clang" >> $GITHUB_ENV
-
-      - name: Build project (Ubuntu)
-        if: matrix.os == 'ubuntu-latest' && (matrix.target == 'x86_64-unknown-linux-gnu' || matrix.target == 'aarch64-unknown-linux-gnu')
+      - name: Build CLI Project
         run: cargo build --release --target ${{ matrix.target }}
-        env:
-          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
-          CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER: x86_64-linux-gnu-gcc
-
-      - name: Build project (macOS)
-        if: matrix.os == 'macos-latest' && (matrix.target == 'x86_64-apple-darwin' || matrix.target == 'aarch64-apple-darwin')
-        run: cargo build --release --target ${{ matrix.target }}
-        env:
-          RUSTFLAGS: "-C linker=clang"
 
       - name: Package Debian (Ubuntu)
-        if: matrix.os == 'ubuntu-latest' && (matrix.target == 'x86_64-unknown-linux-gnu' || matrix.target == 'aarch64-unknown-linux-gnu')
+        if: matrix.os == 'ubuntu-latest' && matrix.target == 'x86_64-unknown-linux-gnu'
         run: |
           mkdir -p pepe/debian
-          cat <<EOF > pepe/debian/control
-          Source: pepe
+          echo "Source: pepe
           Section: utils
           Priority: optional
           Maintainer: Omar MHAIMDAT <omarmhaimdat@gmail.com>
-          Build-Depends: debhelper (>= 9), build-essential, dpkg-dev
+          Build-Depends: debhelper (>= 9), build-essential
           Standards-Version: 3.9.6
           Homepage: https://github.com/omarmhaimdat/pepe
 
           Package: pepe
-          Architecture: any
-          Depends: \${shlibs:Depends}, \${misc:Depends}
+          Architecture: amd64
           Description: HTTP load generator
-           Pepe is a command-line HTTP load generator.
-          EOF
+          Pepe is a command-line HTTP load generator." > pepe/debian/control
 
-          cat <<EOF > pepe/debian/rules
-          #!/usr/bin/make -f
+          echo "#!/usr/bin/make -f
           %:
-          \tdh \$@
-          override_dh_auto_build:
-            cargo build --release
-          override_dh_auto_install:
-            install -D target/release/pepe \$(DESTDIR)/usr/bin/pepe
-          EOF
+          \tdh \$@" > pepe/debian/rules
 
-          cat <<EOF > pepe/debian/changelog
-          pepe (0.1.4) unstable; urgency=low
+          echo "pepe (0.1.0) unstable; urgency=low
             * Initial release
-           -- Omar MHAIMDAT <omarmhaimdat@gmail.com>  \$(date -R)
-          EOF
+           -- Omar MHAIMDAT <omarmhaimdat@gmail.com>  $(date -R)" > pepe/debian/changelog
 
           chmod +x pepe/debian/rules
-          cd pepe
           dpkg-buildpackage -us -uc
 
-      - name: Upload Debian Package
-        if: matrix.os == 'ubuntu-latest' && (matrix.target == 'x86_64-unknown-linux-gnu' || matrix.target == 'aarch64-unknown-linux-gnu')
-        uses: actions/upload-artifact@v4
-        with:
-          name: pepe-debian
-          path: ../pepe_*.deb
-
       - name: Package Homebrew (macOS)
-        if: matrix.os == 'macos-latest' && (matrix.target == 'x86_64-apple-darwin' || matrix.target == 'aarch64-apple-darwin')
+        if: matrix.os == 'macos-latest' && matrix.target == 'x86_64-apple-darwin'
         run: |
-          cargo build --release --target ${{ matrix.target }}
-          if [ -f target/${{ matrix.target }}/release/pepe ]; then
-            tar -czvf pepe-macos.tar.gz -C target/${{ matrix.target }}/release pepe
-          else
-            echo "Error: pepe binary not found"
-            exit 1
-          fi
+          mkdir -p dist
+          tar -czvf dist/pepe-macos.tar.gz -C target/${{ matrix.target }}/release pepe
 
-      - name: Upload Homebrew Package
-        if: matrix.os == 'macos-latest' && (matrix.target == 'x86_64-apple-darwin' || matrix.target == 'aarch64-apple-darwin')
+      - name: Upload Build Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: pepe-homebrew-${{ matrix.target }}
-          path: pepe-macos.tar.gz
+          name: pepe-${{ matrix.target }}
+          path: |
+            ../pepe_*.deb
+            dist/pepe-macos.tar.gz
 
   release:
     if: github.ref == 'refs/heads/master'
@@ -136,45 +96,19 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Download Debian Package
-        uses: actions/download-artifact@v2
-        with:
-          name: pepe-debian
-          path: ./artifacts
+      - name: Download Build Artifacts
+        uses: actions/download-artifact@v4
 
-      - name: Download Homebrew Package
-        uses: actions/download-artifact@v2
-        with:
-          name: pepe-homebrew
-          path: ./artifacts
+      - name: Push to APT Repository
+        run: |
+          # Your script for uploading .deb to APT repository
+          echo "Uploading .deb to APT repo..."
 
-      - name: Create Release
-        id: create_release
-        uses: actions/create-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tag_name: ${{ github.sha }}
-          release_name: Release ${{ github.sha }}
-          draft: false
-          prerelease: false
-
-      - name: Upload Debian Package to Release
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./artifacts/pepe_*.deb
-          asset_name: pepe_ubuntu.deb
-          asset_content_type: application/octet-stream
-
-      - name: Upload Homebrew Package to Release
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./artifacts/pepe-macos.tar.gz
-          asset_name: pepe_macos.tar.gz
-          asset_content_type: application/octet-stream
+      - name: Push to Homebrew
+        run: |
+          git clone https://github.com/omarmhaimdat/homebrew-pepe.git
+          tar -xzvf dist/pepe-macos.tar.gz -C homebrew-pepe/bin
+          cd homebrew-pepe
+          git add .
+          git commit -m "Release $(date +%Y-%m-%d)"
+          git push
