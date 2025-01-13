@@ -92,19 +92,19 @@ jobs:
           debuild -us -uc
 
       - name: Upload Debian Package
-        if: matrix.os == 'ubuntu-latest'
+        if: matrix.os == 'ubuntu-latest' && github.ref == 'refs/heads/master' && (matrix.target == 'x86_64-unknown-linux-gnu' || matrix.target == 'aarch64-unknown-linux-gnu')
         uses: actions/upload-artifact@v4
         with:
           name: pepe-debian
           path: ../pepe_*.deb
 
       - name: Package Homebrew (macOS)
-        if: matrix.os == 'macos-latest'
+        if: matrix.os == 'macos-latest' && (matrix.target == 'x86_64-apple-darwin' || matrix.target == 'aarch64-apple-darwin')
         run: |
           tar -czvf pepe-macos.tar.gz -C target/release pepe
 
       - name: Upload Homebrew Package
-        if: matrix.os == 'macos-latest'
+        if: matrix.os == 'macos-latest' && github.ref == 'refs/heads/master' && (matrix.target == 'x86_64-apple-darwin' || matrix.target == 'aarch64-apple-darwin')
         uses: actions/upload-artifact@v4
         with:
           name: pepe-homebrew
