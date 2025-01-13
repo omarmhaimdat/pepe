@@ -76,12 +76,12 @@ jobs:
           %:
           \tdh \$@" > pepe/debian/rules
 
-          mkdir -p pepe/debian
           echo "pepe (0.1.0) unstable; urgency=low
             * Initial release
            -- Omar MHAIMDAT <omarmhaimdat@gmail.com>  $(date -R)" > pepe/debian/changelog
 
           chmod +x pepe/debian/rules
+          cd pepe
           dpkg-buildpackage -us -uc
 
       - name: Package Homebrew (macOS)
