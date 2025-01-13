@@ -81,18 +81,18 @@ jobs:
           Architecture: any
           Depends: \${shlibs:Depends}, \${misc:Depends}
           Description: HTTP load generator
-           Pepe is a command-line HTTP load generator for stress testing." > pepe/debian/control
+          Pepe is a command-line HTTP load generator for stress testing." > pepe/debian/control
 
           echo "pepe (0.1.0) unstable; urgency=low
             * Initial release.
 
-           -- Omar MHAIMDAT <omarmhaimdat@gmail.com>  $(date -R)" > pepe/debian/changelog
+          -- Omar MHAIMDAT <omarmhaimdat@gmail.com>  $(date -R)" > pepe/debian/changelog
 
-          printf "#!/usr/bin/make -f\n%%:\n\tdh \$@\n\noverride_dh_auto_build:\n\techo 'Building the Rust binary...'\n\tcargo build --manifest-path=\$(CURDIR)/../../../Cargo.toml --release\n\tls -l ../../../target/release\n\noverride_dh_auto_install:\n\techo 'Installing pepe binary...'\n\tinstall -D ../../../target/release/pepe \$(DESTDIR)/usr/bin/pepe\n" > pepe/debian/rules
+          printf "#!/usr/bin/make -f\n%%:\n\tdh \$@\n\noverride_dh_auto_build:\n\techo 'Building the Rust binary...'\n\tcargo build --manifest-path=\$(CURDIR)/../../Cargo.toml --release\n\tls -l ../../target/release\n\noverride_dh_auto_install:\n\techo 'Installing pepe binary...'\n\tinstall -D ../../target/release/pepe \$(DESTDIR)/usr/bin/pepe\n" > pepe/debian/rules
 
           chmod +x pepe/debian/rules
           cd pepe
-          dpkg-buildpackage -us -uc
+          dpkg-buildpackage -us -uc -b
 
       - name: Package Homebrew (macOS)
         if: matrix.os == 'macos-latest' && (matrix.target == 'x86_64-apple-darwin' || matrix.target == 'aarch64-apple-darwin')
