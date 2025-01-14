@@ -1,0 +1,138 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+    branches:
+      - '**'
+
+jobs:
+  build:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        target: [
+          x86_64-unknown-linux-gnu,
+          aarch64-unknown-linux-gnu,
+          x86_64-apple-darwin,
+          aarch64-apple-darwin
+        ]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          target: ${{ matrix.target }}
+          override: true
+
+      - name: Install dependencies (Ubuntu)
+        if: matrix.os == 'ubuntu-latest' && (matrix.target == 'x86_64-unknown-linux-gnu' || matrix.target == 'aarch64-unknown-linux-gnu')
+        run: sudo apt-get update && sudo apt-get install -y build-essential devscripts debhelper cargo gcc-aarch64-linux-gnu
+
+      - name: Install dependencies (macOS)
+        if: matrix.os == 'macos-latest' && (matrix.target == 'x86_64-apple-darwin' || matrix.target == 'aarch64-apple-darwin')
+        run: |
+          brew install gcc
+          xcode-select --install || true
+
+      - name: Build project (Ubuntu)
+        if: matrix.os == 'ubuntu-latest' && (matrix.target == 'x86_64-unknown-linux-gnu' || matrix.target == 'aarch64-unknown-linux-gnu')
+        run: cargo build --release --target ${{ matrix.target }}
+        env:
+          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
+          CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER: x86_64-linux-gnu-gcc
+
+      - name: Build project (macOS)
+        if: matrix.os == 'macos-latest' && (matrix.target == 'x86_64-apple-darwin' || matrix.target == 'aarch64-apple-darwin')
+        run: cargo build --release --target ${{ matrix.target }}
+        env:
+          RUSTFLAGS: "-C linker=clang"
+
+      - name: Debug Repository Structure
+        run: |
+          echo "Current Directory: $(pwd)"
+          echo "Directory Contents:"
+          ls -la
+          echo "Recursive Directory Structure:"
+          ls -R
+
+      - name: Debug Debian Files
+        if: matrix.os == 'ubuntu-latest' && (matrix.target == 'x86_64-unknown-linux-gnu' || matrix.target == 'aarch64-unknown-linux-gnu')
+        run: |
+          mkdir -p pepe/debian/source
+          echo "3.0 (native)" > pepe/debian/source/format
+
+          # Generate the control file
+          echo "Source: pepe
+          Section: utils
+          Priority: optional
+          Maintainer: Omar MHAIMDAT <omarmhaimdat@gmail.com>
+          Build-Depends: debhelper-compat (= 13), build-essential, cargo
+          Standards-Version: 4.6.0
+          Homepage: https://github.com/omarmhaimdat/pepe
+
+          Package: pepe
+          Architecture: any
+          Description: HTTP load generator
+           Pepe is a command-line HTTP load generator for stress testing." > pepe/debian/control
+
+            # Generate the changelog file
+            echo "pepe (0.1.0) unstable; urgency=low\n  * Initial release\n -- Omar MHAIMDAT <omarmhaimdat@gmail.com>  $(date -R)" > pepe/debian/changelog
+
+            printf "#!/usr/bin/make -f\n%%:\n\tdh \$@\n" > pepe/debian/rules
+
+            # Generate the rules file
+            chmod +x pepe/debian/rules
+          cd pepe
+          dpkg-buildpackage -us -uc
+
+      - name: Package Homebrew (macOS)
+        if: matrix.os == 'macos-latest' && (matrix.target == 'x86_64-apple-darwin' || matrix.target == 'aarch64-apple-darwin')
+        run: |
+          mkdir -p dist
+          tar -czvf dist/pepe-macos.tar.gz -C target/${{ matrix.target }}/release pepe
+
+      - name: Upload Build Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: pepe-${{ matrix.target }}
+          path: |
+            pepe_*.deb
+            dist/pepe-macos.tar.gz
+          if-no-files-found: warn
+          compression-level: 6
+          overwrite: false
+          include-hidden-files: false
+
+  release:
+    if: github.ref == 'refs/heads/master'
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download Build Artifacts
+        uses: actions/download-artifact@v4
+
+      - name: Push to APT Repository
+        run: |
+          # Your script for uploading .deb to APT repository
+          echo "Uploading .deb to APT repo..."
+
+      - name: Push to Homebrew
+        run: |
+          git clone https://github.com/omarmhaimdat/homebrew-pepe.git
+          tar -xzvf dist/pepe-macos.tar.gz -C homebrew-pepe/bin
+          cd homebrew-pepe
+          git add .
+          git commit -m "Release $(date +%Y-%m-%d)"
+          git push
