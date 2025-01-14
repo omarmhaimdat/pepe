@@ -2,6 +2,10 @@
 
 Pepe is a command-line HTTP load generator designed to test the performance and reliability of web servers. It allows you to send a large number of HTTP requests to a specified URL and measure various performance metrics such as response times, throughput, and error rates.
 
+Pepe is written in Rust and uses the `reqwest` and `tokio` libraries for making HTTP requests asynchronously. It supports sending multiple requests concurrently, custom headers, request bodies, timeouts, basic authentication, and proxy servers.
+
+![Pepe](assets/pepe.gif)
+
 ## Features
 
 - **Concurrency**: Send multiple requests concurrently to simulate real-world load.
