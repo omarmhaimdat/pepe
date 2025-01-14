@@ -84,25 +84,7 @@ jobs:
            Pepe is a command-line HTTP load generator for stress testing." > pepe/debian/control
 
           # Generate the changelog file
-          echo "pepe (0.1.0) unstable; urgency=low
-            * Initial release
-           -- Omar MHAIMDAT <omarmhaimdat@gmail.com>  $(date -R)" > pepe/debian/changelog
-
-          # Generate the rules file
-          echo "#!/usr/bin/make -f
-
-          %:
-          \tdh $@
-
-          override_dh_auto_build:
-            echo "Building the Rust binary..."
-            cargo build --manifest-path=$(pwd)/../../../Cargo.toml --release
-            ls -l ../../../target/release
-
-          override_dh_auto_install:
-            echo "Installing pepe binary..."
-            install -D ../../../target/release/pepe debian/pepe/usr/bin/pepe" > pepe/debian/rules
-
+          echo "pepe (0.1.0) unstable; urgency=low\n  * Initial release\n -- Omar MHAIMDAT <omarmhaimdat@gmail.com>  $(date -R)" > pepe/debian/changelog && echo "#!/usr/bin/make -f\n\n%:\n\tdh \$@\n\noverride_dh_auto_build:\n\techo \"Building the Rust binary...\"\n\tcargo build --manifest-path=\$(pwd)/../../../Cargo.toml --release\n\tls -l ../../../target/release\n\noverride_dh_auto_install:\n\techo \"Installing pepe binary...\"\n\tinstall -D ../../../target/release/pepe debian/pepe/usr/bin/pepe" > pepe/debian/rules
           chmod +x pepe/debian/rules
           cd pepe
           dpkg-buildpackage -us -uc
