@@ -92,7 +92,7 @@ jobs:
           echo "#!/usr/bin/make -f
 
           %:
-            dh $@
+          \tdh $@
 
           override_dh_auto_build:
             echo "Building the Rust binary..."
