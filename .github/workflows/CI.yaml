@@ -80,7 +80,6 @@ jobs:
 
           Package: pepe
           Architecture: any
-          Depends: \${shlibs:Depends}, \${misc:Depends}
           Description: HTTP load generator
           Pepe is a command-line HTTP load generator for stress testing." > pepe/debian/control
 
