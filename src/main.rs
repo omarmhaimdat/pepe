@@ -9,7 +9,7 @@ use crossterm::{
     },
 };
 use hyper::{HeaderMap, Uri};
-use reqwest::header::USER_AGENT;
+use reqwest::{header::USER_AGENT, Proxy};
 use std::io::stdout;
 use std::str::FromStr;
 use std::sync::Arc;
@@ -55,7 +55,7 @@ struct Args {
     user_agent: String,
     #[clap(short, long)]
     basic_auth: Option<String>,
-    #[clap(short, long)]
+    #[clap(short, long, help = "Proxy server URL: http://user:pass@host:port or socks5://host:port")]
     proxy: Option<String>,
     #[clap(short, long)]
     host: Option<String>,
@@ -94,6 +94,18 @@ impl Args {
         if self.timeout == 0 || self.timeout > 120 {
             eprintln!("Error: Timeout cannot be 0, or greater than 120 seconds.");
             std::process::exit(1);
+        }
+
+        if self.proxy.is_some() {
+            if self.proxy.as_ref().unwrap().starts_with("socks4") {
+                eprintln!("Error: Socks4 proxy is not supported by reqwest.");
+                std::process::exit(1);
+            }
+            let proxy = Proxy::all(self.proxy.as_ref().unwrap());
+            if proxy.is_err() {
+                eprintln!("Error: Invalid proxy URL: {}", self.proxy.as_ref().unwrap());
+                std::process::exit(1);
+            }
         }
     }
 }
@@ -263,7 +275,30 @@ async fn run(
     }
 
     let semaphore = Arc::new(Semaphore::new(args.concurrency as usize));
-    let client = Arc::new(reqwest::Client::new());
+    let mut client_builder = reqwest::Client::builder()
+        .default_headers(request_headers)
+        .timeout(std::time::Duration::from_secs(args.timeout as u64));
+
+    if let Some(proxy_url) = &args.proxy {
+        let proxy = Proxy::all(proxy_url).map_err(|e| PepeError::HeaderParseError(e.to_string()))?;
+        client_builder = client_builder.proxy(proxy);
+    }
+
+    if args.disable_compression {
+        client_builder = client_builder.no_gzip();
+    }
+
+    if args.disable_keepalive {
+        client_builder = client_builder.connection_verbose(true);
+    }
+
+    if args.disable_redirects {
+        client_builder = client_builder.redirect(reqwest::redirect::Policy::none());
+    }
+
+    client_builder = client_builder.timeout(std::time::Duration::from_secs(args.timeout as u64));
+
+    let client = Arc::new(client_builder.build().map_err(|e| PepeError::RequestError(e))?);
     let all_start = std::time::Instant::now();
 
     // Spawn request handler
@@ -278,8 +313,6 @@ async fn run(
                 let client = client.clone();
                 let url = args.url.clone();
                 let method = args.method.clone();
-                let headers = request_headers.clone();
-                let timeout = std::time::Duration::from_secs(args.timeout as u64);
 
                 let sent_tx = sent_tx.clone();
 
@@ -295,12 +328,7 @@ async fn run(
                     let dns_times: (std::time::Duration, std::time::Duration) =
                         resolve_dns(&url).await.unwrap_or_default();
 
-                    let response = client
-                        .request(method.clone(), &url)
-                        .headers(headers)
-                        .timeout(timeout)
-                        .send()
-                        .await;
+                    let response = client.request(method, &url).send().await;
 
                     let response_headers = response
                         .as_ref()
