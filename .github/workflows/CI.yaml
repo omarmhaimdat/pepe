@@ -70,8 +70,7 @@ jobs:
           echo "3.0 (native)" > pepe/debian/source/format
 
           # Generate the control file
-          cat << EOF > pepe/debian/control
-          Source: pepe
+          echo "Source: pepe
           Section: utils
           Priority: optional
           Maintainer: Omar MHAIMDAT <omarmhaimdat@gmail.com>
@@ -83,8 +82,7 @@ jobs:
           Architecture: any
           Depends: \${shlibs:Depends}, \${misc:Depends}
           Description: HTTP load generator
-          Pepe is a command-line HTTP load generator for stress testing.
-          EOF
+          Pepe is a command-line HTTP load generator for stress testing." > pepe/debian/control
 
           # Generate the changelog file
           echo "pepe (0.1.0) unstable; urgency=low
@@ -92,8 +90,7 @@ jobs:
            -- Omar MHAIMDAT <omarmhaimdat@gmail.com>  $(date -R)" > pepe/debian/changelog
 
           # Generate the rules file
-          cat << 'EOF' > pepe/debian/rules
-          #!/usr/bin/make -f
+          echo "#!/usr/bin/make -f
 
           %:
             dh $@
@@ -105,8 +102,7 @@ jobs:
 
           override_dh_auto_install:
             echo "Installing pepe binary..."
-            install -D ../../../target/release/pepe $(DESTDIR)/usr/bin/pepe
-          EOF
+            install -D ../../../target/release/pepe $(DESTDIR)/usr/bin/pepe" > pepe/debian/rules
 
           chmod +x pepe/debian/rules
           cd pepe
