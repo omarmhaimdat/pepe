@@ -25,23 +25,86 @@ Pepe is written in Rust and uses the `reqwest` and `tokio` libraries for making 
 
 ### Manual Installation
 
+Make sure you have Rust installed on your system. You can install Rust using `rustup` by following the instructions on the [official website](https://www.rust-lang.org/tools/install).
+
+Once you have Rust installed, you can build and install Pepe using Cargo, the Rust package manager:
+
+
+Clone the repository:
+
+```bash
+git clone https://github.com/omarmhaimdat/pepe.git
+```
+
+Change to the project directory:
+```bash
+cd pepe
+```
+
+Build and install the Pepe binary using Cargo:
+```bash
+cargo install --path .
+```
+
+This will build the Pepe binary and install it in your Cargo bin directory, which should be in your system's PATH.
+
 ## Usage
 
 ### Basic Usage
 
+To send a simple GET request to a URL, use the following command:
+
+```bash
+pepe https://example.com
+```
+
 ### Advanced Usage
+
+```bash
+pepe -n 1000 -c 20 -t 10 -u "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_11_2) AppleWebKit/601.3.9 (KHTML, like Gecko) Version/9.0.2 Safari/601.3.9" -H "Accept: application/json" -H "Content-Type: application/json" -m GET https://example.com
+```
+
+Let's break down the options used in this command:
+
+- `-n 1000`: Send a total of 1000 requests.
+- `-c 20`: Use 20 concurrent connections.
+- `-t 10`: Set a timeout of 10 seconds for each request.
+- `-u "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_11_2) AppleWebKit/601.3.9 (KHTML, like Gecko) Version/9.0.2 Safari/601.3.9"`: Set the User-Agent header to simulate a Safari browser on a Mac.
+- `-H "Accept: application/json"`: Add a custom Accept header to the requests.
+- `-H "Content-Type: application/json"`: Add a custom Content-Type header to the requests.
+- `-m GET`: Use the GET HTTP method.
+- `https://example.com`: The URL to send requests to.
+
 
 ## Examples
 
 ### Sending a GET Request
 
+```bash
+pepe -n 1000 -c 10 -m GET https://example.com
+```
+
+This command sends 1000 GET requests to `https://example.com` with a concurrency of 10 requests at a time, -m GET specifies the HTTP method to use.
+
 ### Sending a POST Request
+
+Send a POST request with a request body as raw text:
+
+```bash
+pepe -n 1000 -c 10 -m POST -d 'Hello, World!' https://httpbin.org/post
+```
+
+Send a POST request with a request body in json format:
+
+```bash
+pepe -n 1000 -c 10 -m POST -d '{"key": "value"}' -H 'Content-Type: application/json' https://httpbin.org/post
+```
 
 ### Sending Requests with Custom Headers
 
-### Sending Requests with a Request Body
-
-### Basic Authentication
+```bash
+pepe -n 100 -c 5 -H "User-Agent: Pepe/1.0" -H "X-Custom-Header: Value" https://example.com
+```
 
 ## Output
 
