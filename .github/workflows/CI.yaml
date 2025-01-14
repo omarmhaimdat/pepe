@@ -123,16 +123,18 @@ jobs:
       - name: Download Build Artifacts
         uses: actions/download-artifact@v4
 
-      - name: Push to APT Repository
-        run: |
-          # Your script for uploading .deb to APT repository
-          echo "Uploading .deb to APT repo..."
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            pepe_*.deb
+            dist/pepe-macos.tar.gz
+          tag_name: v${{ github.run_number }}
+          title: v${{ github.run_number }}
+          body: |
+            This is the release of the build artifacts for the CI run number ${{ github.run_number }}.
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Push to Homebrew
-        run: |
-          git clone https://github.com/omarmhaimdat/homebrew-pepe.git
-          tar -xzvf dist/pepe-macos.tar.gz -C homebrew-pepe/bin
-          cd homebrew-pepe
-          git add .
-          git commit -m "Release $(date +%Y-%m-%d)"
-          git push
