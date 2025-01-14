@@ -1,6 +1,6 @@
 [package]
 name = "pepe"
-version = "0.1.4"
+version = "0.1.5"
 authors = ["Omar MHAIMDAT"]
 edition = "2021"
 description = "HTTP load generator and performance testing tool"
@@ -14,7 +14,7 @@ license = "MIT"
 [dependencies]
 clap = { version = "4.5.24", features = ["derive"] }
 tokio = { version = "1.42.0", features = ["full"] }
-reqwest = { version = "0.12.12", default-features = false, features = ["json", "rustls-tls", "hickory-dns"] }
+reqwest = { version = "0.12.12", default-features = false, features = ["json", "rustls-tls", "hickory-dns", "socks"] }
 hyper = "1.5.2"
 futures = "0.3.17"
 tokio-stream = "0.1"
