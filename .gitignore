@@ -1,2 +1,4 @@
 /target
 Cargo.lock
+build.sh
+homebrew

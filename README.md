@@ -19,9 +19,18 @@ Pepe is written in Rust and uses the `reqwest` and `tokio` libraries for making 
 
 ## Installation
 
-### Debian Package (Ubuntu, Debian, etc.)
+### Linux and MacOS (Shell Script)
+
+```bash
+curl --proto '=https' --tlsv1.2 -sSf https://pepe.mhaimdat.com/install.sh | sh
+```
 
 ### MacOS Package (Homebrew)
+
+```bash
+brew tap omarmhaimdat/tap
+brew install pepe
+```
 
 ### Manual Installation
 
