@@ -97,12 +97,12 @@ jobs:
 
           override_dh_auto_build:
             echo "Building the Rust binary..."
-            cargo build --manifest-path=$(CURDIR)/../../../Cargo.toml --release
+            cargo build --manifest-path=$(pwd)/../../../Cargo.toml --release
             ls -l ../../../target/release
 
           override_dh_auto_install:
             echo "Installing pepe binary..."
-            install -D ../../../target/release/pepe $(DESTDIR)/usr/bin/pepe" > pepe/debian/rules
+            install -D ../../../target/release/pepe debian/pepe/usr/bin/pepe" > pepe/debian/rules
 
           chmod +x pepe/debian/rules
           cd pepe
