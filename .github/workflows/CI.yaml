@@ -110,30 +110,3 @@ jobs:
           compression-level: 6
           overwrite: false
           include-hidden-files: false
-
-  release:
-    if: github.ref == 'refs/heads/master'
-    needs: build
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Download Build Artifacts
-        uses: actions/download-artifact@v4
-
-      - name: Create Release
-        uses: softprops/action-gh-release@v1
-        with:
-          files: |
-            pepe_*.deb
-            dist/pepe-macos.tar.gz
-          tag_name: v${{ github.run_number }}
-          body: |
-            This is the release of the build artifacts for the CI run number ${{ github.run_number }}.
-          draft: false
-          prerelease: false
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
