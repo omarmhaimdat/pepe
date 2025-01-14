@@ -115,6 +115,23 @@ pepe -n 1000 -c 10 -m POST -d '{"key": "value"}' -H 'Content-Type: application/j
 pepe -n 100 -c 5 -H "User-Agent: Pepe/1.0" -H "X-Custom-Header: Value" https://example.com
 ```
 
+### Proxy Support
+
+Send requests through a proxy server (HTTP or HTTPS, SOCKS5):
+
+Without authentication:
+
+```bash
+pepe -n 1000 -c 10 -x http://proxy:port https://example.com
+```
+
+
+With authentication:
+
+```bash
+pepe -n 1000 -c 10 -x socks5://username:password@proxy:port https://example.com
+```
+
 ## Output
 
 Pepe provides detailed statistics about the performance of the web server, including:
