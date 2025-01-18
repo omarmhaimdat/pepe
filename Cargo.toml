@@ -10,6 +10,7 @@ repository = "https://github.com/omarmhaimdat/pepe"
 keywords = ["http", "load", "testing", "performance", "benchmark", "stress", "tool"]
 categories = ["command-line-utilities", "network-programming"]
 license = "MIT"
+exclude = ["assets/*"]
 
 [dependencies]
 clap = { version = "4.5.24", features = ["derive"] }
