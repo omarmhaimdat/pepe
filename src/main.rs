@@ -8,6 +8,7 @@ use crossterm::{
         LeaveAlternateScreen,
     },
 };
+use curl_parser;
 use hyper::{HeaderMap, Uri};
 use reqwest::{header::USER_AGENT, Proxy};
 use std::io::stdout;
@@ -37,6 +38,8 @@ struct Args {
     duration: Option<String>,
     #[clap(short = 'o', long)]
     output: Option<String>,
+    #[clap(long = "curl", help = "Curl command to convert to HTTP request")]
+    curl: bool,
     #[clap(short = 'm', long, default_value = "GET")]
     method: String,
     #[clap(short = 'H', long)]
@@ -55,7 +58,11 @@ struct Args {
     user_agent: String,
     #[clap(short, long)]
     basic_auth: Option<String>,
-    #[clap(short, long, help = "Proxy server URL: http://user:pass@host:port or socks5://host:port")]
+    #[clap(
+        short,
+        long,
+        help = "Proxy server URL: http://user:pass@host:port or socks5://host:port"
+    )]
     proxy: Option<String>,
     #[clap(short, long)]
     host: Option<String>,
@@ -65,7 +72,10 @@ struct Args {
     disable_keepalive: bool,
     #[clap(long)]
     disable_redirects: bool,
+    #[clap(default_value = "https://httpbin.org/status/200")]
     url: String,
+    #[clap(last = true, default_value = "")]
+    args: Vec<String>,
 }
 
 fn default_concurrency() -> u32 {
@@ -74,7 +84,7 @@ fn default_concurrency() -> u32 {
         .get() as u32
 }
 impl Args {
-    fn validate(&self) {
+    fn validate(&mut self) {
         if self.concurrency > self.number {
             eprintln!(
                 "Error: Number of workers cannot be smaller than the number of requests. -c {} -n {}",
@@ -83,16 +93,58 @@ impl Args {
             std::process::exit(1);
         }
 
-        // Check if method is valid
-        let method = reqwest::Method::from_bytes(self.method.as_bytes());
-        if !method.is_ok() {
-            eprintln!("Error: Invalid method: {}", self.method);
+        if self.curl == false && self.url.is_empty() {
+            eprintln!("Error: URL cannot be empty.");
             std::process::exit(1);
         }
 
         // Verify Timeout
         if self.timeout == 0 || self.timeout > 120 {
             eprintln!("Error: Timeout cannot be 0, or greater than 120 seconds.");
+            std::process::exit(1);
+        }
+
+        if self.curl {
+            // Print the curl command
+            let curl_command = self
+                .args
+                .iter()
+                .map(|arg| {
+                    if arg.contains(' ') || arg.contains('{') {
+                        format!("'{}'", arg)
+                    } else {
+                        arg.clone()
+                    }
+                })
+                .collect::<Vec<_>>()
+                .join(" ");
+            println!("Curl command: {}", curl_command);
+            let parsed_request = curl_parser::ParsedRequest::load(&curl_command, Some(()));
+            if parsed_request.is_err() {
+                eprintln!("Error: {}", parsed_request.err().unwrap());
+                std::process::exit(1);
+            }
+            self.method = parsed_request.as_ref().unwrap().method.clone().to_string();
+            self.url = parsed_request.as_ref().unwrap().url.clone().to_string();
+            self.headers = parsed_request
+                .as_ref()
+                .unwrap()
+                .headers
+                .clone()
+                .iter()
+                .map(|(k, v)| format!("{}: {}", k, v.to_str().unwrap()))
+                .collect();
+            self.body = Some(parsed_request.as_ref().unwrap().body.clone().join(" "));
+            // print body
+            if let Some(body) = &self.body {
+                println!("Body: {}", body);
+            }
+        }
+
+        // Check if method is valid
+        let method = reqwest::Method::from_bytes(self.method.as_bytes());
+        if !method.is_ok() {
+            eprintln!("Error: Invalid method: {}", self.method);
             std::process::exit(1);
         }
 
@@ -233,6 +285,7 @@ pub fn parse_cache_status(headers: &HeaderMap) -> Option<CacheStatus> {
         "x-cache-lookup",
         "x-cdn-cache-status",
         "x-backend-cache-status",
+        "x-vercel-cache",
     ];
 
     for header in cache_headers {
@@ -280,7 +333,8 @@ async fn run(
         .timeout(std::time::Duration::from_secs(args.timeout as u64));
 
     if let Some(proxy_url) = &args.proxy {
-        let proxy = Proxy::all(proxy_url).map_err(|e| PepeError::HeaderParseError(e.to_string()))?;
+        let proxy =
+            Proxy::all(proxy_url).map_err(|e| PepeError::HeaderParseError(e.to_string()))?;
         client_builder = client_builder.proxy(proxy);
     }
 
@@ -298,7 +352,11 @@ async fn run(
 
     client_builder = client_builder.timeout(std::time::Duration::from_secs(args.timeout as u64));
 
-    let client = Arc::new(client_builder.build().map_err(|e| PepeError::RequestError(e))?);
+    let client = Arc::new(
+        client_builder
+            .build()
+            .map_err(|e| PepeError::RequestError(e))?,
+    );
     let all_start = std::time::Instant::now();
 
     // Spawn request handler
@@ -313,6 +371,7 @@ async fn run(
                 let client = client.clone();
                 let url = args.url.clone();
                 let method = args.method.clone();
+                let body = args.body.clone();
 
                 let sent_tx = sent_tx.clone();
 
@@ -328,7 +387,16 @@ async fn run(
                     let dns_times: (std::time::Duration, std::time::Duration) =
                         resolve_dns(&url).await.unwrap_or_default();
 
-                    let response = client.request(method, &url).send().await;
+                    // if post and body is not empty then send post request
+                    let response = if method == reqwest::Method::POST && body.is_some() {
+                        client
+                            .request(method, &url)
+                            .body(body.unwrap())
+                            .send()
+                            .await
+                    } else {
+                        client.request(method, &url).send().await
+                    };
 
                     let response_headers = response
                         .as_ref()
@@ -398,7 +466,7 @@ async fn run(
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let args = Args::parse();
+    let mut args = Args::parse();
     args.validate();
 
     enable_raw_mode()?;
