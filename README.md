@@ -85,6 +85,20 @@ Let's break down the options used in this command:
 - `https://example.com`: The URL to send requests to.
 
 
+### Curl support
+
+pepe can parse curl command and convert it to pepe command.
+
+```bash
+pepe -n 1000 -c 10 --curl -- curl -X POST 'https://httpbin.org/post' \
+  -H 'Content-Type: application/json' \
+  -d '{"key": "value"}'
+```
+
+In order to use this feature, you need to make sure to add `--` after the pepe command and before the curl command.
+
+You don't need to have curl installed on your system, pepe will parse the curl command and convert it to pepe command.
+
 ## Examples
 
 ### Sending a GET Request
