@@ -72,7 +72,7 @@ struct Args {
     disable_keepalive: bool,
     #[clap(long)]
     disable_redirects: bool,
-    #[clap(default_value = "https://httpbin.org/status/200")]
+    #[clap(default_value = "")]
     url: String,
     #[clap(last = true, default_value = "")]
     args: Vec<String>,
