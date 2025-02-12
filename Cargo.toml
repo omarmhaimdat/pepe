@@ -30,10 +30,10 @@ indicatif = "0.17"
 curl-parser = { "git" = "https://github.com/omarmhaimdat/curl-parser" }
 
 [profile.release]
-opt-level = 3
-lto = true
+opt-level = "z"
+lto = "fat"
 codegen-units = 1
-strip = true
+strip = "symbols"
 
 [[bin]]
 name = "pepe"
