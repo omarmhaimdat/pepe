@@ -164,6 +164,8 @@ impl Dashboard {
         enable_raw_mode()?;
         let mut terminal = Terminal::new(CrosstermBackend::new(std::io::stdout()))?;
 
+        terminal.clear()?;
+
         loop {
             // Update stats
             while let Ok(stat) = rx.try_recv() {
@@ -188,6 +190,7 @@ impl Dashboard {
                             | KeyCode::Enter
                             | KeyCode::Char('i')
                     ) {
+                        terminal.clear()?;
                         return Ok(key.code);
                     }
                 }
@@ -345,7 +348,8 @@ impl Dashboard {
             .direction(Direction::Horizontal)
             .constraints([
                 Constraint::Percentage(20),
-                Constraint::Percentage(20),
+                Constraint::Percentage(10),
+                Constraint::Percentage(10),
                 Constraint::Percentage(60),
             ])
             .split(area);
@@ -356,7 +360,43 @@ impl Dashboard {
                 .unwrap_or(NonZeroUsize::new(8).unwrap_or(default_n_threads))
                 .get();
         }
+
         // Logo section
+        f.render_widget(
+            Paragraph::new(LOGO)
+                .style(Style::default().fg(Color::Cyan))
+                .block(Block::default().borders(Borders::ALL)),
+            chunks[0],
+        );
+
+        // Commands section
+        let commands: Vec<Line<'_>> = vec![
+            Line::from(vec![
+                Span::styled("Quit: ", Style::default().fg(Color::Yellow)),
+                Span::raw("q"),
+            ]),
+            Line::from(vec![
+                Span::styled("Restart: ", Style::default().fg(Color::Yellow)),
+                Span::raw("r"),
+            ]),
+            Line::from(vec![
+                Span::styled("Interrupt: ", Style::default().fg(Color::Yellow)),
+                Span::raw("i"),
+            ]),
+        ];
+
+        f.render_widget(
+            Paragraph::new(commands).block(
+                Block::default()
+                    .title("Commands")
+                    .borders(Borders::ALL)
+                    .style(Style::default().fg(Color::Cyan))
+                    .title_style(Style::default().fg(Color::White)),
+            ),
+            chunks[1],
+        );
+
+        // Info section
         let version_info = vec![
             Line::from(vec![
                 Span::styled("Version: ", Style::default().fg(Color::Yellow)),
@@ -378,14 +418,11 @@ impl Dashboard {
                 Span::styled("Cores: ", Style::default().fg(Color::Yellow)),
                 Span::raw(n_threads.to_string()),
             ]),
+            Line::from(vec![
+                Span::styled("PID: ", Style::default().fg(Color::Yellow)),
+                Span::raw(std::process::id().to_string()),
+            ]),
         ];
-
-        f.render_widget(
-            Paragraph::new(LOGO)
-                .style(Style::default().fg(Color::Cyan))
-                .block(Block::default().borders(Borders::ALL)),
-            chunks[0],
-        );
 
         f.render_widget(
             Paragraph::new(version_info)
@@ -396,7 +433,7 @@ impl Dashboard {
                         .title_style(Style::default().fg(Color::White)),
                 )
                 .style(Style::default().fg(Color::Cyan)),
-            chunks[1],
+            chunks[2],
         );
 
         // Parameters section
@@ -417,6 +454,10 @@ impl Dashboard {
                 Span::styled("Total Requests: ", Style::default().fg(Color::Yellow)),
                 Span::raw(self.args.number.to_string()),
             ]),
+            Line::from(vec![
+                Span::styled("Timeout: ", Style::default().fg(Color::Yellow)),
+                Span::raw(self.args.timeout.to_string()),
+            ]),
         ];
 
         f.render_widget(
@@ -427,7 +468,7 @@ impl Dashboard {
                     .style(Style::default().fg(Color::Cyan))
                     .title_style(Style::default().fg(Color::White)),
             ),
-            chunks[2],
+            chunks[3],
         );
     }
 
@@ -618,7 +659,7 @@ impl Dashboard {
         self.render_stat_widget(
             f,
             stats_chunks[1],
-            "RPS",
+            "Request per Second",
             self.stats.rps.to_string(),
             Color::Magenta,
         );

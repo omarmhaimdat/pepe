@@ -1,12 +1,9 @@
 use clap::{ArgAction::HelpLong, Parser};
 use crossterm::{
-    cursor::{Hide, Show},
+    cursor::Show,
     event::KeyCode,
     execute,
-    terminal::{
-        disable_raw_mode, enable_raw_mode, Clear, ClearType, EnterAlternateScreen,
-        LeaveAlternateScreen,
-    },
+    terminal::{disable_raw_mode, enable_raw_mode, LeaveAlternateScreen},
 };
 use curl_parser;
 use hyper::{HeaderMap, Uri};
@@ -26,25 +23,47 @@ mod ui;
 // #[command(long_about = USAGE)]
 #[clap(disable_help_flag = true)]
 struct Args {
-    #[arg(long, action = HelpLong)]
+    #[arg(short, long, action = HelpLong)]
     help: Option<bool>,
-    #[clap(short = 'n', long, default_value = "100")]
+    #[clap(short = 'n', long, default_value = "100", help = "Number of requests")]
     number: u32,
-    #[clap(short = 'c', long, default_value_t = default_concurrency())]
+    #[clap(short = 'c', long, default_value_t = default_concurrency(), help = "Number of concurrent requests")]
     concurrency: u32,
-    #[clap(short = 'q', long, default_value = "0")]
+    #[clap(
+        short = 'q',
+        long,
+        default_value = "0",
+        help = "Number of requests to perform before exiting"
+    )]
     rate_limit: u32,
     #[clap(short = 'z', long)]
     duration: Option<String>,
     #[clap(short = 'o', long)]
     output: Option<String>,
-    #[clap(long = "curl", help = "Curl command to convert to HTTP request")]
+    #[clap(
+        long = "curl",
+        help = "Curl mode to parse curl command, e.g. pepe --curl -- 'curl -X POST http://localhost:8080'"
+    )]
     curl: bool,
-    #[clap(short = 'm', long, default_value = "GET")]
+    #[clap(
+        short = 'm',
+        long,
+        default_value = "GET",
+        help = "HTTP method, e.g. GET, POST, PUT, DELETE"
+    )]
     method: String,
-    #[clap(short = 'H', long)]
+    #[clap(
+        short = 'H',
+        long,
+        help = "HTTP headers, e.g. -H 'Accept: application/json'"
+    )]
     headers: Vec<String>,
-    #[clap(short = 't', long, default_value = "20")]
+    #[clap(
+        short = 't',
+        long,
+        default_value = "20",
+        help = "Time in seconds to wait for a response"
+    )]
     timeout: u32,
     #[clap(short = 'A', long)]
     accept: Option<String>,
@@ -54,7 +73,7 @@ struct Args {
     body_file: Option<String>,
     #[clap(short = 'T', long, default_value = "text/html")]
     content_type: String,
-    #[clap(short, long, default_value = concat!("pepe/", env!("CARGO_PKG_VERSION")))]
+    #[clap(short, long, default_value = concat!("pepe/", env!("CARGO_PKG_VERSION")), help = "User-Agent string, default is pepe/{version}")]
     user_agent: String,
     #[clap(short, long)]
     basic_auth: Option<String>,
@@ -72,7 +91,7 @@ struct Args {
     disable_keepalive: bool,
     #[clap(long)]
     disable_redirects: bool,
-    #[clap(default_value = "")]
+    #[clap(default_value = "", help = "URL to request")]
     url: String,
     #[clap(last = true, default_value = "")]
     args: Vec<String>,
@@ -118,7 +137,6 @@ impl Args {
                 })
                 .collect::<Vec<_>>()
                 .join(" ");
-            println!("Curl command: {}", curl_command);
             let parsed_request = curl_parser::ParsedRequest::load(&curl_command, Some(()));
             if parsed_request.is_err() {
                 eprintln!("Error: {}", parsed_request.err().unwrap());
@@ -471,7 +489,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     enable_raw_mode()?;
     let mut stdout = stdout();
-    execute!(stdout, EnterAlternateScreen, Clear(ClearType::All), Hide)?;
 
     let interrupted = Arc::new(tokio::sync::Notify::new());
 
