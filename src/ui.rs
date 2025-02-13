@@ -4,24 +4,24 @@ use crossterm::{
     event::{self, Event, KeyCode},
     terminal::enable_raw_mode,
 };
+use ratatui::widgets::ListItem;
 use ratatui::{
     backend::CrosstermBackend,
     layout::{Constraint, Direction, Layout, Rect},
     widgets::{BarChart, BarGroup, Block, Borders, List, Paragraph},
     Frame, Terminal,
 };
-use reqwest::StatusCode;
-use std::thread::available_parallelism;
-use tokio::sync::mpsc;
-
-use crate::{Args, CacheCategory, ResponseStats, Sent};
-
 use ratatui::{
     style::{Color, Modifier, Style},
     text::{Line, Span},
 };
+use reqwest::StatusCode;
+use std::thread::available_parallelism;
+use tokio::sync::mpsc;
 
-use ratatui::widgets::ListItem;
+use crate::cache::CacheCategory;
+use crate::{Cli, Sent};
+use crate::ResponseStats;
 
 const LOGO: &str = r#"
     ██████╗ ███████╗██████╗ ███████╗
@@ -51,12 +51,11 @@ struct Stats {
     cache_categories: HashMap<CacheCategory, usize>,
 }
 pub struct Dashboard {
-    // Add storage fields to hold the strings and data
     label_storage: Vec<String>,
     bar_chart_data: Vec<(String, u64)>,
     histogram: Vec<(String, u64)>,
     requests: Vec<ResponseStats>,
-    args: Args,
+    args: Cli,
     status_codes: HashMap<StatusCode, usize>,
     stats: Stats,
     elapsed: std::time::Instant,
@@ -141,7 +140,7 @@ impl Dashboard {
         }
     }
 
-    pub fn new(args: Args) -> Self {
+    pub fn new(args: Cli) -> Self {
         Self {
             bar_chart_data: Vec::new(),
             histogram: Vec::new(),
@@ -248,7 +247,10 @@ impl Dashboard {
                     Style::default().fg(Color::Magenta),
                 ),
                 Span::raw(" "),
-                Span::styled(format!("{:?}", self.args.url), Style::default().fg(Color::White)),
+                Span::styled(
+                    format!("{:?}", self.args.url),
+                    Style::default().fg(Color::White),
+                ),
             ]));
         }
 
@@ -278,7 +280,10 @@ impl Dashboard {
                 Style::default().fg(Color::Magenta),
             ),
             Span::raw(" "),
-            Span::styled(format!("{:?}", self.args.url), Style::default().fg(Color::White)),
+            Span::styled(
+                format!("{:?}", self.args.url),
+                Style::default().fg(Color::White),
+            ),
         ]))
     }
 
@@ -491,7 +496,7 @@ impl Dashboard {
             " ".repeat(bar_width - filled),
             percent
         );
-        if self.stats.count == (self.args.number as usize)  && self.final_duration.is_none() {
+        if self.stats.count == (self.args.number as usize) && self.final_duration.is_none() {
             self.final_duration = Some(std::time::Instant::now() - self.elapsed);
         }
 

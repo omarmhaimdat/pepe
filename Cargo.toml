@@ -1,6 +1,6 @@
 [package]
 name = "pepe"
-version = "0.2.2"
+version = "0.2.3"
 authors = ["Omar MHAIMDAT"]
 edition = "2021"
 description = "HTTP load generator and performance testing tool"
@@ -30,10 +30,17 @@ indicatif = "0.17"
 curl-parser = { "git" = "https://github.com/omarmhaimdat/curl-parser" }
 
 [profile.release]
-opt-level = "z"
-lto = "fat"
+opt-level = 3
+lto = true
 codegen-units = 1
-strip = "symbols"
+panic = "abort"
+strip = true
+debug = false
+
+[profile.release.package."*"]
+opt-level = 3
+debug = false
+strip = true
 
 [[bin]]
 name = "pepe"
