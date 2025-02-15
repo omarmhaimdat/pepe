@@ -4,6 +4,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/)
 and this project adheres to [Semantic Versioning](http://semver.org/).
 
+<!-- next-header -->
 ## [Unreleased] - ReleaseDate
 
 ## [0.2.4] - 2025-02-14
@@ -34,3 +35,8 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ### Removed
 - Redundant comments
+
+
+<!-- next-url -->
+[Unreleased]: https://github.com/omarmhaimdat/pepe/compare/v0.2.4...HEAD
+[0.2.4]: https://github.com/omarmhaimdat/pepe/releases/tag/v0.2.4

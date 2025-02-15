@@ -39,10 +39,10 @@ impl ResponseStats {
             Ok(resp) => {
                 let status_code = resp.status();
                 let content_length = resp.content_length();
-                let text = resp.text().await.unwrap_or_default();
+                let text = resp.text().await.unwrap_or_else(|_| "".to_string());
                 let text = text.trim().replace("\n", " ").replace("\r", " ");
                 let truncated_text = if text.len() > 100 {
-                    text[..100].to_string()
+                    text.chars().take(100).collect::<String>()
                 } else {
                     text
                 };
