@@ -18,10 +18,11 @@ use ratatui::{
 use reqwest::StatusCode;
 use std::thread::available_parallelism;
 use tokio::sync::mpsc;
+use gethostname::gethostname;
 
 use crate::cache::CacheCategory;
-use crate::{Cli, Sent};
 use crate::ResponseStats;
+use crate::{Cli, Sent};
 
 const LOGO: &str = r#"
     ██████╗ ███████╗██████╗ ███████╗
@@ -266,6 +267,16 @@ impl Dashboard {
             Span::styled(format!("[{}]", status_code), style),
             Span::raw(" "),
             Span::styled(
+                format!("{}", self.args.method),
+                Style::default().fg(Color::Magenta),
+            ),
+            Span::raw(" "),
+            Span::styled(
+                format!("{}", self.args.url),
+                Style::default().fg(Color::White),
+            ),
+            Span::raw(" "),
+            Span::styled(
                 format!("{:.2}ms", stat.duration.as_millis()),
                 Style::default().fg(Color::Yellow),
             ),
@@ -273,16 +284,6 @@ impl Dashboard {
             Span::styled(
                 format!("{}b", stat.content_length.unwrap_or(0)),
                 Style::default().fg(Color::Blue),
-            ),
-            Span::raw(" "),
-            Span::styled(
-                format!("{:?}", self.args.method),
-                Style::default().fg(Color::Magenta),
-            ),
-            Span::raw(" "),
-            Span::styled(
-                format!("{:?}", self.args.url),
-                Style::default().fg(Color::White),
             ),
         ]))
     }
@@ -353,9 +354,9 @@ impl Dashboard {
             .direction(Direction::Horizontal)
             .constraints([
                 Constraint::Percentage(20),
-                Constraint::Percentage(10),
-                Constraint::Percentage(10),
-                Constraint::Percentage(60),
+                Constraint::Percentage(15),
+                Constraint::Percentage(15),
+                Constraint::Percentage(50),
             ])
             .split(area);
 
@@ -402,6 +403,7 @@ impl Dashboard {
         );
 
         // Info section
+        let binding = gethostname();
         let version_info = vec![
             Line::from(vec![
                 Span::styled("Version: ", Style::default().fg(Color::Yellow)),
@@ -424,8 +426,8 @@ impl Dashboard {
                 Span::raw(n_threads.to_string()),
             ]),
             Line::from(vec![
-                Span::styled("PID: ", Style::default().fg(Color::Yellow)),
-                Span::raw(std::process::id().to_string()),
+                Span::styled("Hostname: ", Style::default().fg(Color::Yellow)),
+                Span::raw(binding.to_string_lossy()),
             ]),
         ];
 
@@ -486,14 +488,13 @@ impl Dashboard {
         let percent = (self.stats.count * 100) / (self.args.number as usize).max(1);
 
         // Fixed elements: borders(2) + "Progress"(8) + "[]"(2) + "100%"(4) + safety margin(2)
-        let fixed_elements = 18;
+        let fixed_elements = 10;
         let bar_width = chunks[1].width.saturating_sub(fixed_elements) as usize;
         let filled = (percent as usize * bar_width) / 100;
         let progress_bar = format!(
-            "{} [{}{}] {}%",
-            "Progress",
-            "=".repeat(filled),
-            " ".repeat(bar_width - filled),
+            "{}{} {}%",
+            "█".repeat(filled),
+            "░".repeat(bar_width - filled),
             percent
         );
         if self.stats.count == (self.args.number as usize) && self.final_duration.is_none() {
@@ -511,16 +512,19 @@ impl Dashboard {
             );
             f.render_widget(
                 Paragraph::new(vec![Line::from(vec![
-                    Span::styled("Duration: ", Style::default().fg(Color::Yellow)),
-                    Span::raw(formatted_duration),
+                    Span::raw(formatted_duration).style(Style::default().fg(Color::LightGreen))
                 ])])
-                .block(Block::default().borders(Borders::ALL)),
+                .block(Block::default().borders(Borders::ALL).title("Duration")),
                 chunks[0],
             );
             f.render_widget(
-                Paragraph::new(progress_bar)
-                    .style(Style::default().fg(Color::Green))
-                    .block(Block::default().borders(Borders::ALL)),
+                Paragraph::new(Span::styled(
+                    progress_bar,
+                    Style::default()
+                        .fg(Color::Green)
+                        .add_modifier(Modifier::BOLD),
+                ))
+                .block(Block::default().borders(Borders::ALL).title("Progress")),
                 chunks[1],
             );
             return;
@@ -533,48 +537,55 @@ impl Dashboard {
             (std::time::Instant::now() - self.elapsed).as_secs() as u64 % 60,
             (std::time::Instant::now() - self.elapsed).subsec_millis()
         );
-        f.render_widget(
-            Paragraph::new(vec![Line::from(vec![
-                Span::styled("Duration: ", Style::default().fg(Color::Yellow)),
-                Span::raw(formatted_duration),
-            ])])
-            .block(Block::default().borders(Borders::ALL)),
-            chunks[0],
-        );
 
         f.render_widget(
+            Paragraph::new(vec![Line::from(vec![Span::raw(formatted_duration)])])
+                .block(Block::default().borders(Borders::ALL).title("Duration")),
+            chunks[0],
+        );
+        f.render_widget(
             Paragraph::new(progress_bar)
-                .style(Style::default().fg(Color::Green))
-                .block(Block::default().borders(Borders::ALL)),
+                .block(Block::default().borders(Borders::ALL).title("Progress")),
             chunks[1],
         );
     }
 
     fn render_stats(&self, f: &mut Frame, area: Rect) {
-        let stats = vec![Line::from(vec![
-            Span::styled("Total: ", Style::default().fg(Color::Yellow)),
-            Span::raw(self.stats.count.to_string()),
-            Span::raw(" | "),
-            Span::styled("Remaining: ", Style::default().fg(Color::LightYellow)),
-            Span::raw(((self.args.number as usize) - self.stats.count).to_string()),
-            Span::raw(" | "),
-            Span::styled("Success: ", Style::default().fg(Color::Green)),
-            Span::raw(self.stats.success.to_string()),
-            Span::raw(" | "),
-            Span::styled("Failed: ", Style::default().fg(Color::LightRed)),
-            Span::raw(self.stats.failed.to_string()),
-            Span::raw(" | "),
-            Span::styled("Timeouts: ", Style::default().fg(Color::Red)),
-            Span::raw(self.stats.timeouts.to_string()),
-            Span::raw(" | "),
-            Span::styled("Sent: ", Style::default().fg(Color::Cyan)),
-            Span::raw(self.stats.sent.to_string()),
-        ])];
+        let stats = vec![
+            ("Total", self.stats.count.to_string(), Color::Yellow),
+            (
+                "Remaining",
+                ((self.args.number as usize) - self.stats.count).to_string(),
+                Color::LightYellow,
+            ),
+            ("Sent", self.stats.sent.to_string(), Color::Cyan),
+            ("Success", self.stats.success.to_string(), Color::Green),
+            ("Failed", self.stats.failed.to_string(), Color::LightRed),
+            ("Timeouts", self.stats.timeouts.to_string(), Color::Red),
+        ];
 
-        f.render_widget(
-            Paragraph::new(stats).block(Block::default().title("Statistics").borders(Borders::ALL)),
-            area,
-        );
+        let constraints: Vec<Constraint> = stats
+            .iter()
+            .map(|_| Constraint::Percentage(100 / stats.len() as u16))
+            .collect();
+
+        let chunks = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints(constraints)
+            .split(area);
+
+        for (i, (label, value, color)) in stats.iter().enumerate() {
+            let stat = vec![Line::from(vec![
+                Span::styled(format!("{}: ", label), Style::default().fg(*color)),
+                Span::raw(value),
+            ])];
+
+            f.render_widget(
+                Paragraph::new(stat)
+                    .block(Block::default().borders(Borders::ALL).title("Statistics")),
+                chunks[i],
+            );
+        }
     }
 
     fn render_charts(&mut self, f: &mut Frame, area: Rect) {

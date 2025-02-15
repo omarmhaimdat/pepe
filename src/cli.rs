@@ -8,6 +8,7 @@ use crate::PepeError;
 #[derive(Parser, Debug, Clone)]
 #[command(name = "pepe")]
 #[command(version = version())]
+#[command(author = "Omar MHAIMDAT")]
 #[command(about = "HTTP load generator")]
 #[clap(disable_help_flag = true)]
 pub struct Cli {
