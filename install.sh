@@ -19,7 +19,7 @@ if [ "$(uname)" = "Darwin" ]; then
         echo "pepe installed successfully using Homebrew!"
     else
         echo "Homebrew not found, downloading pepe for macOS..."
-        curl -L -o pepe "https://pepe.mhaimdat.com/0.2.4/$(uname -m)-apple-darwin/pepe"
+        curl -L -o pepe "https://pepe.mhaimdat.com/0.2.5/$(uname -m)-apple-darwin/pepe"
         chmod +x pepe
         mv pepe /usr/local/bin/
         echo "pepe for macOS downloaded and installed successfully!"
@@ -53,8 +53,8 @@ elif [ "$(uname -s)" = "Linux" ]; then
     cd "$TEMP_DIR"
     
     echo "Downloading binary..."
-    curl -L -O "https://pepe.mhaimdat.com/0.2.4/x86_64-unknown-linux-gnu/pepe"
-    curl -L -O "https://pepe.mhaimdat.com/0.2.4/x86_64-unknown-linux-gnu/pepe.sha256"
+    curl -L -O "https://pepe.mhaimdat.com/0.2.5/x86_64-unknown-linux-gnu/pepe"
+    curl -L -O "https://pepe.mhaimdat.com/0.2.5/x86_64-unknown-linux-gnu/pepe.sha256"
     
     echo "Verifying binary integrity..."
     EXPECTED_CHECKSUM=$(cat pepe.sha256)
@@ -69,7 +69,7 @@ elif [ "$(uname -s)" = "Linux" ]; then
         exit 1
     fi
     
-    echo "Checksum verified successfully."
+    echo -e "\033[1;32m✓ Checksum verified successfully.\033[0m"
     chmod +x pepe
 
     # Create user binary directory if it doesn't exist
@@ -91,21 +91,25 @@ elif [ "$(uname -s)" = "Linux" ]; then
 
     # Install the binary
     mv pepe "$USER_BIN_DIR/"
-    echo "pepe has been installed to $USER_BIN_DIR/pepe"
+    echo -e "\033[1;32m✓ pepe has been installed to $USER_BIN_DIR/pepe\033[0m"
     
     cd -
     rm -rf "$TEMP_DIR"
-    echo "pepe installed successfully in user space!"
-    # Try to source the profile file
-    if has_sudo; then
-        source $HOME/.profile
-    else
-        echo -e "\033[1;33m⚠️  Please run this command to update your PATH:\033[0m"
-        echo -e "\033[1;32msource $PROFILE_FILE\033[0m"
-    fi
 
-    echo "Run 'pepe --help' to get started"
+    # Installation complete message with next steps
+    printf "\033[1;32m✓ pepe installed successfully in user space!\033[0m\n"
+    printf "\033[1;33m➜ To complete installation, run:\033[0m\n"
+    printf "\033[1;32m    source ~/.profile\033[0m\n\n"
+    printf "\033[1;33m➜ Then verify with:\033[0m\n"
+    printf "\033[1;32m    pepe --help\033[0m\n"
+    
+    # Check if pepe is in PATH
+    if ! echo "/opt/homebrew/opt/llvm/bin:/opt/homebrew/bin:/Users/omarmhaimdat/.opam/default/bin:/opt/homebrew/opt/curl/bin:/opt/homebrew/opt/pyqt@5/5.15.4_1/bin:/opt/homebrew/opt/qt@5/bin:/opt/homebrew/opt/openjdk/bin:/Users/omarmhaimdat/Documents/cliTest/cliTests:/Users/omarmhaimdat/.opam/default/bin:/opt/homebrew/opt/curl/bin:/opt/homebrew/opt/pyqt@5/5.15.4_1/bin:/opt/homebrew/opt/qt@5/bin:/opt/homebrew/opt/openjdk/bin:/Users/omarmhaimdat/Documents/cliTest/cliTests:/Users/omarmhaimdat/.cargo/bin:/usr/bin:/bin:/usr/sbin:/sbin:/Users/omarmhaimdat/.fig/bin:/Users/omarmhaimdat/.local/bin:/Library/TeX/texbin:/usr/local/bin/musl-gcc:/Library/TeX/texbin:/usr/local/bin/musl-gcc:/Applications/Visual Studio Code.app/Contents/Resources/app/bin:/usr/local/bin:/Users/omarmhaimdat/go/bin" | grep -q ""; then
+        printf "\033[1;31m! WARNING:  is not in your PATH\033[0m\n"
+        printf "\033[1;33m➜ Add this line to your shell config (~/.zshrc, ~/.bashrc):\033[0m\n"
+        printf "\033[1;32m    export PATH=\":$PATH\"\033[0m\n"
+    fi
 else
-    echo "Unsupported platform: $(uname)"
+    echo -e "\033[1;31mUnsupported platform: $(uname)\033[0m"
     exit 1
 fi

@@ -29,7 +29,7 @@ pub struct Cli {
     pub duration: Option<String>,
 
     /// Curl mode to parse curl command, e.g. pepe --curl -- 'curl -X POST http://localhost:8080'
-    #[arg(short, long)]
+    #[arg(long)]
     pub curl: bool,
 
     /// HTTP method, e.g. GET, POST, PUT, DELETE
@@ -121,6 +121,7 @@ impl Cli {
                 })
                 .collect::<Vec<_>>()
                 .join(" ");
+            println!("Curl command: {}", curl_command);
             let parsed_request = curl_parser::ParsedRequest::load(&curl_command, Some(()));
             if parsed_request.is_err() {
                 eprintln!("Error: {}", parsed_request.err().unwrap());

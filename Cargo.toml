@@ -27,7 +27,7 @@ tokio-stream = "0.1"
 ratatui = "0.29.0"
 crossterm = "0.28.1"
 indicatif = "0.17"
-curl-parser = { version = "0.5.4", "git" = "https://github.com/omarmhaimdat/curl-parser" }
+curl-parser = { "git" = "https://github.com/omarmhaimdat/curl-parser" }
 gethostname = "1.0.0"
 
 [profile.release]
