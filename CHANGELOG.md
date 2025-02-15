@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 <!-- next-header -->
 ## [Unreleased] - ReleaseDate
 
+## [0.2.6] - 2025-02-15
+
 ## [0.2.5] - 2025-02-15
 
 ## [0.2.4] - 2025-02-14
@@ -40,7 +42,9 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 
 <!-- next-url -->
-[Unreleased]: https://github.com/omarmhaimdat/pepe/compare/v0.2.5...HEAD
+[Unreleased]: https://github.com/omarmhaimdat/pepe/compare/v0.2.6...HEAD
+
+[0.2.6]: https://github.com/omarmhaimdat/pepe/compare/v0.2.5...v0.2.6
 
 [0.2.5]: https://github.com/omarmhaimdat/pepe/compare/v0.2.4...v0.2.5
 [0.2.4]: https://github.com/omarmhaimdat/pepe/releases/tag/v0.2.4
