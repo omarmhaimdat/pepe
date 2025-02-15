@@ -180,3 +180,16 @@ This project is licensed under the MIT License. See the [LICENSE](LICENSE) file 
 - [Reqwest](https://github.com/seanmonstar/reqwest) for HTTP requests.
 - [Tokio](https://github.com/tokio-rs/tokio) for asynchronous runtime.
 - [Crossterm](https://github.com/crossterm-rs/crossterm) for terminal handling.
+
+
+## Roadmap
+
+- [x] Implement basic functionality for sending HTTP requests.
+- [x] Improve support for curl when the protocol is not specified.
+- [ ] Implement a config file for managing load test settings.
+- [ ] Create an output format for easy integration with monitoring tools.
+  - [ ] JSON output.
+  - [ ] CSV output.
+  - [ ] Webhook integration.
+- [ ] Chaining multiple requests.
+- [ ] Implement more advanced load testing scenarios.

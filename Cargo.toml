@@ -1,6 +1,6 @@
 [package]
 name = "pepe"
-version = "0.2.3"
+version = "0.2.4"
 authors = ["Omar MHAIMDAT"]
 edition = "2021"
 description = "HTTP load generator and performance testing tool"
@@ -28,6 +28,7 @@ ratatui = "0.29.0"
 crossterm = "0.28.1"
 indicatif = "0.17"
 curl-parser = { "git" = "https://github.com/omarmhaimdat/curl-parser" }
+gethostname = "1.0.0"
 
 [profile.release]
 opt-level = 3
@@ -48,3 +49,15 @@ path = "src/main.rs"
 
 [package.metadata]
 install.path = "/usr/local/bin"
+
+
+[package.metadata.release]
+shared-version = true
+tag-name = "v{{version}}"
+pre-release-replacements = [
+    { file = "CHANGELOG.md", search = "Unreleased", replace = "{{version}}", min = 1 },
+    { file = "CHANGELOG.md", search = "\\.\\.\\.HEAD", replace = "...{{tag_name}}", exactly = 1 },
+    { file = "CHANGELOG.md", search = "ReleaseDate", replace = "{{date}}", min = 1 },
+    { file = "CHANGELOG.md", search = "<!-- next-header -->", replace = "<!-- next-header -->\n## [Unreleased] - ReleaseDate\n", exactly = 1 },
+    { file = "CHANGELOG.md", search = "<!-- next-url -->", replace = "<!-- next-url -->\n[Unreleased]: https://github.com/omarmhaimdat/pepe/compare/{{tag_name}}...HEAD\n", exactly = 1 },
+]
