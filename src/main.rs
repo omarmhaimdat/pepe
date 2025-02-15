@@ -162,9 +162,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 handler.abort();
                 continue 'main;
             }
-            Ok(KeyCode::Char('q')) => break,
-            Ok(KeyCode::Esc) => break,
-            Ok(KeyCode::Enter) => break,
+            Ok(KeyCode::Char('q')) | Ok(KeyCode::Esc) | Ok(KeyCode::Enter) => {
+                break;
+            }
             Ok(KeyCode::Char('i')) => {
                 interrupted.notify_one();
                 handler.abort();
@@ -178,7 +178,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
-    execute!(stdout, LeaveAlternateScreen, Show)?;
+    execute!(
+        stdout,
+        LeaveAlternateScreen,
+        Show,
+        crossterm::terminal::Clear(crossterm::terminal::ClearType::All),
+        crossterm::cursor::MoveTo(0, 0)
+    )?;
+
     disable_raw_mode()?;
+    args.check_for_updates().await?;
     Ok(())
 }

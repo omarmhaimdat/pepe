@@ -29,6 +29,7 @@ crossterm = "0.28.1"
 indicatif = "0.17"
 curl-parser = { "git" = "https://github.com/omarmhaimdat/curl-parser" }
 gethostname = "1.0.0"
+serde = { version = "1.0.130", features = ["derive"] }
 
 [profile.release]
 opt-level = 3
@@ -56,7 +57,7 @@ shared-version = true
 tag-name = "v{{version}}"
 pre-release-replacements = [
     { file = "CHANGELOG.md", search = "Unreleased", replace = "{{version}}", min = 1 },
-    { file = "CHANGELOG.md", search = "\\.\\.\\.HEAD", replace = "...{{tag_name}}", exactly = 1 },
+    { file = "CHANGELOG.md", search = "...HEAD", replace = "...{{tag_name}}", exactly = 1 },
     { file = "CHANGELOG.md", search = "ReleaseDate", replace = "{{date}}", min = 1 },
     { file = "CHANGELOG.md", search = "<!-- next-header -->", replace = "<!-- next-header -->\n## [Unreleased] - ReleaseDate\n", exactly = 1 },
     { file = "CHANGELOG.md", search = "<!-- next-url -->", replace = "<!-- next-url -->\n[Unreleased]: https://github.com/omarmhaimdat/pepe/compare/{{tag_name}}...HEAD\n", exactly = 1 },
