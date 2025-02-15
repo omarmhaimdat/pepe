@@ -22,7 +22,7 @@ Pepe is written in Rust and uses the `reqwest` and `tokio` libraries for making 
 ### Linux and MacOS (Shell Script)
 
 ```bash
-curl --proto '=https' --tlsv1.2 -sSf https://pepe.mhaimdat.com/install.sh | sh
+curl --proto '=https' --tlsv1.2 -sSf https://pepe.mhaimdat.com/install.sh | bash
 ```
 
 ### MacOS Package (Homebrew)
@@ -180,6 +180,7 @@ This project is licensed under the MIT License. See the [LICENSE](LICENSE) file 
 - [Reqwest](https://github.com/seanmonstar/reqwest) for HTTP requests.
 - [Tokio](https://github.com/tokio-rs/tokio) for asynchronous runtime.
 - [Crossterm](https://github.com/crossterm-rs/crossterm) for terminal handling.
+- [Ratatui](https://github.com/ratatui/ratatui) for TUI components.
 
 
 ## Roadmap

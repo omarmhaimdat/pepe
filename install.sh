@@ -19,7 +19,7 @@ if [ "$(uname)" = "Darwin" ]; then
         echo "pepe installed successfully using Homebrew!"
     else
         echo "Homebrew not found, downloading pepe for macOS..."
-        curl -L -o pepe "https://pepe.mhaimdat.com/0.2.3/$(uname -m)-apple-darwin/pepe"
+        curl -L -o pepe "https://pepe.mhaimdat.com/0.2.4/$(uname -m)-apple-darwin/pepe"
         chmod +x pepe
         mv pepe /usr/local/bin/
         echo "pepe for macOS downloaded and installed successfully!"
@@ -53,8 +53,8 @@ elif [ "$(uname -s)" = "Linux" ]; then
     cd "$TEMP_DIR"
     
     echo "Downloading binary..."
-    curl -L -O "https://pepe.mhaimdat.com/0.2.3/x86_64-unknown-linux-gnu/pepe"
-    curl -L -O "https://pepe.mhaimdat.com/0.2.3/x86_64-unknown-linux-gnu/pepe.sha256"
+    curl -L -O "https://pepe.mhaimdat.com/0.2.4/x86_64-unknown-linux-gnu/pepe"
+    curl -L -O "https://pepe.mhaimdat.com/0.2.4/x86_64-unknown-linux-gnu/pepe.sha256"
     
     echo "Verifying binary integrity..."
     EXPECTED_CHECKSUM=$(cat pepe.sha256)
@@ -96,7 +96,15 @@ elif [ "$(uname -s)" = "Linux" ]; then
     cd -
     rm -rf "$TEMP_DIR"
     echo "pepe installed successfully in user space!"
-    echo "You may need to restart your terminal or run 'source $PROFILE_FILE' to use pepe"
+    # Try to source the profile file
+    if has_sudo; then
+        source $HOME/.profile
+    else
+        echo -e "\033[1;33m⚠️  Please run this command to update your PATH:\033[0m"
+        echo -e "\033[1;32msource $PROFILE_FILE\033[0m"
+    fi
+
+    echo "Run 'pepe --help' to get started"
 else
     echo "Unsupported platform: $(uname)"
     exit 1
