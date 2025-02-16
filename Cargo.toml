@@ -30,6 +30,8 @@ indicatif = "0.17"
 curl-parser = { "git" = "https://github.com/omarmhaimdat/curl-parser" }
 gethostname = "1.0.0"
 serde = { version = "1.0.130", features = ["derive"] }
+serde_yaml = "0.9.34"
+indoc = "2.0.1"  
 
 [profile.release]
 opt-level = 3
