@@ -33,6 +33,7 @@ impl Release {
 #[command(author = "Omar MHAIMDAT")]
 #[command(about = "HTTP load generator")]
 #[clap(disable_help_flag = true)]
+#[command(arg_required_else_help = true)]
 pub struct Cli {
     #[arg(short, long, action = HelpLong)]
     pub help: Option<bool>,
