@@ -1,10 +1,12 @@
-use clap::{ArgAction::HelpLong, Error, Parser};
+use clap::{ArgAction::HelpLong, Error, Parser, Subcommand};
 use curl_parser;
 use reqwest::{header::USER_AGENT, Proxy};
 use serde::Deserialize;
+use std::path::PathBuf;
 
 use crate::utils::{default_user_agent, num_of_cores, version};
 use crate::PepeError;
+use crate::config::lib::Config;
 
 const BBLUE: &str = "\x1b[1;34m"; // Bold Blue
 const BGREEN: &str = "\x1b[1;32m"; // Bold Green
@@ -37,6 +39,9 @@ impl Release {
 pub struct Cli {
     #[arg(short, long, action = HelpLong)]
     pub help: Option<bool>,
+
+    #[command(subcommand)]
+    pub command: Option<Commands>,
 
     /// Number of requests to perform
     #[arg(short, long, default_value_t = 100)]
@@ -100,8 +105,31 @@ pub struct Cli {
     pub args: Vec<String>,
 }
 
+#[derive(Subcommand, Debug, Clone)]
+pub enum Commands {
+    /// Load and run tests from a configuration file
+    File {
+        /// Path to the configuration file, e.g. pepe file config.yml
+        file: PathBuf,
+    },
+}
+
+impl Commands {
+    pub fn is_file_command(&self) -> bool {
+        matches!(self, Commands::File { .. })
+    }
+}
+
 impl Cli {
     pub fn validate(&mut self) -> Result<(), Error> {
+
+        if !self.command.is_none() {
+            if let Some(Commands::File { file: _ }) = &self.command {
+                return self.validate_file();
+            }
+            
+        }
+
         if self.concurrency > self.number {
             eprintln!(
                 "Error: Number of workers cannot be smaller than the number of requests. -c {} -n {}",
@@ -191,6 +219,38 @@ impl Cli {
             }
         }
         Ok(())
+    }
+
+    pub fn validate_file(&mut self) -> Result<(), Error> {
+        if let Some(Commands::File { file }) = &self.command {
+            if !file.exists() {
+                return Err(Error::raw(
+                    clap::error::ErrorKind::ValueValidation,
+                    format!("File not found: {}", file.display()),
+                ));
+            }
+
+            if Config::from_yaml_file(file.to_str().unwrap()).is_err() {
+                return Err(Error::raw(
+                    clap::error::ErrorKind::ValueValidation,
+                    format!("Invalid YAML file: {}", file.display()),
+                ));
+            }
+        }
+        Ok(())
+    }
+
+    pub fn get_file_config(&self) -> Result<Config, Error> {
+        if let Some(Commands::File { file }) = &self.command {
+            let config = Config::from_yaml_file(file.to_str().unwrap())
+                .map_err(|e| Error::raw(clap::error::ErrorKind::ValueValidation, e.to_string()))?;
+            Ok(config)
+        } else {
+            Err(Error::raw(
+                clap::error::ErrorKind::ValueValidation,
+                "No file command found",
+            ))
+        }
     }
 
     pub fn build_client(&self) -> Result<reqwest::Client, PepeError> {

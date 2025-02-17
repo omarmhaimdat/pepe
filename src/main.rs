@@ -16,6 +16,8 @@ use cli::Cli;
 
 mod cache;
 mod cli;
+mod config;
+mod file_ui;
 mod response;
 mod ui;
 mod utils;
@@ -142,6 +144,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut stdout = stdout();
 
     let interrupted = Arc::new(tokio::sync::Notify::new());
+
+    if let Some(command) = args.command.clone() {
+        // check if command is file
+        if command.is_file_command() {
+            let file_config = args.get_file_config()?;
+            let mut dashboard = file_ui::Dashboard::new(file_config);
+            let _ = dashboard.run();
+            disable_raw_mode()?;
+            return Ok(());
+        }
+    }
 
     'main: loop {
         let (tx, mut rx) = mpsc::channel(args.number as usize);

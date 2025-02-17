@@ -1,0 +1,45 @@
+pepe:
+  concurrency: 10
+  timeout: 10
+  number: 500
+
+tests:
+  - id: "auth_request"
+    name: "Get Auth Token"
+    url: "https://api.example.com/auth"
+    method: "POST"
+    headers:
+      Content-Type: "application/json"
+    body: '{ "username": "user", "password": "pass" }'
+    extract:
+      token: "json.access_token"
+
+  - id: "fetch_user"
+    name: "Fetch User Info"
+    url: "https://api.example.com/user"
+    method: "GET"
+    headers:
+      Authorization: "Bearer {{ token }}"
+    depends_on: "auth_request"
+
+  - id: "update_user"
+    name: "Update User Data"
+    url: "https://api.example.com/user/update"
+    method: "PATCH"
+    headers:
+      Authorization: "Bearer {{ token }}"
+      Content-Type: "application/json"
+    body: '{ "email": "new@example.com" }'
+    depends_on: "fetch_user"
+
+  - id: "get_user_details"
+    name: "Get User Details"
+    url: "https://api.example.com/user/details"
+    method: "GET"
+    headers:
+      Authorization: "Bearer {{ token }}"
+    depends_on: "auth_request"
+
+  - id: "health_check"
+    name: "Health Check"
+    curl: 'curl -X GET "https://api.example.com/health" -H "Content-Type: application/json"'

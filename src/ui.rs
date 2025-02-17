@@ -4,6 +4,7 @@ use crossterm::{
     event::{self, Event, KeyCode},
     terminal::enable_raw_mode,
 };
+use gethostname::gethostname;
 use ratatui::widgets::ListItem;
 use ratatui::{
     backend::CrosstermBackend,
@@ -18,7 +19,6 @@ use ratatui::{
 use reqwest::StatusCode;
 use std::thread::available_parallelism;
 use tokio::sync::mpsc;
-use gethostname::gethostname;
 
 use crate::cache::CacheCategory;
 use crate::ResponseStats;
