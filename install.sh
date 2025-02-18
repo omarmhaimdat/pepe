@@ -49,7 +49,7 @@ elif [ "$(uname -s)" = "Linux" ]; then
     echo "ID: $ID"
     [ -n "$ID_LIKE" ] && echo "ID_LIKE: $ID_LIKE"
     
-   TEMP_DIR=/var/folders/dd/6w95nrsn6jn2qd5w439kzdzr0000gn/T/tmp.VwMa2wkGff
+   TEMP_DIR=/var/folders/dd/6w95nrsn6jn2qd5w439kzdzr0000gn/T/tmp.Bjv8tI4Qmq
     cd ""
 
     echo "Downloading binary..."

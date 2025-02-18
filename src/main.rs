@@ -10,12 +10,14 @@ use crossterm::{
 };
 use tokio::sync::{mpsc, Semaphore};
 
+use crate::cli::Cli;
+use crate::request::Request;
 use crate::response::ResponseStats;
 use crate::utils::resolve_dns;
-use cli::Cli;
 
 mod cache;
 mod cli;
+mod request;
 mod response;
 mod ui;
 mod utils;
@@ -50,28 +52,26 @@ impl std::error::Error for PepeError {}
 
 async fn handle_request(
     client: Arc<reqwest::Client>,
-    url: String,
-    method: String,
-    body: Option<String>,
+    request: Request,
     tx: mpsc::Sender<ResponseStats>,
     sent_tx: mpsc::Sender<Sent>,
     permit: tokio::sync::OwnedSemaphorePermit,
 ) {
     let start = std::time::Instant::now();
-    let method = reqwest::Method::from_bytes(method.as_bytes()).unwrap_or(reqwest::Method::GET);
+    let method = request.method();
 
     let _ = sent_tx.send(Sent { count: 1 }).await;
 
-    let dns_times = resolve_dns(&url).await.unwrap_or_default();
+    let dns_times = resolve_dns(&request.url).await.unwrap_or_default();
 
-    let response = if method == reqwest::Method::POST && body.is_some() {
+    let response = if method == reqwest::Method::POST && request.body.is_some() {
         client
-            .request(method, &url)
-            .body(body.unwrap())
+            .request(method, &request.url)
+            .body(request.body.unwrap())
             .send()
             .await
     } else {
-        client.request(method, &url).send().await
+        client.request(method, &request.url).send().await
     };
 
     let stats = ResponseStats::from_response(response, start, dns_times).await;
@@ -85,7 +85,8 @@ async fn run_request(
     tx: mpsc::Sender<ResponseStats>,
     sent_tx: mpsc::Sender<Sent>,
 ) -> Result<(Vec<ResponseStats>, std::time::Duration), PepeError> {
-    let client = Arc::new(args.build_client()?);
+    let request = args.request();
+    let client = Arc::new(request.build_client()?);
     let all_start = std::time::Instant::now();
     let semaphore = Arc::new(Semaphore::new(args.concurrency as usize));
 
@@ -93,9 +94,6 @@ async fn run_request(
         let client = client.clone();
         let tx = tx;
         let sent_tx = sent_tx;
-        let url = args.url.clone();
-        let method = args.method.clone();
-        let body = args.body.clone();
         let number = args.number;
 
         async move {
@@ -108,9 +106,7 @@ async fn run_request(
 
                 tokio::spawn(handle_request(
                     client.clone(),
-                    url.clone(),
-                    method.clone(),
-                    body.clone(),
+                    request.clone(),
                     tx.clone(),
                     sent_tx.clone(),
                     permit,

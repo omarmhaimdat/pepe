@@ -4,11 +4,12 @@ use crossterm::{
     event::{self, Event, KeyCode},
     terminal::enable_raw_mode,
 };
+use gethostname::gethostname;
 use ratatui::widgets::ListItem;
 use ratatui::{
     backend::CrosstermBackend,
     layout::{Constraint, Direction, Layout, Rect},
-    widgets::{BarChart, BarGroup, Block, Borders, List, Paragraph},
+    widgets::{Bar, BarChart, BarGroup, Block, Borders, List, Paragraph},
     Frame, Terminal,
 };
 use ratatui::{
@@ -18,7 +19,6 @@ use ratatui::{
 use reqwest::StatusCode;
 use std::thread::available_parallelism;
 use tokio::sync::mpsc;
-use gethostname::gethostname;
 
 use crate::cache::CacheCategory;
 use crate::ResponseStats;
@@ -234,6 +234,11 @@ impl Dashboard {
                 Span::styled("[TIMEOUT]", Style::default().fg(Color::Red)),
                 Span::raw(" "),
                 Span::styled(
+                    format!("{:?}", self.args.method),
+                    Style::default().fg(Color::Magenta),
+                ),
+                Span::raw(" "),
+                Span::styled(
                     format!("{:.2}ms", stat.duration.as_millis()),
                     Style::default().fg(Color::Yellow),
                 ),
@@ -241,11 +246,6 @@ impl Dashboard {
                 Span::styled(
                     format!("{}b", stat.content_length.unwrap_or(0)),
                     Style::default().fg(Color::Blue),
-                ),
-                Span::raw(" "),
-                Span::styled(
-                    format!("{:?}", self.args.method),
-                    Style::default().fg(Color::Magenta),
                 ),
                 Span::raw(" "),
                 Span::styled(
@@ -272,11 +272,6 @@ impl Dashboard {
             ),
             Span::raw(" "),
             Span::styled(
-                format!("{}", self.args.url),
-                Style::default().fg(Color::White),
-            ),
-            Span::raw(" "),
-            Span::styled(
                 format!("{:.2}ms", stat.duration.as_millis()),
                 Style::default().fg(Color::Yellow),
             ),
@@ -284,6 +279,11 @@ impl Dashboard {
             Span::styled(
                 format!("{}b", stat.content_length.unwrap_or(0)),
                 Style::default().fg(Color::Blue),
+            ),
+            Span::raw(" "),
+            Span::styled(
+                format!("{}", self.args.url),
+                Style::default().fg(Color::White),
             ),
         ]))
     }
@@ -564,9 +564,18 @@ impl Dashboard {
             ("Timeouts", self.stats.timeouts.to_string(), Color::Red),
         ];
 
+        let base_percentage = 100 / stats.len() as u16;
+        let remainder = 100 % stats.len() as u16;
         let constraints: Vec<Constraint> = stats
             .iter()
-            .map(|_| Constraint::Percentage(100 / stats.len() as u16))
+            .enumerate()
+            .map(|(i, _)| {
+                if i < remainder as usize {
+                    Constraint::Percentage(base_percentage + 1)
+                } else {
+                    Constraint::Percentage(base_percentage)
+                }
+            })
             .collect();
 
         let chunks = Layout::default()
@@ -575,14 +584,17 @@ impl Dashboard {
             .split(area);
 
         for (i, (label, value, color)) in stats.iter().enumerate() {
-            let stat = vec![Line::from(vec![
-                Span::styled(format!("{}: ", label), Style::default().fg(*color)),
-                Span::raw(value),
-            ])];
+            let stat = vec![Line::from(vec![Span::styled(
+                format!("{}", value),
+                Style::default().fg(*color),
+            )])];
 
             f.render_widget(
-                Paragraph::new(stat)
-                    .block(Block::default().borders(Borders::ALL).title("Statistics")),
+                Paragraph::new(stat).block(
+                    Block::default()
+                        .borders(Borders::ALL)
+                        .title(format!("{}", label)),
+                ),
                 chunks[i],
             );
         }
@@ -675,7 +687,7 @@ impl Dashboard {
         self.render_stat_widget(
             f,
             stats_chunks[1],
-            "Request per Second",
+            "Requests per Second",
             self.stats.rps.to_string(),
             Color::Magenta,
         );
@@ -772,12 +784,18 @@ impl Dashboard {
             StatusCode::SERVICE_UNAVAILABLE,
         ];
 
-        // At least the ones in the default list should be present, if not, add them
         for status in list_of_default_status {
             if !self.status_codes.contains_key(&status) {
                 data.push((format!("{:?}", status), 0));
             }
         }
+
+        data.sort_by(|a, b| {
+            let status_code_a: u16 = a.0.parse().unwrap_or(0);
+            let status_code_b: u16 = b.0.parse().unwrap_or(0);
+            status_code_a.cmp(&status_code_b)
+        });
+
         let each_bar_width = (area_width as usize / data.len()) - 1;
 
         BarChart::default()
@@ -785,9 +803,19 @@ impl Dashboard {
                 BarGroup::default().bars(
                     data.iter()
                         .map(|(label, value)| {
-                            ratatui::widgets::Bar::default()
+                            let status_code: u16 = label.parse().unwrap_or(0);
+                            let color = match status_code {
+                                100..=199 => Color::Blue,
+                                200..=299 => Color::LightGreen,
+                                300..=399 => Color::Magenta,
+                                400..=499 => Color::Yellow,
+                                500..=599 => Color::Red,
+                                _ => Color::White,
+                            };
+                            Bar::default()
                                 .label(Line::from(label.clone()))
                                 .value(*value)
+                                .style(Style::default().fg(color))
                         })
                         .collect::<Vec<_>>()
                         .as_slice(),
@@ -795,7 +823,6 @@ impl Dashboard {
             )
             .bar_width(each_bar_width as u16)
             .bar_gap(1)
-            .bar_style(Style::default().fg(Color::Cyan))
             .value_style(Style::default().fg(Color::Yellow))
             .label_style(Style::default().fg(Color::White))
             .block(

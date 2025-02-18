@@ -1,10 +1,10 @@
 use clap::{ArgAction::HelpLong, Error, Parser};
 use curl_parser;
-use reqwest::{header::USER_AGENT, Proxy};
+use reqwest::Proxy;
 use serde::Deserialize;
 
+use crate::request::{Request, RequestSettings};
 use crate::utils::{default_user_agent, num_of_cores, version};
-use crate::PepeError;
 
 const BBLUE: &str = "\x1b[1;34m"; // Bold Blue
 const BGREEN: &str = "\x1b[1;32m"; // Bold Green
@@ -193,59 +193,25 @@ impl Cli {
         Ok(())
     }
 
-    pub fn build_client(&self) -> Result<reqwest::Client, PepeError> {
-        let mut request_headers = reqwest::header::HeaderMap::new();
-
-        // Add user agent
-        request_headers.insert(
-            USER_AGENT,
-            self.user_agent
-                .parse::<reqwest::header::HeaderValue>()
-                .map_err(|e| PepeError::HeaderParseError(e.to_string()))?,
-        );
-
-        // Parse headers safely
-        for header in &self.headers {
-            let parts: Vec<&str> = header.splitn(2, ':').collect();
-            if parts.len() == 2 {
-                let name = reqwest::header::HeaderName::from_bytes(parts[0].trim().as_bytes())
-                    .map_err(|e| PepeError::HeaderParseError(e.to_string()))?;
-                let value = reqwest::header::HeaderValue::from_str(parts[1].trim())
-                    .map_err(|e| PepeError::HeaderParseError(e.to_string()))?;
-                request_headers.insert(name, value);
-            }
+    pub fn settings(&self) -> RequestSettings {
+        RequestSettings {
+            user_agent: self.user_agent.clone(),
+            timeout: self.timeout,
+            proxy: self.proxy.clone(),
+            disable_compression: self.disable_compression,
+            disable_keepalive: self.disable_keepalive,
+            disable_redirects: self.disable_redirects,
         }
+    }
 
-        let mut client_builder = reqwest::Client::builder()
-            .default_headers(request_headers)
-            .timeout(std::time::Duration::from_secs(self.timeout as u64));
-
-        if let Some(proxy_url) = &self.proxy {
-            let proxy =
-                Proxy::all(proxy_url).map_err(|e| PepeError::HeaderParseError(e.to_string()))?;
-            client_builder = client_builder.proxy(proxy);
-        }
-
-        if self.disable_compression {
-            client_builder = client_builder.no_gzip();
-        }
-
-        if self.disable_keepalive {
-            client_builder = client_builder.connection_verbose(true);
-        }
-
-        if self.disable_redirects {
-            client_builder = client_builder.redirect(reqwest::redirect::Policy::none());
-        }
-
-        client_builder =
-            client_builder.timeout(std::time::Duration::from_secs(self.timeout as u64));
-
-        let client: reqwest::Client = client_builder
-            .build()
-            .map_err(|e| PepeError::RequestError(e))?;
-
-        Ok(client)
+    pub fn request(&self) -> Request {
+        Request::new(
+            self.url.clone(),
+            self.method.clone(),
+            self.body.clone(),
+            self.headers.clone(),
+            self.settings(),
+        )
     }
 
     pub async fn check_for_updates(&self) -> Result<(), Box<dyn std::error::Error>> {
