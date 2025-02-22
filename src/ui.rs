@@ -1,4 +1,4 @@
-use std::{collections::HashMap, num::NonZeroUsize};
+use std::{collections::BTreeMap, collections::HashMap, num::NonZeroUsize};
 
 use crossterm::{
     event::{self, Event, KeyCode},
@@ -180,7 +180,7 @@ impl Dashboard {
                 self.render_layout(f);
             })?;
 
-            if event::poll(std::time::Duration::from_millis(250))? {
+            if event::poll(std::time::Duration::from_millis(25))? {
                 if let Event::Key(key) = event::read()? {
                     if matches!(
                         key.code,
@@ -487,65 +487,76 @@ impl Dashboard {
 
         let percent = (self.stats.count * 100) / (self.args.number as usize).max(1);
 
-        // Fixed elements: borders(2) + "Progress"(8) + "[]"(2) + "100%"(4) + safety margin(2)
-        let fixed_elements = 10;
-        let bar_width = chunks[1].width.saturating_sub(fixed_elements) as usize;
-        let filled = (percent as usize * bar_width) / 100;
-        let progress_bar = format!(
-            "{}{} {}%",
-            "█".repeat(filled),
-            "░".repeat(bar_width - filled),
-            percent
-        );
+        let progress_color = match percent {
+            0..=25 => Color::Red,
+            26..=50 => Color::LightRed,
+            51..=75 => Color::Yellow,
+            76..=95 => Color::LightGreen,
+            _ => Color::Green,
+        };
+
+        let progress_blocks = ["░", "▒", "▓", "█"];
+        let total_blocks = (chunks[1].width.saturating_sub(12)) as usize;
+        let filled_blocks = (percent as usize * total_blocks) / 100;
+
+        let progress_bar: String = progress_blocks[3].repeat(filled_blocks)
+            + &progress_blocks[0].repeat(total_blocks - filled_blocks);
+
         if self.stats.count == (self.args.number as usize) && self.final_duration.is_none() {
             self.final_duration = Some(std::time::Instant::now() - self.elapsed);
         }
 
-        // Duration widget remains unchanged
-        if let Some(duration) = self.final_duration {
-            let formatted_duration = format!(
-                "{:02}h:{:02}m:{:02}s:{:03}ms",
-                duration.as_secs() as u64 / 3600,
-                duration.as_secs() as u64 % 3600 / 60,
-                duration.as_secs() as u64 % 60,
-                duration.subsec_millis()
-            );
-            f.render_widget(
-                Paragraph::new(vec![Line::from(vec![
-                    Span::raw(formatted_duration).style(Style::default().fg(Color::LightGreen))
-                ])])
-                .block(Block::default().borders(Borders::ALL).title("Duration")),
-                chunks[0],
-            );
-            f.render_widget(
-                Paragraph::new(Span::styled(
-                    progress_bar,
-                    Style::default()
-                        .fg(Color::Green)
-                        .add_modifier(Modifier::BOLD),
-                ))
-                .block(Block::default().borders(Borders::ALL).title("Progress")),
-                chunks[1],
-            );
-            return;
-        }
-        let formatted_duration = format!(
-            "{:02}h:{:02}m:{:02}s:{:03}ms",
-            // Compute seconds from self.elapsed, now - self.elapsed
-            (std::time::Instant::now() - self.elapsed).as_secs() as u64 / 3600,
-            (std::time::Instant::now() - self.elapsed).as_secs() as u64 % 3600 / 60,
-            (std::time::Instant::now() - self.elapsed).as_secs() as u64 % 60,
-            (std::time::Instant::now() - self.elapsed).subsec_millis()
+        let animated_progress = format!(
+            "{} {}% {}",
+            if percent == 100 { "" } else { "➡️" },
+            percent,
+            { "" }
         );
 
+        let progress_line = Line::from(vec![
+            Span::styled(
+                format!("{} ", animated_progress),
+                Style::default()
+                    .fg(Color::White)
+                    .add_modifier(Modifier::BOLD),
+            ),
+            Span::styled(progress_bar, Style::default().fg(progress_color)),
+        ]);
+
+        let formatted_duration = if let Some(duration) = self.final_duration {
+            format!(
+                "{:02}h:{:02}m:{:02}s:{:03}ms",
+                duration.as_secs() / 3600,
+                duration.as_secs() % 3600 / 60,
+                duration.as_secs() % 60,
+                duration.subsec_millis()
+            )
+        } else {
+            let elapsed = std::time::Instant::now() - self.elapsed;
+            format!(
+                "{:02}h:{:02}m:{:02}s:{:03}ms",
+                elapsed.as_secs() / 3600,
+                elapsed.as_secs() % 3600 / 60,
+                elapsed.as_secs() % 60,
+                elapsed.subsec_millis()
+            )
+        };
+
         f.render_widget(
-            Paragraph::new(vec![Line::from(vec![Span::raw(formatted_duration)])])
-                .block(Block::default().borders(Borders::ALL).title("Duration")),
+            Paragraph::new(vec![Line::from(vec![Span::styled(
+                formatted_duration,
+                Style::default().fg(if self.stats.count == self.args.number as usize {
+                    Color::Green
+                } else {
+                    Color::White
+                }),
+            )])])
+            .block(Block::default().borders(Borders::ALL).title("⏳ Duration")),
             chunks[0],
         );
         f.render_widget(
-            Paragraph::new(progress_bar)
-                .block(Block::default().borders(Borders::ALL).title("Progress")),
+            Paragraph::new(progress_line)
+                .block(Block::default().borders(Borders::ALL).title("🚀 Progress")),
             chunks[1],
         );
     }
@@ -598,6 +609,49 @@ impl Dashboard {
                 chunks[i],
             );
         }
+    }
+
+    // TODO: Need to find a space to include it
+    pub fn _compute_response_time_histogram(
+        requests: &[ResponseStats],
+        bin_count: usize,
+    ) -> Vec<(f64, usize)> {
+        // No requests, return empty histogram
+        if requests.is_empty() {
+            return vec![];
+        }
+
+        // Extract response times in seconds
+        let mut response_times: Vec<f64> =
+            requests.iter().map(|r| r.duration.as_secs_f64()).collect();
+
+        // Sort response times to find min/max
+        response_times.sort_by(|a, b| a.partial_cmp(b).unwrap());
+
+        let min_time = *response_times.first().unwrap_or(&0.0);
+        let max_time = *response_times.last().unwrap_or(&1.0);
+
+        // Define bin width
+        let bin_width = (max_time - min_time) / bin_count as f64;
+
+        // Single bin if all durations are the same`ƒ
+        if bin_width == 0.0 {
+            return vec![(min_time, requests.len())];
+        }
+
+        // Create bins
+        let mut histogram: BTreeMap<usize, usize> = BTreeMap::new();
+
+        for &time in &response_times {
+            let bin_index = ((time - min_time) / bin_width) as usize;
+            *histogram.entry(bin_index).or_insert(0) += 1;
+        }
+
+        // Convert histogram to Vec<(bin_center, count)>
+        histogram
+            .into_iter()
+            .map(|(index, count)| (min_time + (index as f64 * bin_width), count))
+            .collect()
     }
 
     fn render_charts(&mut self, f: &mut Frame, area: Rect) {
@@ -687,7 +741,7 @@ impl Dashboard {
         self.render_stat_widget(
             f,
             stats_chunks[1],
-            "Requests per Second",
+            "Requests/Sec",
             self.stats.rps.to_string(),
             Color::Magenta,
         );
