@@ -19,7 +19,7 @@ if [ "$(uname)" = "Darwin" ]; then
         echo "pepe installed successfully using Homebrew!"
     else
         echo "Homebrew not found, downloading pepe for macOS..."
-        curl -L -o pepe "https://pepe.mhaimdat.com/0.2.8/$(uname -m)-apple-darwin/pepe"
+        curl -L -o pepe "https://pepe.mhaimdat.com/0.2.9/$(uname -m)-apple-darwin/pepe"
         chmod +x pepe
         mv pepe /usr/local/bin/
         echo "pepe for macOS downloaded and installed successfully!"
@@ -49,12 +49,12 @@ elif [ "$(uname -s)" = "Linux" ]; then
     echo "ID: $ID"
     [ -n "$ID_LIKE" ] && echo "ID_LIKE: $ID_LIKE"
     
-   TEMP_DIR=/var/folders/dd/6w95nrsn6jn2qd5w439kzdzr0000gn/T/tmp.XE33b7tb2d
+   TEMP_DIR=/var/folders/dd/6w95nrsn6jn2qd5w439kzdzr0000gn/T/tmp.86GnGGFVfj
     cd ""
 
     echo "Downloading binary..."
-    curl -L -O "https://pepe.mhaimdat.com/0.2.8/x86_64-unknown-linux-gnu/pepe"
-    curl -L -O "https://pepe.mhaimdat.com/0.2.8/x86_64-unknown-linux-gnu/pepe.sha256"
+    curl -L -O "https://pepe.mhaimdat.com/0.2.9/x86_64-unknown-linux-gnu/pepe"
+    curl -L -O "https://pepe.mhaimdat.com/0.2.9/x86_64-unknown-linux-gnu/pepe.sha256"
 
     echo "Verifying binary integrity..."
     EXPECTED_CHECKSUM=
