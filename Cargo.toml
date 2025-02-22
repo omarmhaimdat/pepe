@@ -1,6 +1,6 @@
 [package]
 name = "pepe"
-version = "0.2.8"
+version = "0.2.9"
 authors = ["Omar MHAIMDAT"]
 edition = "2021"
 description = "HTTP load generator and performance testing tool"
