@@ -24,13 +24,12 @@ use crate::cache::CacheCategory;
 use crate::ResponseStats;
 use crate::{Cli, Sent};
 
-const LOGO: &str = r#"
-    ██████╗ ███████╗██████╗ ███████╗
-    ██╔══██╗██╔════╝██╔══██╗██╔════╝
-    ██████╔╝█████╗  ██████╔╝█████╗  
-    ██╔═══╝ ██╔══╝  ██╔═══╝ ██╔══╝  
-    ██║     ███████╗██║     ███████╗
-    ╚═╝     ╚══════╝╚═╝     ╚══════╝"#;
+const LOGO: &str = r#"██████╗ ███████╗██████╗ ███████╗
+██╔══██╗██╔════╝██╔══██╗██╔════╝
+██████╔╝█████╗  ██████╔╝█████╗  
+██╔═══╝ ██╔══╝  ██╔═══╝ ██╔══╝  
+██║     ███████╗██║     ███████╗
+╚═╝     ╚══════╝╚═╝     ╚══════╝"#;
 
 #[derive(Default)]
 struct Stats {
@@ -860,7 +859,7 @@ impl Dashboard {
                             let status_code: u16 = label.parse().unwrap_or(0);
                             let color = match status_code {
                                 100..=199 => Color::Blue,
-                                200..=299 => Color::LightGreen,
+                                200..=299 => Color::Green,
                                 300..=399 => Color::Magenta,
                                 400..=499 => Color::Yellow,
                                 500..=599 => Color::Red,
