@@ -8,22 +8,19 @@ on:
 jobs:
   create-release:
     runs-on: ubuntu-latest
-    outputs:
-      upload_url: ${{ steps.create_release.outputs.upload_url }}
     steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
       - name: Create Release
-        id: create_release
-        uses: actions/create-release@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tag_name: ${{ github.ref }}
-          release_name: Release ${{ github.ref }}
-          draft: false
-          prerelease: false
+        run: |
+          gh release create ${{ github.ref }} \
+            --title "Release ${{ github.ref }}" \
+            --generate-notes
 
   build-and-upload:
-    needs: create-release
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
@@ -104,25 +101,13 @@ jobs:
             --endpoint-url ${{ vars.R2_ENDPOINT }} \
             --region ${{ vars.R2_REGION }}
 
-      - name: Upload to Release (binary)
-        uses: actions/upload-release-asset@v1
+      - name: Upload to Release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ needs.create-release.outputs.upload_url }}
-          asset_path: ./target/${{ matrix.target }}/release/${{ matrix.artifact_name }}
-          asset_name: ${{ matrix.asset_name }}
-          asset_content_type: application/octet-stream
-
-      - name: Upload to Release (checksum)
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ needs.create-release.outputs.upload_url }}
-          asset_path: ./target/${{ matrix.target }}/release/${{ matrix.artifact_name }}.sha256
-          asset_name: ${{ matrix.asset_name }}.sha256
-          asset_content_type: text/plain
+        run: |
+          gh release upload ${{ github.ref }} \
+            target/${{ matrix.target }}/release/${{ matrix.artifact_name }} \
+            target/${{ matrix.target }}/release/${{ matrix.artifact_name }}.sha256
 
   update-homebrew:
     needs: build-and-upload
