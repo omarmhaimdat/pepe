@@ -67,6 +67,7 @@ jobs:
         run: cargo build --release --target ${{ matrix.target }}
 
       - name: Debug Repository Structure
+        shell: bash
         run: |
           echo "Current Directory: $(pwd)"
           echo "Directory Contents:"
@@ -75,36 +76,6 @@ jobs:
           else
             ls -la
           fi
-
-      - name: Debug Debian Files
-        if: matrix.os == 'ubuntu-latest' && (matrix.target == 'x86_64-unknown-linux-gnu' || matrix.target == 'aarch64-unknown-linux-gnu')
-        run: |
-          mkdir -p pepe/debian/source
-          echo "3.0 (native)" > pepe/debian/source/format
-
-          # Generate the control file
-          echo "Source: pepe
-          Section: utils
-          Priority: optional
-          Maintainer: Omar MHAIMDAT <omarmhaimdat@gmail.com>
-          Build-Depends: debhelper-compat (= 13), build-essential, cargo
-          Standards-Version: 4.6.0
-          Homepage: https://github.com/omarmhaimdat/pepe
-
-          Package: pepe
-          Architecture: any
-          Description: HTTP load generator
-           Pepe is a command-line HTTP load generator for stress testing." > pepe/debian/control
-
-            # Generate the changelog file
-            echo "pepe (0.1.0) unstable; urgency=low\n  * Initial release\n -- Omar MHAIMDAT <omarmhaimdat@gmail.com>  $(date -R)" > pepe/debian/changelog
-
-            printf "#!/usr/bin/make -f\n%%:\n\tdh \$@\n" > pepe/debian/rules
-
-            # Generate the rules file
-            chmod +x pepe/debian/rules
-          cd pepe
-          dpkg-buildpackage -us -uc
 
       - name: Package Homebrew (macOS)
         if: matrix.os == 'macos-latest' && (matrix.target == 'x86_64-apple-darwin' || matrix.target == 'aarch64-apple-darwin')
