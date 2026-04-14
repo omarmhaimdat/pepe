@@ -1,0 +1,242 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  create-release:
+    runs-on: ubuntu-latest
+    outputs:
+      upload_url: ${{ steps.create_release.outputs.upload_url }}
+    steps:
+      - name: Create Release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ github.ref }}
+          release_name: Release ${{ github.ref }}
+          draft: false
+          prerelease: false
+
+  build-and-upload:
+    needs: create-release
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            artifact_name: pepe
+            asset_name: pepe-x86_64-unknown-linux-gnu
+          - os: ubuntu-latest
+            target: aarch64-unknown-linux-gnu
+            artifact_name: pepe
+            asset_name: pepe-aarch64-unknown-linux-gnu
+          - os: macos-latest
+            target: x86_64-apple-darwin
+            artifact_name: pepe
+            asset_name: pepe-x86_64-apple-darwin
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            artifact_name: pepe
+            asset_name: pepe-aarch64-apple-darwin
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            artifact_name: pepe.exe
+            asset_name: pepe-x86_64-pc-windows-msvc.exe
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Install cross (for cross-compilation)
+        if: matrix.target == 'aarch64-unknown-linux-gnu'
+        run: cargo install cross --locked
+
+      - name: Build (Linux ARM64)
+        if: matrix.target == 'aarch64-unknown-linux-gnu'
+        run: cross build --release --target ${{ matrix.target }}
+
+      - name: Build (Other)
+        if: matrix.target != 'aarch64-unknown-linux-gnu'
+        run: cargo build --release --target ${{ matrix.target }}
+
+      - name: Generate checksums
+        run: |
+          cd target/${{ matrix.target }}/release
+          if [ "${{ runner.os }}" == "Windows" ]; then
+            certutil -hashfile ${{ matrix.artifact_name }} SHA256 > ${{ matrix.artifact_name }}.sha256
+          else
+            sha256sum ${{ matrix.artifact_name }} > ${{ matrix.artifact_name }}.sha256
+          fi
+        shell: bash
+
+      - name: Upload R2 (binary)
+        if: vars.R2_ENABLED == 'true'
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+        run: |
+          VERSION=$(grep '^version =' Cargo.toml | sed -E 's/version = \"(.*)\"/\1/')
+          aws s3 cp target/${{ matrix.target }}/release/${{ matrix.artifact_name }} \
+            s3://${{ vars.R2_BUCKET }}/releases/$VERSION/${{ matrix.asset_name }} \
+            --endpoint-url ${{ vars.R2_ENDPOINT }} \
+            --region ${{ vars.R2_REGION }}
+
+      - name: Upload R2 (checksum)
+        if: vars.R2_ENABLED == 'true'
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+        run: |
+          VERSION=$(grep '^version =' Cargo.toml | sed -E 's/version = \"(.*)\"/\1/')
+          aws s3 cp target/${{ matrix.target }}/release/${{ matrix.artifact_name }}.sha256 \
+            s3://${{ vars.R2_BUCKET }}/releases/$VERSION/${{ matrix.asset_name }}.sha256 \
+            --endpoint-url ${{ vars.R2_ENDPOINT }} \
+            --region ${{ vars.R2_REGION }}
+
+      - name: Upload to Release (binary)
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ needs.create-release.outputs.upload_url }}
+          asset_path: ./target/${{ matrix.target }}/release/${{ matrix.artifact_name }}
+          asset_name: ${{ matrix.asset_name }}
+          asset_content_type: application/octet-stream
+
+      - name: Upload to Release (checksum)
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ needs.create-release.outputs.upload_url }}
+          asset_path: ./target/${{ matrix.target }}/release/${{ matrix.artifact_name }}.sha256
+          asset_name: ${{ matrix.asset_name }}.sha256
+          asset_content_type: text/plain
+
+  update-homebrew:
+    needs: build-and-upload
+    runs-on: ubuntu-latest
+    if: success()
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Get Version
+        id: version
+        run: echo "version=$(grep '^version =' Cargo.toml | sed -E 's/version = \"(.*)\"/\1/')" >> $GITHUB_OUTPUT
+
+      - name: Get Checksums
+        id: checksums
+        run: |
+          TEMP_DIR=$(mktemp -d)
+          cd "$TEMP_DIR"
+          
+          # Download checksums
+          curl -L -O "https://github.com/${{ github.repository }}/releases/download/v${{ steps.version.outputs.version }}/pepe-x86_64-apple-darwin.sha256"
+          curl -L -O "https://github.com/${{ github.repository }}/releases/download/v${{ steps.version.outputs.version }}/pepe-aarch64-apple-darwin.sha256"
+          
+          SHA256_X86_64=$(cat pepe-x86_64-apple-darwin.sha256 | awk '{print $1}')
+          SHA256_AARCH64=$(cat pepe-aarch64-apple-darwin.sha256 | awk '{print $1}')
+          
+          echo "sha256_x86_64=$SHA256_X86_64" >> $GITHUB_OUTPUT
+          echo "sha256_aarch64=$SHA256_AARCH64" >> $GITHUB_OUTPUT
+          
+          cd -
+          rm -rf "$TEMP_DIR"
+
+      - name: Checkout homebrew tap
+        uses: actions/checkout@v4
+        with:
+          repository: omarmhaimdat/homebrew-pepe
+          path: homebrew-pepe
+          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+
+      - name: Update Homebrew formula
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          SHA256_X86_64: ${{ steps.checksums.outputs.sha256_x86_64 }}
+          SHA256_AARCH64: ${{ steps.checksums.outputs.sha256_aarch64 }}
+        run: |
+          mkdir -p homebrew-pepe/Formula
+          python3 << 'PYEOF'
+          import os
+          
+          version = os.environ['VERSION']
+          sha256_x86_64 = os.environ['SHA256_X86_64']
+          sha256_aarch64 = os.environ['SHA256_AARCH64']
+          
+          formula = f'''class Pepe < Formula
+            desc "HTTP load generator and performance testing tool"
+            homepage "https://github.com/omarmhaimdat/pepe"
+            version "{version}"
+          
+            if Hardware::CPU.arm?
+              url "https://github.com/omarmhaimdat/pepe/releases/download/v{version}/pepe-aarch64-apple-darwin"
+              sha256 "{sha256_aarch64}"
+            else
+              url "https://github.com/omarmhaimdat/pepe/releases/download/v{version}/pepe-x86_64-apple-darwin"
+              sha256 "{sha256_x86_64}"
+            end
+          
+            def install
+              bin.install "pepe"
+            end
+          
+            test do
+              system "#{bin}/pepe", "--version"
+            end
+          end
+          '''
+          
+          with open('homebrew-pepe/Formula/pepe.rb', 'w') as f:
+              f.write(formula)
+          PYEOF
+
+      - name: Push Homebrew formula
+        run: |
+          cd homebrew-pepe
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Formula/pepe.rb
+          if ! git diff-index --quiet HEAD --; then
+            git commit -m "Update pepe formula to ${{ steps.version.outputs.version }}"
+            git push
+          else
+            echo "No changes to commit"
+          fi
+
+  update-install-script:
+    needs: build-and-upload
+    runs-on: ubuntu-latest
+    if: success()
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Get Version
+        id: version
+        run: echo "version=$(grep '^version =' Cargo.toml | sed -E 's/version = \"(.*)\"/\1/')" >> $GITHUB_OUTPUT
+
+      - name: Update install script
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          sed -i "s|https://pepe.mhaimdat.com/[0-9.]*|https://pepe.mhaimdat.com/$VERSION|g" install.sh
+
+      - name: Commit and push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add install.sh
+          git diff-index --quiet HEAD -- || (git commit -m "Update install script for release v${{ steps.version.outputs.version }}" && git push)

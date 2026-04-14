@@ -1,13 +1,53 @@
 use crate::cache::CacheStatus;
+use serde::{Serialize, ser::SerializeMap};
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize)]
 pub struct ResponseStats {
+    #[serde(serialize_with = "serialize_duration")]
     pub duration: std::time::Duration,
+    #[serde(serialize_with = "serialize_status_code")]
     pub status_code: Option<reqwest::StatusCode>,
     pub content_length: Option<u64>,
     pub partial_response: Option<String>,
+    #[serde(serialize_with = "serialize_dns_times")]
     pub dns_times: Option<(std::time::Duration, std::time::Duration)>,
+    #[serde(skip)]
     pub cache_status: Option<CacheStatus>,
+}
+
+fn serialize_duration<S>(duration: &std::time::Duration, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: serde::Serializer,
+{
+    serializer.serialize_u128(duration.as_millis())
+}
+
+fn serialize_status_code<S>(status: &Option<reqwest::StatusCode>, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: serde::Serializer,
+{
+    match status {
+        Some(code) => serializer.serialize_u16(code.as_u16()),
+        None => serializer.serialize_none(),
+    }
+}
+
+fn serialize_dns_times<S>(
+    dns_times: &Option<(std::time::Duration, std::time::Duration)>,
+    serializer: S,
+) -> Result<S::Ok, S::Error>
+where
+    S: serde::Serializer,
+{
+    match dns_times {
+        Some((lookup, resolution)) => {
+            let mut map = serializer.serialize_map(Some(2))?;
+            map.serialize_entry("lookup_ms", &lookup.as_millis())?;
+            map.serialize_entry("resolution_ms", &resolution.as_millis())?;
+            map.end()
+        }
+        None => serializer.serialize_none(),
+    }
 }
 
 impl Default for ResponseStats {

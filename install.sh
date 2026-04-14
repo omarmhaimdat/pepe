@@ -49,23 +49,23 @@ elif [ "$(uname -s)" = "Linux" ]; then
     echo "ID: $ID"
     [ -n "$ID_LIKE" ] && echo "ID_LIKE: $ID_LIKE"
     
-   TEMP_DIR=/var/folders/dd/6w95nrsn6jn2qd5w439kzdzr0000gn/T/tmp.86GnGGFVfj
-    cd ""
+    TEMP_DIR=$(mktemp -d)
+    cd "$TEMP_DIR"
 
     echo "Downloading binary..."
     curl -L -O "https://pepe.mhaimdat.com/0.2.9/x86_64-unknown-linux-gnu/pepe"
     curl -L -O "https://pepe.mhaimdat.com/0.2.9/x86_64-unknown-linux-gnu/pepe.sha256"
 
     echo "Verifying binary integrity..."
-    EXPECTED_CHECKSUM=
-    ACTUAL_CHECKSUM=
+    EXPECTED_CHECKSUM=$(cat pepe.sha256)
+    ACTUAL_CHECKSUM=$(sha256sum pepe | awk '{print $1}')
 
-    if [ "" != "" ]; then
+    if [ "$EXPECTED_CHECKSUM" != "$ACTUAL_CHECKSUM" ]; then
         echo "Checksum verification failed!"
-        echo "Expected: "
-        echo "Got: "
+        echo "Expected: $EXPECTED_CHECKSUM"
+        echo "Got: $ACTUAL_CHECKSUM"
         cd -
-        rm -rf ""
+        rm -rf "$TEMP_DIR"
         exit 1
     fi
 
@@ -74,10 +74,11 @@ elif [ "$(uname -s)" = "Linux" ]; then
 
     # Function to add PATH if missing
     add_to_path_if_missing() {
-        local file=
-        if [ -f "" ] && ! grep -q "" ""; then
-            echo "export PATH=\":$PATH\"" >> ""
-            echo "Added  to "
+        local file=$1
+        local bin_dir=$2
+        if [ -f "$file" ] && ! grep -q "$bin_dir" "$file"; then
+            echo "export PATH=\"$bin_dir:\$PATH\"" >> "$file"
+            echo "Added $bin_dir to $file"
         fi
     }
 
@@ -87,16 +88,16 @@ elif [ "$(uname -s)" = "Linux" ]; then
         sudo mv pepe /usr/local/bin/
         echo -e "\033[1;32m✓ pepe has been installed to /usr/local/bin/pepe\033[0m"
     else
-        echo "Installing pepe to user space in /Users/omarmhaimdat/.local/bin/"
-        USER_BIN_DIR="/Users/omarmhaimdat/.local/bin"
-        mkdir -p ""
-        mv pepe "/"
+        echo "Installing pepe to user space in $HOME/.local/bin/"
+        USER_BIN_DIR="$HOME/.local/bin"
+        mkdir -p "$USER_BIN_DIR"
+        mv pepe "$USER_BIN_DIR/"
 
         # Update PATH in all relevant shell config files
-        add_to_path_if_missing "/Users/omarmhaimdat/.profile"
-        add_to_path_if_missing "/Users/omarmhaimdat/.bashrc"
-        add_to_path_if_missing "/Users/omarmhaimdat/.bash_profile"
-        add_to_path_if_missing "/Users/omarmhaimdat/.zshrc"
+        add_to_path_if_missing "$HOME/.profile" "$USER_BIN_DIR"
+        add_to_path_if_missing "$HOME/.bashrc" "$USER_BIN_DIR"
+        add_to_path_if_missing "$HOME/.bash_profile" "$USER_BIN_DIR"
+        add_to_path_if_missing "$HOME/.zshrc" "$USER_BIN_DIR"
 
         echo -e "\033[1;32m✓ pepe installed successfully in user space!\033[0m"
         echo -e "\033[1;33m➜ Restart your shell or run:\033[0m"

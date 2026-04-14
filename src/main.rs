@@ -17,6 +17,7 @@ use crate::utils::resolve_dns;
 
 mod cache;
 mod cli;
+mod json_report;
 mod request;
 mod response;
 mod ui;
@@ -95,22 +96,54 @@ async fn run_request(
         let tx = tx;
         let sent_tx = sent_tx;
         let number = args.number;
+        let duration_ms = args.duration.as_ref().map(|d| {
+            crate::cli::Cli::parse_duration(d).unwrap_or(0)
+        });
 
         async move {
-            for _ in 0..number {
-                let semaphore = semaphore.clone();
-                let permit = semaphore
-                    .acquire_owned()
-                    .await
-                    .expect("Semaphore acquire failed");
+            if let Some(duration_ms) = duration_ms {
+                // Duration-based testing
+                let start = std::time::Instant::now();
+                let duration = std::time::Duration::from_millis(duration_ms);
+                
+                loop {
+                    if start.elapsed() >= duration {
+                        break;
+                    }
+                    
+                    let semaphore = semaphore.clone();
+                    let permit = semaphore
+                        .acquire_owned()
+                        .await
+                        .expect("Semaphore acquire failed");
 
-                tokio::spawn(handle_request(
-                    client.clone(),
-                    request.clone(),
-                    tx.clone(),
-                    sent_tx.clone(),
-                    permit,
-                ));
+                    tokio::spawn(handle_request(
+                        client.clone(),
+                        request.clone(),
+                        tx.clone(),
+                        sent_tx.clone(),
+                        permit,
+                    ));
+                    
+                    tokio::task::yield_now().await;
+                }
+            } else {
+                // Request count-based testing
+                for _ in 0..number {
+                    let semaphore = semaphore.clone();
+                    let permit = semaphore
+                        .acquire_owned()
+                        .await
+                        .expect("Semaphore acquire failed");
+
+                    tokio::spawn(handle_request(
+                        client.clone(),
+                        request.clone(),
+                        tx.clone(),
+                        sent_tx.clone(),
+                        permit,
+                    ));
+                }
             }
         }
     });
@@ -159,6 +192,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 continue 'main;
             }
             Ok(KeyCode::Char('q')) | Ok(KeyCode::Esc) | Ok(KeyCode::Enter) => {
+                if args.json {
+                    let report = json_report::JsonReport::generate(
+                        &dashboard.get_requests(),
+                        dashboard.get_elapsed().as_millis(),
+                    );
+                    if let Ok(json) = report.to_json() {
+                        println!("{}", json);
+                    }
+                }
                 break;
             }
             Ok(KeyCode::Char('i')) => {

@@ -1,6 +1,6 @@
 [package]
 name = "pepe"
-version = "0.2.9"
+version = "0.3.0"
 authors = ["Omar MHAIMDAT"]
 edition = "2021"
 description = "HTTP load generator and performance testing tool"
@@ -30,6 +30,7 @@ indicatif = "0.17"
 curl-parser = { "git" = "https://github.com/omarmhaimdat/curl-parser" }
 gethostname = "1.0.0"
 serde = { version = "1.0.130", features = ["derive"] }
+serde_json = "1.0"
 
 [profile.release]
 opt-level = 3
