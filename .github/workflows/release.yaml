@@ -164,7 +164,7 @@ jobs:
 
       - name: Update Homebrew formula
         run: |
-          cat > homebrew-pepe/Formula/pepe.rb <<EOF
+          cat > homebrew-pepe/Formula/pepe.rb <<"EOF"
 class Pepe < Formula
   desc "HTTP load generator and performance testing tool"
   homepage "https://github.com/omarmhaimdat/pepe"
