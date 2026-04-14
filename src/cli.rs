@@ -46,8 +46,7 @@ pub struct Cli {
     #[arg(short, long, default_value_t = num_of_cores())]
     pub concurrency: u32,
 
-    // TODO: Implement duration
-    /// Duration of the test, e.g. 10s, 3m, 2h
+    /// Duration of the test, e.g. 10s, 3m, 2h (mutually exclusive with -n)
     #[arg(short = 'z', long)]
     pub duration: Option<String>,
 
@@ -91,6 +90,10 @@ pub struct Cli {
     #[arg(long)]
     pub disable_redirects: bool,
 
+    /// Output results in JSON format
+    #[arg(long)]
+    pub json: bool,
+
     /// HTTP url to request
     #[arg(default_value_t = String::from(""))]
     pub url: String,
@@ -102,7 +105,7 @@ pub struct Cli {
 
 impl Cli {
     pub fn validate(&mut self) -> Result<(), Error> {
-        if self.concurrency > self.number {
+        if self.concurrency > self.number && self.duration.is_none() {
             eprintln!(
                 "Error: Number of workers cannot be smaller than the number of requests. -c {} -n {}",
                 self.concurrency, self.number
@@ -128,6 +131,11 @@ impl Cli {
                 clap::error::ErrorKind::ValueValidation,
                 "Timeout must be between 1 and 120 seconds",
             ));
+        }
+
+        // Validate and parse duration if provided
+        if let Some(ref duration_str) = self.duration {
+            Self::parse_duration(duration_str)?;
         }
 
         if self.curl {
@@ -191,6 +199,51 @@ impl Cli {
             }
         }
         Ok(())
+    }
+
+    /// Parse duration string like "10s", "5m", "2h" into milliseconds
+    pub fn parse_duration(duration_str: &str) -> Result<u64, Error> {
+        let duration_str = duration_str.trim().to_lowercase();
+        
+        let (num_str, unit) = if let Some(idx) = duration_str.find(|c: char| c.is_alphabetic()) {
+            duration_str.split_at(idx)
+        } else {
+            return Err(Error::raw(
+                clap::error::ErrorKind::ValueValidation,
+                "Duration must have a unit (s, m, h). Examples: 10s, 5m, 2h",
+            ));
+        };
+
+        let num: u64 = num_str.trim().parse().map_err(|_| {
+            Error::raw(
+                clap::error::ErrorKind::ValueValidation,
+                format!("Invalid duration number: {}", num_str),
+            )
+        })?;
+
+        let milliseconds = match unit {
+            "s" | "sec" | "second" | "seconds" => num * 1000,
+            "m" | "min" | "minute" | "minutes" => num * 60 * 1000,
+            "h" | "hour" | "hours" => num * 60 * 60 * 1000,
+            _ => {
+                return Err(Error::raw(
+                    clap::error::ErrorKind::ValueValidation,
+                    format!(
+                        "Invalid duration unit: {}. Valid units: s, m, h",
+                        unit
+                    ),
+                ))
+            }
+        };
+
+        if milliseconds == 0 {
+            return Err(Error::raw(
+                clap::error::ErrorKind::ValueValidation,
+                "Duration must be greater than 0",
+            ));
+        }
+
+        Ok(milliseconds)
     }
 
     pub fn settings(&self) -> RequestSettings {

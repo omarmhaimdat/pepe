@@ -197,6 +197,14 @@ impl Dashboard {
         }
     }
 
+    pub fn get_requests(&self) -> Vec<ResponseStats> {
+        self.requests.clone()
+    }
+
+    pub fn get_elapsed(&self) -> std::time::Duration {
+        self.elapsed.elapsed()
+    }
+
     fn update_sent(&mut self, sent: Sent) {
         self.stats.sent += sent.count;
     }
