@@ -70,9 +70,11 @@ jobs:
         run: |
           echo "Current Directory: $(pwd)"
           echo "Directory Contents:"
-          ls -la
-          echo "Recursive Directory Structure:"
-          ls -R
+          if [ "${{ runner.os }}" == "Windows" ]; then
+            dir
+          else
+            ls -la
+          fi
 
       - name: Debug Debian Files
         if: matrix.os == 'ubuntu-latest' && (matrix.target == 'x86_64-unknown-linux-gnu' || matrix.target == 'aarch64-unknown-linux-gnu')
