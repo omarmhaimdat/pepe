@@ -66,5 +66,8 @@ jobs:
             [ "$code" = "200" ]
           done
           # The live install.sh must be the one we just built (query string
-          # bypasses any CDN-cached copy of the previous release)
-          curl -fsSL "https://pepe.mhaimdat.com/install.sh?t=$(date +%s)" | grep -q "${TAG#v}"
+          # bypasses any CDN-cached copy of the previous release). Download
+          # first: piping curl into `grep -q` fails under pipefail, because
+          # grep exits on the first match and curl then can't finish writing.
+          installer=$(curl -fsSL "https://pepe.mhaimdat.com/install.sh?t=$(date +%s)")
+          grep -q "APP_VERSION=\"${TAG#v}\"" <<< "$installer"
