@@ -19,7 +19,6 @@ tokio = { version = "1.42.0", features = ["full"] }
 reqwest = { version = "0.12.12", default-features = false, features = [
     "json",
     "rustls-tls",
-    "hickory-dns",
     "socks",
 ] }
 hyper = "1.5.2"

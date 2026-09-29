@@ -25,6 +25,9 @@ publish-jobs = ["homebrew", "./publish-r2"]
 github-attestations = true
 # `pepe self-update` is built in via axoupdater, no separate updater binary
 install-updater = false
+# Let Dependabot bump action versions in the generated release.yml
+# (`dist generate` still rewrites it whenever this config changes)
+allow-dirty = ["ci"]
 
 [dist.github-custom-runners]
 # Native ARM runner: builds the aarch64 musl binary without cross-compiling
