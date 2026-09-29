@@ -1,9 +1,9 @@
 use clap::{ArgAction::HelpLong, Error, Parser, Subcommand};
-use curl_parser;
 use reqwest::Proxy;
 
-use crate::request::{Request, RequestSettings};
+use crate::request::{parse_header, Request, RequestSettings};
 use crate::utils::{default_user_agent, num_of_cores, version};
+use crate::PepeError;
 
 #[derive(Parser, Debug, Clone)]
 #[command(name = "pepe")]
@@ -94,20 +94,16 @@ pub enum Command {
 impl Cli {
     pub fn validate(&mut self) -> Result<(), Error> {
         if self.concurrency > self.number && self.duration.is_none() {
-            eprintln!(
-                "Error: Number of workers cannot be smaller than the number of requests. -c {} -n {}",
-                self.concurrency, self.number
-            );
             return Err(Error::raw(
                 clap::error::ErrorKind::ValueValidation,
                 format!(
-                    "Number of workers cannot be smaller than the number of requests. -c {} -n {}",
+                    "Concurrency cannot be greater than the number of requests. -c {} -n {}",
                     self.concurrency, self.number
                 ),
             ));
         }
 
-        if self.curl == false && self.url.is_empty() {
+        if !self.curl && self.url.is_empty() {
             return Err(Error::raw(
                 clap::error::ErrorKind::ValueValidation,
                 "URL is required",
@@ -140,7 +136,8 @@ impl Cli {
                 })
                 .collect::<Vec<_>>()
                 .join(" ");
-            println!("Curl command: {}", curl_command);
+            // stderr, so `--json` output on stdout stays valid JSON
+            eprintln!("Curl command: {}", curl_command);
             let parsed_request = curl_parser::ParsedRequest::load(&curl_command, Some(()));
             if parsed_request.is_err() {
                 eprintln!("Error: {}", parsed_request.err().unwrap());
@@ -154,17 +151,22 @@ impl Cli {
                 .headers
                 .clone()
                 .iter()
-                .map(|(k, v)| format!("{}: {}", k, v.to_str().unwrap()))
+                .map(|(k, v)| format!("{}: {}", k, String::from_utf8_lossy(v.as_bytes())))
                 .collect();
-            self.body = Some(parsed_request.as_ref().unwrap().body.clone().join(" "));
-            // print body
-            if let Some(body) = &self.body {
-                println!("Body: {}", body);
+            let body = parsed_request.as_ref().unwrap().body.join(" ");
+            if !body.is_empty() {
+                eprintln!("Body: {}", body);
+                self.body = Some(body);
             }
         }
 
+        for header in &self.headers {
+            parse_header(header)
+                .map_err(|e| Error::raw(clap::error::ErrorKind::ValueValidation, e))?;
+        }
+
         let method = reqwest::Method::from_bytes(self.method.as_bytes());
-        if !method.is_ok() {
+        if method.is_err() {
             return Err(Error::raw(
                 clap::error::ErrorKind::ValueValidation,
                 format!("Invalid method: {}", self.method),
@@ -209,10 +211,10 @@ impl Cli {
             )
         })?;
 
-        let milliseconds = match unit {
-            "s" | "sec" | "second" | "seconds" => num * 1000,
-            "m" | "min" | "minute" | "minutes" => num * 60 * 1000,
-            "h" | "hour" | "hours" => num * 60 * 60 * 1000,
+        let unit_ms: u64 = match unit {
+            "s" | "sec" | "second" | "seconds" => 1000,
+            "m" | "min" | "minute" | "minutes" => 60 * 1000,
+            "h" | "hour" | "hours" => 60 * 60 * 1000,
             _ => {
                 return Err(Error::raw(
                     clap::error::ErrorKind::ValueValidation,
@@ -220,6 +222,12 @@ impl Cli {
                 ))
             }
         };
+        let milliseconds = num.checked_mul(unit_ms).ok_or_else(|| {
+            Error::raw(
+                clap::error::ErrorKind::ValueValidation,
+                format!("Duration is too long: {}", duration_str),
+            )
+        })?;
 
         if milliseconds == 0 {
             return Err(Error::raw(
@@ -242,13 +250,56 @@ impl Cli {
         }
     }
 
-    pub fn request(&self) -> Request {
+    /// Test length for `--duration` runs (already validated by `validate`)
+    pub fn run_duration(&self) -> Option<std::time::Duration> {
+        self.duration
+            .as_deref()
+            .and_then(|d| Self::parse_duration(d).ok())
+            .map(std::time::Duration::from_millis)
+    }
+
+    pub fn request(&self) -> Result<Request, PepeError> {
         Request::new(
             self.url.clone(),
             self.method.clone(),
             self.body.clone(),
-            self.headers.clone(),
+            &self.headers,
             self.settings(),
         )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parses_durations() {
+        assert_eq!(Cli::parse_duration("10s").unwrap(), 10_000);
+        assert_eq!(Cli::parse_duration(" 5 min ").unwrap(), 300_000);
+        assert_eq!(Cli::parse_duration("2H").unwrap(), 7_200_000);
+    }
+
+    #[test]
+    fn rejects_bad_durations() {
+        for bad in ["10", "s", "0s", "-1s", "10x", "1.5s", "99999999999999999h"] {
+            assert!(
+                Cli::parse_duration(bad).is_err(),
+                "{bad} should be rejected"
+            );
+        }
+    }
+
+    #[test]
+    fn validate_rejects_invalid_header() {
+        let mut cli = Cli::parse_from(["pepe", "-c", "1", "-H", "not a header", "http://x"]);
+        assert!(cli.validate().is_err());
+    }
+
+    #[test]
+    fn duration_mode_ignores_request_count() {
+        let mut cli = Cli::parse_from(["pepe", "-z", "5s", "-n", "1", "-c", "8", "http://x"]);
+        assert!(cli.validate().is_ok());
+        assert_eq!(cli.run_duration(), Some(std::time::Duration::from_secs(5)));
     }
 }

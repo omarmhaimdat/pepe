@@ -159,23 +159,23 @@ pub async fn check_for_updates() {
         return;
     }
 
-    println!("\n{}┌─────────────────────────────────────┐{}", BBLUE, NC);
-    println!("{}│         Update available            │{}", BBLUE, NC);
-    println!("{}└─────────────────────────────────────┘{}", BBLUE, NC);
-    println!(
+    eprintln!("\n{}┌─────────────────────────────────────┐{}", BBLUE, NC);
+    eprintln!("{}│         Update available            │{}", BBLUE, NC);
+    eprintln!("{}└─────────────────────────────────────┘{}", BBLUE, NC);
+    eprintln!(
         "{}→ Current version:{} {}{}{}",
         BYELLOW, NC, BRED, current, NC
     );
-    println!(
+    eprintln!(
         "{}→ Latest version:{} {}{}{}\n",
         BYELLOW, NC, BGREEN, latest, NC
     );
-    println!("{}To update, run:{}", BGREEN, NC);
-    println!(
+    eprintln!("{}To update, run:{}", BGREEN, NC);
+    eprintln!(
         "  {}{}{}\n",
         BBLUE,
         InstallMethod::detect().update_command(),
         NC
     );
-    println!("(Set {}=1 to disable this check.)", NO_UPDATE_CHECK_ENV);
+    eprintln!("(Set {}=1 to disable this check.)", NO_UPDATE_CHECK_ENV);
 }

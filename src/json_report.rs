@@ -1,127 +1,124 @@
-use crate::ResponseStats;
+use std::collections::BTreeMap;
+use std::time::Duration;
+
 use serde::Serialize;
-use std::collections::HashMap;
+
+use crate::metrics::Metrics;
 
 #[derive(Serialize)]
 pub struct JsonReport {
     pub summary: JsonSummary,
-    pub requests: Vec<ResponseStats>,
 }
 
 #[derive(Serialize)]
 pub struct JsonSummary {
-    pub total_requests: usize,
-    pub successful_requests: usize,
-    pub failed_requests: usize,
-    pub timeout_errors: usize,
-    pub duration_ms: u128,
+    pub total_requests: u64,
+    /// 2xx responses
+    pub successful_requests: u64,
+    /// Every request that did not get a 2xx response
+    pub failed_requests: u64,
+    /// Responses with a non-2xx status
+    pub http_errors: u64,
+    pub timeout_errors: u64,
+    /// Requests that failed without a response (connect, TLS, ...)
+    pub connection_errors: u64,
+    /// True when the run was stopped early (Ctrl-C)
+    pub interrupted: bool,
+    pub duration_ms: f64,
     pub requests_per_second: f64,
     pub data_transfer_bytes: u64,
     pub latency: LatencyStats,
-    pub status_codes: HashMap<u16, usize>,
+    pub status_codes: BTreeMap<u16, u64>,
 }
 
 #[derive(Serialize)]
 pub struct LatencyStats {
-    pub min_ms: u128,
-    pub max_ms: u128,
-    pub avg_ms: u128,
-    pub median_ms: u128,
-    pub p95_ms: u128,
-    pub p99_ms: u128,
+    pub min_ms: f64,
+    pub max_ms: f64,
+    pub avg_ms: f64,
+    pub std_dev_ms: f64,
+    pub median_ms: f64,
+    pub p90_ms: f64,
+    pub p95_ms: f64,
+    pub p99_ms: f64,
+}
+
+fn ms(d: Duration) -> f64 {
+    // Microsecond precision is plenty and keeps the output readable
+    (d.as_secs_f64() * 1_000_000.0).round() / 1000.0
 }
 
 impl JsonReport {
-    pub fn generate(requests: &[ResponseStats], total_duration_ms: u128) -> Self {
-        let total_requests = requests.len();
-        let mut successful_requests = 0;
-        let mut failed_requests = 0;
-        let mut timeout_errors = 0;
-        let mut data_transfer_bytes = 0u64;
-        let mut latencies: Vec<u128> = Vec::new();
-        let mut status_codes: HashMap<u16, usize> = HashMap::new();
-
-        for request in requests {
-            latencies.push(request.duration.as_millis());
-
-            match request.status_code {
-                Some(code) => {
-                    *status_codes.entry(code.as_u16()).or_insert(0) += 1;
-                    if code.is_success() {
-                        successful_requests += 1;
-                    } else {
-                        failed_requests += 1;
-                    }
-                }
-                None => {
-                    timeout_errors += 1;
-                    failed_requests += 1;
-                }
-            }
-
-            if let Some(content_length) = request.content_length {
-                data_transfer_bytes += content_length;
-            }
-        }
-
-        latencies.sort();
-
-        let min_ms = *latencies.iter().min().unwrap_or(&0);
-        let max_ms = *latencies.iter().max().unwrap_or(&0);
-        let avg_ms = if total_requests > 0 {
-            latencies.iter().sum::<u128>() / total_requests as u128
-        } else {
-            0
-        };
-
-        let median_ms = if total_requests > 0 {
-            latencies[total_requests / 2]
-        } else {
-            0
-        };
-
-        let p95_ms = if total_requests > 0 {
-            latencies[(total_requests as f64 * 0.95) as usize]
-        } else {
-            0
-        };
-
-        let p99_ms = if total_requests > 0 {
-            latencies[(total_requests as f64 * 0.99) as usize]
-        } else {
-            0
-        };
-
-        let requests_per_second = if total_duration_ms > 0 {
-            (total_requests as f64 / total_duration_ms as f64) * 1000.0
-        } else {
-            0.0
-        };
-
+    pub fn generate(metrics: &Metrics, elapsed: Duration, interrupted: bool) -> Self {
         Self {
             summary: JsonSummary {
-                total_requests,
-                successful_requests,
-                failed_requests,
-                timeout_errors,
-                duration_ms: total_duration_ms,
-                requests_per_second,
-                data_transfer_bytes,
+                total_requests: metrics.total,
+                successful_requests: metrics.success,
+                failed_requests: metrics.total - metrics.success,
+                http_errors: metrics.failed,
+                timeout_errors: metrics.timeouts,
+                connection_errors: metrics.errors,
+                interrupted,
+                duration_ms: ms(elapsed),
+                requests_per_second: metrics.rps(elapsed),
+                data_transfer_bytes: metrics.bytes,
                 latency: LatencyStats {
-                    min_ms,
-                    max_ms,
-                    avg_ms,
-                    median_ms,
-                    p95_ms,
-                    p99_ms,
+                    min_ms: ms(metrics.min()),
+                    max_ms: ms(metrics.max()),
+                    avg_ms: ms(metrics.mean()),
+                    std_dev_ms: ms(metrics.std_dev()),
+                    median_ms: ms(metrics.percentile(50.0)),
+                    p90_ms: ms(metrics.percentile(90.0)),
+                    p95_ms: ms(metrics.percentile(95.0)),
+                    p99_ms: ms(metrics.percentile(99.0)),
                 },
-                status_codes,
+                // Sorted, so output is stable between runs
+                status_codes: metrics.status_codes.iter().map(|(k, v)| (*k, *v)).collect(),
             },
-            requests: requests.to_vec(),
         }
     }
 
     pub fn to_json(&self) -> Result<String, serde_json::Error> {
         serde_json::to_string_pretty(self)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::response::{ErrorKind, ResponseStats};
+
+    #[test]
+    fn report_covers_every_request() {
+        let mut metrics = Metrics::default();
+        for i in 0..250u64 {
+            let (status, error) = match i % 5 {
+                4 => (None, Some(ErrorKind::Timeout)),
+                3 => (reqwest::StatusCode::from_u16(500).ok(), None),
+                _ => (reqwest::StatusCode::from_u16(200).ok(), None),
+            };
+            metrics.record(&ResponseStats {
+                duration: Duration::from_millis(10),
+                status_code: status,
+                body_bytes: 100,
+                error,
+                ..Default::default()
+            });
+        }
+
+        let report = JsonReport::generate(&metrics, Duration::from_secs(2), false);
+        let s = &report.summary;
+        assert_eq!(s.total_requests, 250);
+        assert_eq!(s.successful_requests, 150);
+        assert_eq!(s.http_errors, 50);
+        assert_eq!(s.timeout_errors, 50);
+        assert_eq!(s.failed_requests, 100);
+        assert_eq!(s.requests_per_second, 125.0);
+        assert_eq!(s.data_transfer_bytes, 25_000);
+        assert_eq!(s.status_codes.get(&200), Some(&150));
+
+        let json: serde_json::Value = serde_json::from_str(&report.to_json().unwrap()).unwrap();
+        assert_eq!(json["summary"]["latency"]["p99_ms"], 10.0);
+        assert_eq!(json["summary"]["status_codes"]["500"], 50);
     }
 }

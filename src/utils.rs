@@ -39,7 +39,7 @@ pub fn default_user_agent() -> String {
 pub async fn resolve_dns(
     url: &str,
 ) -> Result<(std::time::Duration, std::time::Duration), PepeError> {
-    let uri = Uri::from_str(url).map_err(|e| PepeError::UrlParseError(e))?;
+    let uri = Uri::from_str(url).map_err(PepeError::UrlParseError)?;
     let host = uri.host().ok_or_else(|| PepeError::HostParseError)?;
 
     let start = std::time::Instant::now();

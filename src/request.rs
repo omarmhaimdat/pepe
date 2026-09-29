@@ -1,6 +1,5 @@
-use std::collections::HashMap;
-
-use reqwest::{header::USER_AGENT, Proxy};
+use reqwest::header::{HeaderMap, HeaderName, HeaderValue, USER_AGENT};
+use reqwest::Proxy;
 
 use crate::PepeError;
 
@@ -19,8 +18,20 @@ pub struct Request {
     pub url: String,
     pub method: String,
     pub body: Option<String>,
-    pub headers: HashMap<String, String>,
+    pub headers: HeaderMap,
     pub settings: RequestSettings,
+}
+
+/// Parse a `Name: value` header, as passed to `-H`
+pub fn parse_header(header: &str) -> Result<(HeaderName, HeaderValue), String> {
+    let (name, value) = header
+        .split_once(':')
+        .ok_or_else(|| format!("Invalid header {header:?}: expected 'Name: value'"))?;
+    let name = HeaderName::from_bytes(name.trim().as_bytes())
+        .map_err(|_| format!("Invalid header name in {header:?}"))?;
+    let value = HeaderValue::from_str(value.trim())
+        .map_err(|_| format!("Invalid header value in {header:?}"))?;
+    Ok((name, value))
 }
 
 impl Request {
@@ -28,50 +39,36 @@ impl Request {
         url: String,
         method: String,
         body: Option<String>,
-        headers: Vec<String>,
+        headers: &[String],
         settings: RequestSettings,
-    ) -> Self {
-        let mut header_map = HashMap::new();
+    ) -> Result<Self, PepeError> {
+        let mut header_map = HeaderMap::new();
         for header in headers {
-            let parts: Vec<&str> = header.splitn(2, ':').collect();
-            if parts.len() == 2 {
-                header_map.insert(parts[0].trim().to_string(), parts[1].trim().to_string());
-            }
+            let (name, value) = parse_header(header).map_err(PepeError::HeaderParseError)?;
+            // append, not insert: repeated headers (e.g. several Cookie) are kept
+            header_map.append(name, value);
         }
 
-        Self {
+        Ok(Self {
             url,
             method,
             body,
             headers: header_map,
             settings,
-        }
+        })
     }
 
     pub fn method(&self) -> reqwest::Method {
         reqwest::Method::from_bytes(self.method.as_bytes()).unwrap_or(reqwest::Method::GET)
     }
 
-    fn parse_headers(headers: &HashMap<String, String>) -> reqwest::header::HeaderMap {
-        let mut request_headers = reqwest::header::HeaderMap::new();
-        for (name, value) in headers {
-            request_headers.insert(
-                reqwest::header::HeaderName::from_bytes(name.as_bytes()).unwrap(),
-                reqwest::header::HeaderValue::from_str(value).unwrap(),
-            );
-        }
-        request_headers
-    }
-
     pub fn build_client(&self) -> Result<reqwest::Client, PepeError> {
-        let mut request_headers = Self::parse_headers(&self.headers);
-
-        // Add user agent
+        let mut request_headers = self.headers.clone();
         request_headers.insert(
             USER_AGENT,
             self.settings
                 .user_agent
-                .parse::<reqwest::header::HeaderValue>()
+                .parse::<HeaderValue>()
                 .map_err(|e| PepeError::HeaderParseError(e.to_string()))?,
         );
 
@@ -90,20 +87,58 @@ impl Request {
         }
 
         if self.settings.disable_keepalive {
-            client_builder = client_builder.connection_verbose(true);
+            // No idle connections kept, so every request opens a new one
+            client_builder = client_builder.pool_max_idle_per_host(0);
         }
 
         if self.settings.disable_redirects {
             client_builder = client_builder.redirect(reqwest::redirect::Policy::none());
         }
 
-        client_builder =
-            client_builder.timeout(std::time::Duration::from_secs(self.settings.timeout as u64));
+        client_builder.build().map_err(PepeError::RequestError)
+    }
+}
 
-        let client: reqwest::Client = client_builder
-            .build()
-            .map_err(|e| PepeError::RequestError(e))?;
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-        Ok(client)
+    fn settings() -> RequestSettings {
+        RequestSettings {
+            timeout: 5,
+            disable_compression: false,
+            disable_keepalive: false,
+            disable_redirects: false,
+            proxy: None,
+            user_agent: "pepe/test".into(),
+        }
+    }
+
+    #[test]
+    fn parses_header_and_trims() {
+        let (name, value) = parse_header("  Accept :  application/json ").unwrap();
+        assert_eq!(name, "accept");
+        assert_eq!(value, "application/json");
+    }
+
+    #[test]
+    fn keeps_colons_in_value() {
+        let (_, value) = parse_header("Referer: http://example.com:8080/").unwrap();
+        assert_eq!(value, "http://example.com:8080/");
+    }
+
+    #[test]
+    fn rejects_invalid_headers() {
+        assert!(parse_header("no-colon").is_err());
+        assert!(parse_header("bad name: x").is_err());
+        assert!(parse_header("X-Test: bad\nvalue").is_err());
+    }
+
+    #[test]
+    fn keeps_repeated_headers() {
+        let headers = vec!["Cookie: a=1".to_string(), "Cookie: b=2".to_string()];
+        let request =
+            Request::new("http://x".into(), "GET".into(), None, &headers, settings()).unwrap();
+        assert_eq!(request.headers.get_all("cookie").iter().count(), 2);
     }
 }
