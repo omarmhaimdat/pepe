@@ -173,18 +173,17 @@ impl Cli {
             ));
         }
 
-        if self.proxy.is_some() {
-            if self.proxy.as_ref().unwrap().starts_with("socks4") {
+        if let Some(proxy) = &self.proxy {
+            if proxy.starts_with("socks4") {
                 return Err(Error::raw(
                     clap::error::ErrorKind::ValueValidation,
                     "Socks4 proxy is not supported by reqwest.",
                 ));
             }
-            let proxy = Proxy::all(self.proxy.as_ref().unwrap());
-            if proxy.is_err() {
+            if Proxy::all(proxy).is_err() {
                 return Err(Error::raw(
                     clap::error::ErrorKind::ValueValidation,
-                    format!("Invalid proxy URL: {}", self.proxy.as_ref().unwrap()),
+                    format!("Invalid proxy URL: {}", proxy),
                 ));
             }
         }

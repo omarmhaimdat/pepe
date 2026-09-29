@@ -43,16 +43,9 @@ pub async fn resolve_dns(
     let host = uri.host().ok_or_else(|| PepeError::HostParseError)?;
 
     let start = std::time::Instant::now();
-    let addrs = match tokio::net::lookup_host(format!("{}:0", host)).await {
-        Ok(addrs) => addrs,
-        Err(e) => {
-            // eprintln!("DNS lookup failed for host {}: {}", host, e);
-            return Err(PepeError::IoError(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                e,
-            )));
-        }
-    };
+    let addrs = tokio::net::lookup_host(format!("{}:0", host))
+        .await
+        .map_err(PepeError::IoError)?;
     let dns_lookup_time = start.elapsed();
 
     let start = std::time::Instant::now();
