@@ -20,6 +20,13 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [Unreleased]
 
+## [0.3.1](https://github.com/omarmhaimdat/pepe/compare/v0.3.0...v0.3.1) - 2026-09-29
+
+### Other
+
+- release v0.3.1
+- fix false failure in R2 publish verification
+
 ## [0.3.0] - 2026-09-29
 
 ### Added
