@@ -17,6 +17,24 @@ env:
 # release.yml (cargo-dist, pr-run-mode = "upload"). This workflow covers
 # lint, tests and the Nix package.
 jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      # Pinned so new lints in each Rust release don't suddenly fail
+      # unrelated PRs (Dependabot, release PRs). Bump deliberately and fix
+      # whatever the new version reports.
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.98"
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo fmt --check
+      - run: cargo clippy --locked --all-targets -- -D warnings
+
   check:
     name: Check (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
@@ -29,14 +47,7 @@ jobs:
         with:
           persist-credentials: false
       - uses: dtolnay/rust-toolchain@stable
-        with:
-          components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
-      - name: Format
-        if: matrix.os == 'ubuntu-latest'
-        run: cargo fmt --check
-      - name: Clippy
-        run: cargo clippy --locked --all-targets -- -D warnings
       - name: Test
         run: cargo test --locked
       - name: Smoke test
