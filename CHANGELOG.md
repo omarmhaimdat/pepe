@@ -4,8 +4,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/)
 and this project adheres to [Semantic Versioning](http://semver.org/).
 
-<!-- next-header -->
-## [Unreleased] - ReleaseDate
+## [Unreleased]
 
 ## [0.3.0] - 2026-04-14
 
@@ -14,8 +13,6 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 - **JSON export**: New `--json` flag to export detailed test results in JSON format with latency percentiles (P50, P95, P99) and comprehensive metrics
 - **Windows binary support**: Added `x86_64-pc-windows-msvc` to CI/CD build matrix for native Windows `.exe` builds
 - **Automated release workflow**: New GitHub Actions workflow (`release.yaml`) that automatically builds for all platforms, generates checksums, creates releases, and updates Homebrew tap
-- **Testing scripts**: Added `quick_check.sh`, `test_simple.sh`, and `test_improvements.sh` for automated non-blocking testing
-- **Comprehensive documentation**: Added IMPROVEMENTS.md, QUICK_START.md, TESTING_COMPLETE.md, and CI_CD_SETUP.md guides
 
 ### Fixed
 - **Shell script security**: Fixed unquoted variable expansion in `install.sh` that could cause failures with paths containing spaces
