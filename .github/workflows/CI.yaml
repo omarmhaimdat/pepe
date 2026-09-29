@@ -43,6 +43,19 @@ jobs:
         shell: bash
         run: cargo run --locked -- --version
 
+  msrv:
+    name: MSRV (Rust 1.85)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      # Keep in sync with package.rust-version in Cargo.toml. Catches
+      # dependency bumps (e.g. from Dependabot) that silently need newer Rust.
+      - uses: dtolnay/rust-toolchain@1.85
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo check --locked --all-targets
+
   nix:
     name: Nix build (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
