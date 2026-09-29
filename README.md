@@ -142,6 +142,23 @@ pepe -n 1000 -c 10 -m POST -d '{"key": "value"}' -H 'Content-Type: application/j
 pepe -n 100 -c 5 -H "User-Agent: Pepe/1.0" -H "X-Custom-Header: Value" https://example.com
 ```
 
+### Running for a Fixed Time
+
+Keep sending requests for a duration instead of a fixed count (`s`, `m` or `h`):
+
+```bash
+pepe -z 30s -c 20 https://example.com
+```
+
+### JSON Output for Scripts and CI
+
+`--json` skips the dashboard, runs to completion and prints a JSON summary to stdout. Press Ctrl-C to stop early; the report then has `"interrupted": true`.
+
+```bash
+pepe --json -n 1000 -c 20 https://example.com > results.json
+jq '.summary.latency.p99_ms' results.json
+```
+
 ### Proxy Support
 
 Send requests through a proxy server (HTTP or HTTPS, SOCKS5):
@@ -149,14 +166,14 @@ Send requests through a proxy server (HTTP or HTTPS, SOCKS5):
 Without authentication:
 
 ```bash
-pepe -n 1000 -c 10 -x http://proxy:port https://example.com
+pepe -n 1000 -c 10 -p http://proxy:port https://example.com
 ```
 
 
 With authentication:
 
 ```bash
-pepe -n 1000 -c 10 -x socks5://username:password@proxy:port https://example.com
+pepe -n 1000 -c 10 -p socks5://username:password@proxy:port https://example.com
 ```
 
 ## Output
@@ -172,11 +189,13 @@ Pepe provides detailed statistics about the performance of the web server, inclu
 - **99th Percentile**: The 99th percentile response time.
 - **Standard Deviation**: The standard deviation of the response times.
 - **Total Data Transferred**: The total amount of data transferred.
-- **Error Rate**: The percentage of requests that resulted in errors.
+- **Error Rate**: The percentage of requests that did not get a 2xx response.
+- **Failures by kind**: non-2xx responses, connection errors and timeouts are counted separately.
 - **Cache Hit Rate**: The percentage of requests that were served from the cache.
 - **Requests Per Second (RPS)**: The number of requests per second.
-- **DNS Lookup Time**: The time taken to resolve the DNS.
-- **DNS Resolution Time**: The time taken to resolve the DNS addresses.
+- **DNS Lookup Time**: The average time taken to resolve the host.
+
+While a test runs, press `q` to quit, `r` to restart or `i` to stop sending and keep the results on screen.
 
 
 ## Contributing
@@ -202,7 +221,7 @@ This project is licensed under the MIT License. See the [LICENSE](LICENSE) file 
 - [x] Improve support for curl when the protocol is not specified.
 - [ ] Implement a config file for managing load test settings.
 - [ ] Create an output format for easy integration with monitoring tools.
-  - [ ] JSON output.
+  - [x] JSON output.
   - [ ] CSV output.
   - [ ] Webhook integration.
 - [ ] Chaining multiple requests.

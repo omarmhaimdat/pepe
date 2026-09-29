@@ -1,35 +1,30 @@
 use std::io::stdout;
-use std::sync::Arc;
+use std::time::Instant;
 
 use clap::Parser;
 use crossterm::{
-    cursor::Show,
-    event::KeyCode,
+    cursor::{Hide, Show},
     execute,
-    terminal::{disable_raw_mode, enable_raw_mode, LeaveAlternateScreen},
+    terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
-use tokio::sync::{mpsc, Semaphore};
 
 use crate::cli::Cli;
-use crate::request::Request;
-use crate::response::ResponseStats;
-use crate::utils::resolve_dns;
+use crate::load::{LoadHandle, Plan};
+use crate::metrics::Metrics;
 
 mod cache;
 mod cli;
 mod json_report;
+mod load;
+mod metrics;
 mod request;
 mod response;
 mod ui;
 mod update;
 mod utils;
 
-#[derive(Debug, Clone)]
-struct Sent {
-    count: usize,
-}
-
 #[derive(Debug)]
+#[allow(clippy::enum_variant_names)]
 enum PepeError {
     HeaderParseError(String),
     IoError(std::io::Error),
@@ -52,112 +47,83 @@ impl std::fmt::Display for PepeError {
 
 impl std::error::Error for PepeError {}
 
-async fn handle_request(
-    client: Arc<reqwest::Client>,
-    request: Request,
-    tx: mpsc::Sender<ResponseStats>,
-    sent_tx: mpsc::Sender<Sent>,
-    permit: tokio::sync::OwnedSemaphorePermit,
-) {
-    let start = std::time::Instant::now();
-    let method = request.method();
-
-    let _ = sent_tx.send(Sent { count: 1 }).await;
-
-    let dns_times = resolve_dns(&request.url).await.unwrap_or_default();
-
-    let response = if method == reqwest::Method::POST && request.body.is_some() {
-        client
-            .request(method, &request.url)
-            .body(request.body.unwrap())
-            .send()
-            .await
-    } else {
-        client.request(method, &request.url).send().await
-    };
-
-    let stats = ResponseStats::from_response(response, start, dns_times).await;
-
-    drop(permit);
-    let _ = tx.send(stats).await;
+fn plan(args: &Cli) -> Plan {
+    match args.run_duration() {
+        Some(duration) => Plan::Duration(duration),
+        None => Plan::Count(args.number as u64),
+    }
 }
 
-async fn run_request(
-    args: &Cli,
-    tx: mpsc::Sender<ResponseStats>,
-    sent_tx: mpsc::Sender<Sent>,
-) -> Result<(Vec<ResponseStats>, std::time::Duration), PepeError> {
-    let request = args.request();
-    let client = Arc::new(request.build_client()?);
-    let all_start = std::time::Instant::now();
-    let semaphore = Arc::new(Semaphore::new(args.concurrency as usize));
+fn start_load(args: &Cli) -> Result<LoadHandle, PepeError> {
+    let request = args.request()?;
+    let client = request.build_client()?;
+    Ok(load::start(
+        client,
+        request,
+        args.concurrency as usize,
+        plan(args),
+    ))
+}
 
-    let handler = tokio::spawn({
-        let client = client.clone();
-        let tx = tx;
-        let sent_tx = sent_tx;
-        let number = args.number;
-        let duration_ms = args
-            .duration
-            .as_ref()
-            .map(|d| crate::cli::Cli::parse_duration(d).unwrap_or(0));
+fn restore_terminal() {
+    let _ = disable_raw_mode();
+    let _ = execute!(stdout(), LeaveAlternateScreen, Show);
+}
 
-        async move {
-            if let Some(duration_ms) = duration_ms {
-                // Duration-based testing
-                let start = std::time::Instant::now();
-                let duration = std::time::Duration::from_millis(duration_ms);
+/// Puts the terminal into dashboard mode and restores it when dropped, so
+/// every exit path (including `?` errors) leaves a usable shell behind
+struct TerminalGuard;
 
-                loop {
-                    if start.elapsed() >= duration {
-                        break;
-                    }
+impl TerminalGuard {
+    fn enter() -> std::io::Result<Self> {
+        enable_raw_mode()?;
+        execute!(stdout(), EnterAlternateScreen, Hide)?;
+        Ok(Self)
+    }
+}
 
-                    let semaphore = semaphore.clone();
-                    let permit = semaphore
-                        .acquire_owned()
-                        .await
-                        .expect("Semaphore acquire failed");
+impl Drop for TerminalGuard {
+    fn drop(&mut self) {
+        restore_terminal();
+    }
+}
 
-                    tokio::spawn(handle_request(
-                        client.clone(),
-                        request.clone(),
-                        tx.clone(),
-                        sent_tx.clone(),
-                        permit,
-                    ));
+/// `--json`: no dashboard; run to completion (or Ctrl-C), print the report
+async fn run_json(args: &Cli) -> Result<(), Box<dyn std::error::Error>> {
+    let mut load = start_load(args)?;
+    let started = Instant::now();
+    let mut metrics = Metrics::default();
+    let mut interrupted = false;
 
-                    tokio::task::yield_now().await;
-                }
-            } else {
-                // Request count-based testing
-                for _ in 0..number {
-                    let semaphore = semaphore.clone();
-                    let permit = semaphore
-                        .acquire_owned()
-                        .await
-                        .expect("Semaphore acquire failed");
-
-                    tokio::spawn(handle_request(
-                        client.clone(),
-                        request.clone(),
-                        tx.clone(),
-                        sent_tx.clone(),
-                        permit,
-                    ));
-                }
+    loop {
+        tokio::select! {
+            stat = load.rx.recv() => match stat {
+                Some(stat) => metrics.record(&stat),
+                None => break,
+            },
+            _ = tokio::signal::ctrl_c(), if !interrupted => {
+                interrupted = true;
+                load.stop();
             }
         }
-    });
+    }
 
-    handler.await.map_err(|e| {
-        PepeError::IoError(std::io::Error::new(
-            std::io::ErrorKind::Other,
-            e.to_string(),
-        ))
-    })?;
+    let report = json_report::JsonReport::generate(&metrics, started.elapsed(), interrupted);
+    println!("{}", report.to_json()?);
+    Ok(())
+}
 
-    Ok((Vec::new(), all_start.elapsed()))
+async fn run_dashboard(args: &Cli) -> Result<(), Box<dyn std::error::Error>> {
+    let _terminal = TerminalGuard::enter()?;
+    loop {
+        let mut load = start_load(args)?;
+        let mut dashboard = ui::Dashboard::new(args.clone(), plan(args));
+        match dashboard.run(&mut load)? {
+            // Dropping `load` stops the previous run before the next starts
+            ui::Outcome::Restart => continue,
+            ui::Outcome::Quit => return Ok(()),
+        }
+    }
 }
 
 #[tokio::main]
@@ -173,64 +139,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         std::process::exit(1);
     }
 
-    enable_raw_mode()?;
-    let mut stdout = stdout();
-
-    let interrupted = Arc::new(tokio::sync::Notify::new());
-
-    'main: loop {
-        let (tx, mut rx) = mpsc::channel(args.number as usize);
-        let (sent_tx, mut sent_rx) = mpsc::channel(args.number as usize);
-
-        let handler = tokio::spawn({
-            let args = args.clone();
-            async move { run_request(&args.clone(), tx, sent_tx).await }
-        });
-
-        let mut dashboard = ui::Dashboard::new(args.clone());
-
-        let result: Result<KeyCode, Box<dyn std::error::Error>> =
-            dashboard.run(&mut rx, &mut sent_rx);
-
-        match result {
-            Ok(KeyCode::Char('r')) => {
-                handler.abort();
-                continue 'main;
-            }
-            Ok(KeyCode::Char('q')) | Ok(KeyCode::Esc) | Ok(KeyCode::Enter) => {
-                if args.json {
-                    let report = json_report::JsonReport::generate(
-                        &dashboard.get_requests(),
-                        dashboard.get_elapsed().as_millis(),
-                    );
-                    if let Ok(json) = report.to_json() {
-                        println!("{}", json);
-                    }
-                }
-                break;
-            }
-            Ok(KeyCode::Char('i')) => {
-                interrupted.notify_one();
-                handler.abort();
-            }
-            Err(e) => {
-                execute!(stdout, LeaveAlternateScreen, Show)?;
-                disable_raw_mode()?;
-                return Err(e.into());
-            }
-            _ => break,
-        }
+    if args.json {
+        return run_json(&args).await;
     }
 
-    execute!(
-        stdout,
-        LeaveAlternateScreen,
-        Show,
-        crossterm::terminal::Clear(crossterm::terminal::ClearType::All),
-        crossterm::cursor::MoveTo(0, 0)
-    )?;
+    // Release builds abort on panic; restore the terminal first so a crash
+    // never leaves the shell in raw mode
+    let default_hook = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        restore_terminal();
+        default_hook(info);
+    }));
 
-    disable_raw_mode()?;
+    run_dashboard(&args).await?;
     update::check_for_updates().await;
     Ok(())
 }

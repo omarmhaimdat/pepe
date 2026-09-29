@@ -82,3 +82,48 @@ impl CacheStatus {
         None
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use hyper::header::HeaderValue;
+
+    fn headers(name: &'static str, value: &'static str) -> HeaderMap {
+        let mut h = HeaderMap::new();
+        h.insert(name, HeaderValue::from_static(value));
+        h
+    }
+
+    #[test]
+    fn parses_known_cache_headers() {
+        assert_eq!(
+            CacheStatus::parse_headers(&headers("cf-cache-status", "HIT")),
+            Some(CacheStatus::Hit)
+        );
+        assert_eq!(
+            CacheStatus::parse_headers(&headers("x-vercel-cache", "stale")),
+            Some(CacheStatus::Stale)
+        );
+        assert_eq!(
+            CacheStatus::parse_headers(&headers("x-cache", "weird")),
+            Some(CacheStatus::Unknown)
+        );
+        assert_eq!(CacheStatus::parse_headers(&HeaderMap::new()), None);
+    }
+
+    #[test]
+    fn groups_statuses_into_categories() {
+        assert_eq!(
+            CacheCategory::from_cache_status(&CacheStatus::Revalidated),
+            CacheCategory::Hit
+        );
+        assert_eq!(
+            CacheCategory::from_cache_status(&CacheStatus::Bypass),
+            CacheCategory::Miss
+        );
+        assert_eq!(
+            CacheCategory::from_cache_status(&CacheStatus::Error),
+            CacheCategory::Unknown
+        );
+    }
+}

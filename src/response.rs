@@ -1,120 +1,120 @@
+use std::time::{Duration, Instant};
+
 use crate::cache::CacheStatus;
-use serde::{ser::SerializeMap, Serialize};
 
-#[derive(Debug, Clone, Serialize)]
+/// Characters of the response body kept for the "Partial Responses" panel
+const PARTIAL_RESPONSE_CHARS: usize = 100;
+
+/// Why a request produced no response
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ErrorKind {
+    Timeout,
+    Connect,
+    Other,
+}
+
+impl ErrorKind {
+    fn from_reqwest(e: &reqwest::Error) -> Self {
+        if e.is_timeout() {
+            Self::Timeout
+        } else if e.is_connect() {
+            Self::Connect
+        } else {
+            Self::Other
+        }
+    }
+
+    pub fn label(&self) -> &'static str {
+        match self {
+            Self::Timeout => "TIMEOUT",
+            Self::Connect => "CONNECT ERROR",
+            Self::Other => "ERROR",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Default)]
 pub struct ResponseStats {
-    #[serde(serialize_with = "serialize_duration")]
-    pub duration: std::time::Duration,
-    #[serde(serialize_with = "serialize_status_code")]
+    pub duration: Duration,
+    /// None when no complete response was received (see `error`)
     pub status_code: Option<reqwest::StatusCode>,
-    pub content_length: Option<u64>,
+    /// Body bytes actually received (not the Content-Length header, which is
+    /// missing for chunked or compressed responses)
+    pub body_bytes: u64,
     pub partial_response: Option<String>,
-    #[serde(serialize_with = "serialize_dns_times")]
-    pub dns_times: Option<(std::time::Duration, std::time::Duration)>,
-    #[serde(skip)]
+    /// (lookup, resolution) time of the DNS query made before the request
+    pub dns_times: Option<(Duration, Duration)>,
     pub cache_status: Option<CacheStatus>,
-}
-
-fn serialize_duration<S>(duration: &std::time::Duration, serializer: S) -> Result<S::Ok, S::Error>
-where
-    S: serde::Serializer,
-{
-    serializer.serialize_u128(duration.as_millis())
-}
-
-fn serialize_status_code<S>(
-    status: &Option<reqwest::StatusCode>,
-    serializer: S,
-) -> Result<S::Ok, S::Error>
-where
-    S: serde::Serializer,
-{
-    match status {
-        Some(code) => serializer.serialize_u16(code.as_u16()),
-        None => serializer.serialize_none(),
-    }
-}
-
-fn serialize_dns_times<S>(
-    dns_times: &Option<(std::time::Duration, std::time::Duration)>,
-    serializer: S,
-) -> Result<S::Ok, S::Error>
-where
-    S: serde::Serializer,
-{
-    match dns_times {
-        Some((lookup, resolution)) => {
-            let mut map = serializer.serialize_map(Some(2))?;
-            map.serialize_entry("lookup_ms", &lookup.as_millis())?;
-            map.serialize_entry("resolution_ms", &resolution.as_millis())?;
-            map.end()
-        }
-        None => serializer.serialize_none(),
-    }
-}
-
-impl Default for ResponseStats {
-    fn default() -> Self {
-        Self {
-            duration: std::time::Duration::default(),
-            status_code: None,
-            content_length: None,
-            partial_response: None,
-            dns_times: None,
-            cache_status: None,
-        }
-    }
+    pub error: Option<ErrorKind>,
 }
 
 impl ResponseStats {
     pub async fn from_response(
         resp: Result<reqwest::Response, reqwest::Error>,
-        start: std::time::Instant,
-        dns_times: (std::time::Duration, std::time::Duration),
+        start: Instant,
+        dns_times: Option<(Duration, Duration)>,
     ) -> Self {
-        let response_headers = resp
-            .as_ref()
-            .map(|r| r.headers().clone())
-            .unwrap_or_default();
-
-        let cache_status = CacheStatus::parse_headers(&response_headers);
-        let stats = match resp {
-            Ok(resp) => {
-                let status_code = resp.status();
-                let content_length = resp.content_length();
-                let text = resp.text().await.unwrap_or_else(|_| "".to_string());
-                let text = text.trim().replace("\n", " ").replace("\r", " ");
-                let truncated_text = if text.len() > 100 {
-                    text.chars().take(100).collect::<String>()
-                } else {
-                    text
-                };
-
-                ResponseStats {
-                    duration: start.elapsed(),
-                    status_code: Some(status_code),
-                    content_length,
-                    partial_response: Some(truncated_text),
-                    dns_times: None,
-                    cache_status,
-                }
-            }
-            Err(e) => {
-                // Capture timeout errors
-                let status_code = e.status();
-                let content_length = None;
-                let partial_response = None;
-                ResponseStats {
-                    duration: start.elapsed(),
-                    status_code,
-                    content_length,
-                    partial_response,
-                    dns_times: Some(dns_times),
-                    cache_status,
-                }
-            }
+        let resp = match resp {
+            Ok(resp) => resp,
+            Err(e) => return Self::failed(&e, start, dns_times),
         };
 
-        stats
+        let status_code = resp.status();
+        let cache_status = CacheStatus::parse_headers(resp.headers());
+        let body = match resp.bytes().await {
+            Ok(body) => body,
+            // The status arrived but the body did not (e.g. timed out mid-body)
+            Err(e) => return Self::failed(&e, start, dns_times),
+        };
+        let duration = start.elapsed();
+
+        ResponseStats {
+            duration,
+            status_code: Some(status_code),
+            body_bytes: body.len() as u64,
+            partial_response: Some(partial_response(&body)),
+            dns_times,
+            cache_status,
+            error: None,
+        }
+    }
+
+    fn failed(e: &reqwest::Error, start: Instant, dns_times: Option<(Duration, Duration)>) -> Self {
+        ResponseStats {
+            duration: start.elapsed(),
+            dns_times,
+            error: Some(ErrorKind::from_reqwest(e)),
+            ..Default::default()
+        }
+    }
+}
+
+/// First characters of the body on one line, for display
+fn partial_response(body: &[u8]) -> String {
+    // 4 bytes per char at most, so this slice always covers enough characters
+    let head = &body[..body.len().min(PARTIAL_RESPONSE_CHARS * 4)];
+    String::from_utf8_lossy(head)
+        .trim()
+        .chars()
+        .map(|c| if c == '\n' || c == '\r' { ' ' } else { c })
+        .take(PARTIAL_RESPONSE_CHARS)
+        .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn partial_response_is_single_line_and_truncated() {
+        let body = format!("  line one\r\nline two{}", "x".repeat(500));
+        let partial = partial_response(body.as_bytes());
+        assert!(partial.starts_with("line one  line two"));
+        assert_eq!(partial.chars().count(), PARTIAL_RESPONSE_CHARS);
+    }
+
+    #[test]
+    fn partial_response_survives_invalid_utf8() {
+        assert_eq!(partial_response(&[b'o', b'k', 0xff]), "ok\u{fffd}");
     }
 }

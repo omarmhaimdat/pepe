@@ -1,7 +1,9 @@
 # release-plz keeps an open "chore: release vX.Y.Z" PR on master that bumps
-# Cargo.toml and CHANGELOG.md from conventional commits. Merging it creates the
-# vX.Y.Z tag, which triggers .github/workflows/release.yml (cargo-dist) to build
-# every platform and publish GitHub Release, Homebrew, installers and R2.
+# Cargo.toml and CHANGELOG.md from conventional commits. When a push to master
+# carries a Cargo.toml version that has no tag yet (i.e. that PR was merged),
+# release-plz creates the vX.Y.Z tag, which triggers .github/workflows/release.yml
+# (cargo-dist) to build every platform and publish GitHub Release, Homebrew,
+# installers and R2.
 [workspace]
 # Not on crates.io (the `pepe` name is taken); versions come from git tags
 git_only = true
@@ -11,6 +13,4 @@ git_tag_name = "v{{ version }}"
 git_release_enable = false
 # Binary crate: no public Rust API to semver-check
 semver_check = false
-# Only release when a release PR is merged, never on an ordinary push
-release_always = false
 pr_labels = ["release"]
