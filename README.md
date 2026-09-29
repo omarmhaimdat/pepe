@@ -166,14 +166,14 @@ Send requests through a proxy server (HTTP or HTTPS, SOCKS5):
 Without authentication:
 
 ```bash
-pepe -n 1000 -c 10 -x http://proxy:port https://example.com
+pepe -n 1000 -c 10 -p http://proxy:port https://example.com
 ```
 
 
 With authentication:
 
 ```bash
-pepe -n 1000 -c 10 -x socks5://username:password@proxy:port https://example.com
+pepe -n 1000 -c 10 -p socks5://username:password@proxy:port https://example.com
 ```
 
 ## Output
