@@ -1,0 +1,3 @@
+[resolver]
+# Keep Cargo.lock compatible with package.rust-version
+incompatible-rust-versions = "fallback"

@@ -1,0 +1,59 @@
+name: Release-plz
+
+on:
+  push:
+    branches:
+      - master
+
+jobs:
+  # Opens/updates the release PR with the next version and changelog
+  release-plz-pr:
+    name: Release PR
+    if: github.repository_owner == 'omarmhaimdat'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    concurrency:
+      group: release-plz-${{ github.ref }}
+      cancel-in-progress: false
+    steps:
+      - name: Require release token
+        env:
+          TOKEN: ${{ secrets.RELEASE_PLZ_TOKEN }}
+        run: |
+          if [ -z "$TOKEN" ]; then
+            echo "::error::RELEASE_PLZ_TOKEN secret is missing. Tags pushed with the default GITHUB_TOKEN do not trigger the release workflow."
+            exit 1
+          fi
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: release-plz/action@v0.5
+        with:
+          command: release-pr
+        env:
+          GITHUB_TOKEN: ${{ secrets.RELEASE_PLZ_TOKEN }}
+
+  # When the release PR is merged, pushes the vX.Y.Z tag
+  release-plz-release:
+    name: Tag release
+    if: github.repository_owner == 'omarmhaimdat'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: release-plz/action@v0.5
+        with:
+          command: release
+        env:
+          # A PAT (not GITHUB_TOKEN) so the tag push triggers release.yml
+          GITHUB_TOKEN: ${{ secrets.RELEASE_PLZ_TOKEN }}

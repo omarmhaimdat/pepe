@@ -1,5 +1,5 @@
 use crate::cache::CacheStatus;
-use serde::{Serialize, ser::SerializeMap};
+use serde::{ser::SerializeMap, Serialize};
 
 #[derive(Debug, Clone, Serialize)]
 pub struct ResponseStats {
@@ -22,7 +22,10 @@ where
     serializer.serialize_u128(duration.as_millis())
 }
 
-fn serialize_status_code<S>(status: &Option<reqwest::StatusCode>, serializer: S) -> Result<S::Ok, S::Error>
+fn serialize_status_code<S>(
+    status: &Option<reqwest::StatusCode>,
+    serializer: S,
+) -> Result<S::Ok, S::Error>
 where
     S: serde::Serializer,
 {

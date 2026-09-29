@@ -19,43 +19,56 @@ Pepe is written in Rust and uses the `reqwest` and `tokio` libraries for making 
 
 ## Installation
 
-### Linux and MacOS (Shell Script)
+### macOS and Linux (installer script)
 
 ```bash
-curl --proto '=https' --tlsv1.2 -sSf https://pepe.mhaimdat.com/install.sh | bash
+curl -LsSf https://pepe.mhaimdat.com/install.sh | sh
 ```
 
-### MacOS Package (Homebrew)
+### Windows (PowerShell)
+
+```powershell
+powershell -ExecutionPolicy Bypass -c "irm https://pepe.mhaimdat.com/install.ps1 | iex"
+```
+
+Installer-based installs can update themselves:
 
 ```bash
-brew tap omarmhaimdat/tap
-brew install pepe
+pepe self-update
 ```
 
-### Manual Installation
-
-Make sure you have Rust installed on your system. You can install Rust using `rustup` by following the instructions on the [official website](https://www.rust-lang.org/tools/install).
-
-Once you have Rust installed, you can build and install Pepe using Cargo, the Rust package manager:
-
-
-Clone the repository:
+### Homebrew (macOS and Linux)
 
 ```bash
-git clone https://github.com/omarmhaimdat/pepe.git
+brew install omarmhaimdat/pepe/pepe
 ```
 
-Change to the project directory:
+### Nix
+
 ```bash
-cd pepe
+nix run github:omarmhaimdat/pepe -- https://example.com   # try without installing
+nix profile install github:omarmhaimdat/pepe              # install
 ```
 
-Build and install the Pepe binary using Cargo:
+### Prebuilt binaries
+
+Every [release](https://github.com/omarmhaimdat/pepe/releases) ships binaries for macOS (Apple Silicon and Intel), Linux (x86_64 and ARM64, statically linked) and Windows (x86_64), with SHA-256 checksums and signed build provenance:
+
 ```bash
-cargo install --path .
+gh attestation verify pepe-x86_64-unknown-linux-musl.tar.xz --repo omarmhaimdat/pepe
 ```
 
-This will build the Pepe binary and install it in your Cargo bin directory, which should be in your system's PATH.
+### From source
+
+```bash
+cargo install --locked --git https://github.com/omarmhaimdat/pepe
+```
+
+pepe checks for a newer release when it exits. Set `PEPE_NO_UPDATE_CHECK=1` to disable this.
+
+## Releasing
+
+Releases are automated. Merging to `master` with [conventional commits](https://www.conventionalcommits.org/) (`feat:`, `fix:`, ...) keeps a **release PR** open that bumps the version and updates `CHANGELOG.md`. Merging that PR tags `vX.Y.Z`, which builds every platform and publishes the GitHub Release, installers, the Homebrew formula and the pepe.mhaimdat.com mirror.
 
 ## Usage
 

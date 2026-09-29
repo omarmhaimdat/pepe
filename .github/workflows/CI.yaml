@@ -5,92 +5,56 @@ on:
     branches:
       - master
   pull_request:
-    branches:
-      - '**'
 
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+
+# Release targets (macOS, Linux musl, Windows) are built on every PR by
+# release.yml (cargo-dist, pr-run-mode = "upload"). This workflow covers
+# lint, tests and the Nix package.
 jobs:
-  build:
+  check:
+    name: Check (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
-        include:
-          # Ubuntu builds
-          - os: ubuntu-latest
-            target: x86_64-unknown-linux-gnu
-          - os: ubuntu-latest
-            target: aarch64-unknown-linux-gnu
-          # macOS builds
-          - os: macos-latest
-            target: x86_64-apple-darwin
-          - os: macos-latest
-            target: aarch64-apple-darwin
-          # Windows build
-          - os: windows-latest
-            target: x86_64-pc-windows-msvc
-
+        os: [ubuntu-latest, macos-latest, windows-latest]
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up Rust
-        uses: actions-rs/toolchain@v1
+      - uses: actions/checkout@v6
         with:
-          toolchain: stable
-          target: ${{ matrix.target }}
-          override: true
-
-      - name: Install dependencies (Ubuntu)
-        if: matrix.os == 'ubuntu-latest' && (matrix.target == 'x86_64-unknown-linux-gnu' || matrix.target == 'aarch64-unknown-linux-gnu')
-        run: sudo apt-get update && sudo apt-get install -y build-essential devscripts debhelper cargo gcc-aarch64-linux-gnu
-
-      - name: Install dependencies (macOS)
-        if: matrix.os == 'macos-latest' && (matrix.target == 'x86_64-apple-darwin' || matrix.target == 'aarch64-apple-darwin')
-        run: |
-          brew install gcc
-          xcode-select --install || true
-
-      - name: Build project (Ubuntu)
-        if: matrix.os == 'ubuntu-latest' && (matrix.target == 'x86_64-unknown-linux-gnu' || matrix.target == 'aarch64-unknown-linux-gnu')
-        run: cargo build --release --target ${{ matrix.target }}
-        env:
-          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
-          CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER: x86_64-linux-gnu-gcc
-
-      - name: Build project (macOS)
-        if: matrix.os == 'macos-latest' && (matrix.target == 'x86_64-apple-darwin' || matrix.target == 'aarch64-apple-darwin')
-        run: cargo build --release --target ${{ matrix.target }}
-        env:
-          RUSTFLAGS: "-C linker=clang"
-
-      - name: Build project (Windows)
-        if: matrix.os == 'windows-latest' && matrix.target == 'x86_64-pc-windows-msvc'
-        run: cargo build --release --target ${{ matrix.target }}
-
-      - name: Debug Repository Structure
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      - name: Format
+        if: matrix.os == 'ubuntu-latest'
+        run: cargo fmt --check
+      - name: Clippy
+        run: cargo clippy --locked --all-targets
+      - name: Test
+        run: cargo test --locked
+      - name: Smoke test
         shell: bash
-        run: |
-          echo "Current Directory: $(pwd)"
-          echo "Directory Contents:"
-          if [ "${{ runner.os }}" == "Windows" ]; then
-            dir
-          else
-            ls -la
-          fi
+        run: cargo run --locked -- --version
 
-      - name: Package Homebrew (macOS)
-        if: matrix.os == 'macos-latest' && (matrix.target == 'x86_64-apple-darwin' || matrix.target == 'aarch64-apple-darwin')
-        run: |
-          mkdir -p dist
-          tar -czvf dist/pepe-macos.tar.gz -C target/${{ matrix.target }}/release pepe
-
-      - name: Upload Build Artifacts
-        uses: actions/upload-artifact@v4
+  nix:
+    name: Nix build (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v6
         with:
-          name: pepe-${{ matrix.target }}
-          path: |
-            pepe_*.deb
-            dist/pepe-macos.tar.gz
-          if-no-files-found: warn
-          compression-level: 6
-          overwrite: false
-          include-hidden-files: false
+          persist-credentials: false
+      - uses: cachix/install-nix-action@v31
+      - run: nix flake check --print-build-logs
+      - run: nix build --print-build-logs .#pepe
+      - run: ./result/bin/pepe --version
