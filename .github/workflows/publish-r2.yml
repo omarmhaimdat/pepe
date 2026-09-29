@@ -1,0 +1,70 @@
+# Custom dist publish job (see `publish-jobs` in dist-workspace.toml).
+# Mirrors every release artifact to the R2 bucket behind pepe.mhaimdat.com:
+#
+#   /install.sh, /install.ps1   -> installers for the latest release
+#   /latest/<artifact>          -> latest release artifacts
+#   /vX.Y.Z/<artifact>          -> immutable per-version artifacts
+name: Publish to R2
+
+on:
+  workflow_call:
+    inputs:
+      plan:
+        required: true
+        type: string
+
+jobs:
+  publish-r2:
+    if: ${{ vars.R2_ENABLED == 'true' }}
+    runs-on: ubuntu-latest
+    env:
+      AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+      AWS_DEFAULT_REGION: ${{ vars.R2_REGION }}
+      R2_BUCKET: ${{ vars.R2_BUCKET }}
+      R2_ENDPOINT: ${{ vars.R2_ENDPOINT }}
+      TAG: ${{ fromJson(inputs.plan).announcement_tag }}
+    steps:
+      - name: Fetch artifacts
+        uses: actions/download-artifact@v8
+        with:
+          pattern: artifacts-*
+          path: artifacts
+          merge-multiple: true
+
+      - name: Upload to R2
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd artifacts
+          rm -f ./*-dist-manifest.json
+          ls -la
+
+          r2() { aws s3 cp --endpoint-url "$R2_ENDPOINT" --only-show-errors "$@"; }
+
+          # Installers first need to point at files that already exist, so
+          # upload the immutable versioned copy, then latest/, then installers.
+          r2 . "s3://$R2_BUCKET/$TAG/" --recursive \
+            --cache-control "public, max-age=31536000, immutable"
+          r2 . "s3://$R2_BUCKET/latest/" --recursive \
+            --cache-control "public, max-age=300"
+
+          r2 pepe-installer.sh "s3://$R2_BUCKET/install.sh" \
+            --content-type "text/x-shellscript; charset=utf-8" \
+            --cache-control "public, max-age=300"
+          r2 pepe-installer.ps1 "s3://$R2_BUCKET/install.ps1" \
+            --content-type "text/plain; charset=utf-8" \
+            --cache-control "public, max-age=300"
+
+      - name: Verify public URLs
+        shell: bash
+        run: |
+          set -euo pipefail
+          for path in install.sh install.ps1 "$TAG/sha256.sum"; do
+            code=$(curl -s -o /dev/null -w '%{http_code}' "https://pepe.mhaimdat.com/$path")
+            echo "$path -> $code"
+            [ "$code" = "200" ]
+          done
+          # The live install.sh must be the one we just built (query string
+          # bypasses any CDN-cached copy of the previous release)
+          curl -fsSL "https://pepe.mhaimdat.com/install.sh?t=$(date +%s)" | grep -q "${TAG#v}"

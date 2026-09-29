@@ -1,0 +1,31 @@
+[workspace]
+members = ["cargo:."]
+
+# Config for 'dist' (cargo-dist). After editing, run `dist generate` to
+# regenerate .github/workflows/release.yml — never edit that file by hand.
+[dist]
+cargo-dist-version = "0.33.0"
+ci = "github"
+# Build on every PR (not just "plan") so a broken target is caught before merge
+pr-run-mode = "upload"
+targets = [
+    "aarch64-apple-darwin",
+    "x86_64-apple-darwin",
+    "x86_64-unknown-linux-musl",
+    "aarch64-unknown-linux-musl",
+    "x86_64-pc-windows-msvc",
+]
+installers = ["shell", "powershell", "homebrew"]
+# Where the shell/PowerShell installers put the binary
+install-path = ["$XDG_BIN_HOME/", "~/.local/bin"]
+tap = "omarmhaimdat/homebrew-pepe"
+formula = "pepe"
+publish-jobs = ["homebrew", "./publish-r2"]
+# Signed build provenance (`gh attestation verify`)
+github-attestations = true
+# `pepe self-update` is built in via axoupdater, no separate updater binary
+install-updater = false
+
+[dist.github-custom-runners]
+# Native ARM runner: builds the aarch64 musl binary without cross-compiling
+aarch64-unknown-linux-musl = "ubuntu-24.04-arm"
