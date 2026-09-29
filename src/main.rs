@@ -21,6 +21,7 @@ mod json_report;
 mod request;
 mod response;
 mod ui;
+mod update;
 mod utils;
 
 #[derive(Debug, Clone)]
@@ -163,6 +164,10 @@ async fn run_request(
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut args = Cli::parse();
 
+    if let Some(cli::Command::SelfUpdate) = args.command {
+        return update::self_update().await;
+    }
+
     if let Err(e) = args.validate() {
         eprintln!("{}", e);
         std::process::exit(1);
@@ -226,6 +231,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     )?;
 
     disable_raw_mode()?;
-    args.check_for_updates().await?;
+    update::check_for_updates().await;
     Ok(())
 }

@@ -1,31 +1,9 @@
-use clap::{ArgAction::HelpLong, Error, Parser};
+use clap::{ArgAction::HelpLong, Error, Parser, Subcommand};
 use curl_parser;
 use reqwest::Proxy;
-use serde::Deserialize;
 
 use crate::request::{Request, RequestSettings};
 use crate::utils::{default_user_agent, num_of_cores, version};
-
-const BBLUE: &str = "\x1b[1;34m"; // Bold Blue
-const BGREEN: &str = "\x1b[1;32m"; // Bold Green
-const BYELLOW: &str = "\x1b[1;33m"; // Bold Yellow
-const BRED: &str = "\x1b[1;31m"; // Bold Red
-const NC: &str = "\x1b[0m"; // No Color
-
-#[derive(Debug, Deserialize)]
-struct Release {
-    tag_name: String,
-}
-
-impl Release {
-    fn tag_name(&self) -> String {
-        self.tag_name.trim_start_matches('v').to_string()
-    }
-
-    fn version(&self) -> String {
-        self.tag_name()
-    }
-}
 
 #[derive(Parser, Debug, Clone)]
 #[command(name = "pepe")]
@@ -34,7 +12,11 @@ impl Release {
 #[command(about = "HTTP load generator")]
 #[clap(disable_help_flag = true)]
 #[command(arg_required_else_help = true)]
+#[command(args_conflicts_with_subcommands = true)]
 pub struct Cli {
+    #[command(subcommand)]
+    pub command: Option<Command>,
+
     #[arg(short, long, action = HelpLong)]
     pub help: Option<bool>,
 
@@ -101,6 +83,12 @@ pub struct Cli {
     /// List of arguments to pass to curl command
     #[arg(last = true, default_value = "")]
     pub args: Vec<String>,
+}
+
+#[derive(Subcommand, Debug, Clone)]
+pub enum Command {
+    /// Update pepe to the latest release
+    SelfUpdate,
 }
 
 impl Cli {
@@ -262,54 +250,5 @@ impl Cli {
             self.headers.clone(),
             self.settings(),
         )
-    }
-
-    pub async fn check_for_updates(&self) -> Result<(), Box<dyn std::error::Error>> {
-        let client = reqwest::Client::new();
-        let url = "https://api.github.com/repos/omarmhaimdat/pepe/releases/latest";
-
-        let release: Release = match client
-            .get(url)
-            .header("User-Agent", default_user_agent())
-            .timeout(std::time::Duration::from_secs(5))
-            .send()
-            .await
-        {
-            Ok(response) => match response.json().await {
-                Ok(release) => release,
-                Err(_) => return Ok(()),
-            },
-            Err(_) => return Ok(()),
-        };
-
-        if release.tag_name.is_empty() {
-            return Ok(());
-        }
-        let current = version();
-
-        if release.tag_name != format!("v{}", current) {
-            println!("\n{}┌─────────────────────────────────────┐{}", BBLUE, NC);
-            println!("{}│           Version Check             │{}", BBLUE, NC);
-            println!("{}└─────────────────────────────────────┘{}", BBLUE, NC);
-            println!(
-                "{}→ Current version:{} {}{}{}",
-                BYELLOW, NC, BRED, current, NC
-            );
-            println!(
-                "{}→ Latest version:{} {}{}{}\n",
-                BYELLOW,
-                NC,
-                BGREEN,
-                release.version(),
-                NC
-            );
-            println!("{}To update, run:{}", BGREEN, NC);
-            println!(
-                "  {}curl -sSf https://pepe.mhaimdat.com/install.sh | bash{}\n",
-                BBLUE, NC
-            );
-        }
-
-        Ok(())
     }
 }
