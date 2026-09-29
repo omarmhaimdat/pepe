@@ -3,6 +3,7 @@ name = "pepe"
 version = "0.3.0"
 authors = ["Omar MHAIMDAT"]
 edition = "2021"
+rust-version = "1.85"
 description = "HTTP load generator and performance testing tool"
 readme = "README.md"
 homepage = "https://github.com/omarmhaimdat/pepe"
@@ -27,10 +28,12 @@ tokio-stream = "0.1"
 ratatui = "0.29.0"
 crossterm = "0.28.1"
 indicatif = "0.17"
-curl-parser = { "git" = "https://github.com/omarmhaimdat/curl-parser" }
+curl-parser = { git = "https://github.com/omarmhaimdat/curl-parser", rev = "415558b02aa5ce98fcbfb80841c5ff35562e762d", version = "0.5.5" }
 gethostname = "1.0.0"
 serde = { version = "1.0.130", features = ["derive"] }
 serde_json = "1.0"
+axoupdater = "0.10.2"
+semver = "1.0.28"
 
 [profile.release]
 opt-level = 3
@@ -49,18 +52,6 @@ strip = true
 name = "pepe"
 path = "src/main.rs"
 
-[package.metadata]
-install.path = "/usr/local/bin"
-
-
-[package.metadata.release]
-shared-version = true
-tag-name = "v{{version}}"
-pre-release-replacements = [
-    { file = "CHANGELOG.md", search = "Unreleased", replace = "{{version}}", min = 1 },
-    { file = "CHANGELOG.md", search = "...HEAD", replace = "...{{tag_name}}", exactly = 1 },
-    { file = "CHANGELOG.md", search = "ReleaseDate", replace = "{{date}}", min = 1 },
-    { file = "CHANGELOG.md", search = "<!-- next-header -->", replace = "<!-- next-header -->\n## [Unreleased] - ReleaseDate\n", exactly = 1 },
-    { file = "CHANGELOG.md", search = "<!-- next-url -->", replace = "<!-- next-url -->\n[Unreleased]: https://github.com/omarmhaimdat/pepe/compare/{{tag_name}}...HEAD\n", exactly = 1 },
-]
-publish = false
+# Profile used by `dist build` for release artifacts.
+[profile.dist]
+inherits = "release"
