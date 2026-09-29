@@ -1,0 +1,23 @@
+name: Update flake.lock
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 6 * * 1" # Mondays 06:00 UTC
+
+jobs:
+  update:
+    if: github.repository_owner == 'omarmhaimdat'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v6
+      - uses: cachix/install-nix-action@v31
+      - uses: DeterminateSystems/update-flake-lock@v29
+        with:
+          pr-title: "chore(nix): update flake.lock"
+          pr-labels: dependencies
+          # PAT so CI runs on the PR (PRs opened by GITHUB_TOKEN skip CI)
+          token: ${{ secrets.RELEASE_PLZ_TOKEN }}
