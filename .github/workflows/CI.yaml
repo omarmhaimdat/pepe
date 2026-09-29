@@ -52,7 +52,11 @@ jobs:
           persist-credentials: false
       # Keep in sync with package.rust-version in Cargo.toml. Catches
       # dependency bumps (e.g. from Dependabot) that silently need newer Rust.
-      - uses: dtolnay/rust-toolchain@1.85
+      # Version goes in `toolchain`, not the @ref: Dependabot treats the ref
+      # as a release tag and would "bump" @1.85 to a nonexistent Rust version
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.85"
       - uses: Swatinem/rust-cache@v2
       - run: cargo check --locked --all-targets
 

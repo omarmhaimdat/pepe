@@ -16,6 +16,9 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    ignore:
+      # Refs are toolchain names (@stable, @master), not versions
+      - dependency-name: dtolnay/rust-toolchain
     groups:
       github-actions:
         patterns: ["*"]
