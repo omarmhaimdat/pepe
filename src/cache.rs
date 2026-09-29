@@ -1,6 +1,5 @@
 use hyper::HeaderMap;
 
-
 const CACHE_HEADERS: [&str; 7] = [
     "x-cache",
     "x-cache-status",
@@ -26,7 +25,6 @@ pub enum CacheStatus {
     Error,
     Unknown,
 }
-
 
 // CacheCategory is an enum that represents the category of a cache status
 // Some cache statuses are grouped into categories to simplify the analysis
@@ -70,12 +68,9 @@ impl CacheStatus {
         CacheCategory::from_cache_status(self)
     }
 
-
     /// Parse cache headers into a CacheStatus enum
     /// This function is not exhaustive and only supports a few cache headers
     pub fn parse_headers(headers: &HeaderMap) -> Option<CacheStatus> {
-        
-
         for header in CACHE_HEADERS.iter() {
             if let Some(value) = headers.get(*header) {
                 if let Ok(value_str) = value.to_str() {

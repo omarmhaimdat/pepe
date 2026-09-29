@@ -96,21 +96,22 @@ async fn run_request(
         let tx = tx;
         let sent_tx = sent_tx;
         let number = args.number;
-        let duration_ms = args.duration.as_ref().map(|d| {
-            crate::cli::Cli::parse_duration(d).unwrap_or(0)
-        });
+        let duration_ms = args
+            .duration
+            .as_ref()
+            .map(|d| crate::cli::Cli::parse_duration(d).unwrap_or(0));
 
         async move {
             if let Some(duration_ms) = duration_ms {
                 // Duration-based testing
                 let start = std::time::Instant::now();
                 let duration = std::time::Duration::from_millis(duration_ms);
-                
+
                 loop {
                     if start.elapsed() >= duration {
                         break;
                     }
-                    
+
                     let semaphore = semaphore.clone();
                     let permit = semaphore
                         .acquire_owned()
@@ -124,7 +125,7 @@ async fn run_request(
                         sent_tx.clone(),
                         permit,
                     ));
-                    
+
                     tokio::task::yield_now().await;
                 }
             } else {

@@ -1,5 +1,5 @@
-use serde::Serialize;
 use crate::ResponseStats;
+use serde::Serialize;
 use std::collections::HashMap;
 
 #[derive(Serialize)]
@@ -32,10 +32,7 @@ pub struct LatencyStats {
 }
 
 impl JsonReport {
-    pub fn generate(
-        requests: &[ResponseStats],
-        total_duration_ms: u128,
-    ) -> Self {
+    pub fn generate(requests: &[ResponseStats], total_duration_ms: u128) -> Self {
         let total_requests = requests.len();
         let mut successful_requests = 0;
         let mut failed_requests = 0;
@@ -46,7 +43,7 @@ impl JsonReport {
 
         for request in requests {
             latencies.push(request.duration.as_millis());
-            
+
             match request.status_code {
                 Some(code) => {
                     *status_codes.entry(code.as_u16()).or_insert(0) += 1;

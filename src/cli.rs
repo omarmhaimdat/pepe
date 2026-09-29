@@ -204,7 +204,7 @@ impl Cli {
     /// Parse duration string like "10s", "5m", "2h" into milliseconds
     pub fn parse_duration(duration_str: &str) -> Result<u64, Error> {
         let duration_str = duration_str.trim().to_lowercase();
-        
+
         let (num_str, unit) = if let Some(idx) = duration_str.find(|c: char| c.is_alphabetic()) {
             duration_str.split_at(idx)
         } else {
@@ -228,10 +228,7 @@ impl Cli {
             _ => {
                 return Err(Error::raw(
                     clap::error::ErrorKind::ValueValidation,
-                    format!(
-                        "Invalid duration unit: {}. Valid units: s, m, h",
-                        unit
-                    ),
+                    format!("Invalid duration unit: {}. Valid units: s, m, h", unit),
                 ))
             }
         };
