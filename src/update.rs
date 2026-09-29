@@ -90,7 +90,12 @@ pub async fn self_update() -> Result<(), Box<dyn std::error::Error>> {
             "pepe {} was not installed by the pepe installer, so it can't update itself.",
             version()
         );
-        println!("Update it with:\n  {}{}{}", BBLUE, method.update_command(), NC);
+        println!(
+            "Update it with:\n  {}{}{}",
+            BBLUE,
+            method.update_command(),
+            NC
+        );
         return Ok(());
     };
 
@@ -157,8 +162,14 @@ pub async fn check_for_updates() {
     println!("\n{}┌─────────────────────────────────────┐{}", BBLUE, NC);
     println!("{}│         Update available            │{}", BBLUE, NC);
     println!("{}└─────────────────────────────────────┘{}", BBLUE, NC);
-    println!("{}→ Current version:{} {}{}{}", BYELLOW, NC, BRED, current, NC);
-    println!("{}→ Latest version:{} {}{}{}\n", BYELLOW, NC, BGREEN, latest, NC);
+    println!(
+        "{}→ Current version:{} {}{}{}",
+        BYELLOW, NC, BRED, current, NC
+    );
+    println!(
+        "{}→ Latest version:{} {}{}{}\n",
+        BYELLOW, NC, BGREEN, latest, NC
+    );
     println!("{}To update, run:{}", BGREEN, NC);
     println!(
         "  {}{}{}\n",
