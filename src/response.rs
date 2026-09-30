@@ -1,9 +1,13 @@
 use std::time::{Duration, Instant};
 
+use bytes::Bytes;
+
 use crate::cache::CacheStatus;
 
-/// Characters of the response body kept for the "Partial Responses" panel
-const PARTIAL_RESPONSE_CHARS: usize = 100;
+/// Raw body bytes kept for the dashboard's response preview
+const PREVIEW_BYTES: usize = 256;
+/// Characters of the preview shown on one line
+const PREVIEW_CHARS: usize = 120;
 
 /// Why a request produced no response
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -41,11 +45,16 @@ pub struct ResponseStats {
     /// Body bytes actually received (not the Content-Length header, which is
     /// missing for chunked or compressed responses)
     pub body_bytes: u64,
-    pub partial_response: Option<String>,
+    /// Start of the body, copied only when the caller asked for previews.
+    /// Kept raw; decoding happens at display time for the few rows on screen.
+    pub preview: Option<Bytes>,
     /// (lookup, resolution) time of the DNS query made before the request
     pub dns_times: Option<(Duration, Duration)>,
     pub cache_status: Option<CacheStatus>,
     pub error: Option<ErrorKind>,
+    /// Why the request failed, in the words of the innermost error (e.g.
+    /// "Connection refused (os error 61)"); kept only when previews are
+    pub error_message: Option<Box<str>>,
 }
 
 impl ResponseStats {
@@ -53,51 +62,91 @@ impl ResponseStats {
         resp: Result<reqwest::Response, reqwest::Error>,
         start: Instant,
         dns_times: Option<(Duration, Duration)>,
+        keep_preview: bool,
     ) -> Self {
-        let resp = match resp {
+        let mut resp = match resp {
             Ok(resp) => resp,
-            Err(e) => return Self::failed(&e, start, dns_times),
+            Err(e) => return Self::failed(&e, start, dns_times, keep_preview),
         };
 
         let status_code = resp.status();
         let cache_status = CacheStatus::parse_headers(resp.headers());
-        let body = match resp.bytes().await {
-            Ok(body) => body,
-            // The status arrived but the body did not (e.g. timed out mid-body)
-            Err(e) => return Self::failed(&e, start, dns_times),
-        };
+        // Stream the body and count it instead of buffering it whole, so
+        // large responses cost no memory beyond one chunk
+        let mut body_bytes = 0u64;
+        let mut preview = keep_preview.then(Vec::new);
+        loop {
+            match resp.chunk().await {
+                Ok(Some(chunk)) => {
+                    body_bytes += chunk.len() as u64;
+                    if let Some(buf) = preview.as_mut() {
+                        let want = PREVIEW_BYTES.saturating_sub(buf.len());
+                        buf.extend_from_slice(&chunk[..want.min(chunk.len())]);
+                    }
+                }
+                Ok(None) => break,
+                // The status arrived but the body did not (e.g. timed out mid-body)
+                Err(e) => return Self::failed(&e, start, dns_times, keep_preview),
+            }
+        }
         let duration = start.elapsed();
 
         ResponseStats {
             duration,
             status_code: Some(status_code),
-            body_bytes: body.len() as u64,
-            partial_response: Some(partial_response(&body)),
+            body_bytes,
+            preview: preview.map(Bytes::from),
             dns_times,
             cache_status,
             error: None,
+            error_message: None,
         }
     }
 
-    fn failed(e: &reqwest::Error, start: Instant, dns_times: Option<(Duration, Duration)>) -> Self {
+    fn failed(
+        e: &reqwest::Error,
+        start: Instant,
+        dns_times: Option<(Duration, Duration)>,
+        keep_message: bool,
+    ) -> Self {
         ResponseStats {
             duration: start.elapsed(),
             dns_times,
             error: Some(ErrorKind::from_reqwest(e)),
+            error_message: keep_message.then(|| root_cause(e).into()),
             ..Default::default()
         }
     }
 }
 
-/// First characters of the body on one line, for display
-fn partial_response(body: &[u8]) -> String {
-    // 4 bytes per char at most, so this slice always covers enough characters
-    let head = &body[..body.len().min(PARTIAL_RESPONSE_CHARS * 4)];
-    String::from_utf8_lossy(head)
+impl ResponseStats {
+    /// First characters of the body on one line, for display
+    pub fn preview_text(&self) -> Option<String> {
+        self.preview.as_deref().map(preview_text)
+    }
+}
+
+/// The innermost error's message: reqwest's own is generic ("error sending
+/// request for url ..."), the cause is what's useful
+fn root_cause(e: &(dyn std::error::Error + 'static)) -> String {
+    let mut cause = e;
+    while let Some(source) = cause.source() {
+        cause = source;
+    }
+    cause.to_string()
+}
+
+fn preview_text(body: &[u8]) -> String {
+    // The preview may end mid-character; drop that tail rather than show U+FFFD
+    let body = match std::str::from_utf8(body) {
+        Err(e) if e.error_len().is_none() => &body[..e.valid_up_to()],
+        _ => body,
+    };
+    String::from_utf8_lossy(body)
         .trim()
         .chars()
-        .map(|c| if c == '\n' || c == '\r' { ' ' } else { c })
-        .take(PARTIAL_RESPONSE_CHARS)
+        .map(|c| if c.is_control() { ' ' } else { c })
+        .take(PREVIEW_CHARS)
         .collect()
 }
 
@@ -106,15 +155,24 @@ mod tests {
     use super::*;
 
     #[test]
-    fn partial_response_is_single_line_and_truncated() {
-        let body = format!("  line one\r\nline two{}", "x".repeat(500));
-        let partial = partial_response(body.as_bytes());
-        assert!(partial.starts_with("line one  line two"));
-        assert_eq!(partial.chars().count(), PARTIAL_RESPONSE_CHARS);
+    fn preview_is_single_line_and_truncated() {
+        let body = format!("  line one\r\nline\ttwo{}", "x".repeat(500));
+        let preview = preview_text(body.as_bytes());
+        assert!(preview.starts_with("line one  line two"));
+        assert_eq!(preview.chars().count(), PREVIEW_CHARS);
     }
 
     #[test]
-    fn partial_response_survives_invalid_utf8() {
-        assert_eq!(partial_response(&[b'o', b'k', 0xff]), "ok\u{fffd}");
+    fn root_cause_is_the_innermost_error() {
+        let io = std::io::Error::new(std::io::ErrorKind::ConnectionRefused, "Connection refused");
+        let outer = std::io::Error::other(io);
+        assert_eq!(root_cause(&outer), "Connection refused");
+    }
+
+    #[test]
+    fn preview_survives_invalid_utf8() {
+        assert_eq!(preview_text(&[b'o', b'k', 0xff]), "ok\u{fffd}");
+        // Cut in the middle of "é" (0xC3 0xA9)
+        assert_eq!(preview_text(&[b'o', b'k', 0xc3]), "ok");
     }
 }

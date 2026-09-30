@@ -23,16 +23,20 @@ reqwest = { version = "0.12.12", default-features = false, features = [
 ] }
 hyper = "1.5.2"
 futures = "0.3.17"
-tokio-stream = "0.1"
+bytes = "1"
 ratatui = "0.29.0"
-crossterm = "0.28.1"
-indicatif = "0.18"
+# event-stream: read keys asynchronously instead of blocking a runtime thread
+crossterm = { version = "0.28.1", features = ["event-stream"] }
 curl-parser = { git = "https://github.com/omarmhaimdat/curl-parser", rev = "415558b02aa5ce98fcbfb80841c5ff35562e762d", version = "0.5.5" }
 gethostname = "1.0.0"
 serde = { version = "1.0.130", features = ["derive"] }
 serde_json = "1.0"
 axoupdater = "0.10.2"
 semver = "1.0.28"
+
+[target.'cfg(unix)'.dependencies]
+# Keeps Ctrl-C a signal while the dashboard has the terminal in raw mode
+libc = "0.2"
 
 [profile.release]
 opt-level = 3

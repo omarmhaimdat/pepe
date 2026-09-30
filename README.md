@@ -14,7 +14,9 @@ Pepe is written in Rust and uses the `reqwest` and `tokio` libraries for making 
 - **Timeouts**: Set a timeout for each request.
 - **Basic Authentication**: Use basic authentication for the requests.
 - **Proxy Support**: Send requests through a proxy server.
-- **DNS Resolution Timing**: Measure DNS lookup and resolution times.
+- **Live Dashboard**: Throughput and latency charts, status codes, percentiles and a scrollable request log, updated as the test runs.
+- **Interactive Control**: Pause, resume or stop a run, and raise or lower concurrency while it's going.
+- **DNS Resolution Timing**: Sample DNS lookup time once a second during the run.
 - **Detailed Statistics**: Measure and display various performance metrics such as min, max, average, median, percentiles, standard deviation, total data transferred, and error rate.
 
 ## Installation
@@ -193,9 +195,32 @@ Pepe provides detailed statistics about the performance of the web server, inclu
 - **Failures by kind**: non-2xx responses, connection errors and timeouts are counted separately.
 - **Cache Hit Rate**: The percentage of requests that were served from the cache.
 - **Requests Per Second (RPS)**: The number of requests per second.
-- **DNS Lookup Time**: The average time taken to resolve the host.
+- **DNS Lookup Time**: The average time taken to resolve the host, sampled once a second.
 
-While a test runs, press `q` to quit, `r` to restart or `i` to stop sending and keep the results on screen.
+### Dashboard
+
+The dashboard has three views:
+
+- **Live**: the headline numbers, a latency heatmap (time across, latency up, brighter cells mean more requests took that long) with p50 and p99 marked, throughput per second, and a panel with the detailed numbers.
+- **Stats**: every number pepe collects, the test setup, and the latency distribution.
+- **Requests**: the last 2,000 requests (and older failures) with a preview of each response, filterable by status, latency and text.
+
+Pepe, the chili in the corner, reacts to how the run is going. When a run ends, the header turns into a verdict (Healthy, Degraded or Failing) with findings such as failed requests, two separate latency groups, a long tail, or throughput and latency drifting over the run. The same summary is printed to your shell when you quit.
+
+| Key | Action |
+| --- | --- |
+| `space` / `p` | Pause or resume sending |
+| `+` / `-` | Raise or lower concurrency by about 10%, live |
+| `s` / `i` | Stop sending and keep the results on screen |
+| `r` | Restart with the same settings (and the current concurrency) |
+| `tab` / `←` `→` / `1` `2` `3` | Switch view |
+| `↑` `↓` / `j` `k`, `PgUp` `PgDn`, `g` `G` | Scroll the request log |
+| `f` | Filter requests by status: 2xx, 3xx, 4xx, 5xx, no response, failed |
+| `l` | Filter requests by latency: at or above p50, p90 or p99 |
+| `/` | Search the status and response text |
+| `e` / `c` | Show only failed requests / clear all filters |
+| `?` | Show all keys |
+| `q` / `esc` / `Ctrl-C` | Quit |
 
 
 ## Contributing

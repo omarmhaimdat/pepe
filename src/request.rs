@@ -1,5 +1,6 @@
+use bytes::Bytes;
 use reqwest::header::{HeaderMap, HeaderName, HeaderValue, USER_AGENT};
-use reqwest::Proxy;
+use reqwest::{Method, Proxy};
 
 use crate::PepeError;
 
@@ -16,8 +17,10 @@ pub struct RequestSettings {
 #[derive(Debug, Clone)]
 pub struct Request {
     pub url: String,
-    pub method: String,
-    pub body: Option<String>,
+    /// Parsed once here instead of on every request
+    pub method: Method,
+    /// Bytes clones are a refcount bump, so sending the body costs no copy
+    pub body: Option<Bytes>,
     pub headers: HeaderMap,
     pub settings: RequestSettings,
 }
@@ -51,15 +54,11 @@ impl Request {
 
         Ok(Self {
             url,
-            method,
-            body,
+            method: Method::from_bytes(method.as_bytes()).unwrap_or(Method::GET),
+            body: body.map(Bytes::from),
             headers: header_map,
             settings,
         })
-    }
-
-    pub fn method(&self) -> reqwest::Method {
-        reqwest::Method::from_bytes(self.method.as_bytes()).unwrap_or(reqwest::Method::GET)
     }
 
     pub fn build_client(&self) -> Result<reqwest::Client, PepeError> {
