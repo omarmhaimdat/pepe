@@ -8,7 +8,7 @@ use ratatui::{
     layout::{Alignment, Constraint, Flex, Layout, Rect},
     style::{Color, Style, Stylize},
     text::{Line, Span},
-    widgets::{Block, BorderType, Clear, Paragraph, Row, Table, Tabs},
+    widgets::{Block, BorderType, Clear, Paragraph, Row, Table, Tabs, Wrap},
     Frame,
 };
 
@@ -500,8 +500,18 @@ fn render_footer(d: &Dashboard, f: &mut Frame, area: Rect) {
     }
     if d.filter.editing {
         hints = vec![("enter", "done"), ("esc", "clear search")];
+    } else if d.inspecting && d.tab == Tab::Requests {
+        hints = vec![
+            ("esc", "back"),
+            ("↑↓", "newer / older"),
+            ("PgUp/PgDn", "scroll response"),
+            ("[ ]", "nearest kept in full"),
+            ("g/G", "newest / oldest"),
+            ("q", "quit"),
+        ];
     } else if d.tab == Tab::Requests {
-        hints.push(("↑↓", "scroll"));
+        hints.push(("↑↓", "select"));
+        hints.push(("enter", "inspect"));
         hints.push(("f", "status"));
         hints.push(("l", "latency"));
         hints.push(("/", "search"));
@@ -527,14 +537,16 @@ fn render_footer(d: &Dashboard, f: &mut Frame, area: Rect) {
 }
 
 fn render_help(f: &mut Frame, area: Rect) {
-    let rows: [(&str, &str); 15] = [
+    let rows: [(&str, &str); 17] = [
         ("space / p", "pause or resume sending"),
         ("+ / -", "raise or lower concurrency by ~10%"),
         ("s / i", "stop the run, keep the results"),
         ("r", "restart with the same settings"),
         ("tab / ← →", "switch view"),
         ("1 2 3", "live, stats, requests"),
-        ("↑ ↓ / j k", "scroll the request log"),
+        ("↑ ↓ / j k", "select a request (newer / older)"),
+        ("enter", "inspect it: stats, request, full response"),
+        ("[ ]", "inspector: nearest request kept in full"),
         ("f", "filter requests by status"),
         ("l", "filter requests by latency (slow ones)"),
         ("/", "search status and response text"),
@@ -1782,6 +1794,9 @@ fn plot_axis(area: Rect, plot: Rect) -> Rect {
 
 fn render_requests_tab(d: &Dashboard, f: &mut Frame, area: Rect) {
     let log = d.visible_log();
+    if d.inspecting && !log.is_empty() {
+        return render_inspector(d, f, area, &log);
+    }
     let [title, filters, _, table] = Layout::vertical([
         Constraint::Length(1),
         Constraint::Length(1),
@@ -1800,9 +1815,9 @@ fn render_requests_tab(d: &Dashboard, f: &mut Frame, area: Rect) {
     } else {
         label(format!("last {} kept  ", format::count(kept as u64)))
     }];
-    if d.scroll > 0 {
+    if d.scroll > 0 && !d.inspecting {
         right.push(Span::styled(
-            format!(" ↑{} · g to follow ", d.scroll),
+            format!(" {} newer · g for live ", d.scroll),
             Style::new().fg(Color::Black).bg(WARN),
         ));
     } else if d.finished.is_none() {
@@ -1824,17 +1839,25 @@ fn render_requests_tab(d: &Dashboard, f: &mut Frame, area: Rect) {
     }
 
     let height = table.height.saturating_sub(1) as usize;
-    let rows = log
-        .iter()
-        .skip(d.scroll)
-        .take(height)
-        .map(|e| request_row(e));
-    let header = Row::new(["#", "at", "status", "latency", "size", "cache", "response"])
-        .style(Style::new().fg(LABEL).bold());
+    // Scroll just enough to keep the selected row on screen
+    let top = (d.scroll + 1).saturating_sub(height);
+    let rows = log.iter().enumerate().skip(top).take(height).map(|(i, e)| {
+        let row = request_row(e);
+        if i == d.scroll {
+            row.style(Style::new().bg(Color::Indexed(237)).bold())
+        } else {
+            row
+        }
+    });
+    let header = Row::new([
+        "", "#", "at", "status", "latency", "size", "cache", "response",
+    ])
+    .style(Style::new().fg(LABEL).bold());
     f.render_widget(
         Table::new(
             rows,
             [
+                Constraint::Length(1),
                 Constraint::Length(9),
                 Constraint::Length(8),
                 Constraint::Length(13),
@@ -1906,6 +1929,320 @@ fn render_filter_bar(d: &Dashboard, f: &mut Frame, area: Rect) {
     f.render_widget(Paragraph::new(Line::from(spans)), area);
 }
 
+/// One request in full: its stats and the request sent on the left, the
+/// response's headers and body on the right
+fn render_inspector(d: &Dashboard, f: &mut Frame, area: Rect, log: &[&LogEntry]) {
+    let index = d.scroll.min(log.len().saturating_sub(1));
+    let Some(entry) = log.get(index) else {
+        return placeholder(f, area, "no request selected");
+    };
+    let [title, _, body] = Layout::vertical([
+        Constraint::Length(1),
+        Constraint::Length(1),
+        Constraint::Min(0),
+    ])
+    .areas(area);
+
+    let position = Line::from(vec![
+        value(format::count((index + 1) as u64), Color::Reset),
+        label(format!(" of {} ", format::count(log.len() as u64))),
+        label(if index == 0 { "· newest" } else { "" }),
+        label(if d.finished.is_none() {
+            "  · list paused while inspecting"
+        } else {
+            ""
+        }),
+    ]);
+    section(
+        f,
+        title,
+        &format!("request #{}", format::count(entry.seq)),
+        Some(position),
+    );
+
+    let [left, _, right] = Layout::horizontal([
+        Constraint::Length(46.min(body.width / 2)),
+        Constraint::Length(3),
+        Constraint::Min(0),
+    ])
+    .areas(body);
+    f.render_widget(
+        Paragraph::new(inspector_stats(d, entry, left.width as usize)),
+        left,
+    );
+    render_response(d, f, right, &entry.stat);
+}
+
+fn inspector_stats(d: &Dashboard, entry: &LogEntry, w: usize) -> Vec<Line<'static>> {
+    let stat = &entry.stat;
+    let m = &d.metrics;
+    let dash = || "—".to_string();
+    let mut lines = vec![heading("outcome")];
+
+    let (status, color) = match (stat.status_code, stat.error) {
+        (Some(code), _) => (
+            format!(
+                "{} {}",
+                code.as_u16(),
+                code.canonical_reason().unwrap_or("")
+            ),
+            status_color(code.as_u16()),
+        ),
+        (None, error) => (error.map_or("ERROR", |e| e.label()).to_string(), BAD),
+    };
+    lines.push(kv("status", status.trim_end().to_string(), color, w));
+    if let Some(message) = &stat.error_message {
+        lines.push(Line::from(Span::styled(
+            truncate(message, w),
+            Style::new().fg(BAD),
+        )));
+    }
+
+    lines.push(Line::raw(""));
+    lines.push(heading("timing"));
+    let rank = m.rank(stat.duration) * 100.0;
+    lines.push(kv("total", format::latency(stat.duration), Color::Reset, w));
+    lines.push(kv(
+        "  vs the run",
+        format!("slower than {rank:.0}%"),
+        match rank {
+            r if r >= 99.0 => BAD,
+            r if r >= 90.0 => WARN,
+            _ => LABEL,
+        },
+        w,
+    ));
+    match stat.ttfb {
+        Some(ttfb) => {
+            lines.push(kv("  first byte", format::latency(ttfb), Color::Reset, w));
+            lines.push(kv(
+                "  body",
+                format::latency(stat.duration.saturating_sub(ttfb)),
+                Color::Reset,
+                w,
+            ));
+        }
+        None => lines.push(kv("  first byte", dash(), LABEL, w)),
+    }
+    let started = entry.at.saturating_sub(stat.duration);
+    lines.push(kv("started", format::clock_ms(started), Color::Reset, w));
+    lines.push(kv("finished", format::clock_ms(entry.at), Color::Reset, w));
+    lines.push(kv(
+        "dns",
+        stat.dns_times.map_or_else(
+            || "not sampled".into(),
+            |(lookup, _)| format::latency(lookup),
+        ),
+        if stat.dns_times.is_some() {
+            Color::Reset
+        } else {
+            LABEL
+        },
+        w,
+    ));
+
+    lines.push(Line::raw(""));
+    lines.push(heading("response"));
+    let detail = stat.detail.as_deref();
+    let header = |name: &str| {
+        detail
+            .and_then(|d| d.headers.get(name))
+            .and_then(|v| v.to_str().ok())
+            .map(str::to_string)
+    };
+    lines.push(kv(
+        "size",
+        format::bytes(stat.body_bytes as f64),
+        Color::Reset,
+        w,
+    ));
+    lines.push(kv(
+        "type",
+        truncate(&header("content-type").unwrap_or_else(dash), w / 2),
+        Color::Reset,
+        w,
+    ));
+    lines.push(kv(
+        "encoding",
+        header("content-encoding").unwrap_or_else(dash),
+        Color::Reset,
+        w,
+    ));
+    lines.push(kv(
+        "cache",
+        stat.cache_status
+            .as_ref()
+            .map_or_else(dash, |c| format!("{c:?}").to_lowercase()),
+        Color::Reset,
+        w,
+    ));
+    if let Some(detail) = detail {
+        lines.push(kv(
+            "protocol",
+            format!("{:?}", detail.version),
+            Color::Reset,
+            w,
+        ));
+        lines.push(kv(
+            "server",
+            detail.remote_addr.map_or_else(dash, |a| a.to_string()),
+            Color::Reset,
+            w,
+        ));
+        if detail.final_url.trim_end_matches('/') != d.args.url.trim_end_matches('/') {
+            lines.push(kv("redirected", dash(), WARN, w));
+            lines.push(Line::raw(truncate(&detail.final_url, w)));
+        }
+    }
+
+    // The request is the same for every run; show what went on the wire
+    lines.push(Line::raw(""));
+    lines.push(heading("request sent"));
+    let args = &d.args;
+    lines.push(Line::from(vec![
+        value(format!("{} ", args.method), Color::Magenta),
+        Span::raw(truncate(&args.url, w.saturating_sub(args.method.len() + 1))),
+    ]));
+    // Host carries the port unless it's the scheme's default
+    let host = reqwest::Url::parse(&args.url)
+        .ok()
+        .and_then(|u| {
+            let host = u.host_str()?.to_string();
+            Some(match u.port() {
+                Some(port) => format!("{host}:{port}"),
+                None => host,
+            })
+        })
+        .unwrap_or_default();
+    let custom: Vec<(String, String)> = args
+        .headers
+        .iter()
+        .filter_map(|h| h.split_once(':'))
+        .map(|(name, value)| (name.trim().to_lowercase(), value.trim().to_string()))
+        .collect();
+    let mut sent = vec![
+        ("host".to_string(), host),
+        ("user-agent".to_string(), args.user_agent.clone()),
+    ];
+    // The client adds `accept: */*` unless one was given
+    if !custom.iter().any(|(name, _)| name == "accept") {
+        sent.push(("accept".to_string(), "*/*".to_string()));
+    }
+    sent.extend(custom);
+    for (name, v) in sent {
+        lines.push(Line::from(vec![
+            label(format!("{name}: ")),
+            Span::raw(truncate(&v, w.saturating_sub(name.len() + 2))),
+        ]));
+    }
+    match &args.body {
+        Some(body) => {
+            lines.push(Line::from(label(format!(
+                "body, {}:",
+                format::bytes(body.len() as f64)
+            ))));
+            lines.push(Line::raw(truncate(&body.replace('\n', " "), w)));
+        }
+        None => lines.push(Line::from(label("no body"))),
+    }
+    lines
+}
+
+/// Status line, headers and body, scrollable
+fn render_response(d: &Dashboard, f: &mut Frame, area: Rect, stat: &ResponseStats) {
+    let [title, text] = Layout::vertical([Constraint::Length(1), Constraint::Min(0)]).areas(area);
+    let Some(detail) = stat.detail.as_deref() else {
+        section(f, title, "response", None);
+        let why = if stat.status_code.is_none() {
+            "no response: the request failed before one arrived"
+        } else {
+            "not kept in full: above 1,000 requests a second pepe keeps an \
+             evenly spread sample of complete responses (marked ● in the \
+             list; failures sampled separately), dropping the oldest past \
+             32 MiB. Press [ or ] for the nearest newer or older one kept."
+        };
+        f.render_widget(
+            Paragraph::new(Line::from(label(why).italic())).wrap(Wrap { trim: true }),
+            text,
+        );
+        return;
+    };
+    let hint = if d.detail_scroll > 0 {
+        format!("line {} · PgUp/PgDn", d.detail_scroll + 1)
+    } else {
+        "PgUp/PgDn to scroll".to_string()
+    };
+    section(f, title, "response", Some(Line::from(label(hint))));
+
+    let mut lines = Vec::new();
+    if let Some(code) = stat.status_code {
+        lines.push(Line::from(vec![
+            label(format!("{:?} ", detail.version)),
+            value(
+                format!(
+                    "{} {}",
+                    code.as_u16(),
+                    code.canonical_reason().unwrap_or("")
+                ),
+                status_color(code.as_u16()),
+            ),
+        ]));
+    }
+    for (name, v) in &detail.headers {
+        lines.push(Line::from(vec![
+            Span::styled(format!("{name}: "), Style::new().fg(ACCENT)),
+            Span::raw(String::from_utf8_lossy(v.as_bytes()).into_owned()),
+        ]));
+    }
+    lines.push(Line::raw(""));
+    lines.extend(body_lines(detail, stat.body_bytes));
+    f.render_widget(
+        Paragraph::new(lines)
+            .wrap(Wrap { trim: false })
+            .scroll((d.detail_scroll, 0)),
+        text,
+    );
+}
+
+/// The body as text: pretty-printed when it's JSON, a note when binary
+fn body_lines(detail: &crate::response::Detail, total: u64) -> Vec<Line<'static>> {
+    let body = &detail.body[..];
+    if body.is_empty() {
+        return vec![Line::from(label("(empty body)"))];
+    }
+    let mut lines = Vec::new();
+    let json = (!detail.truncated)
+        .then(|| serde_json::from_slice::<serde_json::Value>(body).ok())
+        .flatten()
+        .and_then(|v| serde_json::to_string_pretty(&v).ok());
+    let text = match (json, std::str::from_utf8(body)) {
+        (Some(pretty), _) => pretty,
+        (None, Ok(text)) => text.to_string(),
+        // Cut mid-character at the capture limit: fine; otherwise binary
+        (None, Err(e)) if e.error_len().is_none() => {
+            String::from_utf8_lossy(&body[..e.valid_up_to()]).into_owned()
+        }
+        (None, Err(_)) => {
+            return vec![Line::from(label(format!(
+                "binary body, {} (not shown)",
+                format::bytes(total as f64)
+            )))]
+        }
+    };
+    for line in text.lines() {
+        lines.push(Line::raw(line.replace('\t', "    ")));
+    }
+    if detail.truncated {
+        lines.push(Line::raw(""));
+        lines.push(Line::from(label(format!(
+            "… first {} of {} shown",
+            format::bytes(detail.body.len() as f64),
+            format::bytes(total as f64)
+        ))));
+    }
+    lines
+}
+
 fn request_row(e: &LogEntry) -> Row<'static> {
     let cache = e
         .stat
@@ -1913,7 +2250,10 @@ fn request_row(e: &LogEntry) -> Row<'static> {
         .as_ref()
         .map(|c| format!("{c:?}").to_lowercase())
         .unwrap_or_default();
+    // ● marks requests whose full response was kept for the inspector
+    let full = if e.stat.detail.is_some() { "●" } else { "" };
     Row::new(vec![
+        Line::from(Span::styled(full, Style::new().fg(ACCENT))),
         Line::from(label(format::count(e.seq))),
         Line::from(label(format::clock(e.at))),
         Line::from(status_span(&e.stat)),
@@ -1953,6 +2293,52 @@ mod tests {
     }
 
     #[test]
+    fn inspector_says_the_list_is_paused_while_live() {
+        let args = Cli::parse_from(["pepe", "-c", "4", "http://example.com/"]);
+        let mut d = Dashboard::new(args, Plan::Count(100));
+        record_some(&mut d, 5);
+        d.tab = Tab::Requests;
+        d.inspecting = true;
+        let mut terminal = Terminal::new(TestBackend::new(170, 40)).unwrap();
+        terminal.draw(|f| render(&d, f)).unwrap();
+        let screen: String = terminal
+            .backend()
+            .buffer()
+            .content()
+            .iter()
+            .map(|c| c.symbol())
+            .collect();
+        assert!(screen.contains("list paused while inspecting"));
+        assert!(screen.contains("REQUEST #5"));
+        assert!(screen.contains("first byte"));
+    }
+
+    #[test]
+    fn json_bodies_are_pretty_printed() {
+        let detail = crate::response::Detail {
+            version: reqwest::Version::HTTP_11,
+            headers: Default::default(),
+            body: bytes::Bytes::from_static(b"{\"a\":[1,2]}"),
+            truncated: false,
+            remote_addr: None,
+            final_url: String::new(),
+        };
+        let text: Vec<String> = body_lines(&detail, 11)
+            .iter()
+            .map(|l| l.to_string())
+            .collect();
+        assert_eq!(text, ["{", "  \"a\": [", "    1,", "    2", "  ]", "}"]);
+
+        let binary = crate::response::Detail {
+            body: bytes::Bytes::from_static(&[0xff, 0xfe, 0x00, 0x41]),
+            ..detail
+        };
+        assert!(body_lines(&binary, 4)[0]
+            .to_string()
+            .starts_with("binary body"));
+    }
+
+    #[test]
     fn truncates_with_ellipsis() {
         assert_eq!(truncate("https://example.com", 50), "https://example.com");
         assert_eq!(truncate("abcdef", 4), "abc…");
@@ -1965,6 +2351,20 @@ mod tests {
                 status_code: StatusCode::from_u16(if i % 7 == 0 { 503 } else { 200 }).ok(),
                 body_bytes: 2048,
                 preview: Some(bytes::Bytes::from_static(b"{\"ok\":true}")),
+                ttfb: Some(Duration::from_micros(150 + i * 900)),
+                // Every other request captured in full, as the budget would
+                detail: (i % 2 == 0).then(|| {
+                    let mut headers = reqwest::header::HeaderMap::new();
+                    headers.insert("content-type", "application/json".parse().unwrap());
+                    std::sync::Arc::new(crate::response::Detail {
+                        version: reqwest::Version::HTTP_11,
+                        headers,
+                        body: bytes::Bytes::from_static(b"{\"ok\":true,\"items\":[1,2,3]}"),
+                        truncated: i % 4 == 0,
+                        remote_addr: "127.0.0.1:8000".parse().ok(),
+                        final_url: "http://example.com/next".into(),
+                    })
+                }),
                 ..Default::default()
             });
         }
@@ -2011,6 +2411,16 @@ mod tests {
                         terminal.draw(|f| render(&d, f)).unwrap();
                     }
                 }
+                // The inspector, on a captured request and on one that isn't
+                d.tab = Tab::Requests;
+                d.inspecting = true;
+                for (selected, scroll) in [(0, 0), (1, 5), (2, 500)] {
+                    d.scroll = selected;
+                    d.detail_scroll = scroll;
+                    terminal.draw(|f| render(&d, f)).unwrap();
+                }
+                d.inspecting = false;
+                d.scroll = 0;
             }
         }
     }

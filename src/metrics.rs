@@ -76,6 +76,11 @@ impl Metrics {
         Duration::from_micros(self.latency.max)
     }
 
+    /// Share of requests (0-1) that were faster than `d`
+    pub fn rank(&self, d: Duration) -> f64 {
+        self.latency.fraction_below(d.as_micros() as u64)
+    }
+
     pub fn latency(&self) -> &Histogram {
         &self.latency
     }
@@ -201,6 +206,15 @@ impl Histogram {
         self.count
     }
 
+    /// Share of recorded values (0-1) in buckets below `value`'s bucket
+    pub fn fraction_below(&self, value: u64) -> f64 {
+        if self.count == 0 {
+            return 0.0;
+        }
+        let bucket = Self::index(value).min(self.counts.len());
+        self.counts[..bucket].iter().sum::<u64>() as f64 / self.count as f64
+    }
+
     /// Non-empty buckets as (representative value, count), smallest first
     pub fn buckets(&self) -> impl Iterator<Item = (u64, u64)> + '_ {
         self.counts
@@ -279,6 +293,18 @@ mod tests {
         h.record(7);
         assert_eq!(h.percentile(50.0), 7);
         assert_eq!(h.buckets().collect::<Vec<_>>(), vec![(7, 1)]);
+    }
+
+    #[test]
+    fn rank_is_the_share_of_faster_requests() {
+        let mut m = Metrics::default();
+        for ms in 1..=100 {
+            m.record(&stat(ms, Some(200), None));
+        }
+        let rank = m.rank(Duration::from_millis(90));
+        assert!((0.88..=0.90).contains(&rank), "rank={rank}");
+        assert_eq!(m.rank(Duration::ZERO), 0.0);
+        assert_eq!(Metrics::default().rank(Duration::from_millis(5)), 0.0);
     }
 
     #[test]

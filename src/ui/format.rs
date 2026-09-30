@@ -83,6 +83,16 @@ pub fn clock(d: Duration) -> String {
     }
 }
 
+/// Elapsed time to the millisecond, for single requests: 07.312s, 02:07.312
+pub fn clock_ms(d: Duration) -> String {
+    let secs = d.as_secs();
+    let ms = d.subsec_millis();
+    match secs {
+        0..=59 => format!("{secs:02}.{ms:03}s"),
+        _ => format!("{:02}:{:02}.{ms:03}", secs / 60, secs % 60),
+    }
+}
+
 /// Whole seconds for run lengths: 45s, 3m, 2m30s, 1h5m
 pub fn span(d: Duration) -> String {
     let secs = d.as_secs();
@@ -144,6 +154,8 @@ mod tests {
         assert_eq!(clock(Duration::from_millis(7_300)), "07.3s");
         assert_eq!(clock(Duration::from_millis(127_300)), "02:07.3");
         assert_eq!(clock(Duration::from_secs(3_727)), "1:02:07");
+        assert_eq!(clock_ms(Duration::from_millis(7_312)), "07.312s");
+        assert_eq!(clock_ms(Duration::from_millis(127_005)), "02:07.005");
         assert_eq!(span(Duration::from_secs(45)), "45s");
         assert_eq!(span(Duration::from_secs(180)), "3m");
         assert_eq!(span(Duration::from_secs(150)), "2m30s");
