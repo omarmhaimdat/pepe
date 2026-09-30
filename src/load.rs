@@ -395,6 +395,7 @@ mod tests {
 
     fn request(url: &str, method: &str, body: Option<&str>) -> Request {
         let settings = RequestSettings {
+            insecure: false,
             timeout: 5,
             disable_compression: false,
             disable_keepalive: true,
@@ -405,7 +406,7 @@ mod tests {
         Request::new(
             url.into(),
             method.into(),
-            body.map(Into::into),
+            body.map(|b| b.as_bytes().to_vec()),
             &[],
             settings,
         )

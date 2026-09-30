@@ -1,6 +1,7 @@
 use clap::{ArgAction::HelpLong, Error, Parser, Subcommand};
 use reqwest::Proxy;
 
+use crate::curl;
 use crate::request::{parse_header, Request, RequestSettings};
 use crate::utils::{default_user_agent, num_of_cores, version};
 use crate::PepeError;
@@ -32,7 +33,8 @@ pub struct Cli {
     #[arg(short = 'z', long)]
     pub duration: Option<String>,
 
-    /// Curl mode to parse curl command, e.g. pepe --curl -- 'curl -X POST http://localhost:8080'
+    /// Load-test a curl command: pepe --curl -- curl -X POST http://localhost:8080,
+    /// or pass it as one quoted string, as @file, or on stdin
     #[arg(long)]
     pub curl: bool,
 
@@ -60,6 +62,10 @@ pub struct Cli {
     #[arg(short, long)]
     pub proxy: Option<String>,
 
+    /// Accept invalid TLS certificates (self-signed, expired, wrong host)
+    #[arg(short = 'k', long)]
+    pub insecure: bool,
+
     /// Disable HTTP compression, e.g. gzip
     #[arg(long)]
     pub disable_compression: bool,
@@ -83,6 +89,10 @@ pub struct Cli {
     /// List of arguments to pass to curl command
     #[arg(last = true, default_value = "")]
     pub args: Vec<String>,
+
+    /// Request body as bytes, when it can't be text (from --curl)
+    #[arg(skip)]
+    pub body_bytes: Option<Vec<u8>>,
 }
 
 #[derive(Subcommand, Debug, Clone)]
@@ -123,41 +133,18 @@ impl Cli {
         }
 
         if self.curl {
-            // Print the curl command
-            let curl_command = self
-                .args
-                .iter()
-                .map(|arg| {
-                    if arg.contains(' ') || arg.contains('{') {
-                        format!("'{}'", arg)
-                    } else {
-                        arg.clone()
-                    }
-                })
-                .collect::<Vec<_>>()
-                .join(" ");
+            let request = curl_request(&self.args).map_err(|e| {
+                Error::raw(
+                    clap::error::ErrorKind::ValueValidation,
+                    format!("Invalid curl command: {e}"),
+                )
+            })?;
             // stderr, so `--json` output on stdout stays valid JSON
-            eprintln!("Curl command: {}", curl_command);
-            let parsed_request = curl_parser::ParsedRequest::load(&curl_command, Some(()));
-            if parsed_request.is_err() {
-                eprintln!("Error: {}", parsed_request.err().unwrap());
-                std::process::exit(1);
+            eprintln!("curl: {} {}", request.method, request.url);
+            for note in &request.notes {
+                eprintln!("  note: {note}");
             }
-            self.method = parsed_request.as_ref().unwrap().method.clone().to_string();
-            self.url = parsed_request.as_ref().unwrap().url.clone().to_string();
-            self.headers = parsed_request
-                .as_ref()
-                .unwrap()
-                .headers
-                .clone()
-                .iter()
-                .map(|(k, v)| format!("{}: {}", k, String::from_utf8_lossy(v.as_bytes())))
-                .collect();
-            let body = parsed_request.as_ref().unwrap().body.join(" ");
-            if !body.is_empty() {
-                eprintln!("Body: {}", body);
-                self.body = Some(body);
-            }
+            self.apply_curl(request);
         }
 
         for header in &self.headers {
@@ -238,8 +225,38 @@ impl Cli {
         Ok(milliseconds)
     }
 
+    /// Take the request a curl command describes. Like curl, redirects are
+    /// only followed with -L.
+    fn apply_curl(&mut self, request: curl::CurlRequest) {
+        self.method = request.method;
+        self.url = request.url;
+        self.headers = request.headers;
+        self.body = None;
+        self.body_bytes = request.body;
+        if let Some(user_agent) = request.user_agent {
+            self.user_agent = user_agent;
+        }
+        if request.proxy.is_some() {
+            self.proxy = request.proxy;
+        }
+        if let Some(timeout) = request.timeout_secs {
+            self.timeout = timeout;
+        }
+        self.insecure |= request.insecure;
+        self.disable_keepalive |= request.no_keepalive;
+        self.disable_redirects = !request.follow_redirects;
+    }
+
+    /// The request body, from -d or a curl command
+    pub fn body(&self) -> Option<Vec<u8>> {
+        self.body_bytes
+            .clone()
+            .or_else(|| self.body.as_ref().map(|b| b.clone().into_bytes()))
+    }
+
     pub fn settings(&self) -> RequestSettings {
         RequestSettings {
+            insecure: self.insecure,
             user_agent: self.user_agent.clone(),
             timeout: self.timeout,
             proxy: self.proxy.clone(),
@@ -261,10 +278,42 @@ impl Cli {
         Request::new(
             self.url.clone(),
             self.method.clone(),
-            self.body.clone(),
+            self.body(),
             &self.headers,
             self.settings(),
         )
+    }
+}
+
+/// The curl command to parse: the words after `--`, a single quoted
+/// string, `@file`, or the command piped on stdin
+fn curl_request(args: &[String]) -> Result<curl::CurlRequest, String> {
+    // No words after `--` leaves clap's default of one empty string
+    let args = if args == [""] { &[][..] } else { args };
+    match args {
+        [] => {
+            use std::io::{IsTerminal, Read};
+            if std::io::stdin().is_terminal() {
+                return Err(
+                    "give the command after --, as @file, or pipe it in: pbpaste | pepe --curl"
+                        .into(),
+                );
+            }
+            let mut command = String::new();
+            std::io::stdin()
+                .read_to_string(&mut command)
+                .map_err(|e| format!("can't read stdin: {e}"))?;
+            curl::parse_command(&command)
+        }
+        [one] if one.starts_with('@') => {
+            let path = &one[1..];
+            let command =
+                std::fs::read_to_string(path).map_err(|e| format!("can't read {path}: {e}"))?;
+            curl::parse_command(&command)
+        }
+        // The whole command quoted as one argument
+        [one] if one.contains(char::is_whitespace) => curl::parse_command(one),
+        words => curl::parse_words(words),
     }
 }
 
@@ -300,5 +349,182 @@ mod tests {
         let mut cli = Cli::parse_from(["pepe", "-z", "5s", "-n", "1", "-c", "8", "http://x"]);
         assert!(cli.validate().is_ok());
         assert_eq!(cli.run_duration(), Some(std::time::Duration::from_secs(5)));
+    }
+
+    /// Accept one request and return exactly what arrived on the wire
+    async fn capture(listener: tokio::net::TcpListener) -> Vec<u8> {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        let (mut sock, _) = listener.accept().await.unwrap();
+        let mut raw = Vec::new();
+        let mut buf = [0u8; 8192];
+        loop {
+            let n = sock.read(&mut buf).await.unwrap();
+            raw.extend_from_slice(&buf[..n]);
+            let Some(end) = raw.windows(4).position(|w| w == b"\r\n\r\n") else {
+                continue;
+            };
+            let head = String::from_utf8_lossy(&raw[..end]).to_lowercase();
+            let length = head
+                .lines()
+                .find_map(|l| l.strip_prefix("content-length: "))
+                .map_or(0, |v| v.trim().parse().unwrap());
+            if raw.len() >= end + 4 + length {
+                break;
+            }
+        }
+        let _ = sock
+            .write_all(b"HTTP/1.1 200 OK\r\ncontent-length: 0\r\nconnection: close\r\n\r\n")
+            .await;
+        raw
+    }
+
+    /// Run a curl command through pepe once and return what the server got
+    async fn sent_by_curl(command: impl Fn(&str) -> Vec<String>) -> String {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap().to_string();
+        let server = tokio::spawn(capture(listener));
+        let mut argv = vec![
+            "pepe".to_string(),
+            "-n".into(),
+            "1".into(),
+            "-c".into(),
+            "1".into(),
+            "--curl".into(),
+            "--".into(),
+        ];
+        argv.extend(command(&addr));
+        let mut cli = Cli::parse_from(argv);
+        cli.validate().unwrap();
+        let request = cli.request().unwrap();
+        let client = request.build_client().unwrap();
+        let mut load = crate::load::start(client, request, 1, crate::load::Plan::Count(1), false);
+        while load.rx.recv().await.is_some() {}
+        String::from_utf8_lossy(&server.await.unwrap()).into_owned()
+    }
+
+    #[tokio::test]
+    async fn curl_words_after_double_dash_reach_the_server() {
+        let raw = sent_by_curl(|addr| {
+            [
+                "curl",
+                "-X",
+                "PATCH",
+                &format!("{addr}/items/7?x=1"),
+                "-H",
+                "Content-Type: application/json",
+                "-H",
+                "User-Agent: my-agent/1.0",
+                "-u",
+                "ada:secret",
+                "--data-raw",
+                r#"{"name":"it's \"quoted\" $HOME"}"#,
+            ]
+            .map(String::from)
+            .to_vec()
+        })
+        .await;
+        assert!(raw.starts_with("PATCH /items/7?x=1 HTTP/1.1\r\n"), "{raw}");
+        let lower = raw.to_lowercase();
+        assert!(
+            lower.contains("content-type: application/json\r\n"),
+            "{raw}"
+        );
+        assert!(
+            lower.contains("user-agent: my-agent/1.0\r\n"),
+            "-H wins over the default: {raw}"
+        );
+        assert!(!lower.contains("user-agent: pepe/"), "{raw}");
+        assert!(
+            lower.contains("authorization: basic ywrhonnly3jlda==\r\n"),
+            "{raw}"
+        );
+        assert!(
+            raw.ends_with(r#"{"name":"it's \"quoted\" $HOME"}"#),
+            "{raw}"
+        );
+    }
+
+    #[tokio::test]
+    async fn curl_as_one_string_with_a_binary_upload() {
+        let dir = std::env::temp_dir().join(format!("pepe-cli-curl-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let file = dir.join("blob.bin");
+        std::fs::write(&file, [0u8, 0xff, 0xfe, b'\n', 7]).unwrap();
+        let file = file.display().to_string();
+        let raw = sent_by_curl(|addr| {
+            vec![format!(
+                "curl -sS {addr}/upload \\\n  -F 'meta={{\"a\":1}};type=application/json' \\\n  -F 'file=@{file}'"
+            )]
+        })
+        .await;
+        std::fs::remove_dir_all(dir).ok();
+        assert!(raw.starts_with("POST /upload HTTP/1.1\r\n"), "{raw}");
+        assert!(
+            raw.to_lowercase()
+                .contains("content-type: multipart/form-data; boundary="),
+            "{raw}"
+        );
+        assert!(
+            raw.contains("name=\"meta\"\r\nContent-Type: application/json\r\n\r\n{\"a\":1}\r\n"),
+            "{raw}"
+        );
+        assert!(
+            raw.contains("filename=\"blob.bin\"\r\nContent-Type: application/octet-stream"),
+            "{raw}"
+        );
+    }
+
+    #[test]
+    fn curl_settings_carry_over() {
+        let mut cli = Cli::parse_from([
+            "pepe",
+            "-n",
+            "1",
+            "-c",
+            "1",
+            "--curl",
+            "--",
+            "curl",
+            "-k",
+            "-m",
+            "7",
+            "-x",
+            "proxy:8080",
+            "--no-keepalive",
+            "https://x.io",
+        ]);
+        cli.validate().unwrap();
+        assert!(cli.insecure && cli.disable_keepalive);
+        assert_eq!(cli.timeout, 7);
+        assert_eq!(cli.proxy.as_deref(), Some("http://proxy:8080"));
+        assert!(
+            cli.disable_redirects,
+            "curl doesn't follow redirects without -L"
+        );
+
+        let mut cli = Cli::parse_from([
+            "pepe", "-n", "1", "-c", "1", "--curl", "--", "curl", "-L", "x.io",
+        ]);
+        cli.validate().unwrap();
+        assert!(!cli.disable_redirects);
+        assert_eq!(cli.url, "http://x.io");
+    }
+
+    #[test]
+    fn bad_curl_commands_are_rejected_with_the_reason() {
+        let mut cli = Cli::parse_from([
+            "pepe",
+            "-n",
+            "1",
+            "-c",
+            "1",
+            "--curl",
+            "--",
+            "curl",
+            "--nope",
+            "https://x.io",
+        ]);
+        let err = cli.validate().unwrap_err().to_string();
+        assert!(err.contains("unknown curl option --nope"), "{err}");
     }
 }

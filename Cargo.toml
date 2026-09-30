@@ -27,7 +27,6 @@ bytes = "1"
 ratatui = "0.29.0"
 # event-stream: read keys asynchronously instead of blocking a runtime thread
 crossterm = { version = "0.28.1", features = ["event-stream"] }
-curl-parser = { git = "https://github.com/omarmhaimdat/curl-parser", rev = "415558b02aa5ce98fcbfb80841c5ff35562e762d", version = "0.5.5" }
 gethostname = "1.0.0"
 serde = { version = "1.0.130", features = ["derive"] }
 # preserve_order: the request inspector shows JSON keys in the order sent
