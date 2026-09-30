@@ -1,33 +1,36 @@
-//! Pepe the chili pepper, drawn as pixel art with half blocks. Its face and
-//! the effects around it follow how the run is going.
+//! Pepe the chili pepper: a small pixel-art sprite drawn with half blocks
+//! (two pixels per cell). Its face and the effects next to it follow how the
+//! run is going.
 
 use ratatui::{
     style::{Color, Style},
     text::{Line, Span},
 };
 
-/// Art is 14×12 pixels, drawn two pixels per cell; effects use 4 more columns
-const ART_WIDTH: usize = 14;
+/// Sprite is 16×14 pixels, so 16×7 cells; effects use 4 more columns
+const SPRITE_WIDTH: usize = 16;
 const EFFECTS_WIDTH: usize = 4;
-pub const WIDTH: u16 = (ART_WIDTH + EFFECTS_WIDTH) as u16;
-/// Rows of art (six) plus one for the speech line
+pub const WIDTH: u16 = (SPRITE_WIDTH + EFFECTS_WIDTH) as u16;
+/// Seven rows of sprite; the header adds the speech line under it
 pub const HEIGHT: u16 = 7;
 
-/// g stem, G calyx, r body, R shade, h highlight; E eyes and M mouth are
-/// filled in per mood
-const ART: [&str; 12] = [
-    "...........gg.",
-    "..........g...",
-    "........GGGG..",
-    "......rrrrrrR.",
-    ".....rhhrrrrR.",
-    "....rEErrEErR.",
-    "...rrrrrrrrR..",
-    "..rrrMMMMrrR..",
-    "..rrrMMMMrR...",
-    "..rrrrrrRR....",
-    "...rrrRR......",
-    "....rR........",
+/// K outline, R body, r shade, H highlight, G leaf, g leaf shade. The face is
+/// painted over the body by `face_pixel`.
+const SPRITE: [&str; 14] = [
+    "..........gg....",
+    ".........gg.....",
+    ".....KgGGGGgK...",
+    "....KRgGGGGgRK..",
+    "...KRHRRRRRRRRK.",
+    "...KRRRRRRRRRRrK",
+    "..KRRRRRRRRRRRrK",
+    "..KRRRRRRRRRRRrK",
+    "..KRRRRRRRRRRrK.",
+    "...KRRRRRRRRrK..",
+    "...KRRRRRRRrK...",
+    "..KRRRRRRrrK....",
+    ".KRRRrrrKK......",
+    "KrrKKK..........",
 ];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -53,25 +56,27 @@ impl Mood {
     pub fn says(self) -> &'static str {
         match self {
             Mood::Waiting => "warming up…",
-            Mood::Happy => "all green!",
+            Mood::Happy => "all good",
             Mood::Sweating => "feeling the heat",
             Mood::OnFire => "it's on fire!",
-            Mood::Sleeping => "zzz… paused",
-            Mood::Proud => "nailed it!",
-            Mood::Worried => "that was rough",
+            Mood::Sleeping => "paused",
+            Mood::Proud => "nailed it",
+            Mood::Worried => "have a look",
             Mood::Dizzy => "stopped",
         }
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 enum Eyes {
     Open,
-    Wide,
+    /// Happy squint: ^ ^
+    Smiling,
     Closed,
+    Wide,
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 enum Mouth {
     Smile,
     Flat,
@@ -87,77 +92,111 @@ fn face(mood: Mood, blink: bool) -> (Eyes, Mouth) {
         Mood::Sweating => (Eyes::Wide, Mouth::Flat),
         Mood::OnFire => (Eyes::Wide, Mouth::Open),
         Mood::Sleeping => (Eyes::Closed, Mouth::Flat),
-        Mood::Proud => (Eyes::Closed, Mouth::Smile),
+        Mood::Proud => (Eyes::Smiling, Mouth::Smile),
         Mood::Worried => (Eyes::Open, Mouth::Frown),
         Mood::Dizzy => (Eyes::Wide, Mouth::Open),
     }
 }
 
-/// Color of the pixel at (x, y), or None where the art is transparent
+/// What the face paints at (x, y), if anything
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum Paint {
+    White,
+    Pupil,
+    Dark,
+    Blush,
+}
+
+/// Left edge of each eye; eyes are 2×2 at rows 5-6
+const EYES_X: [usize; 2] = [5, 10];
+
+fn face_pixel(eyes: Eyes, mouth: Mouth, blush: bool, x: usize, y: usize) -> Option<Paint> {
+    for ex in EYES_X {
+        let (dx, dy) = (x as isize - ex as isize, y as isize - 5);
+        let paint = match (eyes, dx, dy) {
+            (Eyes::Open, 0..=1, 0) | (Eyes::Open, 0, 1) => Some(Paint::White),
+            (Eyes::Open, 1, 1) => Some(Paint::Pupil),
+            (Eyes::Wide, 0..=1, 0..=1) => Some(Paint::White),
+            (Eyes::Closed, 0..=1, 1) => Some(Paint::Dark),
+            (Eyes::Smiling, 0 | 2, 1) | (Eyes::Smiling, 1, 0) => Some(Paint::Dark),
+            _ => None,
+        };
+        if paint.is_some() {
+            return paint;
+        }
+    }
+    if blush && y == 7 && (x == 4 || x == 12) {
+        return Some(Paint::Blush);
+    }
+    // Mouth: a 4×2 area at x 7-10, rows 8-9
+    let (mx, my) = (x as isize - 7, y as isize - 8);
+    if !(0..=3).contains(&mx) || !(0..=1).contains(&my) {
+        return None;
+    }
+    let corner = mx == 0 || mx == 3;
+    let dark = match mouth {
+        Mouth::Smile => (my == 0) == corner,
+        Mouth::Frown => (my == 1) == corner,
+        Mouth::Flat => my == 1,
+        Mouth::Open => !corner,
+    };
+    dark.then_some(Paint::Dark)
+}
+
 fn pixel(mood: Mood, eyes: Eyes, mouth: Mouth, x: usize, y: usize) -> Option<Color> {
     let asleep = mood == Mood::Sleeping;
-    let body = Color::Indexed(if asleep { 131 } else { 160 });
-    let shade = Color::Indexed(if asleep { 88 } else { 124 });
-    let dark = Color::Indexed(if asleep { 52 } else { 16 });
-    match ART[y].as_bytes()[x] {
-        b'g' => Some(Color::Indexed(70)),
-        b'G' => Some(Color::Indexed(28)),
-        b'r' => Some(body),
-        b'R' => Some(shade),
-        b'h' => Some(Color::Indexed(if asleep { 174 } else { 210 })),
-        // Each eye is two pixels: white, then pupil
-        b'E' => Some(match eyes {
-            Eyes::Closed => dark,
-            Eyes::Wide => Color::Indexed(231),
-            Eyes::Open if matches!(x, 5 | 9) => Color::Indexed(231),
-            Eyes::Open => Color::Indexed(16),
-        }),
-        // Mouth: a 4×2 area; each shape darkens some of it
-        b'M' => {
-            let (mx, my) = (x.saturating_sub(5), y - 7);
-            let dark_here = match mouth {
-                // ◡: corners on top, middle below
-                Mouth::Smile => (my == 0) == (mx == 0 || mx == 3),
-                Mouth::Flat => my == 0,
-                Mouth::Open => (1..=2).contains(&mx),
-                // ◠: middle on top, corners below
-                Mouth::Frown => (my == 0) == (1..=2).contains(&mx),
+    let blush = matches!(mood, Mood::Happy | Mood::Proud);
+    let c = |awake: u8, sleeping: u8| Some(Color::Indexed(if asleep { sleeping } else { awake }));
+    let base = SPRITE[y].as_bytes()[x];
+    if base == b'R' {
+        if let Some(paint) = face_pixel(eyes, mouth, blush, x, y) {
+            return match paint {
+                Paint::White => c(231, 250),
+                Paint::Pupil | Paint::Dark => c(16, 16),
+                Paint::Blush => c(211, 174),
             };
-            Some(if dark_here { dark } else { body })
         }
+    }
+    match base {
+        b'K' => c(52, 236),
+        b'R' => c(196, 131),
+        b'r' => c(160, 95),
+        b'H' => c(217, 181),
+        b'G' => c(76, 65),
+        b'g' => c(28, 22),
         _ => None,
     }
 }
 
-/// The mascot: six rows of art with effects to the right. `frame` drives the
+/// The mascot, `HEIGHT` lines of at most `WIDTH` cells. `frame` drives the
 /// animation.
 pub fn lines(mood: Mood, frame: u64) -> Vec<Line<'static>> {
-    // Blink for one frame every four seconds while awake and happy
+    // Blink for one frame every four seconds while awake
     let blink = matches!(mood, Mood::Happy | Mood::Waiting) && frame % 40 == 39;
     let (eyes, mouth) = face(mood, blink);
     let tick = (frame / 3) % 2 == 0;
 
     let effect = |row: usize| -> (&'static str, Color) {
-        let flame = Color::Indexed(if tick { 214 } else { 202 });
-        let sweat = Color::Indexed(117);
-        let sparkle = Color::Indexed(228);
+        let spark = Color::Indexed(186);
+        let cool = Color::Indexed(117);
+        let hot = Color::Indexed(if tick { 215 } else { 209 });
         match (mood, row) {
-            (Mood::OnFire, 0) => (if tick { " ) (" } else { "( ) " }, flame),
-            (Mood::OnFire, 1) => (if tick { "(  )" } else { " )( " }, flame),
-            (Mood::Sweating | Mood::Worried, 2) if tick => ("  '", sweat),
-            (Mood::Sweating | Mood::Worried, 3) if !tick => ("  '", sweat),
-            (Mood::Sleeping, 0) => (if tick { "  z" } else { "   Z" }, sweat),
-            (Mood::Sleeping, 1) => (if tick { " z" } else { "  z" }, sweat),
-            (Mood::Proud, 0) => (" *", sparkle),
-            (Mood::Proud, 2) => ("  +", sparkle),
-            (Mood::Dizzy, 1) => (if tick { " @" } else { " ~" }, sparkle),
+            (Mood::OnFire, 0) => (if tick { " ,'" } else { " ', " }, hot),
+            (Mood::OnFire, 1) => (if tick { " (" } else { "  )" }, hot),
+            (Mood::Sweating | Mood::Worried, 2) if tick => ("  ,", cool),
+            (Mood::Sweating | Mood::Worried, 3) if !tick => ("  '", cool),
+            (Mood::Sleeping, 0) => (if tick { "  z" } else { "   z" }, cool),
+            (Mood::Sleeping, 1) => (if tick { " z" } else { "  z" }, cool),
+            (Mood::Proud, 1) => ("  ✦", spark),
+            (Mood::Proud, 3) => (" ·", spark),
+            (Mood::Dizzy, 1) => (if tick { " @" } else { " ~" }, spark),
             _ => ("", Color::Reset),
         }
     };
 
-    let mut out: Vec<Line> = (0..ART.len() / 2)
+    (0..SPRITE.len() / 2)
         .map(|row| {
-            let mut spans: Vec<Span> = (0..ART_WIDTH)
+            let mut spans: Vec<Span> = (0..SPRITE_WIDTH)
                 .map(|x| {
                     let top = pixel(mood, eyes, mouth, x, row * 2);
                     let bottom = pixel(mood, eyes, mouth, x, row * 2 + 1);
@@ -173,9 +212,7 @@ pub fn lines(mood: Mood, frame: u64) -> Vec<Line<'static>> {
             spans.push(Span::styled(text, Style::new().fg(color)));
             Line::from(spans)
         })
-        .collect();
-    out.push(Line::raw(""));
-    out
+        .collect()
 }
 
 #[cfg(test)]
@@ -194,9 +231,9 @@ mod tests {
     ];
 
     #[test]
-    fn art_is_rectangular() {
-        assert!(ART.iter().all(|row| row.len() == ART_WIDTH));
-        assert_eq!(ART.len() % 2, 0);
+    fn sprite_is_rectangular_and_fits() {
+        assert!(SPRITE.iter().all(|row| row.len() == SPRITE_WIDTH));
+        assert_eq!(SPRITE.len(), HEIGHT as usize * 2);
     }
 
     #[test]
@@ -214,15 +251,31 @@ mod tests {
     }
 
     #[test]
-    fn faces_differ_by_mood() {
+    fn face_is_painted_on_the_body() {
+        // Every pixel the face touches must be body, or it would be lost
+        for mood in MOODS {
+            let (eyes, mouth) = face(mood, false);
+            for (y, row) in SPRITE.iter().enumerate() {
+                for x in 0..SPRITE_WIDTH {
+                    if face_pixel(eyes, mouth, true, x, y).is_some() {
+                        assert_eq!(row.as_bytes()[x], b'R', "{mood:?} at {x},{y}");
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn moods_have_different_faces() {
         let face_of = |mood| {
             let (eyes, mouth) = face(mood, false);
-            (5..=10)
-                .flat_map(|x| (5..=8).map(move |y| (x, y)))
+            (0..SPRITE.len())
+                .flat_map(|y| (0..SPRITE_WIDTH).map(move |x| (x, y)))
                 .map(|(x, y)| pixel(mood, eyes, mouth, x, y))
                 .collect::<Vec<_>>()
         };
         assert_ne!(face_of(Mood::Happy), face_of(Mood::Worried));
         assert_ne!(face_of(Mood::Happy), face_of(Mood::Proud));
+        assert_ne!(face_of(Mood::Proud), face_of(Mood::Sleeping));
     }
 }

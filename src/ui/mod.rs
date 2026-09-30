@@ -1,4 +1,5 @@
 mod bigtext;
+mod filter;
 pub mod format;
 mod mascot;
 mod view;
@@ -27,10 +28,10 @@ const FRAME: Duration = Duration::from_millis(100);
 /// high request rates, and costs almost nothing.
 const PUMP: Duration = Duration::from_millis(25);
 /// Requests kept for the request log
-const LOG_CAPACITY: usize = 500;
+const LOG_CAPACITY: usize = 2_000;
 /// Failed requests kept separately, so a burst of successes can't push them
-/// out of the errors-only view
-const ERROR_LOG_CAPACITY: usize = 200;
+/// out of a failures view
+const ERROR_LOG_CAPACITY: usize = 500;
 /// How long a notice (e.g. "concurrency 64 → 70") stays in the footer
 const NOTICE_TTL: Duration = Duration::from_secs(2);
 
@@ -104,8 +105,10 @@ pub struct Dashboard {
 
     tab: Tab,
     show_help: bool,
-    /// Request log shows failures only
-    errors_only: bool,
+    /// What the request log shows
+    filter: filter::Filter,
+    /// Latency the slow filter requires, refreshed as results arrive
+    slow_threshold_us: u64,
     /// Rows scrolled back from the newest entry; 0 follows live
     scroll: usize,
     notice: Option<(String, Instant)>,
@@ -130,7 +133,8 @@ impl Dashboard {
             frame: 0,
             tab: Tab::Live,
             show_help: false,
-            errors_only: false,
+            filter: filter::Filter::default(),
+            slow_threshold_us: 0,
             scroll: 0,
             notice: None,
         }
@@ -150,7 +154,7 @@ impl Dashboard {
         };
 
         // Keep a scrolled-back view anchored on the same rows
-        if self.scroll > 0 && (!self.errors_only || entry.is_error()) {
+        if self.scroll > 0 && self.filter.matches(&entry.stat, self.slow_threshold_us) {
             self.scroll += 1;
         }
         if entry.is_error() {
@@ -165,7 +169,6 @@ impl Dashboard {
             );
         }
         push_bounded(&mut self.log, entry, LOG_CAPACITY);
-        self.scroll = self.scroll.min(self.visible_log().len().saturating_sub(1));
     }
 
     /// Pull everything the load generator produced since the last frame
@@ -190,6 +193,10 @@ impl Dashboard {
         if self.finished.is_none() {
             self.timeline.advance(self.started.elapsed());
         }
+        self.refresh_slow_threshold();
+        if self.scroll > 0 {
+            self.scroll = self.scroll.min(self.visible_log().len().saturating_sub(1));
+        }
         self.sent = load.sent();
         self.concurrency = load.concurrency();
         self.paused = load.is_paused();
@@ -207,12 +214,57 @@ impl Dashboard {
         self.finished.is_none() || self.notice.is_some()
     }
 
-    fn visible_log(&self) -> &VecDeque<LogEntry> {
-        if self.errors_only {
-            &self.error_log
-        } else {
-            &self.log
+    fn refresh_slow_threshold(&mut self) {
+        self.slow_threshold_us = self
+            .filter
+            .slow
+            .quantile()
+            .map_or(0, |q| self.metrics.percentile(q).as_micros() as u64);
+    }
+
+    /// Log entries that pass the filter, newest first. Failures that already
+    /// left the main log are still found in the error log.
+    fn visible_log(&self) -> Vec<&LogEntry> {
+        let oldest = self.log.front().map_or(u64::MAX, |e| e.seq);
+        let older_failures = self.error_log.iter().rev().filter(|e| e.seq < oldest);
+        self.log
+            .iter()
+            .rev()
+            .chain(older_failures)
+            .filter(|e| self.filter.matches(&e.stat, self.slow_threshold_us))
+            .collect()
+    }
+
+    /// Entries kept in total, whatever the filter
+    fn kept(&self) -> usize {
+        let oldest = self.log.front().map_or(u64::MAX, |e| e.seq);
+        self.log.len() + self.error_log.iter().filter(|e| e.seq < oldest).count()
+    }
+
+    fn refilter(&mut self) {
+        self.scroll = 0;
+        self.tab = Tab::Requests;
+        self.refresh_slow_threshold();
+    }
+
+    /// Typing into the search box. Returns false for keys it doesn't handle.
+    fn edit_search(&mut self, key: KeyEvent) -> bool {
+        match key.code {
+            KeyCode::Char(c) if !key.modifiers.contains(KeyModifiers::CONTROL) => {
+                self.filter.query.push(c)
+            }
+            KeyCode::Backspace => {
+                self.filter.query.pop();
+            }
+            KeyCode::Enter => self.filter.editing = false,
+            KeyCode::Esc => {
+                self.filter.query.clear();
+                self.filter.editing = false;
+            }
+            _ => return false,
         }
+        self.scroll = 0;
+        true
     }
 
     fn notify(&mut self, message: String) {
@@ -274,12 +326,16 @@ impl Dashboard {
 
     fn handle_key(&mut self, key: KeyEvent, load: &LoadHandle) -> Option<Outcome> {
         let running = self.finished.is_none();
+        if key.code == KeyCode::Char('c') && key.modifiers.contains(KeyModifiers::CONTROL) {
+            return Some(Outcome::Quit);
+        }
+        if self.filter.editing && self.edit_search(key) {
+            return None;
+        }
         match key.code {
-            KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                return Some(Outcome::Quit)
-            }
             KeyCode::Esc | KeyCode::Char('?') if self.show_help => self.show_help = false,
             KeyCode::Char('?') => self.show_help = true,
+            KeyCode::Esc if self.filter.is_active() => self.filter.clear(),
             KeyCode::Char('q') | KeyCode::Esc => return Some(Outcome::Quit),
             KeyCode::Char('r') => return Some(Outcome::Restart),
             KeyCode::Char('s') | KeyCode::Char('i') if running => {
@@ -297,14 +353,32 @@ impl Dashboard {
             KeyCode::Char('+') | KeyCode::Char('=') if running => self.adjust_concurrency(load, 1),
             KeyCode::Char('-') | KeyCode::Char('_') if running => self.adjust_concurrency(load, -1),
 
-            KeyCode::Tab | KeyCode::Right | KeyCode::Char('l') => self.tab = self.tab.cycle(1),
-            KeyCode::BackTab | KeyCode::Left | KeyCode::Char('h') => self.tab = self.tab.cycle(-1),
+            KeyCode::Tab | KeyCode::Right => self.tab = self.tab.cycle(1),
+            KeyCode::BackTab | KeyCode::Left => self.tab = self.tab.cycle(-1),
             KeyCode::Char(c @ '1'..='3') => self.tab = Tab::ALL[c as usize - '1' as usize],
 
+            KeyCode::Char('f') => {
+                self.filter.status = self.filter.status.next();
+                self.refilter();
+            }
             KeyCode::Char('e') => {
-                self.errors_only = !self.errors_only;
-                self.scroll = 0;
-                self.tab = Tab::Requests;
+                self.filter.status = match self.filter.status {
+                    filter::Status::Failed => filter::Status::All,
+                    _ => filter::Status::Failed,
+                };
+                self.refilter();
+            }
+            KeyCode::Char('l') => {
+                self.filter.slow = self.filter.slow.next();
+                self.refilter();
+            }
+            KeyCode::Char('/') => {
+                self.filter.editing = true;
+                self.refilter();
+            }
+            KeyCode::Char('c') => {
+                self.filter.clear();
+                self.refilter();
             }
             KeyCode::Up | KeyCode::Char('k') => self.scroll_by(1),
             KeyCode::Down | KeyCode::Char('j') => self.scroll_by(-1),
@@ -491,6 +565,40 @@ mod tests {
         assert_eq!(d.scroll, 0);
         d.scroll_by(isize::MAX / 2);
         assert_eq!(d.scroll, 20);
+    }
+
+    #[test]
+    fn filters_reach_failures_older_than_the_main_log() {
+        let mut d = dashboard();
+        d.record(stat(503));
+        for _ in 0..LOG_CAPACITY {
+            d.record(stat(200));
+        }
+        d.record(stat(404));
+        assert_eq!(d.kept(), LOG_CAPACITY + 1);
+
+        d.filter.status = filter::Status::Failed;
+        let seqs: Vec<u64> = d.visible_log().iter().map(|e| e.seq).collect();
+        assert_eq!(seqs, vec![LOG_CAPACITY as u64 + 2, 1], "newest first");
+
+        d.filter.status = filter::Status::ClientError;
+        assert_eq!(d.visible_log().len(), 1);
+        d.filter.clear();
+        d.filter.query = "503".into();
+        assert_eq!(d.visible_log().len(), 1);
+    }
+
+    #[test]
+    fn typing_in_search_does_not_trigger_shortcuts() {
+        let mut d = dashboard();
+        d.filter.editing = true;
+        for c in "quit".chars() {
+            assert!(d.edit_search(KeyEvent::from(KeyCode::Char(c))));
+        }
+        assert_eq!(d.filter.query, "quit");
+        d.edit_search(KeyEvent::from(KeyCode::Backspace));
+        d.edit_search(KeyEvent::from(KeyCode::Enter));
+        assert_eq!((d.filter.query.as_str(), d.filter.editing), ("qui", false));
     }
 
     #[test]

@@ -203,7 +203,7 @@ The dashboard has three views:
 
 - **Live**: the headline numbers, a latency heatmap (time across, latency up, brighter cells mean more requests took that long) with p50 and p99 marked, throughput per second, and a panel with the detailed numbers.
 - **Stats**: every number pepe collects, the test setup, and the latency distribution.
-- **Requests**: the most recent requests with a preview of each response.
+- **Requests**: the last 2,000 requests (and older failures) with a preview of each response, filterable by status, latency and text.
 
 Pepe, the chili in the corner, reacts to how the run is going. When a run ends, the header turns into a verdict (Healthy, Degraded or Failing) with findings such as failed requests, two separate latency groups, a long tail, or throughput and latency drifting over the run. The same summary is printed to your shell when you quit.
 
@@ -215,7 +215,10 @@ Pepe, the chili in the corner, reacts to how the run is going. When a run ends, 
 | `r` | Restart with the same settings (and the current concurrency) |
 | `tab` / `←` `→` / `1` `2` `3` | Switch view |
 | `↑` `↓` / `j` `k`, `PgUp` `PgDn`, `g` `G` | Scroll the request log |
-| `e` | Show only failed requests |
+| `f` | Filter requests by status: 2xx, 3xx, 4xx, 5xx, no response, failed |
+| `l` | Filter requests by latency: at or above p50, p90 or p99 |
+| `/` | Search the status and response text |
+| `e` / `c` | Show only failed requests / clear all filters |
 | `?` | Show all keys |
 | `q` / `esc` / `Ctrl-C` | Quit |
 

@@ -12,7 +12,7 @@ use ratatui::{
     Frame,
 };
 
-use super::{bigtext, format, mascot, progress_percent, Dashboard, LogEntry, Tab};
+use super::{bigtext, filter, format, mascot, progress_percent, Dashboard, LogEntry, Tab};
 use crate::insights::Level;
 use crate::load::Plan;
 use crate::response::ResponseStats;
@@ -23,8 +23,8 @@ use crate::utils::num_of_cores;
 // 256-color indexes are stable across themes; the semantic colors use the
 // terminal's own green/yellow/red so they match the user's theme.
 
-/// Brand: chili orange
-const ACCENT: Color = Color::Indexed(209);
+/// Brand: soft teal
+const ACCENT: Color = Color::Indexed(80);
 /// Labels: readable, but quieter than values
 const LABEL: Color = Color::Indexed(246);
 /// Rules and axes
@@ -32,19 +32,22 @@ const RULE: Color = Color::Indexed(239);
 const GOOD: Color = Color::Green;
 const WARN: Color = Color::Yellow;
 const BAD: Color = Color::Red;
-/// Heatmap ramp, few requests → many: embers to flame
-const HEAT: [Color; 10] = [
-    Color::Indexed(52),
-    Color::Indexed(88),
-    Color::Indexed(124),
-    Color::Indexed(160),
-    Color::Indexed(196),
-    Color::Indexed(202),
-    Color::Indexed(208),
-    Color::Indexed(214),
-    Color::Indexed(220),
-    Color::Indexed(229),
+/// Heatmap ramp, few requests → many. Viridis-like: dark indigo through teal
+/// to soft yellow, easy on the eyes and readable by color-blind users.
+const HEAT: [Color; 9] = [
+    Color::Indexed(54),
+    Color::Indexed(61),
+    Color::Indexed(67),
+    Color::Indexed(30),
+    Color::Indexed(36),
+    Color::Indexed(72),
+    Color::Indexed(114),
+    Color::Indexed(150),
+    Color::Indexed(186),
 ];
+/// Cells holding less than this share of a column stay empty, so a few
+/// stray requests don't read as a pattern
+const HEAT_FLOOR: f64 = 0.002;
 
 /// Smallest terminal the layout is designed for
 const MIN_WIDTH: u16 = 60;
@@ -231,7 +234,8 @@ fn header_height(d: &Dashboard) -> u16 {
         // title, progress, gap, labels, three rows of digits
         None => 7,
     };
-    content.max(mascot::HEIGHT)
+    // The mascot plus its speech line
+    content.max(mascot::HEIGHT + 1)
 }
 
 fn render_header(d: &Dashboard, f: &mut Frame, area: Rect) {
@@ -246,7 +250,6 @@ fn render_header(d: &Dashboard, f: &mut Frame, area: Rect) {
     if show_mascot {
         let mood = d.mood();
         let mut lines = mascot::lines(mood, d.frame);
-        lines.truncate(mascot::HEIGHT as usize - 1);
         lines.push(Line::styled(mood.says(), Style::new().fg(ACCENT).italic()));
         f.render_widget(Paragraph::new(lines), pet);
     }
@@ -496,9 +499,16 @@ fn render_footer(d: &Dashboard, f: &mut Frame, area: Rect) {
         hints.push(("+/-", "concurrency"));
         hints.push(("s", "stop"));
     }
-    if d.tab == Tab::Requests {
+    if d.filter.editing {
+        hints = vec![("enter", "done"), ("esc", "clear search")];
+    } else if d.tab == Tab::Requests {
         hints.push(("↑↓", "scroll"));
-        hints.push(("e", if d.errors_only { "all" } else { "errors" }));
+        hints.push(("f", "status"));
+        hints.push(("l", "latency"));
+        hints.push(("/", "search"));
+        if d.filter.is_active() {
+            hints.push(("c", "clear"));
+        }
     } else {
         hints.push(("tab", "view"));
     }
@@ -518,7 +528,7 @@ fn render_footer(d: &Dashboard, f: &mut Frame, area: Rect) {
 }
 
 fn render_help(f: &mut Frame, area: Rect) {
-    let rows: [(&str, &str); 12] = [
+    let rows: [(&str, &str); 15] = [
         ("space / p", "pause or resume sending"),
         ("+ / -", "raise or lower concurrency by ~10%"),
         ("s / i", "stop the run, keep the results"),
@@ -526,9 +536,12 @@ fn render_help(f: &mut Frame, area: Rect) {
         ("tab / ← →", "switch view"),
         ("1 2 3", "live, stats, requests"),
         ("↑ ↓ / j k", "scroll the request log"),
+        ("f", "filter requests by status"),
+        ("l", "filter requests by latency (slow ones)"),
+        ("/", "search status and response text"),
         ("PgUp PgDn", "scroll faster"),
         ("g / G", "newest / oldest request"),
-        ("e", "show only failed requests"),
+        ("e / c", "failed requests only / clear filters"),
         ("?", "close this help"),
         ("q / esc", "quit"),
     ];
@@ -591,7 +604,7 @@ fn render_live(d: &Dashboard, f: &mut Frame, body: Rect) {
         Constraint::Min(4),
         Constraint::Length(1),
         Constraint::Length(1),
-        Constraint::Length(3),
+        Constraint::Length(4),
         Constraint::Length(1),
     ])
     .areas(chart);
@@ -740,12 +753,14 @@ fn render_heatmap(d: &Dashboard, columns: &Columns, buf: &mut Buffer, area: Rect
             .map(|p| bins[pixel_bins(p)].iter().sum())
             .collect();
         let peak = values.iter().copied().max().unwrap_or(0);
+        let total: u32 = values.iter().sum();
         if peak == 0 {
             continue;
         }
+        // Square-root scale: dense bands stand out, sparse cells stay dim
         let shade = |v: u32| -> Option<Color> {
-            (v > 0).then(|| {
-                let t = (1.0 + v as f64).ln() / (1.0 + peak as f64).ln();
+            (v > 0 && v as f64 >= total as f64 * HEAT_FLOOR).then(|| {
+                let t = (v as f64 / peak as f64).sqrt();
                 HEAT[((t * (HEAT.len() - 1) as f64).round() as usize).min(HEAT.len() - 1)]
             })
         };
@@ -823,17 +838,22 @@ fn render_throughput(columns: &Columns, buf: &mut Buffer, area: Rect) {
     let steps = area.height as usize * 8;
     for (c, (&rps, &errors)) in columns.rps.iter().zip(&columns.errors).enumerate() {
         let level = ((rps / peak) * steps as f64).round() as usize;
-        let color = if rps > 0.0 && errors / rps >= 0.01 {
-            BAD
+        // Filled in a dark shade with a bright top edge, so the strip reads
+        // as a line with some weight under it rather than a solid wall
+        let failing = rps > 0.0 && errors / rps >= 0.01;
+        let (edge, fill_color) = if failing {
+            (BAD, Color::Indexed(52))
         } else {
-            ACCENT
+            (ACCENT, Color::Indexed(23))
         };
+        let top_row = (steps.saturating_sub(level)) / 8;
         for row in 0..area.height as usize {
             let from_bottom = area.height as usize - 1 - row;
             let fill = level.saturating_sub(from_bottom * 8).min(8);
             if fill == 0 {
                 continue;
             }
+            let color = if row == top_row { edge } else { fill_color };
             for x in columns.cells(area, c) {
                 if let Some(cell) = buf.cell_mut((x, area.y + row as u16)) {
                     cell.set_char(LEVELS[fill - 1]).set_fg(color);
@@ -1283,9 +1303,24 @@ fn render_distribution(d: &Dashboard, f: &mut Frame, area: Rect) {
 
 fn render_requests_tab(d: &Dashboard, f: &mut Frame, area: Rect) {
     let log = d.visible_log();
-    let [title, table] = Layout::vertical([Constraint::Length(1), Constraint::Min(0)]).areas(area);
+    let [title, filters, _, table] = Layout::vertical([
+        Constraint::Length(1),
+        Constraint::Length(1),
+        Constraint::Length(1),
+        Constraint::Min(0),
+    ])
+    .areas(area);
 
-    let mut right = vec![label(format!("last {} kept  ", log.len()))];
+    let kept = d.kept();
+    let mut right = vec![if d.filter.is_active() {
+        label(format!(
+            "{} of {} match  ",
+            format::count(log.len() as u64),
+            format::count(kept as u64)
+        ))
+    } else {
+        label(format!("last {} kept  ", format::count(kept as u64)))
+    }];
     if d.scroll > 0 {
         right.push(Span::styled(
             format!(" ↑{} · g to follow ", d.scroll),
@@ -1297,16 +1332,12 @@ fn render_requests_tab(d: &Dashboard, f: &mut Frame, area: Rect) {
             Style::new().fg(Color::Black).bg(GOOD),
         ));
     }
-    let name = if d.errors_only {
-        "failed requests"
-    } else {
-        "requests"
-    };
-    section(f, title, name, Some(Line::from(right)));
+    section(f, title, "requests", Some(Line::from(right)));
+    render_filter_bar(d, f, filters);
 
     if log.is_empty() {
-        let msg = if d.errors_only {
-            "no failed requests so far"
+        let msg = if d.filter.is_active() {
+            "nothing matches these filters · c to clear"
         } else {
             "no responses yet"
         };
@@ -1316,10 +1347,9 @@ fn render_requests_tab(d: &Dashboard, f: &mut Frame, area: Rect) {
     let height = table.height.saturating_sub(1) as usize;
     let rows = log
         .iter()
-        .rev()
         .skip(d.scroll)
         .take(height)
-        .map(request_row);
+        .map(|e| request_row(e));
     let header = Row::new(["#", "at", "status", "latency", "size", "cache", "response"])
         .style(Style::new().fg(LABEL).bold());
     f.render_widget(
@@ -1339,6 +1369,62 @@ fn render_requests_tab(d: &Dashboard, f: &mut Frame, area: Rect) {
         .column_spacing(1),
         table,
     );
+}
+
+/// "STATUS f  all 2xx 3xx …   LATENCY l  any ≥p50 …   SEARCH /  query"
+fn render_filter_bar(d: &Dashboard, f: &mut Frame, area: Rect) {
+    let selected = Style::new().fg(Color::Black).bg(ACCENT).bold();
+    let idle = Style::new().fg(LABEL);
+    let group = |spans: &mut Vec<Span<'static>>, name: &str, key: &str| {
+        spans.push(Span::styled(
+            format!("{name} "),
+            Style::new().fg(LABEL).bold(),
+        ));
+        spans.push(Span::styled(
+            format!("{key} "),
+            Style::new().fg(ACCENT).bold(),
+        ));
+    };
+
+    let mut spans = Vec::new();
+    group(&mut spans, "STATUS", "f");
+    for status in filter::Status::ALL {
+        let style = if status == d.filter.status {
+            selected
+        } else {
+            idle
+        };
+        spans.push(Span::styled(format!(" {} ", status.label()), style));
+    }
+    spans.push(Span::raw("    "));
+    group(&mut spans, "LATENCY", "l");
+    for slow in filter::Slow::ALL {
+        let style = if slow == d.filter.slow {
+            selected
+        } else {
+            idle
+        };
+        spans.push(Span::styled(format!(" {} ", slow.label()), style));
+    }
+    if d.filter.slow != filter::Slow::Any {
+        spans.push(label(format!(
+            " {}",
+            format::latency(Duration::from_micros(d.slow_threshold_us))
+        )));
+    }
+    spans.push(Span::raw("    "));
+    group(&mut spans, "SEARCH", "/");
+    if d.filter.editing {
+        spans.push(Span::styled(
+            format!(" {}▏", d.filter.query),
+            Style::new().fg(Color::Reset).bg(RULE),
+        ));
+    } else if d.filter.query.is_empty() {
+        spans.push(label(" status or body text"));
+    } else {
+        spans.push(Span::styled(format!(" {} ", d.filter.query), selected));
+    }
+    f.render_widget(Paragraph::new(Line::from(spans)), area);
 }
 
 fn request_row(e: &LogEntry) -> Row<'static> {
