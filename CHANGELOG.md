@@ -31,6 +31,21 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 - pause stops a timed run's clock; the inspector scrolls like a pager
 
+### Other
+
+- release v0.5.0
+
+## [0.5.0](https://github.com/omarmhaimdat/pepe/compare/v0.4.0...v0.5.0) - 2026-09-30
+
+### Added
+
+- format and highlight JSON, HTML and XML in the request inspector
+- inspect any request in full from the Requests tab
+
+### Fixed
+
+- pause stops a timed run's clock; the inspector scrolls like a pager
+
 ## [0.4.0](https://github.com/omarmhaimdat/pepe/compare/v0.3.1...v0.4.0) - 2026-09-30
 
 ### Added
