@@ -16,4 +16,7 @@ semver_check = false
 # Before 1.0, a release with any feat: commit bumps the minor version
 # (0.3.x -> 0.4.0) and fix-only releases bump the patch
 features_always_increment_minor = true
+# Only features, fixes and performance work are worth a release; chores,
+# CI and docs changes ride along with the next one instead of making their own
+release_commits = "^(feat|fix|perf)[(:!]"
 pr_labels = ["release"]
