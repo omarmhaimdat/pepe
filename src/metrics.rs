@@ -76,6 +76,18 @@ impl Metrics {
         Duration::from_micros(self.latency.max)
     }
 
+    pub fn latency(&self) -> &Histogram {
+        &self.latency
+    }
+
+    /// Requests that did not get a 2xx response, in percent
+    pub fn error_rate(&self) -> f64 {
+        if self.total == 0 {
+            return 0.0;
+        }
+        (self.total - self.success) as f64 / self.total as f64 * 100.0
+    }
+
     pub fn mean(&self) -> Duration {
         if self.total == 0 {
             return Duration::ZERO;
@@ -132,7 +144,7 @@ fn per_second(amount: f64, elapsed: Duration) -> f64 {
 /// Log-linear histogram (HDR-style). Values below 2^SUB_BITS are exact;
 /// larger values land in buckets whose width is under 1% of their value.
 #[derive(Debug, Default, Clone)]
-struct Histogram {
+pub struct Histogram {
     counts: Vec<u64>,
     count: u64,
     min: u64,
@@ -164,7 +176,7 @@ impl Histogram {
         (top << shift) + ((1u64 << shift) >> 1)
     }
 
-    fn record(&mut self, value: u64) {
+    pub fn record(&mut self, value: u64) {
         let index = Self::index(value);
         if index >= self.counts.len() {
             self.counts.resize(index + 1, 0);
@@ -177,7 +189,28 @@ impl Histogram {
         self.count += 1;
     }
 
-    fn percentile(&self, q: f64) -> u64 {
+    /// Empty the histogram but keep its allocation for reuse
+    pub fn clear(&mut self) {
+        self.counts.fill(0);
+        self.count = 0;
+        self.min = 0;
+        self.max = 0;
+    }
+
+    pub fn count(&self) -> u64 {
+        self.count
+    }
+
+    /// Non-empty buckets as (representative value, count), smallest first
+    pub fn buckets(&self) -> impl Iterator<Item = (u64, u64)> + '_ {
+        self.counts
+            .iter()
+            .enumerate()
+            .filter(|(_, &count)| count > 0)
+            .map(|(index, &count)| (Self::value(index), count))
+    }
+
+    pub fn percentile(&self, q: f64) -> u64 {
         if self.count == 0 {
             return 0;
         }
@@ -235,6 +268,17 @@ mod tests {
                 Histogram::index(v)
             );
         }
+    }
+
+    #[test]
+    fn cleared_histogram_starts_over() {
+        let mut h = Histogram::default();
+        h.record(5_000);
+        h.clear();
+        assert_eq!((h.count(), h.percentile(50.0)), (0, 0));
+        h.record(7);
+        assert_eq!(h.percentile(50.0), 7);
+        assert_eq!(h.buckets().collect::<Vec<_>>(), vec![(7, 1)]);
     }
 
     #[test]

@@ -19,6 +19,7 @@ mod load;
 mod metrics;
 mod request;
 mod response;
+mod timeline;
 mod ui;
 mod update;
 mod utils;
@@ -54,7 +55,8 @@ fn plan(args: &Cli) -> Plan {
     }
 }
 
-fn start_load(args: &Cli) -> Result<LoadHandle, PepeError> {
+/// `previews`: keep the start of each body, which only the dashboard shows
+fn start_load(args: &Cli, previews: bool) -> Result<LoadHandle, PepeError> {
     let request = args.request()?;
     let client = request.build_client()?;
     Ok(load::start(
@@ -62,6 +64,7 @@ fn start_load(args: &Cli) -> Result<LoadHandle, PepeError> {
         request,
         args.concurrency as usize,
         plan(args),
+        previews,
     ))
 }
 
@@ -90,7 +93,7 @@ impl Drop for TerminalGuard {
 
 /// `--json`: no dashboard; run to completion (or Ctrl-C), print the report
 async fn run_json(args: &Cli) -> Result<(), Box<dyn std::error::Error>> {
-    let mut load = start_load(args)?;
+    let mut load = start_load(args, false)?;
     let started = Instant::now();
     let mut metrics = Metrics::default();
     let mut interrupted = false;
@@ -115,12 +118,17 @@ async fn run_json(args: &Cli) -> Result<(), Box<dyn std::error::Error>> {
 
 async fn run_dashboard(args: &Cli) -> Result<(), Box<dyn std::error::Error>> {
     let _terminal = TerminalGuard::enter()?;
+    let mut args = args.clone();
     loop {
-        let mut load = start_load(args)?;
-        let mut dashboard = ui::Dashboard::new(args.clone(), plan(args));
-        match dashboard.run(&mut load)? {
-            // Dropping `load` stops the previous run before the next starts
-            ui::Outcome::Restart => continue,
+        let mut load = start_load(&args, true)?;
+        let mut dashboard = ui::Dashboard::new(args.clone(), plan(&args));
+        match dashboard.run(&mut load).await? {
+            ui::Outcome::Restart => {
+                // Keep any concurrency the user dialed in during the run.
+                // Dropping `load` stops the previous run before the next starts.
+                args.concurrency = load.concurrency() as u32;
+                continue;
+            }
             ui::Outcome::Quit => return Ok(()),
         }
     }

@@ -14,7 +14,9 @@ Pepe is written in Rust and uses the `reqwest` and `tokio` libraries for making 
 - **Timeouts**: Set a timeout for each request.
 - **Basic Authentication**: Use basic authentication for the requests.
 - **Proxy Support**: Send requests through a proxy server.
-- **DNS Resolution Timing**: Measure DNS lookup and resolution times.
+- **Live Dashboard**: Throughput and latency charts, status codes, percentiles and a scrollable request log, updated as the test runs.
+- **Interactive Control**: Pause, resume or stop a run, and raise or lower concurrency while it's going.
+- **DNS Resolution Timing**: Sample DNS lookup time once a second during the run.
 - **Detailed Statistics**: Measure and display various performance metrics such as min, max, average, median, percentiles, standard deviation, total data transferred, and error rate.
 
 ## Installation
@@ -193,9 +195,23 @@ Pepe provides detailed statistics about the performance of the web server, inclu
 - **Failures by kind**: non-2xx responses, connection errors and timeouts are counted separately.
 - **Cache Hit Rate**: The percentage of requests that were served from the cache.
 - **Requests Per Second (RPS)**: The number of requests per second.
-- **DNS Lookup Time**: The average time taken to resolve the host.
+- **DNS Lookup Time**: The average time taken to resolve the host, sampled once a second.
 
-While a test runs, press `q` to quit, `r` to restart or `i` to stop sending and keep the results on screen.
+### Dashboard keys
+
+The dashboard has three views: **Overview** (live charts and totals), **Latency** (distribution and full percentile summary) and **Requests** (the most recent requests with a preview of each response).
+
+| Key | Action |
+| --- | --- |
+| `space` / `p` | Pause or resume sending |
+| `+` / `-` | Raise or lower concurrency by about 10%, live |
+| `s` / `i` | Stop sending and keep the results on screen |
+| `r` | Restart with the same settings (and the current concurrency) |
+| `tab` / `←` `→` / `1` `2` `3` | Switch view |
+| `↑` `↓` / `j` `k`, `PgUp` `PgDn`, `g` `G` | Scroll the request log |
+| `e` | Show only failed requests |
+| `?` | Show all keys |
+| `q` / `esc` / `Ctrl-C` | Quit |
 
 
 ## Contributing

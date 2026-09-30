@@ -1,0 +1,145 @@
+use std::collections::VecDeque;
+use std::time::Duration;
+
+use crate::metrics::Histogram;
+use crate::response::ResponseStats;
+
+/// Width of one point on the dashboard's time-series charts
+pub const BUCKET: Duration = Duration::from_secs(1);
+/// Points kept: ten minutes of history at one per second
+const KEEP: usize = 600;
+
+/// One closed bucket of the timeline
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
+pub struct Sample {
+    /// End of the bucket, in seconds since the run started
+    pub at: f64,
+    pub rps: f64,
+    /// Non-2xx responses and failed requests per second
+    pub errors: f64,
+    pub p50_ms: f64,
+    pub p99_ms: f64,
+}
+
+/// Per-second series for the live charts. One histogram is reused for the
+/// open bucket, so memory stays flat however long the run is.
+#[derive(Debug, Default)]
+pub struct Timeline {
+    samples: VecDeque<Sample>,
+    current: Histogram,
+    errors: u64,
+    /// Start of the open bucket, relative to the run start
+    bucket_start: Duration,
+}
+
+impl Timeline {
+    pub fn record(&mut self, stat: &ResponseStats) {
+        self.current.record(stat.duration.as_micros() as u64);
+        if !stat.status_code.is_some_and(|code| code.is_success()) {
+            self.errors += 1;
+        }
+    }
+
+    /// Close every bucket that ended by `now` (time since the run started)
+    pub fn advance(&mut self, now: Duration) {
+        while now >= self.bucket_start + BUCKET {
+            self.close(BUCKET);
+        }
+    }
+
+    /// Close the last, partial bucket once the run is over
+    pub fn finish(&mut self, now: Duration) {
+        self.advance(now);
+        let rest = now.saturating_sub(self.bucket_start);
+        // A sliver of a bucket would show as a spike or a dip; drop it
+        if rest >= BUCKET / 4 && self.current.count() > 0 {
+            self.close(rest);
+        }
+    }
+
+    fn close(&mut self, length: Duration) {
+        let secs = length.as_secs_f64();
+        let ms = |q| self.current.percentile(q) as f64 / 1000.0;
+        let sample = Sample {
+            at: (self.bucket_start + length).as_secs_f64(),
+            rps: self.current.count() as f64 / secs,
+            errors: self.errors as f64 / secs,
+            p50_ms: ms(50.0),
+            p99_ms: ms(99.0),
+        };
+        if self.samples.len() == KEEP {
+            self.samples.pop_front();
+        }
+        self.samples.push_back(sample);
+        self.current.clear();
+        self.errors = 0;
+        self.bucket_start += length;
+    }
+
+    pub fn samples(&self) -> &VecDeque<Sample> {
+        &self.samples
+    }
+
+    pub fn last(&self) -> Option<&Sample> {
+        self.samples.back()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use reqwest::StatusCode;
+
+    fn stat(ms: u64, status: u16) -> ResponseStats {
+        ResponseStats {
+            duration: Duration::from_millis(ms),
+            status_code: Some(StatusCode::from_u16(status).unwrap()),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn buckets_close_once_per_second() {
+        let mut t = Timeline::default();
+        for _ in 0..10 {
+            t.record(&stat(10, 200));
+        }
+        t.record(&stat(100, 500));
+        t.advance(Duration::from_millis(900));
+        assert!(t.samples().is_empty());
+
+        t.advance(Duration::from_millis(1_100));
+        let s = *t.last().unwrap();
+        assert_eq!((s.at, s.rps, s.errors), (1.0, 11.0, 1.0));
+        // Histogram buckets are within 1% of the true value
+        assert!((9.9..=10.1).contains(&s.p50_ms), "p50={}", s.p50_ms);
+        assert!((99.0..=101.0).contains(&s.p99_ms), "p99={}", s.p99_ms);
+
+        // Quiet seconds still produce (empty) points, so the chart shows gaps
+        t.advance(Duration::from_millis(3_000));
+        assert_eq!(t.samples().len(), 3);
+        assert_eq!(t.last().unwrap().rps, 0.0);
+    }
+
+    #[test]
+    fn finish_keeps_a_meaningful_partial_bucket() {
+        let mut t = Timeline::default();
+        t.record(&stat(1, 200));
+        t.finish(Duration::from_millis(500));
+        let s = *t.last().unwrap();
+        assert_eq!((s.at, s.rps), (0.5, 2.0));
+
+        let mut t = Timeline::default();
+        t.record(&stat(1, 200));
+        t.finish(Duration::from_millis(100));
+        assert!(t.samples().is_empty());
+    }
+
+    #[test]
+    fn history_is_bounded() {
+        let mut t = Timeline::default();
+        t.advance(Duration::from_secs(KEEP as u64 + 50));
+        assert_eq!(t.samples().len(), KEEP);
+        assert_eq!(t.samples().front().unwrap().at, 51.0);
+    }
+}
