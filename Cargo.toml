@@ -30,7 +30,8 @@ crossterm = { version = "0.28.1", features = ["event-stream"] }
 curl-parser = { git = "https://github.com/omarmhaimdat/curl-parser", rev = "415558b02aa5ce98fcbfb80841c5ff35562e762d", version = "0.5.5" }
 gethostname = "1.0.0"
 serde = { version = "1.0.130", features = ["derive"] }
-serde_json = "1.0"
+# preserve_order: the request inspector shows JSON keys in the order sent
+serde_json = { version = "1.0", features = ["preserve_order"] }
 axoupdater = "0.10.2"
 semver = "1.0.28"
 

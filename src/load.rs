@@ -16,6 +16,11 @@ pub const MAX_CONCURRENCY: usize = 100_000;
 /// requests themselves.
 const DNS_PROBE_INTERVAL: Duration = Duration::from_secs(1);
 
+/// Full responses the inspector keeps per second, for successes and for
+/// failures separately. Below this rate every response is kept; above it,
+/// copying every one would cost real throughput, so they're sampled evenly.
+const DETAILS_PER_SECOND: u32 = 1_000;
+
 /// How long a run lasts
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Plan {
@@ -123,13 +128,78 @@ impl DnsSampler {
     }
 }
 
+/// Picks which responses to keep in full: every one while the rate is low,
+/// otherwise one in N spread evenly over each second (N from the previous
+/// second's rate), up to `DETAILS_PER_SECOND`
+struct DetailBudget {
+    epoch: Instant,
+    /// Second (since `epoch`) the counts below belong to
+    second: AtomicU64,
+    ok: Sampler,
+    failed: Sampler,
+}
+
+#[derive(Default)]
+struct Sampler {
+    /// Responses seen and kept this second
+    seen: std::sync::atomic::AtomicU32,
+    kept: std::sync::atomic::AtomicU32,
+    /// Keep one in this many
+    stride: std::sync::atomic::AtomicU32,
+}
+
+impl Sampler {
+    /// Start a new second, sampling so the last second's rate would fit
+    fn roll(&self) {
+        let seen = self.seen.swap(0, Ordering::Relaxed);
+        self.kept.store(0, Ordering::Relaxed);
+        self.stride
+            .store(seen.div_ceil(DETAILS_PER_SECOND).max(1), Ordering::Relaxed);
+    }
+
+    fn claim(&self) -> bool {
+        let n = self.seen.fetch_add(1, Ordering::Relaxed);
+        let stride = self.stride.load(Ordering::Relaxed).max(1);
+        n % stride == 0 && self.kept.fetch_add(1, Ordering::Relaxed) < DETAILS_PER_SECOND
+    }
+}
+
+impl DetailBudget {
+    fn new() -> Self {
+        Self {
+            epoch: Instant::now(),
+            second: AtomicU64::new(0),
+            ok: Sampler::default(),
+            failed: Sampler::default(),
+        }
+    }
+
+    /// Whether this response may be kept in full
+    fn claim(&self, failed: bool) -> bool {
+        let now = self.epoch.elapsed().as_secs();
+        let second = self.second.load(Ordering::Relaxed);
+        if now != second
+            && self
+                .second
+                .compare_exchange(second, now, Ordering::Relaxed, Ordering::Relaxed)
+                .is_ok()
+        {
+            self.ok.roll();
+            self.failed.roll();
+        }
+        if failed { &self.failed } else { &self.ok }.claim()
+    }
+}
+
 /// What every request task shares
 struct Shared {
     client: reqwest::Client,
     request: Request,
     dns: DnsSampler,
-    /// Keep the start of each body for the dashboard's preview column
+    /// Keep the start of each body for the dashboard's preview column, and
+    /// some responses in full for its inspector
     previews: bool,
+    details: DetailBudget,
 }
 
 pub fn start(
@@ -149,6 +219,7 @@ pub fn start(
         request,
         dns: DnsSampler::new(),
         previews,
+        details: DetailBudget::new(),
     });
     let task = tokio::spawn(generate(
         shared,
@@ -179,7 +250,7 @@ async fn generate(
     // Owning every request task here means aborting this task (restart,
     // interrupt, Ctrl-C) drops the JoinSet, which cancels them all.
     let mut tasks = JoinSet::new();
-    let deadline = match plan {
+    let mut deadline = match plan {
         Plan::Duration(d) => Some(tokio::time::Instant::now() + d),
         Plan::Count(_) => None,
     };
@@ -192,21 +263,34 @@ async fn generate(
             }
         }
 
-        let acquire = async {
+        // Paused: wait for resume, then push the deadline back by the pause
+        // so a duration run gets its full length of sending
+        if *paused.borrow_and_update() {
+            let since = tokio::time::Instant::now();
             while *paused.borrow_and_update() {
                 if paused.changed().await.is_err() {
                     break;
                 }
             }
-            semaphore.clone().acquire_owned().await
-        };
+            if let Some(deadline) = deadline.as_mut() {
+                *deadline += since.elapsed();
+            }
+            continue;
+        }
+
+        let acquire = semaphore.clone().acquire_owned();
         let permit = match deadline {
-            // Don't sit waiting for a free slot (or a resume) past the end
+            // Don't sit waiting for a free slot past the end, and notice a
+            // pause that starts while waiting
             Some(deadline) => tokio::select! {
                 permit = acquire => permit,
                 _ = tokio::time::sleep_until(deadline) => break,
+                _ = paused.changed() => continue,
             },
-            None => acquire.await,
+            None => tokio::select! {
+                permit = acquire => permit,
+                _ = paused.changed() => continue,
+            },
         };
         let Ok(permit) = permit else { break };
         if deadline.is_some_and(|d| tokio::time::Instant::now() >= d) {
@@ -244,7 +328,12 @@ async fn send_one(
 
     let start = Instant::now();
     let response = builder.send().await;
-    let stats = ResponseStats::from_response(response, start, dns_times, shared.previews).await;
+    let ttfb = start.elapsed();
+    let capture = shared.previews
+        && matches!(&response, Ok(r) if shared.details.claim(!r.status().is_success()));
+    let stats =
+        ResponseStats::from_response(response, start, ttfb, dns_times, shared.previews, capture)
+            .await;
 
     drop(permit);
     let _ = tx.send(stats);
@@ -345,6 +434,14 @@ mod tests {
         assert!(results
             .iter()
             .all(|r| r.preview_text().as_deref() == Some("ok")));
+        // A small run is captured in full
+        let detail = results[0].detail.as_ref().expect("captured");
+        assert_eq!(&detail.body[..], b"ok");
+        assert_eq!(detail.headers.get("content-length").unwrap(), "2");
+        assert!(!detail.truncated && detail.remote_addr.is_some());
+        assert!(results
+            .iter()
+            .all(|r| r.ttfb.is_some_and(|t| t <= r.duration)));
         // DNS is sampled, not probed for every request
         let probes = results.iter().filter(|r| r.dns_times.is_some()).count();
         assert!((1..5).contains(&probes), "probes={probes}");
@@ -409,6 +506,64 @@ mod tests {
             .await;
         }
         assert_eq!(srv.bodies.load(Ordering::Relaxed), 3);
+    }
+
+    #[test]
+    fn detail_sampling_spreads_over_the_second() {
+        let sampler = Sampler::default();
+        // First second: nothing known yet, keep up to the limit
+        let kept = (0..3_000).filter(|_| sampler.claim()).count();
+        assert_eq!(kept, DETAILS_PER_SECOND as usize);
+        // Next second, sized from 3,000/s: one in three, all through it
+        sampler.roll();
+        let picks: Vec<usize> = (0..3_000).filter(|_| sampler.claim()).collect();
+        assert_eq!(picks.len(), 1_000);
+        assert_eq!(
+            *picks.last().unwrap(),
+            2_997,
+            "reaches the end of the second"
+        );
+        // A quiet second: every response kept
+        sampler.roll();
+        sampler.roll();
+        assert!((0..10).all(|_| sampler.claim()));
+    }
+
+    #[test]
+    fn failures_have_their_own_budget() {
+        let budget = DetailBudget::new();
+        for _ in 0..5_000 {
+            budget.claim(false);
+        }
+        assert!(budget.claim(true));
+    }
+
+    #[tokio::test]
+    async fn pausing_a_duration_run_extends_it() {
+        let srv = server(Duration::from_millis(5)).await;
+        let req = request(&srv.url, "GET", None);
+        let begin = Instant::now();
+        let load = start(
+            req.build_client().unwrap(),
+            req,
+            2,
+            Plan::Duration(Duration::from_millis(400)),
+            false,
+        );
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        load.set_paused(true);
+        // Paused past the original deadline: nothing ends the run
+        tokio::time::sleep(Duration::from_millis(500)).await;
+        let held = load.sent();
+        load.set_paused(false);
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        assert!(load.sent() > held, "still sending after the pause");
+        let results = drain(load).await;
+        // 400ms of sending plus the 500ms pause, give or take
+        let took = begin.elapsed();
+        assert!(took >= Duration::from_millis(850), "took {took:?}");
+        assert!(took < Duration::from_millis(1_500), "took {took:?}");
+        assert!(!results.is_empty());
     }
 
     #[tokio::test]

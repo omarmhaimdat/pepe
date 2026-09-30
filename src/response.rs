@@ -1,6 +1,9 @@
+use std::net::SocketAddr;
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use bytes::Bytes;
+use reqwest::header::HeaderMap;
 
 use crate::cache::CacheStatus;
 
@@ -8,6 +11,35 @@ use crate::cache::CacheStatus;
 const PREVIEW_BYTES: usize = 256;
 /// Characters of the preview shown on one line
 const PREVIEW_CHARS: usize = 120;
+/// Body bytes kept for the request inspector
+pub const BODY_CAPTURE: usize = 32 * 1024;
+
+/// Everything about a response, kept for the few requests the dashboard's
+/// inspector can show in full (see `load::DetailBudget`)
+#[derive(Debug)]
+pub struct Detail {
+    pub version: reqwest::Version,
+    pub headers: HeaderMap,
+    /// Up to `BODY_CAPTURE` bytes of the body
+    pub body: Bytes,
+    /// The body was longer than what's kept
+    pub truncated: bool,
+    pub remote_addr: Option<SocketAddr>,
+    /// Where the request ended up, after any redirects
+    pub final_url: String,
+}
+
+impl Detail {
+    /// Rough memory held, for the dashboard's budget
+    pub fn size(&self) -> usize {
+        let headers: usize = self
+            .headers
+            .iter()
+            .map(|(k, v)| k.as_str().len() + v.len() + 32)
+            .sum();
+        std::mem::size_of::<Self>() + headers + self.body.len() + self.final_url.len()
+    }
+}
 
 /// Why a request produced no response
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -55,14 +87,21 @@ pub struct ResponseStats {
     /// Why the request failed, in the words of the innermost error (e.g.
     /// "Connection refused (os error 61)"); kept only when previews are
     pub error_message: Option<Box<str>>,
+    /// Time until the response headers arrived
+    pub ttfb: Option<Duration>,
+    /// Full headers and body, when this request was picked for capture
+    pub detail: Option<Arc<Detail>>,
 }
 
 impl ResponseStats {
+    /// `ttfb`: when `send` returned. `capture`: keep the full response.
     pub async fn from_response(
         resp: Result<reqwest::Response, reqwest::Error>,
         start: Instant,
+        ttfb: Duration,
         dns_times: Option<(Duration, Duration)>,
         keep_preview: bool,
+        capture: bool,
     ) -> Self {
         let mut resp = match resp {
             Ok(resp) => resp,
@@ -71,6 +110,15 @@ impl ResponseStats {
 
         let status_code = resp.status();
         let cache_status = CacheStatus::parse_headers(resp.headers());
+        let mut detail = capture.then(|| Detail {
+            version: resp.version(),
+            headers: resp.headers().clone(),
+            body: Bytes::new(),
+            truncated: false,
+            remote_addr: resp.remote_addr(),
+            final_url: resp.url().to_string(),
+        });
+        let mut captured = Vec::new();
         // Stream the body and count it instead of buffering it whole, so
         // large responses cost no memory beyond one chunk
         let mut body_bytes = 0u64;
@@ -83,6 +131,10 @@ impl ResponseStats {
                         let want = PREVIEW_BYTES.saturating_sub(buf.len());
                         buf.extend_from_slice(&chunk[..want.min(chunk.len())]);
                     }
+                    if detail.is_some() {
+                        let want = BODY_CAPTURE.saturating_sub(captured.len());
+                        captured.extend_from_slice(&chunk[..want.min(chunk.len())]);
+                    }
                 }
                 Ok(None) => break,
                 // The status arrived but the body did not (e.g. timed out mid-body)
@@ -90,9 +142,15 @@ impl ResponseStats {
             }
         }
         let duration = start.elapsed();
+        if let Some(detail) = detail.as_mut() {
+            detail.truncated = body_bytes as usize > captured.len();
+            detail.body = Bytes::from(captured);
+        }
 
         ResponseStats {
             duration,
+            ttfb: Some(ttfb),
+            detail: detail.map(Arc::new),
             status_code: Some(status_code),
             body_bytes,
             preview: preview.map(Bytes::from),

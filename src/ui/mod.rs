@@ -1,4 +1,5 @@
 mod bigtext;
+mod body;
 mod filter;
 pub mod format;
 mod mascot;
@@ -40,6 +41,8 @@ const LOG_CAPACITY: usize = 2_000;
 /// Failed requests kept separately, so a burst of successes can't push them
 /// out of a failures view
 const ERROR_LOG_CAPACITY: usize = 500;
+/// Memory the inspector's full responses may use; the oldest are dropped first
+const DETAIL_BUDGET: usize = 32 * 1024 * 1024;
 /// Distinct failure causes counted; any more are counted as "other"
 const MAX_FAILURE_CAUSES: usize = 32;
 /// How long a notice (e.g. "concurrency 64 → 70") stays in the footer
@@ -106,6 +109,9 @@ pub struct Dashboard {
     sent: u64,
     concurrency: usize,
     paused: bool,
+    /// Time spent paused, which the run's clock leaves out
+    paused_total: Duration,
+    paused_since: Option<Instant>,
     started: Instant,
     /// Set once every request has finished (or the run was stopped)
     finished: Option<Duration>,
@@ -121,8 +127,21 @@ pub struct Dashboard {
     filter: filter::Filter,
     /// Latency the slow filter requires, refreshed as results arrive
     slow_threshold_us: u64,
-    /// Rows scrolled back from the newest entry; 0 follows live
+    /// Selected row in the request log, counted from the newest; 0 follows
+    /// live
     scroll: usize,
+    /// The selected request is open in the inspector
+    inspecting: bool,
+    /// Lines scrolled down in the inspector's response
+    detail_scroll: u16,
+    /// Furthest the response can scroll, and its visible height; set when
+    /// drawn, since only drawing knows how the text wraps
+    detail_view: std::cell::Cell<(u16, u16)>,
+    /// Show response bodies as received instead of formatted
+    raw_body: bool,
+    /// Requests holding a full response, oldest first, with their size
+    detailed: VecDeque<(u64, usize)>,
+    detail_bytes: usize,
     notice: Option<(String, Instant)>,
 }
 
@@ -139,6 +158,8 @@ impl Dashboard {
             failure_causes: HashMap::new(),
             sent: 0,
             paused: false,
+            paused_total: Duration::ZERO,
+            paused_since: None,
             started: Instant::now(),
             finished: None,
             interrupted: false,
@@ -149,12 +170,38 @@ impl Dashboard {
             filter: filter::Filter::default(),
             slow_threshold_us: 0,
             scroll: 0,
+            inspecting: false,
+            detail_scroll: 0,
+            detail_view: std::cell::Cell::new((0, 0)),
+            raw_body: false,
+            detailed: VecDeque::new(),
+            detail_bytes: 0,
             notice: None,
         }
     }
 
+    /// How long the run has been going, not counting pauses
     fn elapsed(&self) -> Duration {
-        self.finished.unwrap_or_else(|| self.started.elapsed())
+        self.finished.unwrap_or_else(|| self.active())
+    }
+
+    fn active(&self) -> Duration {
+        let pausing = self.paused_since.map_or(Duration::ZERO, |t| t.elapsed());
+        self.started
+            .elapsed()
+            .saturating_sub(self.paused_total + pausing)
+    }
+
+    fn set_paused(&mut self, paused: bool) {
+        match (paused, self.paused_since) {
+            (true, None) => self.paused_since = Some(Instant::now()),
+            (false, Some(since)) => {
+                self.paused_total += since.elapsed();
+                self.paused_since = None;
+            }
+            _ => {}
+        }
+        self.paused = paused;
     }
 
     fn record(&mut self, stat: ResponseStats) {
@@ -162,16 +209,24 @@ impl Dashboard {
         self.timeline.record(&stat);
         let entry = LogEntry {
             seq: self.metrics.total,
-            at: self.started.elapsed(),
+            at: self.active(),
             stat,
         };
+        if entry.is_error() {
+            self.count_failure(&entry.stat);
+        }
+        // The list holds still while a request is open in the inspector: at
+        // high rates new rows would push the one being read out within
+        // milliseconds. Everything else keeps counting.
+        if self.inspecting {
+            return;
+        }
 
         // Keep a scrolled-back view anchored on the same rows
         if self.scroll > 0 && self.filter.matches(&entry.stat, self.slow_threshold_us) {
             self.scroll += 1;
         }
         if entry.is_error() {
-            self.count_failure(&entry.stat);
             push_bounded(
                 &mut self.error_log,
                 LogEntry {
@@ -182,7 +237,35 @@ impl Dashboard {
                 ERROR_LOG_CAPACITY,
             );
         }
+        let detail = entry.stat.detail.as_ref().map(|d| (entry.seq, d.size()));
         push_bounded(&mut self.log, entry, LOG_CAPACITY);
+        if let Some((seq, size)) = detail {
+            self.detailed.push_back((seq, size));
+            self.detail_bytes += size;
+        }
+        self.trim_details();
+    }
+
+    /// Forget full responses that left both logs, then the oldest ones until
+    /// they fit the budget
+    fn trim_details(&mut self) {
+        let oldest_kept = match (self.log.front(), self.error_log.front()) {
+            (Some(a), Some(b)) => a.seq.min(b.seq),
+            (Some(e), None) | (None, Some(e)) => e.seq,
+            (None, None) => u64::MAX,
+        };
+        while let Some(&(seq, size)) = self.detailed.front() {
+            if seq >= oldest_kept && self.detail_bytes <= DETAIL_BUDGET {
+                break;
+            }
+            self.detailed.pop_front();
+            self.detail_bytes -= size;
+            for log in [&mut self.log, &mut self.error_log] {
+                if let Ok(i) = log.binary_search_by_key(&seq, |e| e.seq) {
+                    log[i].stat.detail = None;
+                }
+            }
+        }
     }
 
     fn count_failure(&mut self, stat: &ResponseStats) {
@@ -220,7 +303,7 @@ impl Dashboard {
                 Err(TryRecvError::Empty) => break,
                 Err(TryRecvError::Disconnected) => {
                     if self.finished.is_none() {
-                        let now = self.started.elapsed();
+                        let now = self.active();
                         self.finished = Some(now);
                         self.timeline.finish(now);
                         let samples: Vec<_> = self.timeline.samples().iter().copied().collect();
@@ -232,7 +315,7 @@ impl Dashboard {
             }
         }
         if self.finished.is_none() {
-            self.timeline.advance(self.started.elapsed());
+            self.timeline.advance(self.active());
         }
         self.refresh_slow_threshold();
         if self.scroll > 0 {
@@ -240,7 +323,7 @@ impl Dashboard {
         }
         self.sent = load.sent();
         self.concurrency = load.concurrency();
-        self.paused = load.is_paused();
+        self.set_paused(load.is_paused());
         if self
             .notice
             .as_ref()
@@ -419,6 +502,10 @@ impl Dashboard {
         if self.filter.editing && self.edit_search(key) {
             return None;
         }
+        if self.inspecting && self.tab == Tab::Requests && !self.show_help && self.inspect_key(key)
+        {
+            return None;
+        }
         match key.code {
             KeyCode::Esc | KeyCode::Char('?') if self.show_help => self.show_help = false,
             KeyCode::Char('?') => self.show_help = true,
@@ -434,7 +521,7 @@ impl Dashboard {
             KeyCode::Char(' ') | KeyCode::Char('p') if running => {
                 let paused = !load.is_paused();
                 load.set_paused(paused);
-                self.paused = paused;
+                self.set_paused(paused);
                 self.notify(if paused { "paused" } else { "resumed" }.into());
             }
             KeyCode::Char('+') | KeyCode::Char('=') if running => self.adjust_concurrency(load, 1),
@@ -467,10 +554,15 @@ impl Dashboard {
                 self.filter.clear();
                 self.refilter();
             }
-            KeyCode::Up | KeyCode::Char('k') => self.scroll_by(1),
-            KeyCode::Down | KeyCode::Char('j') => self.scroll_by(-1),
-            KeyCode::PageUp => self.scroll_by(10),
-            KeyCode::PageDown => self.scroll_by(-10),
+            KeyCode::Enter if self.tab == Tab::Requests && !self.visible_log().is_empty() => {
+                self.inspecting = true;
+                self.detail_scroll = 0;
+            }
+            // The log lists the newest first: up is newer, down is older
+            KeyCode::Up | KeyCode::Char('k') => self.scroll_by(-1),
+            KeyCode::Down | KeyCode::Char('j') => self.scroll_by(1),
+            KeyCode::PageUp => self.scroll_by(-10),
+            KeyCode::PageDown => self.scroll_by(10),
             KeyCode::Home | KeyCode::Char('g') => self.scroll = 0,
             KeyCode::End | KeyCode::Char('G') => self.scroll_by(isize::MAX / 2),
             _ => {}
@@ -546,6 +638,63 @@ impl Dashboard {
         Some(out)
     }
 
+    /// Keys while a request is open in the inspector. Returns false for keys
+    /// it leaves to the normal handling (quit, pause, switching tabs, ...).
+    fn inspect_key(&mut self, key: KeyEvent) -> bool {
+        let page = self.detail_view.get().1.max(2) as i32 - 1;
+        match key.code {
+            KeyCode::Esc | KeyCode::Enter | KeyCode::Backspace => self.inspecting = false,
+            // Scroll the response like a pager. Terminals turn the trackpad
+            // and mouse wheel into up/down here, so those scroll too.
+            KeyCode::Up | KeyCode::Char('k') => self.scroll_detail(-1),
+            KeyCode::Down | KeyCode::Char('j') => self.scroll_detail(1),
+            KeyCode::PageUp | KeyCode::Char('u') => self.scroll_detail(-page),
+            KeyCode::PageDown | KeyCode::Char('d') => self.scroll_detail(page),
+            KeyCode::Home | KeyCode::Char('g') => self.scroll_detail(i32::MIN / 2),
+            KeyCode::End | KeyCode::Char('G') => self.scroll_detail(i32::MAX / 2),
+            // Walk through the requests: the list is newest first
+            KeyCode::Left | KeyCode::Char('h') => self.step_inspected(-1),
+            KeyCode::Right | KeyCode::Char('l') => self.step_inspected(1),
+            // Jump to the nearest request whose full response was kept
+            KeyCode::Char('[') => self.step_to_full(-1),
+            KeyCode::Char(']') => self.step_to_full(1),
+            KeyCode::Char('v') => {
+                self.raw_body = !self.raw_body;
+                self.detail_scroll = 0;
+            }
+            _ => return false,
+        }
+        true
+    }
+
+    /// Scroll the inspector's response, stopping at its last page
+    fn scroll_detail(&mut self, lines: i32) {
+        let (max, _) = self.detail_view.get();
+        self.detail_scroll = (self.detail_scroll as i32 + lines).clamp(0, max as i32) as u16;
+    }
+
+    /// Move to the nearest newer (-1) or older (1) request with a full
+    /// response; stay put if there's none that way
+    fn step_to_full(&mut self, direction: isize) {
+        let log = self.visible_log();
+        let mut i = self.scroll as isize + direction;
+        while i >= 0 && (i as usize) < log.len() {
+            if log[i as usize].stat.detail.is_some() {
+                let target = i as usize;
+                drop(log);
+                self.scroll = target;
+                self.detail_scroll = 0;
+                return;
+            }
+            i += direction;
+        }
+    }
+
+    fn step_inspected(&mut self, rows: isize) {
+        self.scroll_by(rows);
+        self.detail_scroll = 0;
+    }
+
     fn scroll_by(&mut self, rows: isize) {
         let max = self.visible_log().len().saturating_sub(1);
         self.scroll = self.scroll.saturating_add_signed(rows).min(max);
@@ -603,6 +752,15 @@ mod tests {
         Dashboard::new(args, Plan::Count(100))
     }
 
+    /// A run with nothing to send, for key handling that needs a handle
+    fn dummy_load() -> LoadHandle {
+        let request = Cli::parse_from(["pepe", "-c", "1", "http://x"])
+            .request()
+            .unwrap();
+        let client = request.build_client().unwrap();
+        crate::load::start(client, request, 1, Plan::Count(0), false)
+    }
+
     fn stat(status: u16) -> ResponseStats {
         ResponseStats {
             status_code: Some(StatusCode::from_u16(status).unwrap()),
@@ -650,8 +808,16 @@ mod tests {
         assert_eq!(d.scroll, 6, "view keeps pointing at the same rows");
         d.scroll_by(-100);
         assert_eq!(d.scroll, 0);
+        // While inspecting, the list holds still and the counts go on
+        d.inspecting = true;
+        let (kept, total) = (d.log.len(), d.metrics.total);
+        d.record(stat(200));
+        assert_eq!((d.scroll, d.log.len()), (0, kept));
+        assert_eq!(d.metrics.total, total + 1);
+        d.inspecting = false;
+        d.record(stat(200));
         d.scroll_by(isize::MAX / 2);
-        assert_eq!(d.scroll, 20);
+        assert_eq!(d.scroll, 21, "the oldest of 22");
     }
 
     #[test]
@@ -711,6 +877,122 @@ mod tests {
             d.failure_causes.len(),
             MAX_FAILURE_CAUSES + 1,
             "capped, plus other"
+        );
+    }
+
+    #[test]
+    fn full_responses_fit_the_budget() {
+        use crate::response::Detail;
+        let mut d = dashboard();
+        let big = || ResponseStats {
+            status_code: Some(StatusCode::OK),
+            detail: Some(std::sync::Arc::new(Detail {
+                version: reqwest::Version::HTTP_11,
+                headers: Default::default(),
+                body: bytes::Bytes::from(vec![b'x'; 1024 * 1024]),
+                truncated: false,
+                remote_addr: None,
+                final_url: String::new(),
+            })),
+            ..Default::default()
+        };
+        for _ in 0..40 {
+            d.record(big());
+        }
+        assert!(d.detail_bytes <= DETAIL_BUDGET);
+        let kept = d.log.iter().filter(|e| e.stat.detail.is_some()).count();
+        assert!((20..40).contains(&kept), "kept={kept}");
+        // The newest keep theirs, the oldest lost them
+        assert!(d.log.back().unwrap().stat.detail.is_some());
+        assert!(d.log.front().unwrap().stat.detail.is_none());
+    }
+
+    #[tokio::test]
+    async fn inspector_walks_the_log() {
+        let mut d = dashboard();
+        for _ in 0..5 {
+            d.record(stat(200));
+        }
+        d.tab = Tab::Requests;
+        d.handle_key(KeyEvent::from(KeyCode::Enter), &dummy_load());
+        assert!(d.inspecting);
+        d.handle_key(KeyEvent::from(KeyCode::Right), &dummy_load());
+        d.handle_key(KeyEvent::from(KeyCode::Right), &dummy_load());
+        assert_eq!(
+            d.visible_log()[d.scroll].seq,
+            3,
+            "two older than the newest"
+        );
+        // As drawn: 50 lines past the first screen, 20 lines tall
+        d.detail_view.set((50, 20));
+        d.handle_key(KeyEvent::from(KeyCode::Down), &dummy_load());
+        d.handle_key(KeyEvent::from(KeyCode::PageDown), &dummy_load());
+        assert_eq!(d.detail_scroll, 20, "a line, then a page");
+        d.handle_key(KeyEvent::from(KeyCode::Char('G')), &dummy_load());
+        assert_eq!(d.detail_scroll, 50, "stops at the last page");
+        d.handle_key(KeyEvent::from(KeyCode::Char('d')), &dummy_load());
+        assert_eq!(d.detail_scroll, 50);
+        d.handle_key(KeyEvent::from(KeyCode::Char('g')), &dummy_load());
+        assert_eq!(d.detail_scroll, 0);
+        d.handle_key(KeyEvent::from(KeyCode::Up), &dummy_load());
+        assert_eq!(d.detail_scroll, 0, "not past the top");
+        d.handle_key(KeyEvent::from(KeyCode::Char('G')), &dummy_load());
+        d.handle_key(KeyEvent::from(KeyCode::Left), &dummy_load());
+        assert_eq!((d.visible_log()[d.scroll].seq, d.detail_scroll), (4, 0));
+        d.handle_key(KeyEvent::from(KeyCode::Esc), &dummy_load());
+        assert!(!d.inspecting);
+    }
+
+    #[tokio::test]
+    async fn brackets_jump_to_kept_responses() {
+        use crate::response::Detail;
+        let mut d = dashboard();
+        for i in 0..10 {
+            let mut s = stat(200);
+            if i == 2 || i == 7 {
+                s.detail = Some(std::sync::Arc::new(Detail {
+                    version: reqwest::Version::HTTP_11,
+                    headers: Default::default(),
+                    body: Default::default(),
+                    truncated: false,
+                    remote_addr: None,
+                    final_url: String::new(),
+                }));
+            }
+            d.record(s);
+        }
+        d.tab = Tab::Requests;
+        let load = dummy_load();
+        d.handle_key(KeyEvent::from(KeyCode::Enter), &load);
+        let seq = |d: &Dashboard| d.visible_log()[d.scroll].seq;
+        assert_eq!(seq(&d), 10);
+        d.handle_key(KeyEvent::from(KeyCode::Char(']')), &load);
+        assert_eq!(seq(&d), 8, "the newer kept one");
+        d.handle_key(KeyEvent::from(KeyCode::Char(']')), &load);
+        assert_eq!(seq(&d), 3);
+        d.handle_key(KeyEvent::from(KeyCode::Char(']')), &load);
+        assert_eq!(seq(&d), 3, "none older: stays put");
+        d.handle_key(KeyEvent::from(KeyCode::Char('[')), &load);
+        assert_eq!(seq(&d), 8);
+    }
+
+    #[test]
+    fn the_clock_stops_while_paused() {
+        let mut d = dashboard();
+        d.started = Instant::now() - Duration::from_secs(10);
+        d.set_paused(true);
+        d.paused_since = Some(Instant::now() - Duration::from_secs(4));
+        let during = d.elapsed();
+        assert!(
+            (5_900..=6_100).contains(&(during.as_millis() as u64)),
+            "{during:?}"
+        );
+        d.set_paused(false);
+        let after = d.elapsed();
+        // Resuming doesn't make the clock jump
+        assert!(
+            after.abs_diff(during) < Duration::from_millis(100),
+            "{during:?} {after:?}"
         );
     }
 
