@@ -12,7 +12,7 @@ use ratatui::{
     Frame,
 };
 
-use super::{bigtext, filter, format, mascot, progress_percent, Dashboard, LogEntry, Tab};
+use super::{bigtext, body, filter, format, mascot, progress_percent, Dashboard, LogEntry, Tab};
 use crate::insights::Level;
 use crate::load::Plan;
 use crate::response::ResponseStats;
@@ -506,6 +506,7 @@ fn render_footer(d: &Dashboard, f: &mut Frame, area: Rect) {
             ("↑↓", "newer / older"),
             ("PgUp/PgDn", "scroll response"),
             ("[ ]", "nearest kept in full"),
+            ("v", "raw / formatted"),
             ("g/G", "newest / oldest"),
             ("q", "quit"),
         ];
@@ -2167,12 +2168,22 @@ fn render_response(d: &Dashboard, f: &mut Frame, area: Rect, stat: &ResponseStat
         );
         return;
     };
-    let hint = if d.detail_scroll > 0 {
+    let (format, body) = body_lines(detail, stat.body_bytes, d.raw_body);
+    let mut hint = Vec::new();
+    if let Some(format) = format.filter(|&f| f != body::Format::Text) {
+        hint.push(value(format.name(), ACCENT));
+        hint.push(label(if d.raw_body {
+            " raw · v to format · "
+        } else {
+            " formatted · v for raw · "
+        }));
+    }
+    hint.push(label(if d.detail_scroll > 0 {
         format!("line {} · PgUp/PgDn", d.detail_scroll + 1)
     } else {
         "PgUp/PgDn to scroll".to_string()
-    };
-    section(f, title, "response", Some(Line::from(label(hint))));
+    }));
+    section(f, title, "response", Some(Line::from(hint)));
 
     let mut lines = Vec::new();
     if let Some(code) = stat.status_code {
@@ -2195,7 +2206,7 @@ fn render_response(d: &Dashboard, f: &mut Frame, area: Rect, stat: &ResponseStat
         ]));
     }
     lines.push(Line::raw(""));
-    lines.extend(body_lines(detail, stat.body_bytes));
+    lines.extend(body);
     f.render_widget(
         Paragraph::new(lines)
             .wrap(Wrap { trim: false })
@@ -2205,33 +2216,29 @@ fn render_response(d: &Dashboard, f: &mut Frame, area: Rect, stat: &ResponseStat
 }
 
 /// The body as text: pretty-printed when it's JSON, a note when binary
-fn body_lines(detail: &crate::response::Detail, total: u64) -> Vec<Line<'static>> {
-    let body = &detail.body[..];
-    if body.is_empty() {
-        return vec![Line::from(label("(empty body)"))];
+/// The body formatted for its type (or raw), and the type it was read as
+fn body_lines(
+    detail: &crate::response::Detail,
+    total: u64,
+    raw: bool,
+) -> (Option<body::Format>, Vec<Line<'static>>) {
+    let bytes = &detail.body[..];
+    if bytes.is_empty() {
+        return (None, vec![Line::from(label("(empty body)"))]);
     }
-    let mut lines = Vec::new();
-    let json = (!detail.truncated)
-        .then(|| serde_json::from_slice::<serde_json::Value>(body).ok())
-        .flatten()
-        .and_then(|v| serde_json::to_string_pretty(&v).ok());
-    let text = match (json, std::str::from_utf8(body)) {
-        (Some(pretty), _) => pretty,
-        (None, Ok(text)) => text.to_string(),
+    let text = match std::str::from_utf8(bytes) {
+        Ok(text) => text.to_string(),
         // Cut mid-character at the capture limit: fine; otherwise binary
-        (None, Err(e)) if e.error_len().is_none() => {
-            String::from_utf8_lossy(&body[..e.valid_up_to()]).into_owned()
+        Err(e) if e.error_len().is_none() => {
+            String::from_utf8_lossy(&bytes[..e.valid_up_to()]).into_owned()
         }
-        (None, Err(_)) => {
-            return vec![Line::from(label(format!(
-                "binary body, {} (not shown)",
-                format::bytes(total as f64)
-            )))]
+        Err(_) => {
+            let note = format!("binary body, {} (not shown)", format::bytes(total as f64));
+            return (None, vec![Line::from(label(note))]);
         }
     };
-    for line in text.lines() {
-        lines.push(Line::raw(line.replace('\t', "    ")));
-    }
+    let format = body::Format::detect(detail, &text);
+    let mut lines = body::lines(&text, format, !detail.truncated, raw);
     if detail.truncated {
         lines.push(Line::raw(""));
         lines.push(Line::from(label(format!(
@@ -2240,7 +2247,7 @@ fn body_lines(detail: &crate::response::Detail, total: u64) -> Vec<Line<'static>
             format::bytes(total as f64)
         ))));
     }
-    lines
+    (Some(format), lines)
 }
 
 fn request_row(e: &LogEntry) -> Row<'static> {
@@ -2314,28 +2321,38 @@ mod tests {
     }
 
     #[test]
-    fn json_bodies_are_pretty_printed() {
-        let detail = crate::response::Detail {
-            version: reqwest::Version::HTTP_11,
-            headers: Default::default(),
-            body: bytes::Bytes::from_static(b"{\"a\":[1,2]}"),
-            truncated: false,
-            remote_addr: None,
-            final_url: String::new(),
+    fn bodies_are_formatted_by_type() {
+        let detail = |content_type: &str, body: &'static [u8]| {
+            let mut headers = reqwest::header::HeaderMap::new();
+            headers.insert("content-type", content_type.parse().unwrap());
+            crate::response::Detail {
+                version: reqwest::Version::HTTP_11,
+                headers,
+                body: bytes::Bytes::from_static(body),
+                truncated: false,
+                remote_addr: None,
+                final_url: String::new(),
+            }
         };
-        let text: Vec<String> = body_lines(&detail, 11)
-            .iter()
-            .map(|l| l.to_string())
-            .collect();
-        assert_eq!(text, ["{", "  \"a\": [", "    1,", "    2", "  ]", "}"]);
+        let text = |lines: Vec<Line>| lines.iter().map(|l| l.to_string()).collect::<Vec<_>>();
 
-        let binary = crate::response::Detail {
-            body: bytes::Bytes::from_static(&[0xff, 0xfe, 0x00, 0x41]),
-            ..detail
-        };
-        assert!(body_lines(&binary, 4)[0]
-            .to_string()
-            .starts_with("binary body"));
+        let (format, lines) = body_lines(&detail("application/json", b"{\"a\":[1,2]}"), 11, false);
+        assert_eq!(format, Some(body::Format::Json));
+        assert_eq!(
+            text(lines),
+            ["{", "  \"a\": [", "    1,", "    2", "  ]", "}"]
+        );
+
+        let (_, lines) = body_lines(&detail("application/json", b"{\"a\":1}"), 7, true);
+        assert_eq!(text(lines), ["{\"a\":1}"], "raw");
+
+        let (format, lines) = body_lines(&detail("text/html", b"<p><b>hi</b></p>"), 16, false);
+        assert_eq!(format, Some(body::Format::Html));
+        assert_eq!(text(lines), ["<p>", "  <b>hi</b>", "</p>"]);
+
+        let (format, lines) = body_lines(&detail("image/png", &[0x89, 0xff, 0x00, 0x41]), 4, false);
+        assert_eq!(format, None);
+        assert!(lines[0].to_string().starts_with("binary body"));
     }
 
     #[test]

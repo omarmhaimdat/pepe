@@ -1,4 +1,5 @@
 mod bigtext;
+mod body;
 mod filter;
 pub mod format;
 mod mascot;
@@ -130,6 +131,8 @@ pub struct Dashboard {
     inspecting: bool,
     /// Lines scrolled down in the inspector's response
     detail_scroll: u16,
+    /// Show response bodies as received instead of formatted
+    raw_body: bool,
     /// Requests holding a full response, oldest first, with their size
     detailed: VecDeque<(u64, usize)>,
     detail_bytes: usize,
@@ -161,6 +164,7 @@ impl Dashboard {
             scroll: 0,
             inspecting: false,
             detail_scroll: 0,
+            raw_body: false,
             detailed: VecDeque::new(),
             detail_bytes: 0,
             notice: None,
@@ -613,6 +617,10 @@ impl Dashboard {
             // Walk through the requests
             KeyCode::Up | KeyCode::Char('k') => self.step_inspected(-1),
             KeyCode::Down | KeyCode::Char('j') => self.step_inspected(1),
+            KeyCode::Char('v') => {
+                self.raw_body = !self.raw_body;
+                self.detail_scroll = 0;
+            }
             // Jump to the nearest request whose full response was kept
             KeyCode::Char('[') => self.step_to_full(-1),
             KeyCode::Char(']') => self.step_to_full(1),
