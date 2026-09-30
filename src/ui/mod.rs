@@ -8,7 +8,7 @@ use std::collections::VecDeque;
 use std::time::{Duration, Instant};
 
 use crossterm::event::{Event, EventStream, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
-use futures::StreamExt;
+use futures::{FutureExt, StreamExt};
 use ratatui::{backend::CrosstermBackend, Terminal};
 use tokio::sync::mpsc::error::TryRecvError;
 use tokio::time::MissedTickBehavior;
@@ -27,6 +27,14 @@ const FRAME: Duration = Duration::from_millis(100);
 /// more often than drawing keeps the channel backlog (and memory) small at
 /// high request rates, and costs almost nothing.
 const PUMP: Duration = Duration::from_millis(25);
+/// After a resize, wait this long for the window to stop changing before a
+/// full redraw, so dragging the edge doesn't queue up dozens of them...
+const RESIZE_SETTLE: Duration = Duration::from_millis(50);
+/// ...but never hold the screen back longer than this while it keeps changing
+const RESIZE_MAX_WAIT: Duration = Duration::from_millis(250);
+/// While idle, how often to check the window size, in case a resize event
+/// never arrives
+const SIZE_CHECK: Duration = Duration::from_millis(250);
 /// Requests kept for the request log
 const LOG_CAPACITY: usize = 2_000;
 /// Failed requests kept separately, so a burst of successes can't push them
@@ -282,14 +290,22 @@ impl Dashboard {
         frames.set_missed_tick_behavior(MissedTickBehavior::Skip);
         let mut pump = tokio::time::interval(PUMP);
         pump.set_missed_tick_behavior(MissedTickBehavior::Skip);
+        let mut size_check = tokio::time::interval(SIZE_CHECK);
+        size_check.set_missed_tick_behavior(MissedTickBehavior::Skip);
+        // Ctrl-C arrives as a signal (see `keep_ctrl_c_a_signal`)
+        let ctrl_c = tokio::signal::ctrl_c();
+        tokio::pin!(ctrl_c);
 
         let mut dirty = true;
+        let mut drawn_size = None;
         loop {
             if dirty {
                 terminal.draw(|f| view::render(self, f))?;
+                drawn_size = crossterm::terminal::size().ok();
                 dirty = false;
             }
             tokio::select! {
+                _ = &mut ctrl_c => return Ok(Outcome::Quit),
                 _ = frames.tick(), if self.animating() => {
                     self.frame += 1;
                     self.drain(load);
@@ -300,9 +316,13 @@ impl Dashboard {
                     // Show the end of the run right away
                     dirty |= self.finished.is_some();
                 }
+                // Frames redraw at the current size anyway while animating
+                _ = size_check.tick(), if !self.animating() => {
+                    dirty = crossterm::terminal::size().ok() != drawn_size;
+                }
                 event = events.next() => match event {
                     Some(Ok(event)) => {
-                        if let Some(outcome) = self.handle(event, load) {
+                        if let Some(outcome) = self.handle_burst(event, &mut events, load).await {
                             return Ok(outcome);
                         }
                         dirty = true;
@@ -310,6 +330,40 @@ impl Dashboard {
                     Some(Err(e)) => return Err(e.into()),
                     None => return Ok(Outcome::Quit),
                 },
+            }
+        }
+    }
+
+    /// Handle `first` and every event queued behind it, so a burst (fast
+    /// typing, a window being dragged) costs one redraw instead of one each.
+    /// After a resize, also wait briefly for the size to settle.
+    async fn handle_burst(
+        &mut self,
+        first: Event,
+        events: &mut EventStream,
+        load: &LoadHandle,
+    ) -> Option<Outcome> {
+        let mut resized = matches!(first, Event::Resize(..));
+        if let Some(outcome) = self.handle(first, load) {
+            return Some(outcome);
+        }
+        let deadline = tokio::time::Instant::now() + RESIZE_MAX_WAIT;
+        loop {
+            let next = if resized {
+                let settle = (tokio::time::Instant::now() + RESIZE_SETTLE).min(deadline);
+                tokio::time::timeout_at(settle, events.next()).await.ok()
+            } else {
+                events.next().now_or_never()
+            };
+            match next {
+                Some(Some(Ok(event))) => {
+                    resized |= matches!(event, Event::Resize(..));
+                    if let Some(outcome) = self.handle(event, load) {
+                        return Some(outcome);
+                    }
+                }
+                Some(None) => return Some(Outcome::Quit),
+                _ => return None,
             }
         }
     }

@@ -1218,6 +1218,7 @@ dependencies = [
  "futures",
  "gethostname",
  "hyper",
+ "libc",
  "ratatui",
  "reqwest 0.12.28",
  "semver",
