@@ -7,6 +7,8 @@ use crate::PepeError;
 #[derive(Debug, Clone)]
 pub struct RequestSettings {
     pub timeout: u32,
+    /// Accept invalid TLS certificates
+    pub insecure: bool,
     pub disable_compression: bool,
     pub disable_keepalive: bool,
     pub disable_redirects: bool,
@@ -41,7 +43,7 @@ impl Request {
     pub fn new(
         url: String,
         method: String,
-        body: Option<String>,
+        body: Option<Vec<u8>>,
         headers: &[String],
         settings: RequestSettings,
     ) -> Result<Self, PepeError> {
@@ -63,13 +65,16 @@ impl Request {
 
     pub fn build_client(&self) -> Result<reqwest::Client, PepeError> {
         let mut request_headers = self.headers.clone();
-        request_headers.insert(
-            USER_AGENT,
-            self.settings
-                .user_agent
-                .parse::<HeaderValue>()
-                .map_err(|e| PepeError::HeaderParseError(e.to_string()))?,
-        );
+        // A User-Agent given with -H wins over the default one
+        if !request_headers.contains_key(USER_AGENT) {
+            request_headers.insert(
+                USER_AGENT,
+                self.settings
+                    .user_agent
+                    .parse::<HeaderValue>()
+                    .map_err(|e| PepeError::HeaderParseError(e.to_string()))?,
+            );
+        }
 
         let mut client_builder = reqwest::Client::builder()
             .default_headers(request_headers)
@@ -79,6 +84,10 @@ impl Request {
             let proxy =
                 Proxy::all(proxy_url).map_err(|e| PepeError::HeaderParseError(e.to_string()))?;
             client_builder = client_builder.proxy(proxy);
+        }
+
+        if self.settings.insecure {
+            client_builder = client_builder.danger_accept_invalid_certs(true);
         }
 
         if self.settings.disable_compression {
@@ -104,6 +113,7 @@ mod tests {
 
     fn settings() -> RequestSettings {
         RequestSettings {
+            insecure: false,
             timeout: 5,
             disable_compression: false,
             disable_keepalive: false,

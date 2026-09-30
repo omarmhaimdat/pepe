@@ -14,6 +14,7 @@ use crate::metrics::Metrics;
 
 mod cache;
 mod cli;
+mod curl;
 mod insights;
 mod json_report;
 mod load;

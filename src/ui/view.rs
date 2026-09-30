@@ -1641,8 +1641,7 @@ fn test_card(d: &Dashboard, w: usize) -> Card {
         format!("{} (from {})", d.concurrency, args.concurrency)
     };
     let body = args
-        .body
-        .as_ref()
+        .body()
         .map_or("none".into(), |b| format::bytes(b.len() as f64));
     Card::new("test")
         .line(Line::from(vec![
@@ -2122,10 +2121,11 @@ fn inspector_stats(d: &Dashboard, entry: &LogEntry, w: usize) -> Vec<Line<'stati
         .filter_map(|h| h.split_once(':'))
         .map(|(name, value)| (name.trim().to_lowercase(), value.trim().to_string()))
         .collect();
-    let mut sent = vec![
-        ("host".to_string(), host),
-        ("user-agent".to_string(), args.user_agent.clone()),
-    ];
+    let mut sent = vec![("host".to_string(), host)];
+    // The default User-Agent unless one was given with -H
+    if !custom.iter().any(|(name, _)| name == "user-agent") {
+        sent.push(("user-agent".to_string(), args.user_agent.clone()));
+    }
     // The client adds `accept: */*` unless one was given
     if !custom.iter().any(|(name, _)| name == "accept") {
         sent.push(("accept".to_string(), "*/*".to_string()));
@@ -2137,13 +2137,18 @@ fn inspector_stats(d: &Dashboard, entry: &LogEntry, w: usize) -> Vec<Line<'stati
             Span::raw(truncate(&v, w.saturating_sub(name.len() + 2))),
         ]));
     }
-    match &args.body {
+    match args.body() {
         Some(body) => {
             lines.push(Line::from(label(format!(
                 "body, {}:",
                 format::bytes(body.len() as f64)
             ))));
-            lines.push(Line::raw(truncate(&body.replace('\n', " "), w)));
+            let text = String::from_utf8_lossy(&body);
+            let preview: String = text
+                .chars()
+                .map(|c| if c.is_control() { ' ' } else { c })
+                .collect();
+            lines.push(Line::raw(truncate(&preview, w)));
         }
         None => lines.push(Line::from(label("no body"))),
     }

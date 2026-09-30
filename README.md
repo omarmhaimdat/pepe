@@ -102,7 +102,7 @@ Let's break down the options used in this command:
 
 ### Curl support
 
-pepe can parse curl command and convert it to pepe command.
+Load-test any curl command, including ones copied from a browser's dev tools ("Copy as cURL"), Postman or Insomnia. pepe sends the same request curl would: same method, URL, headers and body.
 
 ```bash
 pepe -n 1000 -c 10 --curl -- curl -X POST 'https://httpbin.org/post' \
@@ -110,9 +110,21 @@ pepe -n 1000 -c 10 --curl -- curl -X POST 'https://httpbin.org/post' \
   -d '{"key": "value"}'
 ```
 
-In order to use this feature, you need to make sure to add `--` after the pepe command and before the curl command.
+Put `--` between pepe's options and the curl command. The command can also be given as one quoted string, read from a file, or piped in:
 
-You don't need to have curl installed on your system, pepe will parse the curl command and convert it to pepe command.
+```bash
+pepe -z 30s --curl -- @request.txt
+pbpaste | pepe -z 30s --curl
+```
+
+What's understood:
+
+- Quoting: single and double quotes, backslash escapes, line continuations, bash `$'...'` (Chrome's "Copy as cURL (bash)") and Windows `^` escaping ("Copy as cURL (cmd)").
+- Methods: `-X`, and the ones curl implies: POST for data and forms, PUT for `-T`, HEAD for `-I`, GET for `-G`.
+- Bodies: `-d`/`--data`, `--data-raw`, `--data-binary`, `--data-urlencode`, `--json`, `@file` for any of them, `-F`/`--form` multipart (with file uploads), `-T` uploads, and `-G` to move data into the query string.
+- Headers: `-H` (including `-H @file`, `-H 'Name;'` for an empty value, `-H 'Name:'` to drop one), `-u` basic auth, `--oauth2-bearer`, `-b` cookies, `-A`, `-e`, `-r`, `--compressed`.
+- Connection: `-L` (like curl, redirects are only followed with `-L`), `-k`, `-x`, `-m`, `--no-keepalive`, `--url`, `--url-query`, bunched flags like `-sSLk` and attached values like `-XPOST`.
+- Output, logging and TLS options (`-o`, `-s`, `-v`, `-w`, `--cacert`, ...) are accepted and have no effect. An unknown option is an error, and anything pepe can't reproduce (such as a cookie file) is reported as a note.
 
 ## Examples
 
