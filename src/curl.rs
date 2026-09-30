@@ -33,14 +33,12 @@ pub fn parse_command(command: &str) -> Result<CurlRequest, String> {
 // ─── Shell words ─────────────────────────────────────────────────────────────
 
 /// Split a command into words like a POSIX shell (without expansions).
-/// Windows cmd-style commands (`^"` quoting, `^` line endings) are
-/// recognized and unescaped first.
+/// Windows cmd-style commands (`^"` quoting, `^` line endings) follow cmd's
+/// rules instead.
 pub fn split(input: &str) -> Result<Vec<String>, String> {
-    let input = if is_cmd_style(input) {
-        unescape_cmd(input)
-    } else {
-        input.to_string()
-    };
+    if is_cmd_style(input) {
+        return split_cmd(&unescape_cmd(input));
+    }
     let chars: Vec<char> = input.chars().collect();
     let mut words = Vec::new();
     let mut word = String::new();
@@ -194,6 +192,63 @@ fn ansi_c_quoted(chars: &[char], mut i: usize, out: &mut String) -> Result<usize
             out.push(c);
         }
     }
+}
+
+/// Split a cmd command line (after `^` unescaping) the way Windows programs
+/// read their arguments: only double quotes group, and backslashes are
+/// literal unless they come before a quote, so paths like `C:\dir\file`
+/// survive
+fn split_cmd(input: &str) -> Result<Vec<String>, String> {
+    let chars: Vec<char> = input.chars().collect();
+    let mut words = Vec::new();
+    let mut word = String::new();
+    let mut in_word = false;
+    let mut quoted = false;
+    let mut i = 0;
+    while i < chars.len() {
+        match chars[i] {
+            ' ' | '\t' | '\n' | '\r' if !quoted => {
+                if in_word {
+                    words.push(std::mem::take(&mut word));
+                    in_word = false;
+                }
+                i += 1;
+            }
+            '\\' => {
+                let run = chars[i..].iter().take_while(|&&c| c == '\\').count();
+                i += run;
+                if chars.get(i) == Some(&'"') {
+                    // 2n backslashes and a quote: n backslashes, then the
+                    // quote toggles; 2n+1: n backslashes and a literal quote
+                    word.extend(std::iter::repeat_n('\\', run / 2));
+                    if run % 2 == 1 {
+                        word.push('"');
+                        i += 1;
+                    }
+                } else {
+                    word.extend(std::iter::repeat_n('\\', run));
+                }
+                in_word = true;
+            }
+            '"' => {
+                quoted = !quoted;
+                in_word = true;
+                i += 1;
+            }
+            c => {
+                word.push(c);
+                in_word = true;
+                i += 1;
+            }
+        }
+    }
+    if quoted {
+        return Err("unterminated \" quote in the curl command".into());
+    }
+    if in_word {
+        words.push(word);
+    }
+    Ok(words)
 }
 
 /// Windows cmd copies quote with `^"` and end lines with ` ^`
@@ -786,7 +841,7 @@ fn url_encode_field(v: &str) -> Result<String, String> {
         (_, Some(e)) => Ok(format!(
             "{}={}",
             &v[..e],
-            percent_encode(v[e + 1..].as_bytes())
+            percent_encode(&v.as_bytes()[e + 1..])
         )),
         _ => Ok(percent_encode(v.as_bytes())),
     }
@@ -1191,6 +1246,28 @@ mod tests {
     }
 
     #[test]
+    fn windows_cmd_keeps_backslashes_in_paths() {
+        let words = split(
+            "curl ^\"https://x.io/up^\" ^\r\n  -F ^\"file=@C:\\Users\\ada\\it's.txt^\" ^\r\n  --data-raw ^\"^{^\\^\"a^\\^\":1^}^\"",
+        )
+        .unwrap();
+        assert_eq!(
+            words,
+            [
+                "curl",
+                "https://x.io/up",
+                "-F",
+                r"file=@C:\Users\ada\it's.txt",
+                "--data-raw",
+                r#"{"a":1}"#
+            ]
+        );
+        // cmd's argument rules for backslashes before quotes
+        assert_eq!(split_cmd(r#"a\\"b c" d\"e"#).unwrap(), [r"a\b c", r#"d"e"#]);
+        assert!(split_cmd("\"open").is_err());
+    }
+
+    #[test]
     fn plain_get_with_port_and_no_scheme() {
         let r = parse("curl localhost:8080/api/v1/items?id=4&sort=-name#top");
         assert_eq!(r.method, "GET");
@@ -1322,12 +1399,15 @@ mod tests {
         std::fs::write(&png, [0x89, b'P', b'N', b'G', 0, 1]).unwrap();
         let (json, png) = (json.display().to_string(), png.display().to_string());
 
-        let r = parse(&format!("curl -d @{json} https://x.io"));
+        // Quoted, as in a shell, so a Windows path keeps its backslashes
+        let r = parse(&format!("curl -d '@{json}' https://x.io"));
         assert_eq!(body(&r), "{\"a\":1}", "-d drops newlines from files");
-        let r = parse(&format!("curl --data-binary @{json} https://x.io"));
+        let r = parse(&format!("curl --data-binary '@{json}' https://x.io"));
         assert_eq!(body(&r), "{\"a\":\n1}\n", "--data-binary keeps them");
 
-        let r = parse(&format!("curl -F name=Ada -F 'avatar=@{png};type=image/x-png' -F 'note=<{json}' https://x.io/up"));
+        let r = parse(&format!(
+            "curl -F name=Ada -F 'avatar=@{png};type=image/x-png' -F 'note=<{json}' https://x.io/up"
+        ));
         assert_eq!(r.method, "POST");
         let ct = header(&r, "content-type").unwrap();
         let boundary = ct.strip_prefix("multipart/form-data; boundary=").unwrap();
@@ -1346,7 +1426,7 @@ mod tests {
         assert!(text.contains("name=\"note\"\r\n\r\n{\"a\":\n1}\n\r\n"));
         assert!(text.ends_with(&format!("--{boundary}--\r\n")));
 
-        let r = parse(&format!("curl -T {png} https://x.io/files/"));
+        let r = parse(&format!("curl -T '{png}' https://x.io/files/"));
         assert_eq!(
             (r.method.as_str(), r.url.as_str()),
             ("PUT", "https://x.io/files/logo.png")
