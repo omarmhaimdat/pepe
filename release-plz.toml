@@ -13,4 +13,7 @@ git_tag_name = "v{{ version }}"
 git_release_enable = false
 # Binary crate: no public Rust API to semver-check
 semver_check = false
+# Before 1.0, a release with any feat: commit bumps the minor version
+# (0.3.x -> 0.4.0) and fix-only releases bump the patch
+features_always_increment_minor = true
 pr_labels = ["release"]
