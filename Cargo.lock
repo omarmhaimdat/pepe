@@ -1208,7 +1208,7 @@ checksum = "57c0d7b74b563b49d38dae00a0c37d4d6de9b432382b2892f0574ddcae73fd0a"
 
 [[package]]
 name = "pepe"
-version = "0.3.1"
+version = "0.4.0"
 dependencies = [
  "axoupdater",
  "bytes",

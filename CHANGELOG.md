@@ -20,6 +20,24 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [Unreleased]
 
+## [0.4.0](https://github.com/omarmhaimdat/pepe/compare/v0.3.1...v0.4.0) - 2026-09-30
+
+### Added
+
+- rework the Stats view into cards over a full-height distribution
+- richer Live view, compact monochrome heatmap
+- request filters, calmer colors, redrawn mascot
+- latency heatmap, end-of-run verdict and a chili mascot
+- interactive dashboard with live charts, and a much faster load path
+
+### Fixed
+
+- dashboard freezing when the terminal falls behind, slow resizes
+
+### Other
+
+- bump the minor version for feature releases before 1.0
+
 ## [0.3.1](https://github.com/omarmhaimdat/pepe/compare/v0.3.0...v0.3.1) - 2026-09-29
 
 ### Other
