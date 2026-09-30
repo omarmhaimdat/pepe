@@ -9,6 +9,29 @@ pub const BUCKET: Duration = Duration::from_secs(1);
 /// Points kept: ten minutes of history at one per second
 const KEEP: usize = 600;
 
+/// Latency bins for the heatmap: log-spaced, 24 per decade from 10µs to 100s,
+/// so each bin is about 10% wide
+pub const BINS_PER_DECADE: usize = 24;
+pub const BINS: usize = BINS_PER_DECADE * 7;
+const LOWEST_US: f64 = 10.0;
+
+/// Request counts per latency bin for one bucket
+pub type LatencyBins = [u32; BINS];
+
+/// Heatmap bin for a latency in microseconds
+pub fn bin_of(us: u64) -> usize {
+    let us = us as f64;
+    if us <= LOWEST_US {
+        return 0;
+    }
+    (((us / LOWEST_US).log10() * BINS_PER_DECADE as f64) as usize).min(BINS - 1)
+}
+
+/// Lower edge of heatmap bin `bin`, in microseconds
+pub fn bin_floor_us(bin: usize) -> f64 {
+    LOWEST_US * 10f64.powf(bin as f64 / BINS_PER_DECADE as f64)
+}
+
 /// One closed bucket of the timeline
 #[derive(Debug, Clone, Copy, Default, PartialEq)]
 pub struct Sample {
@@ -26,7 +49,10 @@ pub struct Sample {
 #[derive(Debug, Default)]
 pub struct Timeline {
     samples: VecDeque<Sample>,
+    /// Heatmap column for each sample, kept apart so `Sample` stays small
+    bins: VecDeque<LatencyBins>,
     current: Histogram,
+    current_bins: Option<Box<LatencyBins>>,
     errors: u64,
     /// Start of the open bucket, relative to the run start
     bucket_start: Duration,
@@ -34,7 +60,9 @@ pub struct Timeline {
 
 impl Timeline {
     pub fn record(&mut self, stat: &ResponseStats) {
-        self.current.record(stat.duration.as_micros() as u64);
+        let us = stat.duration.as_micros() as u64;
+        self.current.record(us);
+        self.current_bins.get_or_insert_with(|| Box::new([0; BINS]))[bin_of(us)] += 1;
         if !stat.status_code.is_some_and(|code| code.is_success()) {
             self.errors += 1;
         }
@@ -69,8 +97,12 @@ impl Timeline {
         };
         if self.samples.len() == KEEP {
             self.samples.pop_front();
+            self.bins.pop_front();
         }
         self.samples.push_back(sample);
+        let bins = self.current_bins.get_or_insert_with(|| Box::new([0; BINS]));
+        self.bins.push_back(**bins);
+        bins.fill(0);
         self.current.clear();
         self.errors = 0;
         self.bucket_start += length;
@@ -82,6 +114,11 @@ impl Timeline {
 
     pub fn last(&self) -> Option<&Sample> {
         self.samples.back()
+    }
+
+    /// Latency bins, one per sample, oldest first
+    pub fn bins(&self) -> &VecDeque<LatencyBins> {
+        &self.bins
     }
 }
 
@@ -115,9 +152,15 @@ mod tests {
         assert!((9.9..=10.1).contains(&s.p50_ms), "p50={}", s.p50_ms);
         assert!((99.0..=101.0).contains(&s.p99_ms), "p99={}", s.p99_ms);
 
+        let bins = t.bins().back().unwrap();
+        assert_eq!(bins[bin_of(10_000)], 10);
+        assert_eq!(bins[bin_of(100_000)], 1);
+
         // Quiet seconds still produce (empty) points, so the chart shows gaps
         t.advance(Duration::from_millis(3_000));
         assert_eq!(t.samples().len(), 3);
+        assert_eq!(t.bins().len(), 3);
+        assert!(t.bins().back().unwrap().iter().all(|&n| n == 0));
         assert_eq!(t.last().unwrap().rps, 0.0);
     }
 
@@ -140,6 +183,20 @@ mod tests {
         let mut t = Timeline::default();
         t.advance(Duration::from_secs(KEEP as u64 + 50));
         assert_eq!(t.samples().len(), KEEP);
+        assert_eq!(t.bins().len(), KEEP);
         assert_eq!(t.samples().front().unwrap().at, 51.0);
+    }
+
+    #[test]
+    fn bins_are_log_spaced() {
+        assert_eq!(bin_of(0), 0);
+        assert_eq!(bin_of(10), 0);
+        assert_eq!(bin_of(100), BINS_PER_DECADE);
+        assert_eq!(bin_of(1_000), 2 * BINS_PER_DECADE);
+        assert_eq!(bin_of(u64::MAX), BINS - 1);
+        for us in [37u64, 1_234, 56_789, 3_000_000] {
+            let b = bin_of(us);
+            assert!(bin_floor_us(b) <= us as f64 * 1.000_001 && (us as f64) < bin_floor_us(b + 1));
+        }
     }
 }

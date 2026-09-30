@@ -197,9 +197,15 @@ Pepe provides detailed statistics about the performance of the web server, inclu
 - **Requests Per Second (RPS)**: The number of requests per second.
 - **DNS Lookup Time**: The average time taken to resolve the host, sampled once a second.
 
-### Dashboard keys
+### Dashboard
 
-The dashboard has three views: **Overview** (live charts and totals), **Latency** (distribution and full percentile summary) and **Requests** (the most recent requests with a preview of each response).
+The dashboard has three views:
+
+- **Live**: the headline numbers, a latency heatmap (time across, latency up, brighter cells mean more requests took that long) with p50 and p99 marked, throughput per second, and a panel with the detailed numbers.
+- **Stats**: every number pepe collects, the test setup, and the latency distribution.
+- **Requests**: the most recent requests with a preview of each response.
+
+Pepe, the chili in the corner, reacts to how the run is going. When a run ends, the header turns into a verdict (Healthy, Degraded or Failing) with findings such as failed requests, two separate latency groups, a long tail, or throughput and latency drifting over the run. The same summary is printed to your shell when you quit.
 
 | Key | Action |
 | --- | --- |

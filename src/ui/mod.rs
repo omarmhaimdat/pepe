@@ -1,4 +1,6 @@
-mod format;
+mod bigtext;
+pub mod format;
+mod mascot;
 mod view;
 
 use std::collections::VecDeque;
@@ -10,6 +12,7 @@ use ratatui::{backend::CrosstermBackend, Terminal};
 use tokio::sync::mpsc::error::TryRecvError;
 use tokio::time::MissedTickBehavior;
 
+use crate::insights::{self, Level, Verdict};
 use crate::load::{LoadHandle, Plan};
 use crate::metrics::Metrics;
 use crate::response::ResponseStats;
@@ -39,18 +42,18 @@ pub enum Outcome {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Tab {
-    Overview,
-    Latency,
+    Live,
+    Stats,
     Requests,
 }
 
 impl Tab {
-    const ALL: [Tab; 3] = [Tab::Overview, Tab::Latency, Tab::Requests];
+    const ALL: [Tab; 3] = [Tab::Live, Tab::Stats, Tab::Requests];
 
     fn title(self) -> &'static str {
         match self {
-            Tab::Overview => "Overview",
-            Tab::Latency => "Latency",
+            Tab::Live => "Live",
+            Tab::Stats => "Stats",
             Tab::Requests => "Requests",
         }
     }
@@ -94,6 +97,10 @@ pub struct Dashboard {
     /// Set once every request has finished (or the run was stopped)
     finished: Option<Duration>,
     interrupted: bool,
+    /// Findings, worked out once the run is over
+    verdict: Option<Verdict>,
+    /// Frames drawn while live, for the mascot's animation
+    frame: u64,
 
     tab: Tab,
     show_help: bool,
@@ -119,7 +126,9 @@ impl Dashboard {
             started: Instant::now(),
             finished: None,
             interrupted: false,
-            tab: Tab::Overview,
+            verdict: None,
+            frame: 0,
+            tab: Tab::Live,
             show_help: false,
             errors_only: false,
             scroll: 0,
@@ -170,6 +179,9 @@ impl Dashboard {
                         let now = self.started.elapsed();
                         self.finished = Some(now);
                         self.timeline.finish(now);
+                        let samples: Vec<_> = self.timeline.samples().iter().copied().collect();
+                        self.verdict =
+                            Some(insights::verdict(&self.metrics, &samples, self.interrupted));
                     }
                     break;
                 }
@@ -227,6 +239,7 @@ impl Dashboard {
             }
             tokio::select! {
                 _ = frames.tick(), if self.animating() => {
+                    self.frame += 1;
                     self.drain(load);
                     dirty = true;
                 }
@@ -302,6 +315,74 @@ impl Dashboard {
             _ => {}
         }
         None
+    }
+
+    /// How the mascot feels about the run so far
+    fn mood(&self) -> mascot::Mood {
+        use mascot::Mood;
+        if self.interrupted && self.finished.is_some() {
+            return Mood::Dizzy;
+        }
+        if let Some(verdict) = &self.verdict {
+            return match verdict.level {
+                Level::Healthy => Mood::Proud,
+                _ => Mood::Worried,
+            };
+        }
+        if self.paused {
+            return Mood::Sleeping;
+        }
+        let Some(now) = self.timeline.last() else {
+            return Mood::Waiting;
+        };
+        let error_share = if now.rps > 0.0 {
+            now.errors / now.rps
+        } else {
+            0.0
+        };
+        let median_ms = self.metrics.percentile(50.0).as_secs_f64() * 1000.0;
+        if error_share >= 0.05 {
+            Mood::OnFire
+        } else if error_share >= 0.005 || (median_ms > 0.0 && now.p99_ms > 10.0 * median_ms) {
+            Mood::Sweating
+        } else {
+            Mood::Happy
+        }
+    }
+
+    /// Headline numbers, most important first
+    fn summary_parts(&self) -> Vec<String> {
+        let m = &self.metrics;
+        let elapsed = self.elapsed();
+        vec![
+            format!(
+                "{} requests in {}",
+                format::count(m.total),
+                format::span(elapsed)
+            ),
+            format!("{} req/s", format::compact(m.rps(elapsed))),
+            format!("p99 {}", format::latency(m.percentile(99.0))),
+            format!("p50 {}", format::latency(m.percentile(50.0))),
+            format!("{:.2}% ok", 100.0 - m.error_rate()),
+        ]
+    }
+
+    /// Plain-text verdict to leave in the shell after quitting
+    pub fn report(&self) -> Option<String> {
+        let verdict = self.verdict.as_ref()?;
+        let mut out = format!(
+            "pepe · {} {} · ×{}\n{} {} · {}\n",
+            self.args.method,
+            self.args.url,
+            self.concurrency,
+            verdict.level.symbol(),
+            verdict.level.headline(),
+            self.summary_parts().join(" · ")
+        );
+        for note in &verdict.notes {
+            out += &format!("  {} {}\n", note.level.symbol(), note.text);
+        }
+        Some(out)
     }
 
     fn scroll_by(&mut self, rows: isize) {
@@ -414,8 +495,8 @@ mod tests {
 
     #[test]
     fn tabs_cycle_both_ways() {
-        assert_eq!(Tab::Overview.cycle(1), Tab::Latency);
-        assert_eq!(Tab::Overview.cycle(-1), Tab::Requests);
-        assert_eq!(Tab::Requests.cycle(1), Tab::Overview);
+        assert_eq!(Tab::Live.cycle(1), Tab::Stats);
+        assert_eq!(Tab::Live.cycle(-1), Tab::Requests);
+        assert_eq!(Tab::Requests.cycle(1), Tab::Live);
     }
 }

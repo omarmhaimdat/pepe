@@ -14,6 +14,7 @@ use crate::metrics::Metrics;
 
 mod cache;
 mod cli;
+mod insights;
 mod json_report;
 mod load;
 mod metrics;
@@ -116,7 +117,9 @@ async fn run_json(args: &Cli) -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-async fn run_dashboard(args: &Cli) -> Result<(), Box<dyn std::error::Error>> {
+/// Runs the dashboard until the user quits. Returns the end-of-run report, to
+/// print once the terminal is back to normal.
+async fn run_dashboard(args: &Cli) -> Result<Option<String>, Box<dyn std::error::Error>> {
     let _terminal = TerminalGuard::enter()?;
     let mut args = args.clone();
     loop {
@@ -129,7 +132,7 @@ async fn run_dashboard(args: &Cli) -> Result<(), Box<dyn std::error::Error>> {
                 args.concurrency = load.concurrency() as u32;
                 continue;
             }
-            ui::Outcome::Quit => return Ok(()),
+            ui::Outcome::Quit => return Ok(dashboard.report()),
         }
     }
 }
@@ -159,7 +162,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         default_hook(info);
     }));
 
-    run_dashboard(&args).await?;
+    if let Some(report) = run_dashboard(&args).await? {
+        print!("{report}");
+    }
     update::check_for_updates().await;
     Ok(())
 }
