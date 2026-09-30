@@ -250,7 +250,7 @@ async fn generate(
     // Owning every request task here means aborting this task (restart,
     // interrupt, Ctrl-C) drops the JoinSet, which cancels them all.
     let mut tasks = JoinSet::new();
-    let deadline = match plan {
+    let mut deadline = match plan {
         Plan::Duration(d) => Some(tokio::time::Instant::now() + d),
         Plan::Count(_) => None,
     };
@@ -263,21 +263,34 @@ async fn generate(
             }
         }
 
-        let acquire = async {
+        // Paused: wait for resume, then push the deadline back by the pause
+        // so a duration run gets its full length of sending
+        if *paused.borrow_and_update() {
+            let since = tokio::time::Instant::now();
             while *paused.borrow_and_update() {
                 if paused.changed().await.is_err() {
                     break;
                 }
             }
-            semaphore.clone().acquire_owned().await
-        };
+            if let Some(deadline) = deadline.as_mut() {
+                *deadline += since.elapsed();
+            }
+            continue;
+        }
+
+        let acquire = semaphore.clone().acquire_owned();
         let permit = match deadline {
-            // Don't sit waiting for a free slot (or a resume) past the end
+            // Don't sit waiting for a free slot past the end, and notice a
+            // pause that starts while waiting
             Some(deadline) => tokio::select! {
                 permit = acquire => permit,
                 _ = tokio::time::sleep_until(deadline) => break,
+                _ = paused.changed() => continue,
             },
-            None => acquire.await,
+            None => tokio::select! {
+                permit = acquire => permit,
+                _ = paused.changed() => continue,
+            },
         };
         let Ok(permit) = permit else { break };
         if deadline.is_some_and(|d| tokio::time::Instant::now() >= d) {
@@ -523,6 +536,34 @@ mod tests {
             budget.claim(false);
         }
         assert!(budget.claim(true));
+    }
+
+    #[tokio::test]
+    async fn pausing_a_duration_run_extends_it() {
+        let srv = server(Duration::from_millis(5)).await;
+        let req = request(&srv.url, "GET", None);
+        let begin = Instant::now();
+        let load = start(
+            req.build_client().unwrap(),
+            req,
+            2,
+            Plan::Duration(Duration::from_millis(400)),
+            false,
+        );
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        load.set_paused(true);
+        // Paused past the original deadline: nothing ends the run
+        tokio::time::sleep(Duration::from_millis(500)).await;
+        let held = load.sent();
+        load.set_paused(false);
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        assert!(load.sent() > held, "still sending after the pause");
+        let results = drain(load).await;
+        // 400ms of sending plus the 500ms pause, give or take
+        let took = begin.elapsed();
+        assert!(took >= Duration::from_millis(850), "took {took:?}");
+        assert!(took < Duration::from_millis(1_500), "took {took:?}");
+        assert!(!results.is_empty());
     }
 
     #[tokio::test]

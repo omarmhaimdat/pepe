@@ -503,11 +503,11 @@ fn render_footer(d: &Dashboard, f: &mut Frame, area: Rect) {
     } else if d.inspecting && d.tab == Tab::Requests {
         hints = vec![
             ("esc", "back"),
-            ("↑↓", "newer / older"),
-            ("PgUp/PgDn", "scroll response"),
+            ("↑↓ u/d", "scroll"),
+            ("g/G", "top / bottom"),
+            ("←→", "newer / older request"),
             ("[ ]", "nearest kept in full"),
             ("v", "raw / formatted"),
-            ("g/G", "newest / oldest"),
             ("q", "quit"),
         ];
     } else if d.tab == Tab::Requests {
@@ -538,7 +538,7 @@ fn render_footer(d: &Dashboard, f: &mut Frame, area: Rect) {
 }
 
 fn render_help(f: &mut Frame, area: Rect) {
-    let rows: [(&str, &str); 17] = [
+    let rows: [(&str, &str); 18] = [
         ("space / p", "pause or resume sending"),
         ("+ / -", "raise or lower concurrency by ~10%"),
         ("s / i", "stop the run, keep the results"),
@@ -548,6 +548,7 @@ fn render_help(f: &mut Frame, area: Rect) {
         ("↑ ↓ / j k", "select a request (newer / older)"),
         ("enter", "inspect it: stats, request, full response"),
         ("[ ]", "inspector: nearest request kept in full"),
+        ("← →", "inspector: newer / older request"),
         ("f", "filter requests by status"),
         ("l", "filter requests by latency (slow ones)"),
         ("/", "search status and response text"),
@@ -2178,12 +2179,6 @@ fn render_response(d: &Dashboard, f: &mut Frame, area: Rect, stat: &ResponseStat
             " formatted · v for raw · "
         }));
     }
-    hint.push(label(if d.detail_scroll > 0 {
-        format!("line {} · PgUp/PgDn", d.detail_scroll + 1)
-    } else {
-        "PgUp/PgDn to scroll".to_string()
-    }));
-    section(f, title, "response", Some(Line::from(hint)));
 
     let mut lines = Vec::new();
     if let Some(code) = stat.status_code {
@@ -2207,10 +2202,29 @@ fn render_response(d: &Dashboard, f: &mut Frame, area: Rect, stat: &ResponseStat
     }
     lines.push(Line::raw(""));
     lines.extend(body);
+
+    // Rows once wrapped, so scrolling can stop at the last page
+    let width = text.width.max(1) as usize;
+    let rows: usize = lines.iter().map(|l| l.width().div_ceil(width).max(1)).sum();
+    let height = text.height as usize;
+    let max = rows.saturating_sub(height).min(u16::MAX as usize) as u16;
+    d.detail_view.set((max, text.height));
+    let top = d.detail_scroll.min(max);
+    hint.push(label(if rows > height {
+        format!(
+            "lines {}–{} of {} · ↑↓ u/d to scroll",
+            top as usize + 1,
+            (top as usize + height).min(rows),
+            rows
+        )
+    } else {
+        format!("{rows} lines")
+    }));
+    section(f, title, "response", Some(Line::from(hint)));
     f.render_widget(
         Paragraph::new(lines)
             .wrap(Wrap { trim: false })
-            .scroll((d.detail_scroll, 0)),
+            .scroll((top, 0)),
         text,
     );
 }

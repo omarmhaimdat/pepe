@@ -203,13 +203,13 @@ The dashboard has three views:
 
 - **Live**: the headline numbers, a latency heatmap (time across, latency up, brighter cells mean more requests took that long) with p50 and p99 marked, throughput per second, and a panel with the detailed numbers.
 - **Stats**: every number pepe collects, the test setup, and the latency distribution.
-- **Requests**: the last 2,000 requests (and older failures), filterable by status, latency and text. Press `enter` on one to inspect it: status, total time split into time to first byte and body download, how it ranks in the run, DNS, server address, protocol, cache status, the request as sent, and the full response headers and body, with JSON, HTML and XML indented and highlighted. Walk to the next request with `↑`/`↓`. Up to 1,000 responses a second are kept in full, an even sample above that (marked `●`, reached with `[`/`]`).
+- **Requests**: the last 2,000 requests (and older failures), filterable by status, latency and text. Press `enter` on one to inspect it: status, total time split into time to first byte and body download, how it ranks in the run, DNS, server address, protocol, cache status, the request as sent, and the full response headers and body, with JSON, HTML and XML indented and highlighted. Walk to the next request with `←`/`→`. Up to 1,000 responses a second are kept in full, an even sample above that (marked `●`, reached with `[`/`]`).
 
 Pepe, the chili in the corner, reacts to how the run is going. When a run ends, the header turns into a verdict (Healthy, Degraded or Failing) with findings such as failed requests, two separate latency groups, a long tail, or throughput and latency drifting over the run. The same summary is printed to your shell when you quit.
 
 | Key | Action |
 | --- | --- |
-| `space` / `p` | Pause or resume sending |
+| `space` / `p` | Pause or resume sending; a timed run's clock stops while paused |
 | `+` / `-` | Raise or lower concurrency by about 10%, live |
 | `s` / `i` | Stop sending and keep the results on screen |
 | `r` | Restart with the same settings (and the current concurrency) |
@@ -219,7 +219,7 @@ Pepe, the chili in the corner, reacts to how the run is going. When a run ends, 
 | `l` | Filter requests by latency: at or above p50, p90 or p99 |
 | `/` | Search the status and response text |
 | `e` / `c` | Show only failed requests / clear all filters |
-| `enter` | Inspect the selected request; `↑`/`↓` walk through requests, `PgUp`/`PgDn` scroll the response, `[`/`]` jump to the nearest one kept in full, `v` switches between formatted and raw, `esc` goes back |
+| `enter` | Inspect the selected request: `↑`/`↓` (or the trackpad), `u`/`d` and `g`/`G` scroll the response, `←`/`→` walk to the newer/older request, `[`/`]` jump to the nearest one kept in full, `v` switches between formatted and raw, `esc` goes back |
 | `?` | Show all keys |
 | `q` / `esc` / `Ctrl-C` | Quit |
 
