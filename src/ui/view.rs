@@ -23,8 +23,8 @@ use crate::utils::num_of_cores;
 // 256-color indexes are stable across themes; the semantic colors use the
 // terminal's own green/yellow/red so they match the user's theme.
 
-/// Brand: soft teal
-const ACCENT: Color = Color::Indexed(80);
+/// The one accent color: cyan
+const ACCENT: Color = Color::Indexed(81);
 /// Labels: readable, but quieter than values
 const LABEL: Color = Color::Indexed(246);
 /// Rules and axes
@@ -32,18 +32,17 @@ const RULE: Color = Color::Indexed(239);
 const GOOD: Color = Color::Green;
 const WARN: Color = Color::Yellow;
 const BAD: Color = Color::Red;
-/// Heatmap ramp, few requests → many. Viridis-like: dark indigo through teal
-/// to soft yellow, easy on the eyes and readable by color-blind users.
+/// Heatmap ramp, few requests → many: dark gray to white
 const HEAT: [Color; 9] = [
-    Color::Indexed(54),
-    Color::Indexed(61),
-    Color::Indexed(67),
-    Color::Indexed(30),
-    Color::Indexed(36),
-    Color::Indexed(72),
-    Color::Indexed(114),
-    Color::Indexed(150),
-    Color::Indexed(186),
+    Color::Indexed(237),
+    Color::Indexed(239),
+    Color::Indexed(241),
+    Color::Indexed(243),
+    Color::Indexed(245),
+    Color::Indexed(247),
+    Color::Indexed(250),
+    Color::Indexed(253),
+    Color::Indexed(255),
 ];
 /// Cells holding less than this share of a column stay empty, so a few
 /// stray requests don't read as a pattern
@@ -584,65 +583,106 @@ fn render_help(f: &mut Frame, area: Rect) {
     );
 }
 
-// ─── Live: heatmap, throughput, stats column ─────────────────────────────────
+// ─── Live: latency heatmap and lines, throughput, latest, errors ─────────────
 
-/// Left axis and right gutter widths around the heatmap and throughput strip
+/// Left axis and right gutter widths around the time charts
 const AXIS: u16 = 8;
 const GUTTER: u16 = 13;
+/// While a run is going, the time axis spans at least this many seconds, so
+/// the first seconds don't stretch across the whole width
+const MIN_SPAN_SECS: usize = 30;
+/// Latency lines: name, value, color
+type LatencyLine = (&'static str, fn(&ColumnLatency) -> f64, Color);
+const LINES: [LatencyLine; 3] = [
+    ("p50", |l| l.p50, ACCENT),
+    ("p90", |l| l.p90, Color::Indexed(250)),
+    ("p99", |l| l.p99, WARN),
+];
 
 fn render_live(d: &Dashboard, f: &mut Frame, body: Rect) {
     let with_stats = body.width >= STATS_COLUMN_MIN_WIDTH;
-    let [chart, _, stats] = Layout::horizontal([
+    let [left, _, stats] = Layout::horizontal([
         Constraint::Min(0),
         Constraint::Length(if with_stats { 3 } else { 0 }),
         Constraint::Length(if with_stats { STATS_COLUMN } else { 0 }),
     ])
     .areas(body);
 
-    let [heat_title, heat, _, rps_title, rps, axis] = Layout::vertical([
-        Constraint::Length(1),
-        Constraint::Min(4),
-        Constraint::Length(1),
-        Constraint::Length(1),
-        Constraint::Length(4),
-        Constraint::Length(1),
-    ])
-    .areas(chart);
+    // The charts share one time axis and take a fixed share of the height,
+    // leaving the rest to the latest requests and errors
+    let h = left.height;
+    let heat_rows = (h / 5).clamp(3, 8);
+    let line_rows = (h / 7).clamp(3, 6);
+    let rps_rows = if h >= 30 { 4 } else { 3 };
+    let [heat_title, heat, line_title, lines, rps_title, rps, axis, _, bottom] =
+        Layout::vertical([
+            Constraint::Length(1),
+            Constraint::Length(heat_rows),
+            Constraint::Length(1),
+            Constraint::Length(line_rows),
+            Constraint::Length(1),
+            Constraint::Length(rps_rows),
+            Constraint::Length(1),
+            Constraint::Length(1),
+            Constraint::Min(0),
+        ])
+        .areas(left);
 
-    // Legend: the ramp, painted one cell per color after the text is laid out
-    let ramp = "█".repeat(HEAT.len());
+    // Heatmap legend: the ramp itself, one cell per shade
+    let ramp: Vec<Span> = HEAT
+        .iter()
+        .map(|&c| Span::styled("█", Style::new().fg(c)))
+        .collect();
+    let mut legend = vec![label("fewer ")];
+    legend.extend(ramp);
+    legend.push(label(" more"));
     section(
         f,
         heat_title,
-        "latency over time",
-        Some(Line::from(vec![
-            label("fewer "),
-            Span::raw(ramp),
-            label(" more"),
-        ])),
+        "latency distribution",
+        Some(Line::from(legend)),
     );
-    let ramp_x = heat_title.right().saturating_sub(HEAT.len() as u16 + 5);
-    for (i, color) in HEAT.iter().enumerate() {
-        if let Some(cell) = f.buffer_mut().cell_mut((ramp_x + i as u16, heat_title.y)) {
-            cell.set_fg(*color);
-        }
-    }
 
-    let now = d.timeline.last().map(|s| {
-        Line::from(vec![
-            label("now "),
-            value(format!("{} req/s", format::compact(s.rps)), ACCENT),
-        ])
-    });
-    section(f, rps_title, "throughput", now);
+    let mut line_legend = Vec::new();
+    for (name, _, color) in LINES {
+        line_legend.push(Span::styled("━ ", Style::new().fg(color)));
+        line_legend.push(label(format!("{name} ")));
+    }
+    section(
+        f,
+        line_title,
+        "latency percentiles",
+        Some(Line::from(line_legend)),
+    );
+    section(
+        f,
+        rps_title,
+        "throughput",
+        Some(throughput_detail(
+            d,
+            rps_title.width.saturating_sub(16) as usize,
+        )),
+    );
 
     if d.timeline.samples().is_empty() {
         placeholder(f, heat, "collecting the first second…");
     } else {
         let columns = Columns::new(d, heat.width.saturating_sub(AXIS + GUTTER));
         render_heatmap(d, &columns, f.buffer_mut(), heat);
+        render_latency_lines(&columns, f.buffer_mut(), lines);
         render_throughput(&columns, f.buffer_mut(), rps);
         render_time_axis(&columns, f, axis);
+    }
+
+    if bottom.height >= 4 {
+        let [latest, _, errors] = Layout::horizontal([
+            Constraint::Fill(3),
+            Constraint::Length(3),
+            Constraint::Fill(2),
+        ])
+        .areas(bottom);
+        render_latest(d, f, latest);
+        render_errors(d, f, errors);
     }
 
     if with_stats {
@@ -650,15 +690,71 @@ fn render_live(d: &Dashboard, f: &mut Frame, body: Rect) {
     }
 }
 
-/// Timeline samples grouped so the whole run fits the chart width
+/// "now 7.2k req/s · 1.9 MiB/s · 1.1 KiB avg body · 16 in flight", keeping
+/// only the leading items that fit in `width`
+fn throughput_detail(d: &Dashboard, width: usize) -> Line<'static> {
+    let m = &d.metrics;
+    let now = d.timeline.last().map_or(0.0, |s| s.rps);
+    let avg_body = if m.total > 0 {
+        m.bytes as f64 / m.total as f64
+    } else {
+        0.0
+    };
+    let items = [
+        vec![
+            label("now "),
+            value(format!("{} req/s", format::compact(now)), ACCENT),
+        ],
+        vec![value(
+            format!("{}/s", format::bytes(m.throughput(d.elapsed()))),
+            Color::Reset,
+        )],
+        vec![
+            value(format::bytes(avg_body), Color::Reset),
+            label(" avg body"),
+        ],
+        vec![
+            value(format::count(d.sent.saturating_sub(m.total)), Color::Reset),
+            label(" in flight"),
+        ],
+    ];
+    let mut spans: Vec<Span> = Vec::new();
+    let mut used = 0;
+    for item in items {
+        let sep = if spans.is_empty() { 0 } else { 3 };
+        let w: usize = item.iter().map(|s| s.width()).sum();
+        if used + sep + w > width {
+            break;
+        }
+        if sep > 0 {
+            spans.push(label(" · "));
+        }
+        spans.extend(item);
+        used += sep + w;
+    }
+    Line::from(spans)
+}
+
+/// Latency lines for one column, in milliseconds (None: no requests)
+struct ColumnLatency {
+    p50: f64,
+    p90: f64,
+    p99: f64,
+}
+
+/// Timeline samples grouped into chart columns. While a run is going the
+/// axis covers its planned length, so the chart fills in from the left.
 struct Columns {
-    /// Latency bins per column
+    /// Latency bins per column with data
     bins: Vec<LatencyBins>,
     rps: Vec<f64>,
     errors: Vec<f64>,
+    latency: Vec<Option<ColumnLatency>>,
+    /// Columns the axis has room for, including ones still to come
+    slots: usize,
     /// Cells available for the columns
     width: u16,
-    /// Seconds covered by the chart
+    /// Seconds covered by the axis
     span: (f64, f64),
 }
 
@@ -667,45 +763,79 @@ impl Columns {
         let samples = d.timeline.samples();
         let bins = d.timeline.bins();
         let n = samples.len();
+        let seconds = if d.finished.is_some() {
+            n
+        } else {
+            match d.plan {
+                Plan::Duration(t) => n.max(t.as_secs() as usize).min(n.max(600)),
+                Plan::Count(_) => n.max(MIN_SPAN_SECS),
+            }
+        };
         let width = (width as usize).max(1);
-        let group = n.div_ceil(width).max(1);
-        let count = n.div_ceil(group);
+        let group = seconds.div_ceil(width).max(1);
+        let start = samples.front().map_or(0.0, |s| s.at - 1.0).max(0.0);
 
         let mut out = Columns {
-            bins: Vec::with_capacity(count),
-            rps: Vec::with_capacity(count),
-            errors: Vec::with_capacity(count),
+            bins: Vec::new(),
+            rps: Vec::new(),
+            errors: Vec::new(),
+            latency: Vec::new(),
+            slots: seconds.div_ceil(group).max(1),
             width: width as u16,
-            span: (
-                samples.front().map_or(0.0, |s| s.at - 1.0).max(0.0),
-                samples.back().map_or(0.0, |s| s.at),
-            ),
+            span: (start, start + seconds as f64),
         };
-        for start in (0..n).step_by(group) {
-            let end = (start + group).min(n);
+        for first in (0..n).step_by(group) {
+            let end = (first + group).min(n);
             let mut merged = [0u32; BINS];
-            for column in bins.range(start..end) {
+            for column in bins.range(first..end) {
                 for (m, c) in merged.iter_mut().zip(column) {
                     *m += c;
                 }
             }
-            let len = (end - start) as f64;
+            let len = (end - first) as f64;
+            let group_samples = || samples.range(first..end);
             out.bins.push(merged);
             out.rps
-                .push(samples.range(start..end).map(|s| s.rps).sum::<f64>() / len);
+                .push(group_samples().map(|s| s.rps).sum::<f64>() / len);
             out.errors
-                .push(samples.range(start..end).map(|s| s.errors).sum::<f64>() / len);
+                .push(group_samples().map(|s| s.errors).sum::<f64>() / len);
+            // Average the seconds that had requests
+            let busy: Vec<_> = group_samples().filter(|s| s.rps > 0.0).collect();
+            out.latency.push((!busy.is_empty()).then(|| {
+                let avg = |pick: fn(&crate::timeline::Sample) -> f64| {
+                    busy.iter().map(|s| pick(s)).sum::<f64>() / busy.len() as f64
+                };
+                ColumnLatency {
+                    p50: avg(|s| s.p50_ms),
+                    p90: avg(|s| s.p90_ms),
+                    p99: avg(|s| s.p99_ms),
+                }
+            }));
         }
         out
     }
 
-    /// Cells of `area` a column covers. Columns share the width evenly, so
-    /// the chart always spans the whole plot.
+    /// Cells of `area` a column covers; columns share the axis evenly
     fn cells(&self, area: Rect, column: usize) -> std::ops::Range<u16> {
-        let n = self.bins.len().max(1);
-        let edge = |c: usize| area.x + AXIS + (c * self.width as usize / n) as u16;
+        let edge = |c: usize| area.x + AXIS + (c * self.width as usize / self.slots) as u16;
         edge(column)..edge(column + 1).max(edge(column) + 1)
     }
+}
+
+/// Left axis: a rule, with labels at the top and bottom rows
+fn draw_axis(buf: &mut Buffer, area: Rect, top: &str, bottom: &str) {
+    for row in 0..area.height {
+        buf.set_string(area.x + AXIS - 2, area.y + row, "│", Style::new().fg(RULE));
+    }
+    let dim = Style::new().fg(LABEL);
+    buf.set_stringn(area.x, area.y, format!("{top:>6} ┤"), AXIS as usize, dim);
+    buf.set_stringn(
+        area.x,
+        area.bottom() - 1,
+        format!("{bottom:>6} ┤"),
+        AXIS as usize,
+        dim,
+    );
 }
 
 /// Time × latency heatmap. Two latency rows per cell using half blocks; each
@@ -729,8 +859,8 @@ fn render_heatmap(d: &Dashboard, columns: &Columns, buf: &mut Buffer, area: Rect
     // A handful of outliers shouldn't squash everything else: cap the range a
     // little above p99.9 and pile anything slower into the top row
     let p999 = d.metrics.percentile(99.9).as_micros() as f64;
-    let cap =
-        bin_of((p999 * 1.5) as u64).max(bin_of(d.metrics.percentile(99.0).as_micros() as u64) + 2);
+    let p99 = d.metrics.percentile(99.0).as_micros() as u64;
+    let cap = bin_of((p999 * 1.5) as u64).max(bin_of(p99) + 2);
     let capped = hi > cap;
     let hi = hi.min(cap);
     let extra = (BINS_PER_DECADE / 2).saturating_sub(hi - lo + 1);
@@ -781,29 +911,16 @@ fn render_heatmap(d: &Dashboard, columns: &Columns, buf: &mut Buffer, area: Rect
         }
     }
 
-    // Axis: range at top and bottom, a thin rule in between
-    let dim = Style::new().fg(LABEL);
-    let axis_label = |buf: &mut Buffer, row: u16, text: String| {
-        buf.set_stringn(
-            area.x,
-            area.y + row,
-            format!("{text:>6} ┤"),
-            AXIS as usize,
-            dim,
-        );
-    };
-    for row in 0..area.height {
-        buf.set_string(area.x + AXIS - 2, area.y + row, "│", Style::new().fg(RULE));
-    }
     let top = format::latency_short(bin_floor_us(hi) as u64);
-    axis_label(buf, 0, if capped { format!("≥{top}") } else { top });
-    axis_label(
+    let top = if capped { format!("≥{top}") } else { top };
+    draw_axis(
         buf,
-        area.height - 1,
-        format::latency_short(bin_floor_us(lo) as u64),
+        area,
+        &top,
+        &format::latency_short(bin_floor_us(lo) as u64),
     );
 
-    // Overall p50 and p99 marked in the right gutter
+    // Run-wide p50 and p99 marked in the right gutter
     let row_of = |us: f64| -> u16 {
         let p = (bin_of(us as u64).saturating_sub(lo) as f64 / span * pixels as f64) as u16;
         area.height.saturating_sub(1).saturating_sub(p / 2)
@@ -820,11 +937,113 @@ fn render_heatmap(d: &Dashboard, columns: &Columns, buf: &mut Buffer, area: Rect
         );
     };
     let p50 = d.metrics.percentile(50.0).as_micros() as f64;
-    let p99 = d.metrics.percentile(99.0).as_micros() as f64;
+    let p99 = p99 as f64;
     let (r50, r99) = (row_of(p50), row_of(p99));
     mark(buf, r99, "p99", p99, WARN);
     if r50 != r99 {
-        mark(buf, r50, "p50", p50, GOOD);
+        mark(buf, r50, "p50", p50, ACCENT);
+    }
+}
+
+/// p50, p90 and p99 over time as braille lines on a log scale
+fn render_latency_lines(columns: &Columns, buf: &mut Buffer, area: Rect) {
+    let known: Vec<&ColumnLatency> = columns.latency.iter().flatten().collect();
+    if known.is_empty() || area.height == 0 {
+        return;
+    }
+    let lo = known
+        .iter()
+        .map(|l| l.p50)
+        .fold(f64::MAX, f64::min)
+        .max(0.001)
+        * 0.8;
+    let hi = known
+        .iter()
+        .map(|l| l.p99)
+        .fold(0.0, f64::max)
+        .max(lo * 2.0)
+        * 1.2;
+    let (width, height) = (columns.width as usize * 2, area.height as usize * 4);
+    let dot_row = |ms: f64| -> usize {
+        let t = ((ms.max(lo)).ln() - lo.ln()) / (hi.ln() - lo.ln());
+        height - 1 - ((t * (height - 1) as f64).round() as usize).min(height - 1)
+    };
+
+    // Braille dots per cell, and which line owns each cell (highest wins)
+    let cols = columns.width as usize;
+    let mut bits = vec![0u32; cols * area.height as usize];
+    let mut owner = vec![None::<usize>; cols * area.height as usize];
+    for (line, (_, pick, _)) in LINES.iter().enumerate() {
+        let mut prev: Option<usize> = None;
+        for (c, latency) in columns.latency.iter().enumerate() {
+            let Some(latency) = latency else {
+                prev = None;
+                continue;
+            };
+            let y = dot_row(pick(latency));
+            let cells = columns.cells(area, c);
+            let x0 = (cells.start - area.x - AXIS) as usize * 2;
+            let x1 = ((cells.end - area.x - AXIS) as usize * 2).min(width);
+            for x in x0..x1 {
+                // Join a step from the previous column with a vertical run
+                let (a, b) = match (x == x0, prev) {
+                    (true, Some(p)) => (p.min(y), p.max(y)),
+                    _ => (y, y),
+                };
+                for yy in a..=b {
+                    let i = (yy / 4) * cols + x / 2;
+                    bits[i] |= braille_bit(x % 2, yy % 4);
+                    owner[i] = Some(owner[i].map_or(line, |o| o.max(line)));
+                }
+            }
+            prev = Some(y);
+        }
+    }
+    for row in 0..area.height as usize {
+        for col in 0..cols {
+            let i = row * cols + col;
+            if let (Some(line), true) = (owner[i], bits[i] != 0) {
+                if let Some(cell) = buf.cell_mut((area.x + AXIS + col as u16, area.y + row as u16))
+                {
+                    cell.set_char(char::from_u32(0x2800 + bits[i]).unwrap_or(' '))
+                        .set_fg(LINES[line].2);
+                }
+            }
+        }
+    }
+
+    let us = |ms: f64| format::latency_short((ms * 1000.0) as u64);
+    draw_axis(buf, area, &us(hi), &us(lo));
+
+    // Latest values in the gutter, nudged apart when they'd share a row
+    let Some(last) = columns.latency.iter().rev().flatten().next() else {
+        return;
+    };
+    let gutter = area.right().saturating_sub(GUTTER) + 1;
+    let mut taken = Vec::new();
+    for (name, pick, color) in LINES.iter().rev() {
+        let mut row = (dot_row(pick(last)) / 4) as u16;
+        while taken.contains(&row) && row + 1 < area.height {
+            row += 1;
+        }
+        taken.push(row);
+        buf.set_stringn(
+            gutter,
+            area.y + row,
+            format!("◂ {name} {}", us(pick(last))),
+            GUTTER as usize - 1,
+            Style::new().fg(*color).bold(),
+        );
+    }
+}
+
+/// Braille bit for the dot at (column, row) within a cell
+fn braille_bit(dx: usize, dy: usize) -> u32 {
+    match (dx, dy) {
+        (0, 3) => 0x40,
+        (1, 3) => 0x80,
+        (0, dy) => 1 << dy,
+        (_, dy) => 1 << (dy + 3),
     }
 }
 
@@ -838,15 +1057,14 @@ fn render_throughput(columns: &Columns, buf: &mut Buffer, area: Rect) {
     let steps = area.height as usize * 8;
     for (c, (&rps, &errors)) in columns.rps.iter().zip(&columns.errors).enumerate() {
         let level = ((rps / peak) * steps as f64).round() as usize;
-        // Filled in a dark shade with a bright top edge, so the strip reads
-        // as a line with some weight under it rather than a solid wall
+        // A dim fill with a bright top edge; red where requests failed
         let failing = rps > 0.0 && errors / rps >= 0.01;
         let (edge, fill_color) = if failing {
             (BAD, Color::Indexed(52))
         } else {
-            (ACCENT, Color::Indexed(23))
+            (ACCENT, Color::Indexed(238))
         };
-        let top_row = (steps.saturating_sub(level)) / 8;
+        let top_row = steps.saturating_sub(level) / 8;
         for row in 0..area.height as usize {
             let from_bottom = area.height as usize - 1 - row;
             let fill = level.saturating_sub(from_bottom * 8).min(8);
@@ -861,33 +1079,21 @@ fn render_throughput(columns: &Columns, buf: &mut Buffer, area: Rect) {
             }
         }
     }
-    let dim = Style::new().fg(LABEL);
-    for row in 0..area.height {
-        buf.set_string(area.x + AXIS - 2, area.y + row, "│", Style::new().fg(RULE));
-    }
-    buf.set_stringn(
-        area.x,
-        area.y,
-        format!("{:>6} ┤", format::compact(peak)),
-        AXIS as usize,
-        dim,
-    );
-    buf.set_stringn(
-        area.x,
-        area.bottom() - 1,
-        format!("{:>6} ┤", "0"),
-        AXIS as usize,
-        dim,
-    );
+    draw_axis(buf, area, &format::compact(peak), "0");
     let gutter = area.right().saturating_sub(GUTTER) + 1;
-    buf.set_stringn(gutter, area.y, "◂ peak", GUTTER as usize - 1, dim);
+    buf.set_stringn(
+        gutter,
+        area.y,
+        "◂ peak",
+        GUTTER as usize - 1,
+        Style::new().fg(LABEL),
+    );
 }
 
 fn render_time_axis(columns: &Columns, f: &mut Frame, area: Rect) {
-    let width = columns.width;
     let axis = Rect {
         x: area.x + AXIS,
-        width: width.min(area.width.saturating_sub(AXIS + GUTTER)),
+        width: columns.width.min(area.width.saturating_sub(AXIS + GUTTER)),
         ..area
     };
     let secs = |s: f64| format::span(Duration::from_secs_f64(s.max(0.0)));
@@ -896,6 +1102,116 @@ fn render_time_axis(columns: &Columns, f: &mut Frame, area: Rect) {
         Paragraph::new(label(secs(columns.span.1))).alignment(Alignment::Right),
         axis,
     );
+}
+
+/// What a request returned, or why it failed, on one line
+fn outcome_text(stat: &ResponseStats) -> String {
+    stat.preview_text()
+        .or_else(|| stat.error_message.as_deref().map(str::to_string))
+        .unwrap_or_default()
+}
+
+/// The newest requests, one per row
+fn render_latest(d: &Dashboard, f: &mut Frame, area: Rect) {
+    let [title, rows] = Layout::vertical([Constraint::Length(1), Constraint::Min(0)]).areas(area);
+    section(
+        f,
+        title,
+        "latest requests",
+        Some(Line::from(label("3 for all"))),
+    );
+    if d.log.is_empty() {
+        return placeholder(f, rows, "no responses yet");
+    }
+    let lines: Vec<Line> = d
+        .log
+        .iter()
+        .rev()
+        .take(rows.height as usize)
+        .map(|e| {
+            let failed = e.is_error();
+            Line::from(vec![
+                Span::raw(format!("{:<12}", status_span(&e.stat).content))
+                    .style(status_span(&e.stat).style),
+                Span::raw(format!("{:>9}", format::latency(e.stat.duration))),
+                label(format!(" {:>9}  ", format::bytes(e.stat.body_bytes as f64))),
+                Span::styled(
+                    outcome_text(&e.stat),
+                    Style::new().fg(if failed { BAD } else { LABEL }),
+                ),
+            ])
+        })
+        .collect();
+    f.render_widget(Paragraph::new(lines), rows);
+}
+
+/// Failures grouped by kind, and what the latest one said
+fn render_errors(d: &Dashboard, f: &mut Frame, area: Rect) {
+    let m = &d.metrics;
+    let failed = m.total - m.success;
+    let [title, rows] = Layout::vertical([Constraint::Length(1), Constraint::Min(0)]).areas(area);
+    let summary = if failed == 0 {
+        Line::from(value("none", GOOD))
+    } else {
+        Line::from(vec![
+            value(format::count(failed), BAD),
+            label(format!(" · {:.1}%", m.error_rate())),
+        ])
+    };
+    section(f, title, "errors", Some(summary));
+    if failed == 0 {
+        let msg = if m.total == 0 {
+            "no responses yet"
+        } else {
+            "no errors so far"
+        };
+        return placeholder(f, rows, msg);
+    }
+
+    let mut kinds: Vec<(String, u64)> = m
+        .status_codes
+        .iter()
+        .filter(|(code, _)| !(200..300).contains(*code))
+        .map(|(code, &n)| (format!("HTTP {code}"), n))
+        .collect();
+    kinds.push(("timeout".into(), m.timeouts));
+    kinds.push(("connection".into(), m.errors));
+    kinds.retain(|(_, n)| *n > 0);
+    kinds.sort_by_key(|(_, n)| std::cmp::Reverse(*n));
+
+    let w = rows.width as usize;
+    let count_width = kinds
+        .iter()
+        .map(|k| format::count(k.1).len())
+        .max()
+        .unwrap_or(1);
+    let bar_width = w.saturating_sub(11 + count_width + 8);
+    let mut lines: Vec<Line> = kinds
+        .into_iter()
+        .map(|(name, n)| {
+            let share = n as f64 / failed as f64;
+            Line::from(vec![
+                value(format!("{name:<11}"), BAD),
+                Span::styled(
+                    format!("{:<bar_width$}", bar(share, bar_width)),
+                    Style::new().fg(BAD),
+                ),
+                Span::raw(format!(" {:>count_width$}", format::count(n))),
+                label(format!(" {:>5.1}%", share * 100.0)),
+            ])
+        })
+        .collect();
+
+    if let Some(last) = d.error_log.back() {
+        lines.push(Line::raw(""));
+        lines.push(Line::from(label("latest failure")));
+        let what = match last.stat.status_code {
+            Some(code) => format!("HTTP {} · {}", code.as_u16(), outcome_text(&last.stat)),
+            None => outcome_text(&last.stat),
+        };
+        lines.push(Line::from(Span::raw(truncate(&what, w))));
+    }
+    f.render_widget(Paragraph::new(lines), rows);
 }
 
 /// Everything worth knowing at a glance, as label/value rows
@@ -1441,7 +1757,7 @@ fn request_row(e: &LogEntry) -> Row<'static> {
         Line::from(Span::raw(format::latency(e.stat.duration))).alignment(Alignment::Right),
         Line::from(label(format::bytes(e.stat.body_bytes as f64))).alignment(Alignment::Right),
         Line::from(label(cache)),
-        Line::raw(e.stat.preview_text().unwrap_or_default()),
+        Line::raw(outcome_text(&e.stat)),
     ])
 }
 

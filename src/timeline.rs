@@ -41,6 +41,7 @@ pub struct Sample {
     /// Non-2xx responses and failed requests per second
     pub errors: f64,
     pub p50_ms: f64,
+    pub p90_ms: f64,
     pub p99_ms: f64,
 }
 
@@ -93,6 +94,7 @@ impl Timeline {
             rps: self.current.count() as f64 / secs,
             errors: self.errors as f64 / secs,
             p50_ms: ms(50.0),
+            p90_ms: ms(90.0),
             p99_ms: ms(99.0),
         };
         if self.samples.len() == KEEP {

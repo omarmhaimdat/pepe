@@ -52,6 +52,9 @@ pub struct ResponseStats {
     pub dns_times: Option<(Duration, Duration)>,
     pub cache_status: Option<CacheStatus>,
     pub error: Option<ErrorKind>,
+    /// Why the request failed, in the words of the innermost error (e.g.
+    /// "Connection refused (os error 61)"); kept only when previews are
+    pub error_message: Option<Box<str>>,
 }
 
 impl ResponseStats {
@@ -63,7 +66,7 @@ impl ResponseStats {
     ) -> Self {
         let mut resp = match resp {
             Ok(resp) => resp,
-            Err(e) => return Self::failed(&e, start, dns_times),
+            Err(e) => return Self::failed(&e, start, dns_times, keep_preview),
         };
 
         let status_code = resp.status();
@@ -83,7 +86,7 @@ impl ResponseStats {
                 }
                 Ok(None) => break,
                 // The status arrived but the body did not (e.g. timed out mid-body)
-                Err(e) => return Self::failed(&e, start, dns_times),
+                Err(e) => return Self::failed(&e, start, dns_times, keep_preview),
             }
         }
         let duration = start.elapsed();
@@ -96,14 +99,21 @@ impl ResponseStats {
             dns_times,
             cache_status,
             error: None,
+            error_message: None,
         }
     }
 
-    fn failed(e: &reqwest::Error, start: Instant, dns_times: Option<(Duration, Duration)>) -> Self {
+    fn failed(
+        e: &reqwest::Error,
+        start: Instant,
+        dns_times: Option<(Duration, Duration)>,
+        keep_message: bool,
+    ) -> Self {
         ResponseStats {
             duration: start.elapsed(),
             dns_times,
             error: Some(ErrorKind::from_reqwest(e)),
+            error_message: keep_message.then(|| root_cause(e).into()),
             ..Default::default()
         }
     }
@@ -114,6 +124,16 @@ impl ResponseStats {
     pub fn preview_text(&self) -> Option<String> {
         self.preview.as_deref().map(preview_text)
     }
+}
+
+/// The innermost error's message: reqwest's own is generic ("error sending
+/// request for url ..."), the cause is what's useful
+fn root_cause(e: &(dyn std::error::Error + 'static)) -> String {
+    let mut cause = e;
+    while let Some(source) = cause.source() {
+        cause = source;
+    }
+    cause.to_string()
 }
 
 fn preview_text(body: &[u8]) -> String {
@@ -140,6 +160,13 @@ mod tests {
         let preview = preview_text(body.as_bytes());
         assert!(preview.starts_with("line one  line two"));
         assert_eq!(preview.chars().count(), PREVIEW_CHARS);
+    }
+
+    #[test]
+    fn root_cause_is_the_innermost_error() {
+        let io = std::io::Error::new(std::io::ErrorKind::ConnectionRefused, "Connection refused");
+        let outer = std::io::Error::other(io);
+        assert_eq!(root_cause(&outer), "Connection refused");
     }
 
     #[test]
