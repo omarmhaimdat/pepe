@@ -8,7 +8,7 @@ use ratatui::{
     layout::{Alignment, Constraint, Flex, Layout, Rect},
     style::{Color, Style, Stylize},
     text::{Line, Span},
-    widgets::{Bar, BarChart, BarGroup, Block, BorderType, Clear, Paragraph, Row, Table, Tabs},
+    widgets::{Block, BorderType, Clear, Paragraph, Row, Table, Tabs},
     Frame,
 };
 
@@ -1316,7 +1316,7 @@ fn status_rows(d: &Dashboard, width: usize) -> Vec<Line<'static>> {
         rows.push(("timeout".into(), BAD, m.timeouts));
     }
     if m.errors > 0 {
-        rows.push(("error".into(), BAD, m.errors));
+        rows.push(("conn err".into(), BAD, m.errors));
     }
     let count_width = rows
         .iter()
@@ -1340,41 +1340,282 @@ fn status_rows(d: &Dashboard, width: usize) -> Vec<Line<'static>> {
         .collect()
 }
 
-// ─── Stats: every number, the test setup and the distribution ────────────────
+// ─── Stats: every number, as cards, over the latency distribution ───────────
 
-fn render_stats_tab(d: &Dashboard, f: &mut Frame, area: Rect) {
-    let dist_height = if area.height >= 34 { 12 } else { 0 };
-    let [grid, _, dist_title, dist] = Layout::vertical([
-        Constraint::Min(0),
-        Constraint::Length(if dist_height > 0 { 1 } else { 0 }),
-        Constraint::Length(if dist_height > 0 { 1 } else { 0 }),
-        Constraint::Length(dist_height),
-    ])
-    .areas(area);
+/// Cards are laid out in as many columns of about this width as fit
+const CARD_WIDTH: u16 = 48;
+const CARD_GAP: u16 = 4;
 
-    let [a, _, b, _, c] = Layout::horizontal([
-        Constraint::Fill(1),
-        Constraint::Length(4),
-        Constraint::Fill(1),
-        Constraint::Length(4),
-        Constraint::Fill(1),
-    ])
-    .areas(grid);
+/// A titled block of rows, built for a given width
+struct Card {
+    lines: Vec<Line<'static>>,
+}
 
-    f.render_widget(Paragraph::new(setup_column(d, a.width as usize)), a);
-    f.render_widget(Paragraph::new(counts_column(d, b.width as usize)), b);
-    f.render_widget(Paragraph::new(latency_column(d, c.width as usize)), c);
+impl Card {
+    fn new(title: &str) -> Self {
+        Card {
+            lines: vec![heading(title)],
+        }
+    }
 
-    if dist_height > 0 {
-        section(f, dist_title, "latency distribution", None);
-        render_distribution(d, f, dist);
+    fn row(mut self, name: &str, val: String, color: Color, width: usize) -> Self {
+        self.lines.push(kv(name, val, color, width));
+        self
+    }
+
+    fn line(mut self, line: Line<'static>) -> Self {
+        self.lines.push(line);
+        self
     }
 }
 
-/// Test setup, environment and, once done, the findings
-fn setup_column(d: &Dashboard, w: usize) -> Vec<Line<'static>> {
-    let args = &d.args;
+fn render_stats_tab(d: &Dashboard, f: &mut Frame, area: Rect) {
+    let columns = ((area.width + CARD_GAP) / (CARD_WIDTH + CARD_GAP)).clamp(1, 4);
+    let width = (area.width + CARD_GAP) / columns - CARD_GAP;
+    let w = width as usize;
+    let cards = [
+        requests_card(d, w),
+        latency_card(d, w),
+        throughput_card(d, w),
+        errors_card(d, w),
+        status_card(d, w),
+        test_card(d, w),
+        network_card(d, w),
+    ];
+
+    // Masonry: each card goes to the shortest column so far
+    let mut heights = vec![0u16; columns as usize];
+    let mut placed = Vec::with_capacity(cards.len());
+    for card in cards {
+        let col = (0..heights.len()).min_by_key(|&c| heights[c]).unwrap_or(0);
+        placed.push((col, heights[col], card));
+        heights[col] += card_height(&placed.last().unwrap().2) + 1;
+    }
+    let grid_height = heights.iter().copied().max().unwrap_or(0).min(area.height);
+
+    for (col, y, card) in placed {
+        let x = area.x + col as u16 * (width + CARD_GAP);
+        let height = card_height(&card).min(grid_height.saturating_sub(y));
+        if height == 0 {
+            continue;
+        }
+        let rect = Rect::new(x, area.y + y, width, height);
+        f.render_widget(Paragraph::new(card.lines), rect);
+    }
+
+    // The distribution takes whatever height is left
+    let rest = area.height.saturating_sub(grid_height);
+    if rest >= 8 {
+        let [title, chart] = Layout::vertical([Constraint::Length(1), Constraint::Min(0)])
+            .areas(Rect::new(area.x, area.y + grid_height, area.width, rest));
+        section(
+            f,
+            title,
+            "latency distribution",
+            Some(Line::from(label("requests per latency, √ scale"))),
+        );
+        render_distribution(d, f.buffer_mut(), chart);
+    }
+}
+
+fn card_height(card: &Card) -> u16 {
+    card.lines.len() as u16
+}
+
+fn requests_card(d: &Dashboard, w: usize) -> Card {
     let m = &d.metrics;
+    let failed = m.total - m.success;
+    let share = |n: u64| match m.total {
+        0 => String::new(),
+        total => format!("  {:>6.2}%", n as f64 / total as f64 * 100.0),
+    };
+    let quiet = |n: u64, color: Color| if n > 0 { color } else { LABEL };
+    Card::new("requests")
+        .row("sent", format::count(d.sent), Color::Reset, w)
+        .row("completed", format::count(m.total), Color::Reset, w)
+        .row(
+            "in flight",
+            format::count(d.sent.saturating_sub(m.total)),
+            Color::Reset,
+            w,
+        )
+        .row(
+            "ok (2xx)",
+            format!("{}{}", format::count(m.success), share(m.success)),
+            GOOD,
+            w,
+        )
+        .row(
+            "failed",
+            format!("{}{}", format::count(failed), share(failed)),
+            quiet(failed, BAD),
+            w,
+        )
+        .row(
+            "  http errors",
+            format::count(m.failed),
+            quiet(m.failed, WARN),
+            w,
+        )
+        .row(
+            "  timeouts",
+            format::count(m.timeouts),
+            quiet(m.timeouts, BAD),
+            w,
+        )
+        .row(
+            "  conn errors",
+            format::count(m.errors),
+            quiet(m.errors, BAD),
+            w,
+        )
+}
+
+/// Every percentile, each with a log-scale bar so p50 and p99.99 both show
+fn latency_card(d: &Dashboard, w: usize) -> Card {
+    let m = &d.metrics;
+    let min = (m.min().as_micros() as f64).max(1.0);
+    let max = (m.max().as_micros() as f64).max(min * 1.01);
+    let value_width = 10;
+    let bar_width = w.saturating_sub(8 + value_width + 2);
+    let mut card = Card::new("latency");
+    let row = |card: Card, name: &str, v: Duration, color: Color| {
+        let t = ((v.as_micros() as f64).max(min) / min).ln() / (max / min).ln();
+        card.line(Line::from(vec![
+            label(format!("{name:<8}")),
+            value(format!("{:>value_width$}", format::latency(v)), color),
+            Span::raw("  "),
+            Span::styled(bar(t, bar_width), Style::new().fg(color)),
+        ]))
+    };
+    card = row(card, "min", m.min(), GOOD);
+    let n = PERCENTILES.len();
+    for (i, &(name, q)) in PERCENTILES.iter().enumerate() {
+        card = row(card, name, m.percentile(q), heat(i, n));
+    }
+    card = row(card, "max", m.max(), BAD);
+    card.row(
+        "mean ± sd",
+        format!(
+            "{} ± {}",
+            format::latency(m.mean()),
+            format::latency(m.std_dev())
+        ),
+        Color::Reset,
+        w,
+    )
+}
+
+fn throughput_card(d: &Dashboard, w: usize) -> Card {
+    let m = &d.metrics;
+    let elapsed = d.elapsed();
+    let samples = d.timeline.samples();
+    // Leave out the ramp-up and drain seconds at either end
+    let steady: Vec<f64> = samples
+        .iter()
+        .skip(1)
+        .take(samples.len().saturating_sub(2))
+        .map(|s| s.rps)
+        .collect();
+    let peak = samples.iter().map(|s| s.rps).fold(0.0, f64::max);
+    let slowest = steady.iter().copied().fold(f64::MAX, f64::min);
+    let spread = if steady.len() >= 2 {
+        let mean = steady.iter().sum::<f64>() / steady.len() as f64;
+        let var = steady.iter().map(|v| (v - mean).powi(2)).sum::<f64>() / steady.len() as f64;
+        format!("±{:.0}%", var.sqrt() / mean.max(f64::EPSILON) * 100.0)
+    } else {
+        "—".into()
+    };
+    let avg_body = if m.total > 0 {
+        m.bytes as f64 / m.total as f64
+    } else {
+        0.0
+    };
+    let rate = |v: f64| format!("{} req/s", format::compact(v));
+    Card::new("throughput")
+        .row("average", rate(m.rps(elapsed)), ACCENT, w)
+        .row("peak second", rate(peak), Color::Reset, w)
+        .row(
+            "slowest second",
+            if steady.is_empty() {
+                "—".into()
+            } else {
+                rate(slowest)
+            },
+            Color::Reset,
+            w,
+        )
+        .row("spread", spread, Color::Reset, w)
+        .row("received", format::bytes(m.bytes as f64), Color::Reset, w)
+        .row(
+            "transfer",
+            format!("{}/s", format::bytes(m.throughput(elapsed))),
+            Color::Reset,
+            w,
+        )
+        .row("avg body", format::bytes(avg_body), Color::Reset, w)
+        .row("elapsed", format::clock(elapsed), Color::Reset, w)
+        .line(sparkline(samples.iter().map(|s| s.rps), w))
+}
+
+/// Values as a one-line bar sparkline, squeezed to `width` cells
+fn sparkline(values: impl ExactSizeIterator<Item = f64>, width: usize) -> Line<'static> {
+    const LEVELS: [char; 8] = ['▁', '▂', '▃', '▄', '▅', '▆', '▇', '█'];
+    let values: Vec<f64> = values.collect();
+    if values.is_empty() || width == 0 {
+        return Line::raw("");
+    }
+    let group = values.len().div_ceil(width);
+    let points: Vec<f64> = values
+        .chunks(group)
+        .map(|c| c.iter().sum::<f64>() / c.len() as f64)
+        .collect();
+    let peak = points.iter().copied().fold(0.0, f64::max).max(f64::EPSILON);
+    let text: String = points
+        .iter()
+        .map(|v| LEVELS[((v / peak) * 7.0).round() as usize])
+        .collect();
+    Line::styled(text, Style::new().fg(ACCENT))
+}
+
+/// Failures grouped by cause, most frequent first
+fn errors_card(d: &Dashboard, w: usize) -> Card {
+    let m = &d.metrics;
+    let failed = m.total - m.success;
+    let mut card = Card::new("errors");
+    if failed == 0 {
+        let text = if m.total == 0 {
+            "no responses yet"
+        } else {
+            "none"
+        };
+        return card.line(Line::from(value(
+            text,
+            if m.total == 0 { LABEL } else { GOOD },
+        )));
+    }
+    for (cause, n) in d.top_failure_causes().into_iter().take(6) {
+        let count = format!(
+            "{}  {:>5.1}%",
+            format::count(n),
+            n as f64 / m.total as f64 * 100.0
+        );
+        let room = w.saturating_sub(count.len() + 2);
+        card = card.row(&truncate(cause, room), count, BAD, w);
+    }
+    card
+}
+
+fn status_card(d: &Dashboard, w: usize) -> Card {
+    let mut card = Card::new("status codes");
+    for line in status_rows(d, w) {
+        card = card.line(line);
+    }
+    card
+}
+
+fn test_card(d: &Dashboard, w: usize) -> Card {
+    let args = &d.args;
     let on_off = |on: bool| if on { "on" } else { "off" }.to_string();
     let plan = match d.plan {
         Plan::Count(n) => format!("{} requests", format::count(n)),
@@ -1389,230 +1630,152 @@ fn setup_column(d: &Dashboard, w: usize) -> Vec<Line<'static>> {
         .body
         .as_ref()
         .map_or("none".into(), |b| format::bytes(b.len() as f64));
-
-    let mut lines = vec![
-        heading("test"),
-        Line::from(vec![
+    Card::new("test")
+        .line(Line::from(vec![
             value(format!("{} ", args.method), Color::Magenta),
             Span::raw(truncate(&args.url, w.saturating_sub(args.method.len() + 1))),
-        ]),
-        kv("run", plan, Color::Reset, w),
-        kv("concurrency", concurrency, Color::Reset, w),
-        kv("timeout", format!("{}s", args.timeout), Color::Reset, w),
-        kv("headers", args.headers.len().to_string(), Color::Reset, w),
-        kv("body", body, Color::Reset, w),
-        kv(
+        ]))
+        .row("run", plan, Color::Reset, w)
+        .row("concurrency", concurrency, Color::Reset, w)
+        .row("timeout", format!("{}s", args.timeout), Color::Reset, w)
+        .row("headers", args.headers.len().to_string(), Color::Reset, w)
+        .row("body", body, Color::Reset, w)
+        .row(
             "keep-alive",
             on_off(!args.disable_keepalive),
             Color::Reset,
             w,
-        ),
-        kv(
+        )
+        .row(
             "redirects",
             on_off(!args.disable_redirects),
             Color::Reset,
             w,
-        ),
-        kv(
+        )
+        .row(
             "proxy",
             truncate(args.proxy.as_deref().unwrap_or("none"), w / 2),
             Color::Reset,
             w,
-        ),
-        kv(
+        )
+        .row(
             "user agent",
             truncate(&args.user_agent, w / 2),
             Color::Reset,
             w,
-        ),
-        Line::raw(""),
-        heading("network"),
-        kv(
+        )
+}
+
+fn network_card(d: &Dashboard, w: usize) -> Card {
+    let m = &d.metrics;
+    Card::new("network")
+        .row(
             "dns lookup",
             format::latency(m.avg_dns_lookup()),
             Color::Reset,
             w,
-        ),
-        kv(
+        )
+        .row(
             "cache hits",
             format!("{:.1}%", m.cache_hit_rate()),
             Color::Reset,
             w,
-        ),
-        kv(
+        )
+        .row(
             "from",
             truncate(&gethostname().to_string_lossy(), w / 2),
             Color::Reset,
             w,
-        ),
-        kv("cores", num_of_cores().to_string(), Color::Reset, w),
-    ];
-    if let Some(v) = &d.verdict {
-        lines.push(Line::raw(""));
-        lines.push(heading("findings"));
-        for note in &v.notes {
-            lines.push(Line::from(vec![
-                Span::styled(
-                    format!("{} ", note.level.symbol()),
-                    Style::new().fg(level_color(note.level)),
-                ),
-                Span::raw(truncate(&note.text, w.saturating_sub(2))),
-            ]));
+        )
+        .row("cores", num_of_cores().to_string(), Color::Reset, w)
+}
+
+/// Latency histogram on a log x-axis and a square-root y-axis (so the tail
+/// shows), with p50, p90 and p99 marked
+fn render_distribution(d: &Dashboard, buf: &mut Buffer, area: Rect) {
+    const LEVELS: [char; 8] = ['▁', '▂', '▃', '▄', '▅', '▆', '▇', '█'];
+    let hist = d.metrics.latency();
+    // Bottom row for the latency labels, top row for the markers
+    if hist.count() == 0 || area.height < 4 || area.width <= AXIS + 4 {
+        return;
+    }
+    let plot = Rect::new(
+        area.x + AXIS,
+        area.y + 1,
+        area.width - AXIS,
+        area.height - 2,
+    );
+    let lo = (d.metrics.min().as_micros() as f64).max(1.0);
+    let hi = (d.metrics.max().as_micros() as f64).max(lo * 1.01);
+    let span = (hi / lo).ln();
+    let x_of = |us: f64| -> usize {
+        (((us.max(lo) / lo).ln() / span) * (plot.width - 1) as f64).round() as usize
+    };
+    let mut counts = vec![0u64; plot.width as usize];
+    for (v, n) in hist.buckets() {
+        counts[x_of(v as f64).min(plot.width as usize - 1)] += n;
+    }
+    let peak = counts.iter().copied().max().unwrap_or(0).max(1) as f64;
+    let steps = plot.height as usize * 8;
+
+    let p = |q| d.metrics.percentile(q).as_micros() as f64;
+    let (p50, p90, p99) = (p(50.0), p(90.0), p(99.0));
+    for (x, &n) in counts.iter().enumerate() {
+        if n == 0 {
+            continue;
+        }
+        let level = (((n as f64 / peak).sqrt() * steps as f64).round() as usize).max(1);
+        // Past p99 is the tail: tint it so it reads as such
+        let at = lo * (span * x as f64 / (plot.width - 1) as f64).exp();
+        let color = if at > p99 { WARN } else { Color::Indexed(250) };
+        for row in 0..plot.height as usize {
+            let from_bottom = plot.height as usize - 1 - row;
+            let fill = level.saturating_sub(from_bottom * 8).min(8);
+            if fill > 0 {
+                if let Some(cell) = buf.cell_mut((plot.x + x as u16, plot.y + row as u16)) {
+                    cell.set_char(LEVELS[fill - 1]).set_fg(color);
+                }
+            }
         }
     }
-    lines
+
+    // Percentile markers: a dotted rule down the empty space, label on top
+    for (name, us, color) in [
+        ("p50", p50, ACCENT),
+        ("p90", p90, Color::Reset),
+        ("p99", p99, WARN),
+    ] {
+        let x = plot.x + x_of(us) as u16;
+        for row in 0..plot.height {
+            if let Some(cell) = buf.cell_mut((x, plot.y + row)) {
+                if cell.symbol() == " " {
+                    cell.set_char('┊').set_fg(color);
+                }
+            }
+        }
+        let text = format!("{name} {}", format::latency_short(us as u64));
+        let start = x.min(area.right().saturating_sub(text.len() as u16));
+        buf.set_string(start, area.y, text, Style::new().fg(color).bold());
+    }
+
+    // Axes: peak count on the left, latency labels every ~12 cells below
+    draw_axis(buf, plot_axis(area, plot), &format::compact(peak), "0");
+    let mut next_free = plot.x;
+    let bottom = area.bottom() - 1;
+    for x in (0..plot.width).step_by(12) {
+        let us = lo * (span * x as f64 / (plot.width - 1) as f64).exp();
+        let text = format::latency_short(us as u64);
+        let at = plot.x + x;
+        if at >= next_free && at + text.len() as u16 <= area.right() {
+            buf.set_string(at, bottom, &text, Style::new().fg(LABEL));
+            next_free = at + text.len() as u16 + 2;
+        }
+    }
 }
 
-/// Counts, rates and status codes
-fn counts_column(d: &Dashboard, w: usize) -> Vec<Line<'static>> {
-    let m = &d.metrics;
-    let elapsed = d.elapsed();
-    let failed = m.total - m.success;
-    let peak = d
-        .timeline
-        .samples()
-        .iter()
-        .map(|s| s.rps)
-        .fold(0.0, f64::max);
-    let share = |n: u64| match m.total {
-        0 => "—".to_string(),
-        total => format!("{:.2}%", n as f64 / total as f64 * 100.0),
-    };
-    let avg_body = if m.total > 0 {
-        m.bytes as f64 / m.total as f64
-    } else {
-        0.0
-    };
-
-    let mut lines = vec![
-        heading("requests"),
-        kv("sent", format::count(d.sent), Color::Reset, w),
-        kv("completed", format::count(m.total), Color::Reset, w),
-        kv(
-            "in flight",
-            format::count(d.sent.saturating_sub(m.total)),
-            Color::Reset,
-            w,
-        ),
-        kv(
-            "ok (2xx)",
-            format!("{}  {}", format::count(m.success), share(m.success)),
-            GOOD,
-            w,
-        ),
-        kv(
-            "failed",
-            format!("{}  {}", format::count(failed), share(failed)),
-            if failed > 0 { BAD } else { LABEL },
-            w,
-        ),
-        kv("  http errors", format::count(m.failed), LABEL, w),
-        kv("  timeouts", format::count(m.timeouts), LABEL, w),
-        kv("  conn errors", format::count(m.errors), LABEL, w),
-        Line::raw(""),
-        heading("throughput"),
-        kv(
-            "average",
-            format!("{} req/s", format::compact(m.rps(elapsed))),
-            ACCENT,
-            w,
-        ),
-        kv(
-            "peak second",
-            format!("{} req/s", format::compact(peak)),
-            Color::Reset,
-            w,
-        ),
-        kv("received", format::bytes(m.bytes as f64), Color::Reset, w),
-        kv(
-            "transfer",
-            format!("{}/s", format::bytes(m.throughput(elapsed))),
-            Color::Reset,
-            w,
-        ),
-        kv("avg body", format::bytes(avg_body), Color::Reset, w),
-        kv("elapsed", format::clock(elapsed), Color::Reset, w),
-        Line::raw(""),
-        heading("status codes"),
-    ];
-    lines.extend(status_rows(d, w));
-    lines
-}
-
-/// Every percentile, as numbers and as bars
-fn latency_column(d: &Dashboard, w: usize) -> Vec<Line<'static>> {
-    let m = &d.metrics;
-    let n = PERCENTILES.len();
-    let mut lines = vec![
-        heading("latency"),
-        kv("min", format::latency(m.min()), GOOD, w),
-        kv("mean", format::latency(m.mean()), Color::Reset, w),
-        kv("std dev", format::latency(m.std_dev()), Color::Reset, w),
-    ];
-    for (i, &(name, q)) in PERCENTILES.iter().enumerate() {
-        lines.push(kv(name, format::latency(m.percentile(q)), heat(i, n), w));
-    }
-    lines.push(kv("max", format::latency(m.max()), BAD, w));
-    lines.push(Line::raw(""));
-    lines.push(heading("percentiles"));
-
-    let max = m.max().as_secs_f64().max(f64::EPSILON);
-    let bar_width = w.saturating_sub(18);
-    for (i, &(name, q)) in PERCENTILES.iter().enumerate() {
-        let v = m.percentile(q);
-        lines.push(Line::from(vec![
-            label(format!("{name:<7}")),
-            Span::styled(
-                format!("{:<bar_width$}", bar(v.as_secs_f64() / max, bar_width)),
-                Style::new().fg(heat(i, n)),
-            ),
-            Span::raw(format!(" {:>9}", format::latency(v))),
-        ]));
-    }
-    lines
-}
-
-/// Latency histogram re-binned onto a log scale between min and max
-fn render_distribution(d: &Dashboard, f: &mut Frame, area: Rect) {
-    let hist = d.metrics.latency();
-    if hist.count() == 0 {
-        return placeholder(f, area, "no responses yet");
-    }
-    const BAR: u16 = 6;
-    let bins = ((area.width + 1) / (BAR + 1)).clamp(1, 40) as usize;
-    let lo = (d.metrics.min().as_micros() as f64).max(1.0);
-    let hi = (d.metrics.max().as_micros() as f64).max(lo + 1.0);
-    let span = (hi / lo).ln();
-    let mut counts = vec![0u64; bins];
-    for (v, n) in hist.buckets() {
-        let t = ((v as f64).max(lo) / lo).ln() / span;
-        counts[((t * bins as f64) as usize).min(bins - 1)] += n;
-    }
-    let bars: Vec<Bar> = counts
-        .iter()
-        .enumerate()
-        .map(|(i, &n)| {
-            let mid = lo * (span * (i as f64 + 0.5) / bins as f64).exp();
-            Bar::default()
-                .value(n)
-                .text_value(if n == 0 {
-                    String::new()
-                } else {
-                    format::compact(n as f64)
-                })
-                .label(Line::from(format::latency_short(mid as u64)))
-                .style(Style::new().fg(heat(i, bins)))
-        })
-        .collect();
-    f.render_widget(
-        BarChart::default()
-            .data(BarGroup::default().bars(&bars))
-            .bar_width(BAR)
-            .bar_gap(1)
-            .value_style(Style::new().fg(Color::Black).bold())
-            .label_style(Style::new().fg(LABEL)),
-        area,
-    );
+/// The strip left of `plot`, where `draw_axis` puts its rule and labels
+fn plot_axis(area: Rect, plot: Rect) -> Rect {
+    Rect::new(area.x, plot.y, AXIS + 1, plot.height)
 }
 
 // ─── Requests ────────────────────────────────────────────────────────────────

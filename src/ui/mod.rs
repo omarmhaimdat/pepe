@@ -4,7 +4,7 @@ pub mod format;
 mod mascot;
 mod view;
 
-use std::collections::VecDeque;
+use std::collections::{HashMap, VecDeque};
 use std::time::{Duration, Instant};
 
 use crossterm::event::{Event, EventStream, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
@@ -40,6 +40,8 @@ const LOG_CAPACITY: usize = 2_000;
 /// Failed requests kept separately, so a burst of successes can't push them
 /// out of a failures view
 const ERROR_LOG_CAPACITY: usize = 500;
+/// Distinct failure causes counted; any more are counted as "other"
+const MAX_FAILURE_CAUSES: usize = 32;
 /// How long a notice (e.g. "concurrency 64 → 70") stays in the footer
 const NOTICE_TTL: Duration = Duration::from_secs(2);
 
@@ -99,6 +101,8 @@ pub struct Dashboard {
     timeline: Timeline,
     log: VecDeque<LogEntry>,
     error_log: VecDeque<LogEntry>,
+    /// Failed requests by cause ("HTTP 503", "Connection refused ...")
+    failure_causes: HashMap<Box<str>, u64>,
     sent: u64,
     concurrency: usize,
     paused: bool,
@@ -132,6 +136,7 @@ impl Dashboard {
             timeline: Timeline::default(),
             log: VecDeque::with_capacity(LOG_CAPACITY),
             error_log: VecDeque::with_capacity(ERROR_LOG_CAPACITY),
+            failure_causes: HashMap::new(),
             sent: 0,
             paused: false,
             started: Instant::now(),
@@ -166,6 +171,7 @@ impl Dashboard {
             self.scroll += 1;
         }
         if entry.is_error() {
+            self.count_failure(&entry.stat);
             push_bounded(
                 &mut self.error_log,
                 LogEntry {
@@ -177,6 +183,33 @@ impl Dashboard {
             );
         }
         push_bounded(&mut self.log, entry, LOG_CAPACITY);
+    }
+
+    fn count_failure(&mut self, stat: &ResponseStats) {
+        let cause = match (stat.status_code, &stat.error_message, stat.error) {
+            (Some(code), _, _) => format!("HTTP {}", code.as_u16()),
+            (None, Some(message), _) => message.to_string(),
+            (None, None, Some(kind)) => kind.label().to_lowercase(),
+            (None, None, None) => "error".to_string(),
+        };
+        if let Some(n) = self.failure_causes.get_mut(cause.as_str()) {
+            *n += 1;
+        } else if self.failure_causes.len() < MAX_FAILURE_CAUSES {
+            self.failure_causes.insert(cause.into(), 1);
+        } else {
+            *self.failure_causes.entry("other".into()).or_insert(0) += 1;
+        }
+    }
+
+    /// Failure causes, most frequent first
+    fn top_failure_causes(&self) -> Vec<(&str, u64)> {
+        let mut causes: Vec<(&str, u64)> = self
+            .failure_causes
+            .iter()
+            .map(|(cause, &n)| (cause.as_ref(), n))
+            .collect();
+        causes.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(b.0)));
+        causes
     }
 
     /// Pull everything the load generator produced since the last frame
@@ -653,6 +686,32 @@ mod tests {
         d.edit_search(KeyEvent::from(KeyCode::Backspace));
         d.edit_search(KeyEvent::from(KeyCode::Enter));
         assert_eq!((d.filter.query.as_str(), d.filter.editing), ("qui", false));
+    }
+
+    #[test]
+    fn failures_are_grouped_by_cause() {
+        let mut d = dashboard();
+        let refused = || ResponseStats {
+            error: Some(crate::response::ErrorKind::Connect),
+            error_message: Some("Connection refused".into()),
+            ..Default::default()
+        };
+        d.record(refused());
+        d.record(refused());
+        d.record(stat(503));
+        d.record(stat(200));
+        assert_eq!(
+            d.top_failure_causes(),
+            vec![("Connection refused", 2), ("HTTP 503", 1)]
+        );
+        for code in 400..450 {
+            d.record(stat(code));
+        }
+        assert_eq!(
+            d.failure_causes.len(),
+            MAX_FAILURE_CAUSES + 1,
+            "capped, plus other"
+        );
     }
 
     #[test]
