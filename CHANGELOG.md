@@ -26,6 +26,18 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [Unreleased]
 
+## [0.6.0](https://github.com/omarmhaimdat/pepe/compare/v0.5.1...v0.6.0) - 2026-10-01
+
+### Added
+
+- ramp mode, and one setup screen for every mode
+- API mode, load-testing the endpoints of an OpenAPI spec
+- setup screen to fill in every option before a run
+
+### Other
+
+- the setup screen, ramp mode and API mode
+
 ## [0.5.0](https://github.com/omarmhaimdat/pepe/compare/v0.4.0...v0.5.0) - 2026-09-30
 
 ### Added
