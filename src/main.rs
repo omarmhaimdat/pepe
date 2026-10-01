@@ -1,9 +1,10 @@
-use std::io::stdout;
+use std::io::{stdin, stdout, IsTerminal};
 use std::time::Instant;
 
-use clap::Parser;
+use clap::{CommandFactory, Parser};
 use crossterm::{
     cursor::{Hide, Show},
+    event::{DisableBracketedPaste, EnableBracketedPaste},
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
@@ -72,7 +73,7 @@ fn start_load(args: &Cli, previews: bool) -> Result<LoadHandle, PepeError> {
 
 fn restore_terminal() {
     let _ = disable_raw_mode();
-    let _ = execute!(stdout(), LeaveAlternateScreen, Show);
+    let _ = execute!(stdout(), DisableBracketedPaste, LeaveAlternateScreen, Show);
 }
 
 /// Puts the terminal into dashboard mode and restores it when dropped, so
@@ -84,7 +85,8 @@ impl TerminalGuard {
         enable_raw_mode()?;
         #[cfg(unix)]
         keep_ctrl_c_a_signal();
-        execute!(stdout(), EnterAlternateScreen, Hide)?;
+        // Bracketed paste: a pasted curl command arrives whole, not as keys
+        execute!(stdout(), EnterAlternateScreen, Hide, EnableBracketedPaste)?;
         Ok(Self)
     }
 }
@@ -200,25 +202,51 @@ async fn run_json(args: &Cli) -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-/// Runs the dashboard until the user quits. Returns the end-of-run report, to
-/// print once the terminal is back to normal.
-async fn run_dashboard(args: &Cli) -> Result<Option<String>, Box<dyn std::error::Error>> {
+/// What to print once the terminal is back to normal
+#[derive(Default)]
+struct Farewell {
+    /// The end-of-run report
+    report: Option<String>,
+    /// The command that reproduces settings chosen on the setup screen
+    command: Option<String>,
+}
+
+/// Runs the setup screen (when asked for, or when there's no URL yet) and
+/// the dashboard, until the user quits
+async fn run_dashboard(
+    args: &Cli,
+    mut setup: bool,
+) -> Result<Farewell, Box<dyn std::error::Error>> {
     // Declared first so it's dropped last: restoring the terminal writes to
     // it, which can block too, and Ctrl-C must still get out then
     let _watchdog = CtrlCWatchdog::arm();
     let _terminal = TerminalGuard::enter()?;
     let mut args = args.clone();
+    let mut farewell = Farewell::default();
     loop {
+        if setup {
+            match ui::Setup::new(&args).run().await? {
+                ui::SetupOutcome::Start(chosen) => {
+                    args = *chosen;
+                    farewell.command = Some(args.command_line());
+                }
+                ui::SetupOutcome::Quit => return Ok(farewell),
+            }
+            setup = false;
+        }
         let mut load = start_load(&args, true)?;
         let mut dashboard = ui::Dashboard::new(args.clone(), plan(&args));
-        match dashboard.run(&mut load).await? {
-            ui::Outcome::Restart => {
-                // Keep any concurrency the user dialed in during the run.
-                // Dropping `load` stops the previous run before the next starts.
-                args.concurrency = load.concurrency() as u32;
-                continue;
+        let outcome = dashboard.run(&mut load).await?;
+        // Keep any concurrency the user dialed in during the run. Dropping
+        // `load` stops the previous run before the next starts.
+        args.concurrency = load.concurrency() as u32;
+        match outcome {
+            ui::Outcome::Restart => continue,
+            ui::Outcome::Edit => setup = true,
+            ui::Outcome::Quit => {
+                farewell.report = dashboard.report();
+                return Ok(farewell);
             }
-            ui::Outcome::Quit => return Ok(dashboard.report()),
         }
     }
 }
@@ -231,9 +259,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         return update::self_update().await;
     }
 
-    if let Err(e) = args.validate() {
-        eprintln!("{}", e);
-        std::process::exit(1);
+    // The setup screen opens on request, or when there's nothing to run
+    // yet and someone is at the terminal to fill it in
+    let interactive = !args.json && stdin().is_terminal() && stdout().is_terminal();
+    let nothing_to_run = args.url.is_empty() && !args.curl;
+    if nothing_to_run && !interactive {
+        Cli::command().print_help()?;
+        std::process::exit(2);
+    }
+    let setup = interactive && (args.setup || nothing_to_run);
+
+    // With nothing to run yet, the setup screen does the checking instead
+    if !nothing_to_run {
+        if let Err(e) = args.validate() {
+            eprintln!("{}", e);
+            std::process::exit(1);
+        }
     }
 
     if args.json {
@@ -248,8 +289,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         default_hook(info);
     }));
 
-    if let Some(report) = run_dashboard(&args).await? {
+    let farewell = run_dashboard(&args, setup).await?;
+    if let Some(report) = farewell.report {
         print!("{report}");
+    }
+    if let Some(command) = farewell.command {
+        println!("Run this again with:\n  {command}");
     }
     update::check_for_updates().await;
     Ok(())

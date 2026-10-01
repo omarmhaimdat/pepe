@@ -12,7 +12,6 @@ use crate::PepeError;
 #[command(author = "Omar MHAIMDAT")]
 #[command(about = "HTTP load generator")]
 #[clap(disable_help_flag = true)]
-#[command(arg_required_else_help = true)]
 #[command(args_conflicts_with_subcommands = true)]
 pub struct Cli {
     #[command(subcommand)]
@@ -81,6 +80,11 @@ pub struct Cli {
     /// Output results in JSON format
     #[arg(long)]
     pub json: bool,
+
+    /// Open the setup screen to review or change the settings before
+    /// starting (it opens by itself when no URL is given)
+    #[arg(short = 'i', long)]
+    pub setup: bool,
 
     /// HTTP url to request
     #[arg(default_value_t = String::from(""))]
@@ -247,6 +251,55 @@ impl Cli {
         self.disable_redirects = !request.follow_redirects;
     }
 
+    /// The pepe command that reproduces these settings, leaving out
+    /// everything still at its default
+    pub fn command_line(&self) -> String {
+        let defaults = Cli::parse_from(["pepe", "x"]);
+        let mut parts = vec!["pepe".to_string()];
+        let mut flag = |name: &str, value: &str| {
+            parts.push(name.to_string());
+            parts.push(shell_quote(value));
+        };
+        if self.concurrency != defaults.concurrency {
+            flag("-c", &self.concurrency.to_string());
+        }
+        match &self.duration {
+            Some(duration) => flag("-z", duration),
+            None if self.number != defaults.number => flag("-n", &self.number.to_string()),
+            None => {}
+        }
+        if self.method != defaults.method {
+            flag("-m", &self.method);
+        }
+        for header in &self.headers {
+            flag("-H", header);
+        }
+        if let Some(body) = self.body() {
+            flag("-d", &String::from_utf8_lossy(&body));
+        }
+        if self.timeout != defaults.timeout {
+            flag("-t", &self.timeout.to_string());
+        }
+        if self.user_agent != defaults.user_agent {
+            flag("-u", &self.user_agent);
+        }
+        if let Some(proxy) = &self.proxy {
+            flag("-p", proxy);
+        }
+        for (on, name) in [
+            (self.insecure, "-k"),
+            (self.disable_redirects, "--disable-redirects"),
+            (self.disable_keepalive, "--disable-keepalive"),
+            (self.disable_compression, "--disable-compression"),
+        ] {
+            if on {
+                parts.push(name.to_string());
+            }
+        }
+        parts.push(shell_quote(&self.url));
+        parts.join(" ")
+    }
+
     /// The request body, from -d or a curl command
     pub fn body(&self) -> Option<Vec<u8>> {
         self.body_bytes
@@ -282,6 +335,19 @@ impl Cli {
             &self.headers,
             self.settings(),
         )
+    }
+}
+
+/// Quote a value for a POSIX shell, only when it needs it
+fn shell_quote(value: &str) -> String {
+    let plain = !value.is_empty()
+        && value
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || "_@%+=:,./-".contains(c));
+    if plain {
+        value.to_string()
+    } else {
+        format!("'{}'", value.replace('\'', r"'\''"))
     }
 }
 
@@ -471,6 +537,49 @@ mod tests {
         assert!(
             raw.contains("filename=\"blob.bin\"\r\nContent-Type: application/octet-stream"),
             "{raw}"
+        );
+    }
+
+    #[test]
+    fn command_line_round_trips_through_the_parser() {
+        let argv = [
+            "pepe",
+            "-c",
+            "50",
+            "-z",
+            "30s",
+            "-m",
+            "POST",
+            "-H",
+            "Authorization: Bearer it's",
+            "-H",
+            "Accept: */*",
+            "-d",
+            r#"{"a": 1}"#,
+            "-t",
+            "5",
+            "-k",
+            "--disable-redirects",
+            "https://x.io/items?a=1&b=2",
+        ];
+        let cli = Cli::parse_from(argv);
+        let line = cli.command_line();
+        assert_eq!(
+            line,
+            r#"pepe -c 50 -z 30s -m POST -H 'Authorization: Bearer it'\''s' -H 'Accept: */*' -d '{"a": 1}' -t 5 -k --disable-redirects 'https://x.io/items?a=1&b=2'"#
+        );
+        // What it prints parses back to the same settings
+        let again = Cli::parse_from(crate::curl::split(&line).unwrap());
+        assert_eq!(again.command_line(), line);
+        assert_eq!(
+            (again.headers, again.body, again.url),
+            (cli.headers, cli.body, cli.url)
+        );
+
+        // Defaults are left out
+        assert_eq!(
+            Cli::parse_from(["pepe", "http://x.io"]).command_line(),
+            "pepe http://x.io"
         );
     }
 

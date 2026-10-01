@@ -24,14 +24,14 @@ use crate::utils::num_of_cores;
 // terminal's own green/yellow/red so they match the user's theme.
 
 /// The one accent color: cyan
-const ACCENT: Color = Color::Indexed(81);
+pub(super) const ACCENT: Color = Color::Indexed(81);
 /// Labels: readable, but quieter than values
-const LABEL: Color = Color::Indexed(246);
+pub(super) const LABEL: Color = Color::Indexed(246);
 /// Rules and axes
-const RULE: Color = Color::Indexed(239);
-const GOOD: Color = Color::Green;
-const WARN: Color = Color::Yellow;
-const BAD: Color = Color::Red;
+pub(super) const RULE: Color = Color::Indexed(239);
+pub(super) const GOOD: Color = Color::Green;
+pub(super) const WARN: Color = Color::Yellow;
+pub(super) const BAD: Color = Color::Red;
 /// Heatmap ramp, few requests → many: dark gray to white
 const HEAT: [Color; 9] = [
     Color::Indexed(237),
@@ -104,15 +104,15 @@ pub fn render(d: &Dashboard, f: &mut Frame) {
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-fn label(text: impl Into<String>) -> Span<'static> {
+pub(super) fn label(text: impl Into<String>) -> Span<'static> {
     Span::styled(text.into(), Style::new().fg(LABEL))
 }
 
-fn value(text: impl Into<String>, color: Color) -> Span<'static> {
+pub(super) fn value(text: impl Into<String>, color: Color) -> Span<'static> {
     Span::styled(text.into(), Style::new().fg(color).bold())
 }
 
-fn heading(text: &str) -> Line<'static> {
+pub(super) fn heading(text: &str) -> Line<'static> {
     Line::from(Span::styled(
         text.to_uppercase(),
         Style::new().fg(LABEL).bold(),
@@ -120,7 +120,7 @@ fn heading(text: &str) -> Line<'static> {
 }
 
 /// Section title followed by a rule to the edge: "LATENCY ────────"
-fn section(f: &mut Frame, area: Rect, title: &str, right: Option<Line<'static>>) {
+pub(super) fn section(f: &mut Frame, area: Rect, title: &str, right: Option<Line<'static>>) {
     let title = format!("{} ", title.to_uppercase());
     let right_width = right.as_ref().map_or(0, |r| r.width() + 1);
     let rule = (area.width as usize).saturating_sub(title.chars().count() + right_width);
@@ -145,7 +145,7 @@ fn kv(name: &str, val: String, color: Color, width: usize) -> Line<'static> {
     ])
 }
 
-fn status_color(code: u16) -> Color {
+pub(super) fn status_color(code: u16) -> Color {
     match code {
         100..=199 => Color::Blue,
         200..=299 => GOOD,
@@ -201,7 +201,7 @@ fn center(area: Rect, width: u16, height: u16) -> Rect {
     area
 }
 
-fn truncate(s: &str, max: usize) -> String {
+pub(super) fn truncate(s: &str, max: usize) -> String {
     if s.chars().count() <= max {
         return s.to_string();
     }
@@ -479,7 +479,7 @@ fn render_tabs(d: &Dashboard, f: &mut Frame, area: Rect) {
     );
 }
 
-fn key_hints(pairs: &[(&'static str, &'static str)]) -> Vec<Span<'static>> {
+pub(super) fn key_hints(pairs: &[(&'static str, &'static str)]) -> Vec<Span<'static>> {
     let mut spans = Vec::with_capacity(pairs.len() * 2);
     for (key, action) in pairs {
         spans.push(Span::styled(
@@ -492,7 +492,7 @@ fn key_hints(pairs: &[(&'static str, &'static str)]) -> Vec<Span<'static>> {
 }
 
 fn render_footer(d: &Dashboard, f: &mut Frame, area: Rect) {
-    let mut hints: Vec<(&str, &str)> = vec![("q", "quit"), ("r", "restart")];
+    let mut hints: Vec<(&str, &str)> = vec![("q", "quit"), ("r", "restart"), ("E", "edit")];
     if d.finished.is_none() {
         hints.push(("space", if d.paused { "resume" } else { "pause" }));
         hints.push(("+/-", "concurrency"));
@@ -538,11 +538,12 @@ fn render_footer(d: &Dashboard, f: &mut Frame, area: Rect) {
 }
 
 fn render_help(f: &mut Frame, area: Rect) {
-    let rows: [(&str, &str); 18] = [
+    let rows: [(&str, &str); 19] = [
         ("space / p", "pause or resume sending"),
         ("+ / -", "raise or lower concurrency by ~10%"),
         ("s / i", "stop the run, keep the results"),
         ("r", "restart with the same settings"),
+        ("E", "edit the settings, then run again"),
         ("tab / ← →", "switch view"),
         ("1 2 3", "live, stats, requests"),
         ("↑ ↓ / j k", "select a request (newer / older)"),

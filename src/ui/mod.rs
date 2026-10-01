@@ -3,7 +3,10 @@ mod body;
 mod filter;
 pub mod format;
 mod mascot;
+mod setup;
 mod view;
+
+pub use setup::{Setup, SetupOutcome};
 
 use std::collections::{HashMap, VecDeque};
 use std::time::{Duration, Instant};
@@ -52,6 +55,8 @@ const NOTICE_TTL: Duration = Duration::from_secs(2);
 pub enum Outcome {
     Quit,
     Restart,
+    /// Back to the setup screen, to change the settings and run again
+    Edit,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -512,6 +517,7 @@ impl Dashboard {
             KeyCode::Esc if self.filter.is_active() => self.filter.clear(),
             KeyCode::Char('q') | KeyCode::Esc => return Some(Outcome::Quit),
             KeyCode::Char('r') => return Some(Outcome::Restart),
+            KeyCode::Char('E') => return Some(Outcome::Edit),
             KeyCode::Char('s') | KeyCode::Char('i') if running => {
                 // Stop sending; results so far stay on screen
                 load.stop();
