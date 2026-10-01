@@ -87,6 +87,8 @@ pub struct ResponseStats {
     /// Why the request failed, in the words of the innermost error (e.g.
     /// "Connection refused (os error 61)"); kept only when previews are
     pub error_message: Option<Box<str>>,
+    /// Which endpoint of the run this request went to (API mode); 0 otherwise
+    pub endpoint: u16,
     /// Time until the response headers arrived
     pub ttfb: Option<Duration>,
     /// Full headers and body, when this request was picked for capture
@@ -149,6 +151,7 @@ impl ResponseStats {
 
         ResponseStats {
             duration,
+            endpoint: 0,
             ttfb: Some(ttfb),
             detail: detail.map(Arc::new),
             status_code: Some(status_code),

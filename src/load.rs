@@ -192,9 +192,51 @@ impl DetailBudget {
 }
 
 /// What every request task shares
+/// One request in the mix a run sends
+pub struct Target {
+    pub request: Request,
+    /// Headers for this request only; those every request shares are the
+    /// client's defaults
+    pub headers: reqwest::header::HeaderMap,
+    /// Which endpoint the results count toward
+    pub endpoint: u16,
+    /// Share of the traffic relative to the other targets
+    pub weight: u32,
+}
+
+/// Longest repeating sequence used to mix targets by weight
+const MAX_SCHEDULE: usize = 4_096;
+
+/// The order targets are sent in: each appears in proportion to its weight,
+/// spread out rather than in runs
+fn schedule(targets: &[Target]) -> Vec<u16> {
+    let total: u64 = targets.iter().map(|t| t.weight.max(1) as u64).sum();
+    let scale = (MAX_SCHEDULE as f64 / total as f64).min(1.0);
+    let counts: Vec<usize> = targets
+        .iter()
+        .map(|t| ((t.weight.max(1) as f64 * scale).round() as usize).max(1))
+        .collect();
+    let len: usize = counts.iter().sum();
+    // Smooth weighted round-robin: always send the target furthest behind
+    let mut credit = vec![0i64; targets.len()];
+    let mut order = Vec::with_capacity(len);
+    for _ in 0..len {
+        for (c, &n) in credit.iter_mut().zip(&counts) {
+            *c += n as i64;
+        }
+        let next = (0..targets.len()).max_by_key(|&i| credit[i]).unwrap_or(0);
+        credit[next] -= len as i64;
+        order.push(next as u16);
+    }
+    order
+}
+
 struct Shared {
     client: reqwest::Client,
-    request: Request,
+    targets: Vec<Target>,
+    /// Indexes into `targets`, cycled through
+    schedule: Vec<u16>,
+    next: AtomicUsize,
     dns: DnsSampler,
     /// Keep the start of each body for the dashboard's preview column, and
     /// some responses in full for its inspector
@@ -202,6 +244,7 @@ struct Shared {
     details: DetailBudget,
 }
 
+/// Load one request
 pub fn start(
     client: reqwest::Client,
     request: Request,
@@ -209,6 +252,24 @@ pub fn start(
     plan: Plan,
     previews: bool,
 ) -> LoadHandle {
+    let target = Target {
+        request,
+        headers: Default::default(),
+        endpoint: 0,
+        weight: 1,
+    };
+    start_targets(client, vec![target], concurrency, plan, previews)
+}
+
+/// Load a mix of requests, each in proportion to its weight
+pub fn start_targets(
+    client: reqwest::Client,
+    targets: Vec<Target>,
+    concurrency: usize,
+    plan: Plan,
+    previews: bool,
+) -> LoadHandle {
+    assert!(!targets.is_empty(), "a run needs at least one target");
     let (tx, rx) = mpsc::unbounded_channel();
     let (paused, paused_rx) = watch::channel(false);
     let sent = Arc::new(AtomicU64::new(0));
@@ -216,7 +277,9 @@ pub fn start(
     let semaphore = Arc::new(Semaphore::new(concurrency));
     let shared = Arc::new(Shared {
         client,
-        request,
+        schedule: schedule(&targets),
+        targets,
+        next: AtomicUsize::new(0),
         dns: DnsSampler::new(),
         previews,
         details: DetailBudget::new(),
@@ -314,7 +377,9 @@ async fn send_one(
     tx: mpsc::UnboundedSender<ResponseStats>,
     permit: OwnedSemaphorePermit,
 ) {
-    let request = &shared.request;
+    let turn = shared.next.fetch_add(1, Ordering::Relaxed);
+    let target = &shared.targets[shared.schedule[turn % shared.schedule.len()] as usize];
+    let request = &target.request;
     let dns_times = if shared.dns.claim() {
         resolve_dns(&request.url).await.ok()
     } else {
@@ -322,6 +387,9 @@ async fn send_one(
     };
 
     let mut builder = shared.client.request(request.method.clone(), &request.url);
+    if !target.headers.is_empty() {
+        builder = builder.headers(target.headers.clone());
+    }
     if let Some(body) = &request.body {
         builder = builder.body(body.clone());
     }
@@ -331,9 +399,10 @@ async fn send_one(
     let ttfb = start.elapsed();
     let capture = shared.previews
         && matches!(&response, Ok(r) if shared.details.claim(!r.status().is_success()));
-    let stats =
+    let mut stats =
         ResponseStats::from_response(response, start, ttfb, dns_times, shared.previews, capture)
             .await;
+    stats.endpoint = target.endpoint;
 
     drop(permit);
     let _ = tx.send(stats);
@@ -537,6 +606,52 @@ mod tests {
             budget.claim(false);
         }
         assert!(budget.claim(true));
+    }
+
+    #[test]
+    fn schedule_follows_weights_and_spreads_them() {
+        let target = |weight| Target {
+            request: request("http://x/", "GET", None),
+            headers: Default::default(),
+            endpoint: 0,
+            weight,
+        };
+        let order = schedule(&[target(3), target(1)]);
+        assert_eq!(order, [0, 1, 0, 0], "three to one, spread out");
+        let order = schedule(&[target(1), target(1), target(1)]);
+        assert_eq!(order.len(), 3);
+        // Huge weights are scaled down, keeping the proportion
+        let order = schedule(&[target(900_000), target(100_000)]);
+        assert!(order.len() <= MAX_SCHEDULE + 2);
+        let share = order.iter().filter(|&&i| i == 0).count() as f64 / order.len() as f64;
+        assert!((0.89..=0.91).contains(&share), "{share}");
+    }
+
+    #[tokio::test]
+    async fn targets_are_mixed_by_weight_and_tagged() {
+        let srv = server(Duration::ZERO).await;
+        let target = |path: &str, endpoint: u16, weight: u32| {
+            let req = request(&format!("{}{path}", srv.url), "GET", None);
+            let mut headers = reqwest::header::HeaderMap::new();
+            headers.insert("x-endpoint", endpoint.to_string().parse().unwrap());
+            Target {
+                request: req,
+                headers,
+                endpoint,
+                weight,
+            }
+        };
+        let client = request(&srv.url, "GET", None).build_client().unwrap();
+        let load = start_targets(
+            client,
+            vec![target("a", 0, 3), target("b", 1, 1)],
+            2,
+            Plan::Count(40),
+            false,
+        );
+        let results = drain(load).await;
+        let count = |e| results.iter().filter(|r| r.endpoint == e).count();
+        assert_eq!((count(0), count(1)), (30, 10));
     }
 
     #[tokio::test]

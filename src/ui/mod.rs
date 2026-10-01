@@ -3,9 +3,11 @@ mod body;
 mod filter;
 pub mod format;
 mod mascot;
+mod plan;
 mod setup;
 mod view;
 
+pub use plan::{PlanOutcome, PlanScreen};
 pub use setup::{Setup, SetupOutcome};
 
 use std::collections::{HashMap, VecDeque};
@@ -61,6 +63,8 @@ pub enum Outcome {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Tab {
+    /// Per-endpoint results; API mode only
+    Endpoints,
     Live,
     Stats,
     Requests,
@@ -68,23 +72,39 @@ enum Tab {
 
 impl Tab {
     const ALL: [Tab; 3] = [Tab::Live, Tab::Stats, Tab::Requests];
+    const API: [Tab; 4] = [Tab::Endpoints, Tab::Live, Tab::Stats, Tab::Requests];
 
     fn title(self) -> &'static str {
         match self {
+            Tab::Endpoints => "Endpoints",
             Tab::Live => "Live",
             Tab::Stats => "Stats",
             Tab::Requests => "Requests",
         }
     }
 
-    fn index(self) -> usize {
-        Self::ALL.iter().position(|&t| t == self).unwrap_or(0)
+    /// This tab's position among `tabs`
+    fn index(self, tabs: &[Tab]) -> usize {
+        tabs.iter().position(|&t| t == self).unwrap_or(0)
     }
 
-    fn cycle(self, step: isize) -> Tab {
-        let n = Self::ALL.len() as isize;
-        Self::ALL[(self.index() as isize + step).rem_euclid(n) as usize]
+    fn cycle(self, step: isize, tabs: &[Tab]) -> Tab {
+        let n = tabs.len() as isize;
+        tabs[(self.index(tabs) as isize + step).rem_euclid(n) as usize]
     }
+}
+
+/// One endpoint of an API-mode run, as the dashboard shows it
+pub struct EndpointView {
+    /// "GET /pets/{id}"
+    pub label: String,
+    pub method: String,
+    /// The request's URL (the first, when parameter values rotate)
+    pub url: String,
+    /// How many URLs it rotates through
+    pub variants: usize,
+    pub headers: Vec<(String, String)>,
+    pub body: Option<Vec<u8>>,
 }
 
 /// A finished request as shown in the log
@@ -107,6 +127,11 @@ pub struct Dashboard {
     plan: Plan,
     metrics: Metrics,
     timeline: Timeline,
+    /// API mode: the endpoints in the run, and results for each
+    endpoints: Vec<EndpointView>,
+    endpoint_metrics: Vec<Metrics>,
+    /// Selected row on the Endpoints tab
+    endpoint_cursor: usize,
     log: VecDeque<LogEntry>,
     error_log: VecDeque<LogEntry>,
     /// Failed requests by cause ("HTTP 503", "Connection refused ...")
@@ -158,6 +183,9 @@ impl Dashboard {
             plan,
             metrics: Metrics::default(),
             timeline: Timeline::default(),
+            endpoints: Vec::new(),
+            endpoint_metrics: Vec::new(),
+            endpoint_cursor: 0,
             log: VecDeque::with_capacity(LOG_CAPACITY),
             error_log: VecDeque::with_capacity(ERROR_LOG_CAPACITY),
             failure_causes: HashMap::new(),
@@ -182,6 +210,22 @@ impl Dashboard {
             detailed: VecDeque::new(),
             detail_bytes: 0,
             notice: None,
+        }
+    }
+
+    /// API mode: show results per endpoint, starting on the Endpoints tab
+    pub fn with_endpoints(mut self, endpoints: Vec<EndpointView>) -> Self {
+        self.endpoint_metrics = vec![Metrics::default(); endpoints.len()];
+        self.endpoints = endpoints;
+        self.tab = Tab::Endpoints;
+        self
+    }
+
+    fn tabs(&self) -> &'static [Tab] {
+        if self.endpoints.is_empty() {
+            &Tab::ALL
+        } else {
+            &Tab::API
         }
     }
 
@@ -212,6 +256,9 @@ impl Dashboard {
     fn record(&mut self, stat: ResponseStats) {
         self.metrics.record(&stat);
         self.timeline.record(&stat);
+        if let Some(metrics) = self.endpoint_metrics.get_mut(stat.endpoint as usize) {
+            metrics.record(&stat);
+        }
         let entry = LogEntry {
             seq: self.metrics.total,
             at: self.active(),
@@ -533,9 +580,24 @@ impl Dashboard {
             KeyCode::Char('+') | KeyCode::Char('=') if running => self.adjust_concurrency(load, 1),
             KeyCode::Char('-') | KeyCode::Char('_') if running => self.adjust_concurrency(load, -1),
 
-            KeyCode::Tab | KeyCode::Right => self.tab = self.tab.cycle(1),
-            KeyCode::BackTab | KeyCode::Left => self.tab = self.tab.cycle(-1),
-            KeyCode::Char(c @ '1'..='3') => self.tab = Tab::ALL[c as usize - '1' as usize],
+            KeyCode::Tab | KeyCode::Right => self.tab = self.tab.cycle(1, self.tabs()),
+            KeyCode::BackTab | KeyCode::Left => self.tab = self.tab.cycle(-1, self.tabs()),
+            KeyCode::Char(c @ '1'..='9') if (c as usize - '1' as usize) < self.tabs().len() => {
+                self.tab = self.tabs()[c as usize - '1' as usize]
+            }
+
+            // The Endpoints tab: pick one, enter shows its requests
+            KeyCode::Up | KeyCode::Char('k') if self.tab == Tab::Endpoints => {
+                self.endpoint_cursor = self.endpoint_cursor.saturating_sub(1)
+            }
+            KeyCode::Down | KeyCode::Char('j') if self.tab == Tab::Endpoints => {
+                self.endpoint_cursor =
+                    (self.endpoint_cursor + 1).min(self.endpoints.len().saturating_sub(1))
+            }
+            KeyCode::Enter if self.tab == Tab::Endpoints => {
+                self.filter.endpoint = Some(self.endpoint_cursor as u16);
+                self.refilter();
+            }
 
             KeyCode::Char('f') => {
                 self.filter.status = self.filter.status.next();
@@ -1004,8 +1066,45 @@ mod tests {
 
     #[test]
     fn tabs_cycle_both_ways() {
-        assert_eq!(Tab::Live.cycle(1), Tab::Stats);
-        assert_eq!(Tab::Live.cycle(-1), Tab::Requests);
-        assert_eq!(Tab::Requests.cycle(1), Tab::Live);
+        assert_eq!(Tab::Live.cycle(1, &Tab::ALL), Tab::Stats);
+        assert_eq!(Tab::Live.cycle(-1, &Tab::ALL), Tab::Requests);
+        assert_eq!(Tab::Requests.cycle(1, &Tab::ALL), Tab::Live);
+        assert_eq!(Tab::Requests.cycle(1, &Tab::API), Tab::Endpoints);
+    }
+
+    #[tokio::test]
+    async fn api_mode_tracks_each_endpoint() {
+        let view = |label: &str| EndpointView {
+            label: label.into(),
+            method: "GET".into(),
+            url: format!("http://x{}", &label[4..]),
+            variants: 1,
+            headers: Vec::new(),
+            body: None,
+        };
+        let mut d = dashboard().with_endpoints(vec![view("GET /a"), view("GET /b")]);
+        assert_eq!(d.tab, Tab::Endpoints);
+        for (endpoint, status) in [(0, 200), (1, 200), (1, 500), (1, 200)] {
+            d.record(ResponseStats {
+                endpoint,
+                ..stat(status)
+            });
+        }
+        assert_eq!(d.endpoint_metrics[0].total, 1);
+        assert_eq!(
+            (d.endpoint_metrics[1].total, d.endpoint_metrics[1].success),
+            (3, 2)
+        );
+
+        // Down then enter: the request log, filtered to that endpoint
+        let load = dummy_load();
+        d.handle_key(KeyEvent::from(KeyCode::Down), &load);
+        d.handle_key(KeyEvent::from(KeyCode::Enter), &load);
+        assert_eq!((d.tab, d.filter.endpoint), (Tab::Requests, Some(1)));
+        assert_eq!(d.visible_log().len(), 3);
+        d.handle_key(KeyEvent::from(KeyCode::Char('4')), &load);
+        assert_eq!(d.tab, Tab::Requests, "fourth tab in API mode");
+        d.handle_key(KeyEvent::from(KeyCode::Char('1')), &load);
+        assert_eq!(d.tab, Tab::Endpoints);
     }
 }

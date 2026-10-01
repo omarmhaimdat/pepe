@@ -12,7 +12,6 @@ use crate::PepeError;
 #[command(author = "Omar MHAIMDAT")]
 #[command(about = "HTTP load generator")]
 #[clap(disable_help_flag = true)]
-#[command(args_conflicts_with_subcommands = true)]
 pub struct Cli {
     #[command(subcommand)]
     pub command: Option<Command>,
@@ -21,15 +20,15 @@ pub struct Cli {
     pub help: Option<bool>,
 
     /// Number of requests to perform
-    #[arg(short, long, default_value_t = 100)]
+    #[arg(short, long, default_value_t = 100, global = true)]
     pub number: u32,
 
     /// Number of concurrent requests at a time
-    #[arg(short, long, default_value_t = num_of_cores())]
+    #[arg(short, long, default_value_t = num_of_cores(), global = true)]
     pub concurrency: u32,
 
     /// Duration of the test, e.g. 10s, 3m, 2h (mutually exclusive with -n)
-    #[arg(short = 'z', long)]
+    #[arg(short = 'z', long, global = true)]
     pub duration: Option<String>,
 
     /// Load-test a curl command: pepe --curl -- curl -X POST http://localhost:8080,
@@ -42,11 +41,11 @@ pub struct Cli {
     pub method: String,
 
     /// HTTP headers, e.g. -H 'Accept: application/json'
-    #[arg(short = 'H', long)]
+    #[arg(short = 'H', long, global = true)]
     pub headers: Vec<String>,
 
     /// Time in seconds to wait for a response
-    #[arg(short, long, default_value_t = 20)]
+    #[arg(short, long, default_value_t = 20, global = true)]
     pub timeout: u32,
 
     /// HTTP request body
@@ -54,36 +53,36 @@ pub struct Cli {
     pub body: Option<String>,
 
     /// User-Agent string, default is pepe/{version}
-    #[arg(short, long, default_value_t = default_user_agent())]
+    #[arg(short, long, default_value_t = default_user_agent(), global = true)]
     pub user_agent: String,
 
     /// Proxy server URL: http://user:pass@host:port or socks5://host:port
-    #[arg(short, long)]
+    #[arg(short, long, global = true)]
     pub proxy: Option<String>,
 
     /// Accept invalid TLS certificates (self-signed, expired, wrong host)
-    #[arg(short = 'k', long)]
+    #[arg(short = 'k', long, global = true)]
     pub insecure: bool,
 
     /// Disable HTTP compression, e.g. gzip
-    #[arg(long)]
+    #[arg(long, global = true)]
     pub disable_compression: bool,
 
     /// Disable HTTP keepalive, e.g. Connection: close
-    #[arg(long)]
+    #[arg(long, global = true)]
     pub disable_keepalive: bool,
 
     /// Prevent http redirects
-    #[arg(long)]
+    #[arg(long, global = true)]
     pub disable_redirects: bool,
 
     /// Output results in JSON format
-    #[arg(long)]
+    #[arg(long, global = true)]
     pub json: bool,
 
     /// Open the setup screen to review or change the settings before
     /// starting (it opens by itself when no URL is given)
-    #[arg(short = 'i', long)]
+    #[arg(short = 'i', long, global = true)]
     pub setup: bool,
 
     /// HTTP url to request
@@ -103,6 +102,48 @@ pub struct Cli {
 pub enum Command {
     /// Update pepe to the latest release
     SelfUpdate,
+    /// Load-test every endpoint of an OpenAPI spec
+    Api(ApiArgs),
+}
+
+#[derive(clap::Args, Debug, Clone)]
+pub struct ApiArgs {
+    /// The OpenAPI spec: a file or URL, JSON or YAML
+    pub spec: String,
+
+    /// Credentials: bearer:TOKEN, basic:USER:PASSWORD, apikey:VALUE,
+    /// header:NAME=VALUE or query:NAME=VALUE
+    #[arg(long)]
+    pub auth: Vec<String>,
+
+    /// Base URL to send requests to, instead of the spec's server
+    #[arg(long)]
+    pub server: Option<String>,
+
+    /// Run every endpoint that has the values it needs. Without --all,
+    /// --tag or --only, nothing runs until it's picked on the plan screen
+    #[arg(long)]
+    pub all: bool,
+
+    /// Run the endpoints with this tag, e.g. --tag Billing
+    #[arg(long)]
+    pub tag: Vec<String>,
+
+    /// Run the endpoints matching this, e.g. 'GET /pets*' or '/pets/*'
+    #[arg(long)]
+    pub only: Vec<String>,
+
+    /// Leave out endpoints matching this
+    #[arg(long)]
+    pub skip: Vec<String>,
+
+    /// A parameter's value(s), rotated through: --set id=1,2,3
+    #[arg(long = "set", value_name = "NAME=VALUE[,VALUE]")]
+    pub set: Vec<String>,
+
+    /// Let --all, --tag and --only switch on POST, PUT, PATCH and DELETE too
+    #[arg(long)]
+    pub include_writes: bool,
 }
 
 impl Cli {
@@ -117,7 +158,7 @@ impl Cli {
             ));
         }
 
-        if !self.curl && self.url.is_empty() {
+        if !self.curl && self.url.is_empty() && self.command.is_none() {
             return Err(Error::raw(
                 clap::error::ErrorKind::ValueValidation,
                 "URL is required",
@@ -581,6 +622,58 @@ mod tests {
             Cli::parse_from(["pepe", "http://x.io"]).command_line(),
             "pepe http://x.io"
         );
+    }
+
+    #[test]
+    fn the_cli_definition_is_consistent() {
+        use clap::CommandFactory;
+        Cli::command().debug_assert();
+    }
+
+    #[test]
+    fn api_subcommand_takes_shared_flags_on_either_side() {
+        for argv in [
+            vec![
+                "pepe",
+                "api",
+                "spec.yaml",
+                "-c",
+                "5",
+                "-z",
+                "10s",
+                "--auth",
+                "bearer:t",
+                "--set",
+                "id=1,2",
+            ],
+            vec![
+                "pepe",
+                "-c",
+                "5",
+                "-z",
+                "10s",
+                "api",
+                "spec.yaml",
+                "--auth",
+                "bearer:t",
+                "--set",
+                "id=1,2",
+            ],
+        ] {
+            let mut cli = Cli::parse_from(argv);
+            cli.validate().unwrap();
+            assert_eq!((cli.concurrency, cli.duration.as_deref()), (5, Some("10s")));
+            let Some(Command::Api(api)) = &cli.command else {
+                panic!("api subcommand not parsed")
+            };
+            assert_eq!(
+                (api.spec.as_str(), api.auth.len(), api.set.len()),
+                ("spec.yaml", 1, 1)
+            );
+        }
+        // The default mode is unchanged
+        let cli = Cli::parse_from(["pepe", "-c", "5", "http://x.io"]);
+        assert!(cli.command.is_none() && cli.url == "http://x.io");
     }
 
     #[test]

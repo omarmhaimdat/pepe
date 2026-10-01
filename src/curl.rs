@@ -956,7 +956,7 @@ fn read_text(path: &str) -> Result<String, String> {
     Ok(String::from_utf8_lossy(&read_file(path)?).into_owned())
 }
 
-fn base64(input: &[u8]) -> String {
+pub fn base64(input: &[u8]) -> String {
     const ALPHABET: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
     let mut out = String::with_capacity(input.len().div_ceil(3) * 4);
     for chunk in input.chunks(3) {

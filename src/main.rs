@@ -13,6 +13,7 @@ use crate::cli::Cli;
 use crate::load::{LoadHandle, Plan};
 use crate::metrics::Metrics;
 
+mod api;
 mod cache;
 mod cli;
 mod curl;
@@ -20,6 +21,7 @@ mod insights;
 mod json_report;
 mod load;
 mod metrics;
+mod openapi;
 mod request;
 mod response;
 mod timeline;
@@ -251,12 +253,166 @@ async fn run_dashboard(
     }
 }
 
+/// API mode with `--json`: run the endpoints that are on, print one report
+async fn run_api_json(args: &Cli, run: &api::ApiRun) -> Result<(), Box<dyn std::error::Error>> {
+    // Nobody to prompt here: say what's missing instead
+    if let (Some(scheme), true) = (run.spec.auth.first(), run.credentials.is_empty()) {
+        eprintln!(
+            "note: this API declares {} and no credentials were given; pass {}",
+            scheme.describe(),
+            scheme.hint()
+        );
+    }
+    let which = run.enabled();
+    if which.is_empty() {
+        let tags: Vec<&str> = run
+            .spec
+            .tags
+            .iter()
+            .map(|(name, _)| name.as_str())
+            .collect();
+        eprintln!(
+            "error: no endpoint to run. Pick some with --all, --tag NAME or --only PATTERN \
+             (tags: {}); --set gives parameters their values, --include-writes allows writes",
+            tags.join(", ")
+        );
+        std::process::exit(1);
+    }
+    let targets = run.targets(args, &which)?;
+    let mut load = load::start_targets(
+        run.client(args)?,
+        targets,
+        args.concurrency as usize,
+        plan(args),
+        false,
+    );
+    let started = Instant::now();
+    let mut total = Metrics::default();
+    let mut each = vec![Metrics::default(); which.len()];
+    let mut interrupted = false;
+    loop {
+        tokio::select! {
+            stat = load.rx.recv() => match stat {
+                Some(stat) => {
+                    total.record(&stat);
+                    if let Some(metrics) = each.get_mut(stat.endpoint as usize) {
+                        metrics.record(&stat);
+                    }
+                }
+                None => break,
+            },
+            _ = tokio::signal::ctrl_c(), if !interrupted => {
+                interrupted = true;
+                load.stop();
+            }
+        }
+    }
+    let elapsed = started.elapsed();
+    let report = json_report::JsonReport::generate(&total, elapsed, interrupted);
+    let mut report = serde_json::to_value(&report)?;
+    let ms = |d: std::time::Duration| (d.as_secs_f64() * 1_000_000.0).round() / 1000.0;
+    let endpoints: Vec<serde_json::Value> = which
+        .iter()
+        .zip(&each)
+        .map(|(&index, m)| {
+            serde_json::json!({
+                "endpoint": run.endpoints[index].label,
+                "requests": m.total,
+                "failed_requests": m.total - m.success,
+                "requests_per_second": m.rps(elapsed),
+                "median_ms": ms(m.percentile(50.0)),
+                "p99_ms": ms(m.percentile(99.0)),
+                "status_codes": m.status_codes.iter().map(|(k, v)| (k.to_string(), *v)).collect::<std::collections::BTreeMap<_, _>>(),
+            })
+        })
+        .collect();
+    report["endpoints"] = serde_json::Value::Array(endpoints);
+    println!("{}", serde_json::to_string_pretty(&report)?);
+    Ok(())
+}
+
+/// API mode: the plan screen, then the dashboard with one row per endpoint
+async fn run_api(args: &Cli, api: &cli::ApiArgs) -> Result<(), Box<dyn std::error::Error>> {
+    let mut run = match api::ApiRun::load(api).await {
+        Ok(run) => run,
+        Err(e) => {
+            eprintln!("error: {e}");
+            std::process::exit(1);
+        }
+    };
+    if args.json {
+        return run_api_json(args, &run).await;
+    }
+
+    let mut report = None;
+    {
+        let _watchdog = CtrlCWatchdog::arm();
+        let _terminal = TerminalGuard::enter()?;
+        // The dashboard's title shows the API rather than one URL
+        let mut shown = args.clone();
+        shown.method = "API".into();
+        shown.url = run.spec.base_url.clone();
+        let mut planning = true;
+        loop {
+            if planning {
+                match ui::PlanScreen::new(&mut run, &mut shown).run().await? {
+                    ui::PlanOutcome::Start => planning = false,
+                    ui::PlanOutcome::Quit => break,
+                }
+                shown.url = run.spec.base_url.clone();
+            }
+            let which = run.enabled();
+            let targets = run.targets(&shown, &which)?;
+            let mut load = load::start_targets(
+                run.client(&shown)?,
+                targets,
+                shown.concurrency as usize,
+                plan(&shown),
+                true,
+            );
+            let mut dashboard = ui::Dashboard::new(shown.clone(), plan(&shown))
+                .with_endpoints(run.views(&shown, &which));
+            let outcome = dashboard.run(&mut load).await?;
+            shown.concurrency = load.concurrency() as u32;
+            match outcome {
+                ui::Outcome::Restart => {}
+                ui::Outcome::Edit => planning = true,
+                ui::Outcome::Quit => {
+                    report = dashboard.report();
+                    break;
+                }
+            }
+        }
+    }
+    if let Some(report) = report {
+        print!("{report}");
+    }
+    update::check_for_updates().await;
+    Ok(())
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut args = Cli::parse();
 
     if let Some(cli::Command::SelfUpdate) = args.command {
         return update::self_update().await;
+    }
+
+    // Release builds abort on panic; restore the terminal first so a crash
+    // never leaves the shell in raw mode
+    let default_hook = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        restore_terminal();
+        default_hook(info);
+    }));
+
+    if let Some(cli::Command::Api(api)) = args.command.clone() {
+        if let Err(e) = args.validate() {
+            eprintln!("{}", e);
+            std::process::exit(1);
+        }
+        return run_api(&args, &api).await;
     }
 
     // The setup screen opens on request, or when there's nothing to run
@@ -280,14 +436,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     if args.json {
         return run_json(&args).await;
     }
-
-    // Release builds abort on panic; restore the terminal first so a crash
-    // never leaves the shell in raw mode
-    let default_hook = std::panic::take_hook();
-    std::panic::set_hook(Box::new(move |info| {
-        restore_terminal();
-        default_hook(info);
-    }));
 
     let farewell = run_dashboard(&args, setup).await?;
     if let Some(report) = farewell.report {
