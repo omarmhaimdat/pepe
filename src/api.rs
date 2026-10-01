@@ -118,21 +118,24 @@ impl ApiRun {
         Ok(targets)
     }
 
-    /// What the dashboard shows for each of these endpoints
+    /// What the dashboard shows for each of these endpoints. Credentials
+    /// are named, never shown.
     pub fn views(&self, cli: &Cli, which: &[usize]) -> Vec<EndpointView> {
-        let shared: Vec<(String, String)> = self
-            .shared_headers(cli)
+        let masked = self.credentials.masked();
+        let mut shared: Vec<(String, String)> = cli
+            .headers
             .iter()
             .filter_map(|h| h.split_once(':'))
             .map(|(name, value)| (name.trim().to_string(), value.trim().to_string()))
             .collect();
+        shared.extend(masked.headers.iter().cloned());
         which
             .iter()
             .map(|&index| {
                 let endpoint = &self.endpoints[index];
                 let mut headers = shared.clone();
                 headers.extend(endpoint.headers());
-                let urls = self.urls(index);
+                let urls = endpoint.urls(&self.spec.base_url, &masked);
                 EndpointView {
                     label: endpoint.label.clone(),
                     method: endpoint.method.clone(),
@@ -194,8 +197,11 @@ mod tests {
         let views = run.views(&cli, &run.enabled());
         assert_eq!(views[1].variants, 4);
         assert!(views[0].headers.contains(&("X-Run".into(), "1".into())));
-        assert!(views[0]
-            .headers
-            .contains(&("Authorization".into(), "Bearer t".into())));
+        assert!(
+            views[0]
+                .headers
+                .contains(&("Authorization".into(), openapi::MASK.into())),
+            "credentials are named, not shown"
+        );
     }
 }

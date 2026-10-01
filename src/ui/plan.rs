@@ -13,15 +13,16 @@ use ratatui::{
     layout::{Alignment, Constraint, Layout, Rect},
     style::{Color, Modifier, Style, Stylize},
     text::{Line, Span},
-    widgets::{Block, BorderType, Clear, Padding, Paragraph},
+    widgets::{Clear, Padding, Paragraph},
     Frame, Terminal,
 };
 
+use super::kit::{caption, chips, marker, pane_title, panel, wrap, FAINT, FIELD, SELECTED};
 use super::view::{label, status_color, truncate, value, ACCENT, BAD, GOOD, LABEL, RULE, WARN};
 use super::{body, format, mascot};
 use crate::api::ApiRun;
 use crate::load::Plan;
-use crate::openapi::{split_values, AuthKind, Credentials, Endpoint, Field, In};
+use crate::openapi::{split_values, AuthKind, Credentials, Endpoint, Field, In, MASK};
 use crate::response::ResponseStats;
 use crate::Cli;
 
@@ -65,7 +66,9 @@ impl TextInput {
 
     /// Edit or move; false when the key isn't one for the text
     fn key(&mut self, key: KeyEvent) -> bool {
-        let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
+        // AltGr arrives as ctrl+alt on Windows, and types a character
+        let ctrl = key.modifiers.contains(KeyModifiers::CONTROL)
+            && !key.modifiers.contains(KeyModifiers::ALT);
         match key.code {
             KeyCode::Char('u') if ctrl => {
                 self.chars.drain(..self.cursor);
@@ -1787,7 +1790,12 @@ impl<'a> PlanScreen<'a> {
     fn request_lines(&self, index: usize) -> Vec<Line<'static>> {
         let endpoint = &self.run.endpoints[index];
         let credentials = &self.run.credentials;
-        let url = self.run.urls(index).into_iter().next().unwrap_or_default();
+        // Built with the credentials masked, so none can reach the screen
+        let url = endpoint
+            .urls(&self.run.spec.base_url, &credentials.masked())
+            .into_iter()
+            .next()
+            .unwrap_or_default();
         let (address, query) = url.split_once('?').unwrap_or((&url, ""));
         let parsed = reqwest::Url::parse(address).ok();
         let host = parsed.as_ref().map(|u| {
@@ -1807,7 +1815,7 @@ impl<'a> PlanScreen<'a> {
         ])];
         for (i, pair) in query.split('&').filter(|p| !p.is_empty()).enumerate() {
             let (name, shown) = pair.split_once('=').unwrap_or((pair, ""));
-            let secret = credentials.query.iter().any(|(n, _)| n == name);
+            let secret = shown == MASK;
             lines.push(Line::from(vec![
                 label(if i == 0 { "  ? " } else { "  & " }),
                 Span::styled(name.to_string(), Style::new().fg(ACCENT)),
@@ -2115,57 +2123,8 @@ impl<'a> PlanScreen<'a> {
     }
 }
 
-/// Background of the selected line
-const SELECTED: Color = Color::Indexed(237);
-/// Background of the field being typed in
-const FIELD: Color = Color::Indexed(236);
-/// What's off, or not sent
-const FAINT: Color = Color::Indexed(242);
 /// In place of a credential
 const HIDDEN: &str = "••••••••";
-
-/// A rounded card with its title in the top border, and `right` at the
-/// other end of it
-fn panel(title: Line<'static>, right: Option<Line<'static>>, border: Color) -> Block<'static> {
-    let mut block = Block::bordered()
-        .border_type(BorderType::Rounded)
-        .border_style(Style::new().fg(border))
-        .title_top(title);
-    if let Some(right) = right {
-        block = block.title_top(right.right_aligned());
-    }
-    block
-}
-
-/// A card's title, lit when the card has the keys
-fn caption(text: &str, focused: bool) -> Line<'static> {
-    Line::from(Span::styled(
-        format!(" {} ", text.to_uppercase()),
-        Style::new().fg(if focused { ACCENT } else { LABEL }).bold(),
-    ))
-}
-
-/// The bar at the left of the selected line, lit in the pane with the keys
-fn marker(active: bool, focused: bool) -> Span<'static> {
-    match (active, focused) {
-        (true, true) => Span::styled("▌", Style::new().fg(ACCENT)),
-        (true, false) => Span::styled("▌", Style::new().fg(FAINT)),
-        _ => Span::raw(" "),
-    }
-}
-
-/// Keys and what they do, the keys as small caps on a chip
-fn chips(pairs: &[(&'static str, &'static str)]) -> Line<'static> {
-    let mut spans = Vec::with_capacity(pairs.len() * 2);
-    for (key, action) in pairs {
-        spans.push(Span::styled(
-            format!(" {key} "),
-            Style::new().bg(SELECTED).fg(ACCENT).bold(),
-        ));
-        spans.push(label(format!(" {action}  ")));
-    }
-    Line::from(spans)
-}
 
 /// How many leading characters every endpoint's path has in common, up to
 /// a `/`: "/api" of "/api/ads" and "/api/boards"
@@ -2302,66 +2261,6 @@ fn method_color(method: &str) -> Color {
         "DELETE" => BAD,
         _ => WARN,
     }
-}
-
-/// A pane's title and a rule to the edge, lit when the pane has the keys
-fn pane_title(f: &mut Frame, area: Rect, title: &str, right: Option<Line<'static>>, focused: bool) {
-    let title = format!("{} ", title.to_uppercase());
-    let right_width = right.as_ref().map_or(0, |r| r.width() + 1);
-    let rule = (area.width as usize).saturating_sub(title.chars().count() + right_width);
-    let mut spans = vec![
-        Span::styled(
-            title,
-            Style::new().fg(if focused { ACCENT } else { LABEL }).bold(),
-        ),
-        Span::styled("─".repeat(rule), Style::new().fg(RULE)),
-    ];
-    if let Some(right) = right {
-        spans.push(Span::raw(" "));
-        spans.extend(right.spans);
-    }
-    f.render_widget(Paragraph::new(Line::from(spans)), area);
-}
-
-/// Text on lines of at most `width`, broken between words where it can be;
-/// what doesn't fit `max_lines` is cut
-fn wrap(text: &str, width: usize, max_lines: usize) -> Vec<String> {
-    let width = width.max(8);
-    let mut lines: Vec<String> = Vec::new();
-    let mut line: Vec<char> = Vec::new();
-    for word in text.split_whitespace() {
-        let mut word: Vec<char> = word.chars().collect();
-        loop {
-            let space = usize::from(!line.is_empty());
-            if line.len() + space + word.len() <= width {
-                if space == 1 {
-                    line.push(' ');
-                }
-                line.append(&mut word);
-                break;
-            }
-            // A word longer than a line fills this one and carries on
-            let room = width.saturating_sub(line.len() + space);
-            if word.len() > width && room > 0 {
-                if space == 1 {
-                    line.push(' ');
-                }
-                line.extend(word.drain(..room));
-            }
-            lines.push(line.drain(..).collect());
-        }
-    }
-    if !line.is_empty() {
-        lines.push(line.into_iter().collect());
-    }
-    if lines.len() > max_lines {
-        lines.truncate(max_lines);
-        if let Some(last) = lines.last_mut() {
-            let kept: String = last.chars().take(width - 1).collect();
-            *last = format!("{kept}…");
-        }
-    }
-    lines
 }
 
 /// "200 OK · 12.3ms" for a tried endpoint; with its size when `full`

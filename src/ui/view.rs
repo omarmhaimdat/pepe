@@ -172,7 +172,7 @@ fn level_color(level: Level) -> Color {
 }
 
 /// Horizontal bar with 1/8-cell resolution
-fn bar(fraction: f64, width: usize) -> String {
+pub(super) fn bar(fraction: f64, width: usize) -> String {
     const PARTIAL: [char; 8] = [' ', '▏', '▎', '▍', '▌', '▋', '▊', '▉'];
     let eighths = (fraction.clamp(0.0, 1.0) * width as f64 * 8.0).round() as usize;
     let mut out = "█".repeat(eighths / 8);
@@ -2232,7 +2232,11 @@ fn inspector_stats(d: &Dashboard, entry: &LogEntry, w: usize) -> Vec<Line<'stati
             Color::Reset,
             w,
         ));
-        if detail.final_url.trim_end_matches('/') != d.args.url.trim_end_matches('/') {
+        // In API mode the run has many URLs, and which one this request
+        // went to isn't kept, so a redirect can't be told from here
+        if d.endpoints.is_empty()
+            && detail.final_url.trim_end_matches('/') != d.args.url.trim_end_matches('/')
+        {
             lines.push(kv("redirected", dash(), WARN, w));
             lines.push(Line::raw(truncate(&detail.final_url, w)));
         }

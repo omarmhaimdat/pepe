@@ -9,6 +9,9 @@ use serde_json::Value;
 const MAX_VARIANTS: usize = 64;
 /// How deep generated example bodies follow nested schemas
 const MAX_DEPTH: usize = 6;
+/// How far anyOf/oneOf/allOf and array items are followed. Schemas may
+/// refer back to themselves; this is what ends that.
+const MAX_NESTING: usize = 8;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum In {
@@ -166,7 +169,10 @@ fn plain(value: &Value) -> String {
 }
 
 /// The value a schema itself suggests: example, default, const or first enum
-fn schema_example(doc: &Value, schema: &Value) -> Option<Value> {
+fn schema_example(doc: &Value, schema: &Value, nesting: usize) -> Option<Value> {
+    if nesting > MAX_NESTING {
+        return None;
+    }
     let schema = resolve(doc, schema);
     for key in ["example", "default", "const"] {
         if let Some(v) = schema.get(key).filter(|v| !v.is_null()) {
@@ -184,7 +190,11 @@ fn schema_example(doc: &Value, schema: &Value) -> Option<Value> {
         if let Some(found) = schema
             .get(key)
             .and_then(Value::as_array)
-            .and_then(|options| options.iter().find_map(|o| schema_example(doc, o)))
+            .and_then(|options| {
+                options
+                    .iter()
+                    .find_map(|o| schema_example(doc, o, nesting + 1))
+            })
         {
             return Some(found);
         }
@@ -194,8 +204,11 @@ fn schema_example(doc: &Value, schema: &Value) -> Option<Value> {
 
 /// A value of the right shape for a schema, when the spec suggests none
 fn generate(doc: &Value, schema: &Value, depth: usize) -> Value {
+    if depth > MAX_DEPTH {
+        return Value::Null;
+    }
     let schema = resolve(doc, schema);
-    if let Some(example) = schema_example(doc, schema) {
+    if let Some(example) = schema_example(doc, schema, 0) {
         return example;
     }
     for key in ["anyOf", "oneOf"] {
@@ -208,7 +221,7 @@ fn generate(doc: &Value, schema: &Value, depth: usize) -> Value {
                     .find(|o| resolve(doc, o).get("type").and_then(Value::as_str) != Some("null"))
             });
         if let Some(option) = first {
-            return generate(doc, option, depth);
+            return generate(doc, option, depth + 1);
         }
     }
     // 3.1 allows a list of types: take the first that isn't null
@@ -262,7 +275,10 @@ fn generate(doc: &Value, schema: &Value, depth: usize) -> Value {
 }
 
 /// A short name for a schema's type: "integer", "date", "string[]"
-fn type_name(doc: &Value, schema: &Value) -> String {
+fn type_name(doc: &Value, schema: &Value, nesting: usize) -> String {
+    if nesting > MAX_NESTING {
+        return "object".into();
+    }
     let schema = resolve(doc, schema);
     for key in ["anyOf", "oneOf", "allOf"] {
         let option = schema
@@ -274,7 +290,7 @@ fn type_name(doc: &Value, schema: &Value) -> String {
                     .find(|o| resolve(doc, o).get("type").and_then(Value::as_str) != Some("null"))
             });
         if let Some(option) = option {
-            return type_name(doc, option);
+            return type_name(doc, option, nesting + 1);
         }
     }
     let kind = match schema.get("type") {
@@ -290,9 +306,9 @@ fn type_name(doc: &Value, schema: &Value) -> String {
     match kind {
         "array" => format!(
             "{}[]",
-            schema
-                .get("items")
-                .map_or("string".to_string(), |items| type_name(doc, items))
+            schema.get("items").map_or("string".to_string(), |items| {
+                type_name(doc, items, nesting + 1)
+            })
         ),
         // A string's format says more than "string"
         "string" => match schema.get("format").and_then(Value::as_str) {
@@ -304,7 +320,10 @@ fn type_name(doc: &Value, schema: &Value) -> String {
 }
 
 /// The values a schema allows, when it lists them
-fn schema_options(doc: &Value, schema: &Value) -> Vec<String> {
+fn schema_options(doc: &Value, schema: &Value, nesting: usize) -> Vec<String> {
+    if nesting > MAX_NESTING {
+        return Vec::new();
+    }
     let schema = resolve(doc, schema);
     if let Some(values) = schema.get("enum").and_then(Value::as_array) {
         return values.iter().filter(|v| !v.is_null()).map(plain).collect();
@@ -315,16 +334,16 @@ fn schema_options(doc: &Value, schema: &Value) -> Vec<String> {
             .and_then(Value::as_array)
             .into_iter()
             .flatten()
-            .map(|option| schema_options(doc, option))
+            .map(|option| schema_options(doc, option, nesting + 1))
             .find(|options| !options.is_empty());
         if let Some(found) = found {
             return found;
         }
     }
     if let Some(items) = schema.get("items") {
-        return schema_options(doc, items);
+        return schema_options(doc, items, nesting + 1);
     }
-    if type_name(doc, schema) == "boolean" {
+    if type_name(doc, schema, nesting) == "boolean" {
         return vec!["true".into(), "false".into()];
     }
     Vec::new()
@@ -422,7 +441,7 @@ impl Spec {
                                 .get("value")
                                 .cloned()
                         })
-                        .or_else(|| schema_example(doc, schema))
+                        .or_else(|| schema_example(doc, schema, 0))
                         .filter(|v| !v.is_null());
                     let param = Param {
                         name: name.clone(),
@@ -432,11 +451,11 @@ impl Spec {
                                 .get("required")
                                 .and_then(Value::as_bool)
                                 .unwrap_or(false),
-                        kind: type_name(doc, schema),
+                        kind: type_name(doc, schema, 0),
                         description: Some(first_line(raw.get("description")))
                             .filter(|d| !d.is_empty())
                             .unwrap_or_else(|| first_line(resolve(doc, schema).get("description"))),
-                        options: schema_options(doc, schema),
+                        options: schema_options(doc, schema, 0),
                         value: value.as_ref().map(plain),
                         guess: plain(&generate(doc, schema, 0)),
                     };
@@ -618,6 +637,9 @@ fn auth_schemes(doc: &Value) -> Vec<AuthScheme> {
 
 // ─── Credentials ─────────────────────────────────────────────────────────────
 
+/// What stands in for a credential's value wherever one would be shown
+pub const MASK: &str = "REDACTED";
+
 /// Credentials from `--auth`, placed where the API expects them
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct Credentials {
@@ -659,17 +681,26 @@ impl Credentials {
                         AuthKind::ApiKey { name, location } => Some((name.clone(), *location)),
                         _ => None,
                     });
-                    let (name, value, location) = match (rest.split_once('='), declared) {
-                        (Some((name, value)), declared) => (
-                            name.to_string(),
-                            value,
-                            declared.map_or(In::Header, |d| d.1),
-                        ),
-                        (None, Some((name, location))) => (name, rest, location),
-                        (None, None) => {
-                            return Err(format!(
-                                "--auth {arg}: the spec declares no API key; use apikey:NAME=VALUE"
-                            ))
+                    // A key may contain `=` itself (base64 padding), so
+                    // only a spec without an API key reads NAME=VALUE
+                    let (name, value, location) = match declared {
+                        Some((name, location)) => {
+                            let named = format!("{name}=");
+                            let value = match rest.get(..named.len()) {
+                                Some(start) if start.eq_ignore_ascii_case(&named) => {
+                                    &rest[named.len()..]
+                                }
+                                _ => rest,
+                            };
+                            (name, value, location)
+                        }
+                        None => {
+                            let (name, value) = rest.split_once('=').ok_or_else(|| {
+                                format!(
+                                    "--auth {arg}: the spec declares no API key; use apikey:NAME=VALUE"
+                                )
+                            })?;
+                            (name.to_string(), value, In::Header)
                         }
                     };
                     match location {
@@ -685,11 +716,37 @@ impl Credentials {
                 }
             }
         }
+        // Said here, rather than when the run starts
+        for (name, value) in &out.headers {
+            if reqwest::header::HeaderName::from_bytes(name.as_bytes()).is_err() {
+                return Err(format!("--auth: {name:?} can't be a header name"));
+            }
+            if reqwest::header::HeaderValue::from_str(value).is_err() {
+                return Err(format!(
+                    "--auth: the value for {name} has characters a header can't carry"
+                ));
+            }
+        }
         Ok(out)
     }
 
     pub fn is_empty(&self) -> bool {
         self.headers.is_empty() && self.query.is_empty()
+    }
+
+    /// The same credentials with every value replaced by `MASK`, for
+    /// showing where they go without showing them
+    pub fn masked(&self) -> Credentials {
+        let mask = |pairs: &[(String, String)]| {
+            pairs
+                .iter()
+                .map(|(name, _)| (name.clone(), MASK.to_string()))
+                .collect()
+        };
+        Credentials {
+            headers: mask(&self.headers),
+            query: mask(&self.query),
+        }
     }
 }
 
@@ -1302,6 +1359,73 @@ paths:
 
         assert!(Credentials::parse(&["token".into()], &spec).is_err());
         assert!(Credentials::parse(&["magic:x".into()], &spec).is_err());
+    }
+
+    #[test]
+    fn api_keys_keep_their_equals_signs_and_are_checked() {
+        let spec = petstore();
+        // base64 padding isn't NAME=VALUE; the spec's own name may be given
+        for arg in [
+            "apikey:dGVzdA==",
+            "apikey:X-API-Key=dGVzdA==",
+            "apikey:x-api-key=dGVzdA==",
+        ] {
+            let creds = Credentials::parse(&[arg.into()], &spec).unwrap();
+            assert_eq!(
+                creds.headers,
+                [("X-API-Key".to_string(), "dGVzdA==".to_string())],
+                "{arg}"
+            );
+        }
+        // Without an API key in the spec, the name has to be given
+        let bare: Value = serde_json::json!({"openapi": "3.0.0", "servers": [{"url": "https://x.io"}], "paths": {"/a": {"get": {}}}});
+        let bare = Spec::parse(&bare, None, None).unwrap();
+        assert!(Credentials::parse(&["apikey:abc".into()], &bare).is_err());
+        let creds = Credentials::parse(&["apikey:X-Key=a=b".into()], &bare).unwrap();
+        assert_eq!(creds.headers, [("X-Key".to_string(), "a=b".to_string())]);
+
+        // What can't be sent is refused here, not when the run starts
+        assert!(Credentials::parse(&["header:Bad Name=x".into()], &spec)
+            .unwrap_err()
+            .contains("header name"));
+        assert!(Credentials::parse(&["bearer:a\nb".into()], &spec).is_err());
+
+        let creds = Credentials::parse(&["bearer:s3cret".into(), "query:k=s3cret".into()], &spec)
+            .unwrap()
+            .masked();
+        assert_eq!(
+            creds.headers[0],
+            ("Authorization".to_string(), MASK.to_string())
+        );
+        assert_eq!(creds.query[0], ("k".to_string(), MASK.to_string()));
+    }
+
+    #[test]
+    fn schemas_that_refer_to_themselves_end() {
+        let doc: Value = serde_json::json!({
+            "openapi": "3.0.0", "servers": [{"url": "https://x.io"}],
+            "components": {"schemas": {
+                "Pet": {"oneOf": [{"$ref": "#/components/schemas/Cat"}]},
+                "Cat": {"allOf": [{"$ref": "#/components/schemas/Pet"}, {"type": "object", "properties": {"name": {"type": "string"}}}]},
+                "Tree": {"type": "array", "items": {"$ref": "#/components/schemas/Tree"}},
+                "Node": {"type": "object", "properties": {"next": {"$ref": "#/components/schemas/Node"}}}
+            }},
+            "paths": {"/pets": {"post": {
+                "parameters": [
+                    {"name": "tree", "in": "query", "required": true, "schema": {"$ref": "#/components/schemas/Tree"}},
+                    {"name": "pet", "in": "query", "schema": {"$ref": "#/components/schemas/Pet"}}
+                ],
+                "requestBody": {"content": {"application/json": {"schema": {"type": "object", "properties": {
+                    "pet": {"$ref": "#/components/schemas/Pet"},
+                    "node": {"$ref": "#/components/schemas/Node"}
+                }}}}}
+            }}}
+        });
+        let spec = Spec::parse(&doc, None, None).unwrap();
+        let op = &spec.operations[0];
+        assert_eq!(op.params.len(), 2);
+        assert!(op.params[0].kind.ends_with("[]"));
+        assert!(op.body.is_some());
     }
 
     #[test]

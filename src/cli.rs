@@ -16,7 +16,8 @@ pub struct Cli {
     #[command(subcommand)]
     pub command: Option<Command>,
 
-    #[arg(short, long, action = HelpLong)]
+    /// Print help
+    #[arg(short, long, action = HelpLong, global = true)]
     pub help: Option<bool>,
 
     /// Number of requests to perform
@@ -37,7 +38,7 @@ pub struct Cli {
     pub curl: bool,
 
     /// HTTP method, e.g. GET, POST, PUT, DELETE
-    #[arg(short, long, default_value_t = String::from("GET"))]
+    #[arg(short, long, default_value_t = String::from("GET"), global = true)]
     pub method: String,
 
     /// HTTP headers, e.g. -H 'Accept: application/json'
@@ -49,7 +50,7 @@ pub struct Cli {
     pub timeout: u32,
 
     /// HTTP request body
-    #[arg(short = 'd', long)]
+    #[arg(short = 'd', long, global = true)]
     pub body: Option<String>,
 
     /// User-Agent string, default is pepe/{version}
@@ -104,9 +105,51 @@ pub enum Command {
     SelfUpdate,
     /// Load-test every endpoint of an OpenAPI spec
     Api(ApiArgs),
+    /// Raise the load step by step to find where the target stops keeping up
+    Ramp(RampArgs),
 }
 
-#[derive(clap::Args, Debug, Clone)]
+#[derive(clap::Args, Debug, Clone, PartialEq)]
+pub struct RampArgs {
+    /// HTTP url to request; without one, the setup screen opens
+    #[arg(default_value_t = String::new(), hide_default_value = true)]
+    pub url: String,
+
+    /// Concurrency of the first step
+    #[arg(long, default_value_t = 10)]
+    pub from: u32,
+
+    /// Concurrency of the last step
+    #[arg(long, default_value_t = 100)]
+    pub to: u32,
+
+    /// Concurrency added at each step
+    #[arg(long, default_value_t = 10)]
+    pub step: u32,
+
+    /// How long each step is held, e.g. 10s, 1m
+    #[arg(long, default_value = "10s")]
+    pub every: String,
+
+    /// End the ramp once a step crosses this: 'p99 > 500ms', 'errors > 1%'
+    #[arg(long, value_name = "CONDITION")]
+    pub until: Vec<String>,
+}
+
+impl Default for RampArgs {
+    fn default() -> Self {
+        RampArgs {
+            url: String::new(),
+            from: 10,
+            to: 100,
+            step: 10,
+            every: "10s".into(),
+            until: Vec::new(),
+        }
+    }
+}
+
+#[derive(clap::Args, Debug, Clone, Default)]
 pub struct ApiArgs {
     /// The OpenAPI spec: a file or URL, JSON or YAML
     pub spec: String,
@@ -148,7 +191,9 @@ pub struct ApiArgs {
 
 impl Cli {
     pub fn validate(&mut self) -> Result<(), Error> {
-        if self.concurrency > self.number && self.duration.is_none() {
+        // A ramp sets its own concurrency and runs for as long as its steps
+        let ramp = matches!(self.command, Some(Command::Ramp(_)));
+        if self.concurrency > self.number && self.duration.is_none() && !ramp {
             return Err(Error::raw(
                 clap::error::ErrorKind::ValueValidation,
                 format!(
@@ -297,17 +342,57 @@ impl Cli {
     pub fn command_line(&self) -> String {
         let defaults = Cli::parse_from(["pepe", "x"]);
         let mut parts = vec!["pepe".to_string()];
+        match &self.command {
+            Some(Command::Ramp(_)) => parts.push("ramp".into()),
+            Some(Command::Api(_)) => parts.push("api".into()),
+            _ => {}
+        }
         let mut flag = |name: &str, value: &str| {
             parts.push(name.to_string());
             parts.push(shell_quote(value));
         };
-        if self.concurrency != defaults.concurrency {
-            flag("-c", &self.concurrency.to_string());
+        // A ramp sets its own load; the other modes take -c and -n or -z
+        let ramp = match &self.command {
+            Some(Command::Ramp(ramp)) => Some(ramp),
+            _ => None,
+        };
+        let mut target = self.url.clone();
+        match &self.command {
+            Some(Command::Ramp(ramp)) => {
+                let usual = RampArgs::default();
+                for (name, value, default) in [
+                    ("--from", ramp.from, usual.from),
+                    ("--to", ramp.to, usual.to),
+                    ("--step", ramp.step, usual.step),
+                ] {
+                    if value != default {
+                        flag(name, &value.to_string());
+                    }
+                }
+                if ramp.every != usual.every {
+                    flag("--every", &ramp.every);
+                }
+                for condition in &ramp.until {
+                    flag("--until", condition);
+                }
+            }
+            Some(Command::Api(api)) => {
+                target = api.spec.clone();
+                if let Some(server) = &api.server {
+                    flag("--server", server);
+                }
+            }
+            _ => {}
         }
-        match &self.duration {
-            Some(duration) => flag("-z", duration),
-            None if self.number != defaults.number => flag("-n", &self.number.to_string()),
-            None => {}
+        if ramp.is_none() {
+            if self.concurrency != defaults.concurrency {
+                flag("-c", &self.concurrency.to_string());
+            }
+            match &self.duration {
+                Some(duration) => flag("-z", duration),
+                None if self.number != defaults.number => flag("-n", &self.number.to_string()),
+                None => {}
+            }
         }
         if self.method != defaults.method {
             flag("-m", &self.method);
@@ -337,7 +422,7 @@ impl Cli {
                 parts.push(name.to_string());
             }
         }
-        parts.push(shell_quote(&self.url));
+        parts.push(shell_quote(&target));
         parts.join(" ")
     }
 

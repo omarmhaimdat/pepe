@@ -2,12 +2,15 @@ mod bigtext;
 mod body;
 mod filter;
 pub mod format;
+mod kit;
 mod mascot;
 mod plan;
+mod ramp;
 mod setup;
 mod view;
 
 pub use plan::{PlanOutcome, PlanScreen};
+pub use ramp::RampScreen;
 pub use setup::{Setup, SetupOutcome};
 
 use std::collections::{HashMap, VecDeque};
@@ -54,6 +57,7 @@ const MAX_FAILURE_CAUSES: usize = 32;
 const NOTICE_TTL: Duration = Duration::from_secs(2);
 
 /// What the user asked for when leaving the dashboard
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Outcome {
     Quit,
     Restart,
