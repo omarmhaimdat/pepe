@@ -14,6 +14,9 @@ Pepe is written in Rust and uses the `reqwest` and `tokio` libraries for making 
 - **Timeouts**: Set a timeout for each request.
 - **Basic Authentication**: Use basic authentication for the requests.
 - **Proxy Support**: Send requests through a proxy server.
+- **Setup Screen**: Run `pepe` with no arguments to fill in every option on a form, with the equivalent command shown as you go.
+- **Ramp Mode**: Raise the load step by step and find the concurrency where the target stops keeping up.
+- **API Mode**: Load-test the endpoints of an OpenAPI spec, picked by tag, with their parameters and credentials set on screen.
 - **Live Dashboard**: Throughput and latency charts, status codes, percentiles and a scrollable request log, updated as the test runs.
 - **Interactive Control**: Pause, resume or stop a run, and raise or lower concurrency while it's going.
 - **DNS Resolution Timing**: Sample DNS lookup time once a second during the run.
@@ -126,6 +129,82 @@ What's understood:
 - Connection: `-L` (like curl, redirects are only followed with `-L`), `-k`, `-x`, `-m`, `--no-keepalive`, `--url`, `--url-query`, bunched flags like `-sSLk` and attached values like `-XPOST`.
 - Output, logging and TLS options (`-o`, `-s`, `-v`, `-w`, `--cacert`, ...) are accepted and have no effect. An unknown option is an error, and anything pepe can't reproduce (such as a cookie file) is reported as a note.
 
+### Setup screen
+
+Run `pepe` with no URL and it opens a form with every option as a field: URL, method, headers, body, load, timeout, redirects, keep-alive, TLS, proxy and user agent. Add `-i` to any command to open the form filled in from its flags.
+
+```bash
+pepe
+pepe -i -c 50 -z 30s https://example.com
+```
+
+- `tab` switches mode: **Single URL**, **Ramp** or **API**. What the modes share is kept.
+- `↑` `↓` move between fields, `←` `→` change a choice, `enter` starts.
+- Paste a curl command anywhere and the form is filled in from it.
+- `ctrl-t` sends the request once and shows the response, to check it before the run.
+- The command card always shows the flags that reproduce the form. It's printed to your shell when you quit, and `E` in the dashboard brings you back to the form.
+
+### Ramp: finding where the target stops keeping up
+
+`pepe ramp` raises concurrency step by step, measures each step on its own, and says where the target holds, where it stops scaling and where it breaks.
+
+```bash
+pepe ramp https://example.com --from 10 --to 200 --step 10 --every 15s
+pepe ramp https://example.com --until 'p99 > 500ms' --until 'errors > 1%'
+```
+
+- `--from`, `--to`, `--step`: the concurrency of the first step, the last, and what's added between (10, 100 and 10 by default).
+- `--every`: how long each step is held (`10s` by default).
+- `--until`: ends the ramp once a step crosses a limit, so a failing target isn't hammered further. Latency percentiles (`p50 > 100ms`, `p99 > 2s`) and `errors > 1%` are understood; give it more than once for several limits.
+- `-m`, `-d`, `-H` and the other request options work as they do without `ramp`. Without a URL, the setup screen opens in Ramp mode.
+
+The screen shows each step as a row (throughput, p50, p90, p99, the slowest request, errors) with a note when something changes, the run second by second, throughput and p99 at each concurrency, and the result: the level that held, where throughput stopped following the load, where it broke, and the command for a steady run at the level that held. Throughput counts successful responses only, so a target that sheds load quickly doesn't look fast.
+
+| Key | Action |
+| --- | --- |
+| `↑` `↓` | Pick a step and see everything measured about it; `esc` goes back to following the run |
+| `space` | Pause or resume; a step's clock stops while paused |
+| `n` | End this step now and go on to the next |
+| `s` | Stop the ramp here and keep the results |
+| `r` / `e` | Run again / back to the setup screen |
+| `q` / `Ctrl-C` | Quit; the table and the result are printed to your shell |
+
+`--json` runs the ramp without a screen and prints every step and the findings.
+
+### API mode: load-testing an OpenAPI spec
+
+`pepe api` reads an OpenAPI 3 (or Swagger 2) spec, from a file or a URL, in JSON or YAML, and turns its operations into requests.
+
+```bash
+pepe api openapi.yaml
+pepe api https://api.example.com/openapi.json --auth bearer:$TOKEN -c 20 -z 1m
+```
+
+It opens on a plan screen. Nothing is sent, and no endpoint is switched on, until you say so.
+
+- Endpoints are listed under the spec's tags. `space` switches an endpoint on or off, or a whole tag; `/` filters the list.
+- `enter` on an endpoint goes to its parameters: path, query, header and cookie parameters with their type, description and the values the spec allows, then the body and the endpoint's share of the traffic. `enter` edits one, `space` steps through the spec's values, `del` leaves it out. Several values (`a, b`) are sent in turn, or together for array parameters.
+- The request is shown as it will go out, and `t` sends it once and shows the answer.
+- If the spec declares authentication and none was given, pepe asks for it, checks it with one request, and shows credentials masked from then on.
+- `c`, `n`, `z` change concurrency, requests and duration; `u` the server; `a` the credentials; `g` starts the run.
+- Endpoints that still need a value, and writes (POST, PUT, PATCH, DELETE), are never switched on in bulk: you switch those on one by one.
+
+The run is the usual dashboard, with an **Endpoints** view in front: requests, throughput, p50, p99, errors and status codes for each endpoint. `enter` on one shows its requests, and `E` goes back to the plan.
+
+Everything on the plan screen has a flag:
+
+| Flag | What it does |
+| --- | --- |
+| `--auth` | Credentials: `bearer:TOKEN`, `basic:USER:PASSWORD`, `apikey:VALUE`, `header:NAME=VALUE` or `query:NAME=VALUE` |
+| `--server` | Send requests here instead of the spec's server |
+| `--all` | Switch on every endpoint that has the values it needs |
+| `--tag`, `--only` | Switch on the endpoints with this tag, or matching a pattern such as `'GET /pets*'` |
+| `--skip` | Leave out endpoints matching a pattern |
+| `--set` | Give a parameter its value(s) wherever it appears: `--set id=1,2,3` |
+| `--include-writes` | Let `--all`, `--tag` and `--only` switch on writes too |
+
+With `--json` there is no screen, so name what to run with `--all`, `--tag` or `--only`; the report has a section per endpoint.
+
 ## Examples
 
 ### Sending a GET Request
@@ -225,6 +304,7 @@ Pepe, the chili in the corner, reacts to how the run is going. When a run ends, 
 | `+` / `-` | Raise or lower concurrency by about 10%, live |
 | `s` / `i` | Stop sending and keep the results on screen |
 | `r` | Restart with the same settings (and the current concurrency) |
+| `E` | Back to the setup screen (or, in API mode, the plan), to change the settings and run again |
 | `tab` / `←` `→` / `1` `2` `3` | Switch view |
 | `↑` `↓` / `j` `k`, `PgUp` `PgDn`, `g` `G` | Select a request in the log (newer / older) |
 | `f` | Filter requests by status: 2xx, 3xx, 4xx, 5xx, no response, failed |
