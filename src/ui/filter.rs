@@ -103,11 +103,16 @@ pub struct Filter {
     pub query: String,
     /// The search box has focus
     pub editing: bool,
+    /// API mode: only requests to this endpoint
+    pub endpoint: Option<u16>,
 }
 
 impl Filter {
     pub fn is_active(&self) -> bool {
-        self.status != Status::All || self.slow != Slow::Any || !self.query.is_empty()
+        self.status != Status::All
+            || self.slow != Slow::Any
+            || !self.query.is_empty()
+            || self.endpoint.is_some()
     }
 
     pub fn clear(&mut self) {
@@ -116,7 +121,7 @@ impl Filter {
 
     /// `min_us`: latency the slow filter requires, worked out by the caller
     pub fn matches(&self, stat: &ResponseStats, min_us: u64) -> bool {
-        if !self.status.matches(stat) {
+        if !self.status.matches(stat) || self.endpoint.is_some_and(|e| e != stat.endpoint) {
             return false;
         }
         if self.slow != Slow::Any && (stat.duration.as_micros() as u64) < min_us {

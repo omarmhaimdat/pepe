@@ -1,9 +1,10 @@
-use std::io::stdout;
+use std::io::{stdin, stdout, IsTerminal};
 use std::time::Instant;
 
-use clap::Parser;
+use clap::{CommandFactory, Parser};
 use crossterm::{
     cursor::{Hide, Show},
+    event::{DisableBracketedPaste, EnableBracketedPaste},
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
@@ -11,7 +12,9 @@ use crossterm::{
 use crate::cli::Cli;
 use crate::load::{LoadHandle, Plan};
 use crate::metrics::Metrics;
+use crate::ramp::{Ramp, RampPlan, Tick};
 
+mod api;
 mod cache;
 mod cli;
 mod curl;
@@ -19,6 +22,8 @@ mod insights;
 mod json_report;
 mod load;
 mod metrics;
+mod openapi;
+mod ramp;
 mod request;
 mod response;
 mod timeline;
@@ -72,7 +77,7 @@ fn start_load(args: &Cli, previews: bool) -> Result<LoadHandle, PepeError> {
 
 fn restore_terminal() {
     let _ = disable_raw_mode();
-    let _ = execute!(stdout(), LeaveAlternateScreen, Show);
+    let _ = execute!(stdout(), DisableBracketedPaste, LeaveAlternateScreen, Show);
 }
 
 /// Puts the terminal into dashboard mode and restores it when dropped, so
@@ -84,7 +89,8 @@ impl TerminalGuard {
         enable_raw_mode()?;
         #[cfg(unix)]
         keep_ctrl_c_a_signal();
-        execute!(stdout(), EnterAlternateScreen, Hide)?;
+        // Bracketed paste: a pasted curl command arrives whole, not as keys
+        execute!(stdout(), EnterAlternateScreen, Hide, EnableBracketedPaste)?;
         Ok(Self)
     }
 }
@@ -200,27 +206,278 @@ async fn run_json(args: &Cli) -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-/// Runs the dashboard until the user quits. Returns the end-of-run report, to
-/// print once the terminal is back to normal.
-async fn run_dashboard(args: &Cli) -> Result<Option<String>, Box<dyn std::error::Error>> {
+/// What to print once the terminal is back to normal
+#[derive(Default)]
+struct Farewell {
+    /// The end-of-run report
+    report: Option<String>,
+    /// The command that reproduces settings chosen on the setup screen
+    command: Option<String>,
+}
+
+/// A ramp's load has no end of its own: the ramp stops it
+const UNTIL_STOPPED: std::time::Duration = std::time::Duration::from_secs(365 * 24 * 60 * 60);
+
+/// Runs the setup screen (when asked for, or when there's nothing to run
+/// yet) and then the screen of the mode it chose, until the user quits
+async fn run_interactive(
+    args: &Cli,
+    mut setup: bool,
+) -> Result<Farewell, Box<dyn std::error::Error>> {
     // Declared first so it's dropped last: restoring the terminal writes to
     // it, which can block too, and Ctrl-C must still get out then
     let _watchdog = CtrlCWatchdog::arm();
     let _terminal = TerminalGuard::enter()?;
     let mut args = args.clone();
+    let mut farewell = Farewell::default();
+    // Why the last start didn't happen, for the setup screen to say
+    let mut error: Option<String> = None;
     loop {
-        let mut load = start_load(&args, true)?;
-        let mut dashboard = ui::Dashboard::new(args.clone(), plan(&args));
-        match dashboard.run(&mut load).await? {
-            ui::Outcome::Restart => {
+        if setup {
+            match ui::Setup::new(&args).with_error(error.take()).run().await? {
+                ui::SetupOutcome::Start(chosen) => {
+                    args = *chosen;
+                    farewell.command = Some(args.command_line());
+                }
+                ui::SetupOutcome::Quit => return Ok(farewell),
+            }
+            setup = false;
+        }
+        match args.command.clone() {
+            Some(cli::Command::Ramp(ramp)) => {
+                let plan = match RampPlan::from_args(&ramp) {
+                    Ok(plan) => plan,
+                    Err(e) => {
+                        error = Some(e);
+                        setup = true;
+                        continue;
+                    }
+                };
+                let request = args.request()?;
+                let mut load = load::start(
+                    request.build_client()?,
+                    request,
+                    plan.levels[0] as usize,
+                    Plan::Duration(UNTIL_STOPPED),
+                    false,
+                );
+                let mut screen = ui::RampScreen::new(args.clone(), plan);
+                match screen.run(&mut load).await? {
+                    ui::Outcome::Restart => continue,
+                    ui::Outcome::Edit => setup = true,
+                    ui::Outcome::Quit => {
+                        farewell.report = screen.report();
+                        return Ok(farewell);
+                    }
+                }
+            }
+            Some(cli::Command::Api(api)) => {
+                let mut run = match api::ApiRun::load(&api).await {
+                    Ok(run) => run,
+                    Err(e) => {
+                        error = Some(e);
+                        setup = true;
+                        continue;
+                    }
+                };
+                farewell.report = api_session(&args, &mut run).await?;
+                return Ok(farewell);
+            }
+            _ => {
+                let mut load = start_load(&args, true)?;
+                let mut dashboard = ui::Dashboard::new(args.clone(), plan(&args));
+                let outcome = dashboard.run(&mut load).await?;
                 // Keep any concurrency the user dialed in during the run.
                 // Dropping `load` stops the previous run before the next starts.
                 args.concurrency = load.concurrency() as u32;
-                continue;
+                match outcome {
+                    ui::Outcome::Restart => continue,
+                    ui::Outcome::Edit => setup = true,
+                    ui::Outcome::Quit => {
+                        farewell.report = dashboard.report();
+                        return Ok(farewell);
+                    }
+                }
             }
+        }
+    }
+}
+
+/// Ramp mode with `--json`: climb the steps, print what each measured
+async fn run_ramp_json(args: &Cli, plan: RampPlan) -> Result<(), Box<dyn std::error::Error>> {
+    let request = args.request()?;
+    let mut load = load::start(
+        request.build_client()?,
+        request,
+        plan.levels[0] as usize,
+        Plan::Duration(UNTIL_STOPPED),
+        false,
+    );
+    let mut ramp = Ramp::new(plan, Instant::now());
+    let mut clock = tokio::time::interval(std::time::Duration::from_millis(50));
+    while ramp.end.is_none() {
+        tokio::select! {
+            stat = load.rx.recv() => match stat {
+                Some(stat) => ramp.record(&stat, Instant::now()),
+                None => break,
+            },
+            _ = clock.tick() => {
+                if let Tick::Level(level) = ramp.tick(Instant::now()) {
+                    load.set_concurrency(level as usize);
+                }
+            }
+            _ = tokio::signal::ctrl_c() => {
+                ramp.stop(Instant::now());
+            }
+        }
+    }
+    load.stop();
+    println!("{}", serde_json::to_string_pretty(&ramp::json(&ramp))?);
+    Ok(())
+}
+
+/// API mode with `--json`: run the endpoints that are on, print one report
+async fn run_api_json(args: &Cli, run: &api::ApiRun) -> Result<(), Box<dyn std::error::Error>> {
+    // Nobody to prompt here: say what's missing instead
+    if let (Some(scheme), true) = (run.spec.auth.first(), run.credentials.is_empty()) {
+        eprintln!(
+            "note: this API declares {} and no credentials were given; pass {}",
+            scheme.describe(),
+            scheme.hint()
+        );
+    }
+    let which = run.enabled();
+    if which.is_empty() {
+        let tags: Vec<&str> = run
+            .spec
+            .tags
+            .iter()
+            .map(|(name, _)| name.as_str())
+            .collect();
+        eprintln!(
+            "error: no endpoint to run. Pick some with --all, --tag NAME or --only PATTERN \
+             (tags: {}); --set gives parameters their values, --include-writes allows writes",
+            tags.join(", ")
+        );
+        std::process::exit(1);
+    }
+    let targets = run.targets(args, &which)?;
+    let mut load = load::start_targets(
+        run.client(args)?,
+        targets,
+        args.concurrency as usize,
+        plan(args),
+        false,
+    );
+    let started = Instant::now();
+    let mut total = Metrics::default();
+    let mut each = vec![Metrics::default(); which.len()];
+    let mut interrupted = false;
+    loop {
+        tokio::select! {
+            stat = load.rx.recv() => match stat {
+                Some(stat) => {
+                    total.record(&stat);
+                    if let Some(metrics) = each.get_mut(stat.endpoint as usize) {
+                        metrics.record(&stat);
+                    }
+                }
+                None => break,
+            },
+            _ = tokio::signal::ctrl_c(), if !interrupted => {
+                interrupted = true;
+                load.stop();
+            }
+        }
+    }
+    let elapsed = started.elapsed();
+    let report = json_report::JsonReport::generate(&total, elapsed, interrupted);
+    let mut report = serde_json::to_value(&report)?;
+    let ms = |d: std::time::Duration| (d.as_secs_f64() * 1_000_000.0).round() / 1000.0;
+    let endpoints: Vec<serde_json::Value> = which
+        .iter()
+        .zip(&each)
+        .map(|(&index, m)| {
+            serde_json::json!({
+                "endpoint": run.endpoints[index].label,
+                "requests": m.total,
+                "failed_requests": m.total - m.success,
+                "requests_per_second": m.rps(elapsed),
+                "median_ms": ms(m.percentile(50.0)),
+                "p99_ms": ms(m.percentile(99.0)),
+                "status_codes": m.status_codes.iter().map(|(k, v)| (k.to_string(), *v)).collect::<std::collections::BTreeMap<_, _>>(),
+            })
+        })
+        .collect();
+    report["endpoints"] = serde_json::Value::Array(endpoints);
+    println!("{}", serde_json::to_string_pretty(&report)?);
+    Ok(())
+}
+
+/// The plan screen, then the dashboard with one row per endpoint, and
+/// back, until the user quits. Returns the report of the last run. The
+/// terminal is already the dashboard's.
+async fn api_session(
+    args: &Cli,
+    run: &mut api::ApiRun,
+) -> Result<Option<String>, Box<dyn std::error::Error>> {
+    // The dashboard's title shows the API rather than one URL
+    let mut shown = args.clone();
+    shown.method = "API".into();
+    shown.url = run.spec.base_url.clone();
+    let mut planning = true;
+    loop {
+        if planning {
+            match ui::PlanScreen::new(run, &mut shown).run().await? {
+                ui::PlanOutcome::Start => planning = false,
+                ui::PlanOutcome::Quit => return Ok(None),
+            }
+            shown.url = run.spec.base_url.clone();
+        }
+        let which = run.enabled();
+        let targets = run.targets(&shown, &which)?;
+        let mut load = load::start_targets(
+            run.client(&shown)?,
+            targets,
+            shown.concurrency as usize,
+            plan(&shown),
+            true,
+        );
+        let mut dashboard = ui::Dashboard::new(shown.clone(), plan(&shown))
+            .with_endpoints(run.views(&shown, &which));
+        let outcome = dashboard.run(&mut load).await?;
+        shown.concurrency = load.concurrency() as u32;
+        match outcome {
+            ui::Outcome::Restart => {}
+            ui::Outcome::Edit => planning = true,
             ui::Outcome::Quit => return Ok(dashboard.report()),
         }
     }
+}
+
+/// API mode: read the spec, then the plan screen and the dashboard
+async fn run_api(args: &Cli, api: &cli::ApiArgs) -> Result<(), Box<dyn std::error::Error>> {
+    let mut run = match api::ApiRun::load(api).await {
+        Ok(run) => run,
+        Err(e) => {
+            eprintln!("error: {e}");
+            std::process::exit(1);
+        }
+    };
+    if args.json {
+        return run_api_json(args, &run).await;
+    }
+
+    let report = {
+        let _watchdog = CtrlCWatchdog::arm();
+        let _terminal = TerminalGuard::enter()?;
+        api_session(args, &mut run).await?
+    };
+    if let Some(report) = report {
+        print!("{report}");
+    }
+    update::check_for_updates().await;
+    Ok(())
 }
 
 #[tokio::main]
@@ -231,15 +488,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         return update::self_update().await;
     }
 
-    if let Err(e) = args.validate() {
-        eprintln!("{}", e);
-        std::process::exit(1);
-    }
-
-    if args.json {
-        return run_json(&args).await;
-    }
-
     // Release builds abort on panic; restore the terminal first so a crash
     // never leaves the shell in raw mode
     let default_hook = std::panic::take_hook();
@@ -248,8 +496,61 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         default_hook(info);
     }));
 
-    if let Some(report) = run_dashboard(&args).await? {
+    if let Some(cli::Command::Api(api)) = args.command.clone() {
+        if let Err(e) = args.validate() {
+            eprintln!("{}", e);
+            std::process::exit(1);
+        }
+        return run_api(&args, &api).await;
+    }
+
+    // A ramp names its URL after `ramp`; from here on it's the URL
+    let ramp = match &args.command {
+        Some(cli::Command::Ramp(ramp)) => {
+            args.url = ramp.url.clone();
+            Some(ramp.clone())
+        }
+        _ => None,
+    };
+
+    // The setup screen opens on request, or when there's nothing to run
+    // yet and someone is at the terminal to fill it in
+    let interactive = !args.json && stdin().is_terminal() && stdout().is_terminal();
+    let nothing_to_run = args.url.is_empty() && !args.curl;
+    if nothing_to_run && !interactive {
+        Cli::command().print_help()?;
+        std::process::exit(2);
+    }
+    let setup = interactive && (args.setup || nothing_to_run);
+
+    // With nothing to run yet, the setup screen does the checking instead
+    if !nothing_to_run {
+        if let Err(e) = args.validate() {
+            eprintln!("{}", e);
+            std::process::exit(1);
+        }
+    }
+
+    if let (Some(ramp), false) = (&ramp, nothing_to_run) {
+        match RampPlan::from_args(ramp) {
+            Ok(plan) if args.json => return run_ramp_json(&args, plan).await,
+            Ok(_) => {}
+            Err(e) => {
+                eprintln!("error: {e}");
+                std::process::exit(1);
+            }
+        }
+    }
+    if args.json {
+        return run_json(&args).await;
+    }
+
+    let farewell = run_interactive(&args, setup).await?;
+    if let Some(report) = farewell.report {
         print!("{report}");
+    }
+    if let Some(command) = farewell.command {
+        println!("Run this again with:\n  {command}");
     }
     update::check_for_updates().await;
     Ok(())

@@ -24,14 +24,14 @@ use crate::utils::num_of_cores;
 // terminal's own green/yellow/red so they match the user's theme.
 
 /// The one accent color: cyan
-const ACCENT: Color = Color::Indexed(81);
+pub(super) const ACCENT: Color = Color::Indexed(81);
 /// Labels: readable, but quieter than values
-const LABEL: Color = Color::Indexed(246);
+pub(super) const LABEL: Color = Color::Indexed(246);
 /// Rules and axes
-const RULE: Color = Color::Indexed(239);
-const GOOD: Color = Color::Green;
-const WARN: Color = Color::Yellow;
-const BAD: Color = Color::Red;
+pub(super) const RULE: Color = Color::Indexed(239);
+pub(super) const GOOD: Color = Color::Green;
+pub(super) const WARN: Color = Color::Yellow;
+pub(super) const BAD: Color = Color::Red;
 /// Heatmap ramp, few requests → many: dark gray to white
 const HEAT: [Color; 9] = [
     Color::Indexed(237),
@@ -91,6 +91,7 @@ pub fn render(d: &Dashboard, f: &mut Frame) {
     render_header(d, f, header);
     render_tabs(d, f, tabs);
     match d.tab {
+        Tab::Endpoints => render_endpoints(d, f, body),
         Tab::Live => render_live(d, f, body),
         Tab::Stats => render_stats_tab(d, f, body),
         Tab::Requests => render_requests_tab(d, f, body),
@@ -104,15 +105,15 @@ pub fn render(d: &Dashboard, f: &mut Frame) {
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-fn label(text: impl Into<String>) -> Span<'static> {
+pub(super) fn label(text: impl Into<String>) -> Span<'static> {
     Span::styled(text.into(), Style::new().fg(LABEL))
 }
 
-fn value(text: impl Into<String>, color: Color) -> Span<'static> {
+pub(super) fn value(text: impl Into<String>, color: Color) -> Span<'static> {
     Span::styled(text.into(), Style::new().fg(color).bold())
 }
 
-fn heading(text: &str) -> Line<'static> {
+pub(super) fn heading(text: &str) -> Line<'static> {
     Line::from(Span::styled(
         text.to_uppercase(),
         Style::new().fg(LABEL).bold(),
@@ -120,7 +121,7 @@ fn heading(text: &str) -> Line<'static> {
 }
 
 /// Section title followed by a rule to the edge: "LATENCY ────────"
-fn section(f: &mut Frame, area: Rect, title: &str, right: Option<Line<'static>>) {
+pub(super) fn section(f: &mut Frame, area: Rect, title: &str, right: Option<Line<'static>>) {
     let title = format!("{} ", title.to_uppercase());
     let right_width = right.as_ref().map_or(0, |r| r.width() + 1);
     let rule = (area.width as usize).saturating_sub(title.chars().count() + right_width);
@@ -145,7 +146,7 @@ fn kv(name: &str, val: String, color: Color, width: usize) -> Line<'static> {
     ])
 }
 
-fn status_color(code: u16) -> Color {
+pub(super) fn status_color(code: u16) -> Color {
     match code {
         100..=199 => Color::Blue,
         200..=299 => GOOD,
@@ -171,7 +172,7 @@ fn level_color(level: Level) -> Color {
 }
 
 /// Horizontal bar with 1/8-cell resolution
-fn bar(fraction: f64, width: usize) -> String {
+pub(super) fn bar(fraction: f64, width: usize) -> String {
     const PARTIAL: [char; 8] = [' ', '▏', '▎', '▍', '▌', '▋', '▊', '▉'];
     let eighths = (fraction.clamp(0.0, 1.0) * width as f64 * 8.0).round() as usize;
     let mut out = "█".repeat(eighths / 8);
@@ -201,7 +202,7 @@ fn center(area: Rect, width: u16, height: u16) -> Rect {
     area
 }
 
-fn truncate(s: &str, max: usize) -> String {
+pub(super) fn truncate(s: &str, max: usize) -> String {
     if s.chars().count() <= max {
         return s.to_string();
     }
@@ -464,13 +465,14 @@ fn fit_parts(parts: &[String], width: usize) -> String {
 }
 
 fn render_tabs(d: &Dashboard, f: &mut Frame, area: Rect) {
-    let titles = Tab::ALL
+    let titles = d
+        .tabs()
         .iter()
         .enumerate()
         .map(|(i, t)| Line::from(format!("{} {}", i + 1, t.title().to_uppercase())));
     f.render_widget(
         Tabs::new(titles)
-            .select(d.tab.index())
+            .select(d.tab.index(d.tabs()))
             .style(Style::new().fg(LABEL))
             .highlight_style(Style::new().fg(Color::Black).bg(ACCENT).bold())
             .divider(" ")
@@ -479,7 +481,7 @@ fn render_tabs(d: &Dashboard, f: &mut Frame, area: Rect) {
     );
 }
 
-fn key_hints(pairs: &[(&'static str, &'static str)]) -> Vec<Span<'static>> {
+pub(super) fn key_hints(pairs: &[(&'static str, &'static str)]) -> Vec<Span<'static>> {
     let mut spans = Vec::with_capacity(pairs.len() * 2);
     for (key, action) in pairs {
         spans.push(Span::styled(
@@ -492,7 +494,7 @@ fn key_hints(pairs: &[(&'static str, &'static str)]) -> Vec<Span<'static>> {
 }
 
 fn render_footer(d: &Dashboard, f: &mut Frame, area: Rect) {
-    let mut hints: Vec<(&str, &str)> = vec![("q", "quit"), ("r", "restart")];
+    let mut hints: Vec<(&str, &str)> = vec![("q", "quit"), ("r", "restart"), ("E", "edit")];
     if d.finished.is_none() {
         hints.push(("space", if d.paused { "resume" } else { "pause" }));
         hints.push(("+/-", "concurrency"));
@@ -510,6 +512,10 @@ fn render_footer(d: &Dashboard, f: &mut Frame, area: Rect) {
             ("v", "raw / formatted"),
             ("q", "quit"),
         ];
+    } else if d.tab == Tab::Endpoints {
+        hints.push(("↑↓", "select"));
+        hints.push(("enter", "its requests"));
+        hints.push(("tab", "view"));
     } else if d.tab == Tab::Requests {
         hints.push(("↑↓", "select"));
         hints.push(("enter", "inspect"));
@@ -538,11 +544,12 @@ fn render_footer(d: &Dashboard, f: &mut Frame, area: Rect) {
 }
 
 fn render_help(f: &mut Frame, area: Rect) {
-    let rows: [(&str, &str); 18] = [
+    let rows: [(&str, &str); 19] = [
         ("space / p", "pause or resume sending"),
         ("+ / -", "raise or lower concurrency by ~10%"),
         ("s / i", "stop the run, keep the results"),
         ("r", "restart with the same settings"),
+        ("E", "edit the settings, then run again"),
         ("tab / ← →", "switch view"),
         ("1 2 3", "live, stats, requests"),
         ("↑ ↓ / j k", "select a request (newer / older)"),
@@ -1791,6 +1798,130 @@ fn plot_axis(area: Rect, plot: Rect) -> Rect {
     Rect::new(area.x, plot.y, AXIS + 1, plot.height)
 }
 
+// ─── Endpoints (API mode) ────────────────────────────────────────────────────
+
+/// One row per endpoint: how much traffic it took and how it held up
+fn render_endpoints(d: &Dashboard, f: &mut Frame, area: Rect) {
+    let [title, table] = Layout::vertical([Constraint::Length(1), Constraint::Min(0)]).areas(area);
+    let failing = d
+        .endpoint_metrics
+        .iter()
+        .filter(|m| m.total > m.success)
+        .count();
+    let summary = if failing > 0 {
+        Line::from(value(format!("{failing} with failures"), BAD))
+    } else if d.metrics.total > 0 {
+        Line::from(value("all responding", GOOD))
+    } else {
+        Line::from(label("waiting for responses"))
+    };
+    section(f, title, "endpoints", Some(summary));
+
+    let elapsed = d.elapsed();
+    // The slowest p99 among endpoints with traffic gets pointed out
+    let slowest = d
+        .endpoint_metrics
+        .iter()
+        .enumerate()
+        .filter(|(_, m)| m.total > 0)
+        .max_by_key(|(_, m)| m.percentile(99.0))
+        .map(|(i, _)| i)
+        .filter(|_| d.endpoints.len() > 1);
+    let height = table.height.saturating_sub(1) as usize;
+    let top = (d.endpoint_cursor + 1).saturating_sub(height);
+    let rows = d
+        .endpoints
+        .iter()
+        .zip(&d.endpoint_metrics)
+        .enumerate()
+        .skip(top)
+        .take(height)
+        .map(|(i, (view, m))| {
+            let none = m.total == 0;
+            let dash = |text: String| if none { "—".to_string() } else { text };
+            let errors = m.error_rate();
+            let mut codes: Vec<(u16, u64)> = m.status_codes.iter().map(|(c, n)| (*c, *n)).collect();
+            codes.sort_unstable();
+            let mut statuses: Vec<Span> = Vec::new();
+            for (code, n) in codes {
+                statuses.push(value(format!("{code}"), status_color(code)));
+                statuses.push(label(format!(" ×{}  ", format::compact(n as f64))));
+            }
+            if m.timeouts + m.errors > 0 {
+                statuses.push(value("no response", BAD));
+                statuses.push(label(format!(
+                    " ×{}",
+                    format::compact((m.timeouts + m.errors) as f64)
+                )));
+            }
+            let note = if slowest == Some(i) && errors == 0.0 {
+                label("  ← slowest")
+            } else {
+                Span::raw("")
+            };
+            let row = Row::new(vec![
+                Line::raw(view.label.clone()),
+                Line::raw(dash(format::count(m.total))).alignment(Alignment::Right),
+                Line::raw(dash(format::compact(m.rps(elapsed)))).alignment(Alignment::Right),
+                Line::raw(dash(format::latency(m.percentile(50.0)))).alignment(Alignment::Right),
+                Line::from(Span::styled(
+                    dash(format::latency(m.percentile(99.0))),
+                    Style::new().fg(if slowest == Some(i) {
+                        WARN
+                    } else {
+                        Color::Reset
+                    }),
+                ))
+                .alignment(Alignment::Right),
+                Line::from(Span::styled(
+                    dash(format!("{errors:.1}%")),
+                    Style::new().fg(if errors > 0.0 { BAD } else { LABEL }),
+                ))
+                .alignment(Alignment::Right),
+                Line::from(statuses.into_iter().chain([note]).collect::<Vec<_>>()),
+            ]);
+            if i == d.endpoint_cursor {
+                row.style(Style::new().bg(Color::Indexed(237)).bold())
+            } else {
+                row
+            }
+        });
+    let header = Row::new([
+        "endpoint",
+        "requests",
+        "req/s",
+        "p50",
+        "p99",
+        "errors",
+        "responses",
+    ])
+    .style(Style::new().fg(LABEL).bold());
+    let label_width = d
+        .endpoints
+        .iter()
+        .map(|v| v.label.chars().count())
+        .max()
+        .unwrap_or(8)
+        .clamp(8, 56) as u16;
+    f.render_widget(
+        Table::new(
+            rows,
+            [
+                Constraint::Length(label_width),
+                Constraint::Length(10),
+                Constraint::Length(8),
+                Constraint::Length(10),
+                Constraint::Length(10),
+                Constraint::Length(8),
+                Constraint::Fill(1),
+            ],
+        )
+        .header(header)
+        .column_spacing(2),
+        table,
+    );
+}
+
 // ─── Requests ────────────────────────────────────────────────────────────────
 
 fn render_requests_tab(d: &Dashboard, f: &mut Frame, area: Rect) {
@@ -1842,34 +1973,40 @@ fn render_requests_tab(d: &Dashboard, f: &mut Frame, area: Rect) {
     let height = table.height.saturating_sub(1) as usize;
     // Scroll just enough to keep the selected row on screen
     let top = (d.scroll + 1).saturating_sub(height);
+    let api = !d.endpoints.is_empty();
     let rows = log.iter().enumerate().skip(top).take(height).map(|(i, e)| {
-        let row = request_row(e);
+        let endpoint = d
+            .endpoints
+            .get(e.stat.endpoint as usize)
+            .map(|v| v.label.as_str());
+        let row = request_row(e, endpoint.filter(|_| api));
         if i == d.scroll {
             row.style(Style::new().bg(Color::Indexed(237)).bold())
         } else {
             row
         }
     });
-    let header = Row::new([
-        "", "#", "at", "status", "latency", "size", "cache", "response",
-    ])
-    .style(Style::new().fg(LABEL).bold());
+    let mut names = vec!["", "#", "at", "status", "latency", "size"];
+    let mut widths = vec![
+        Constraint::Length(1),
+        Constraint::Length(9),
+        Constraint::Length(8),
+        Constraint::Length(13),
+        Constraint::Length(9),
+        Constraint::Length(10),
+    ];
+    if api {
+        names.push("endpoint");
+        widths.push(Constraint::Length(34));
+    } else {
+        names.push("cache");
+        widths.push(Constraint::Length(7));
+    }
+    names.push("response");
+    widths.push(Constraint::Fill(1));
+    let header = Row::new(names).style(Style::new().fg(LABEL).bold());
     f.render_widget(
-        Table::new(
-            rows,
-            [
-                Constraint::Length(1),
-                Constraint::Length(9),
-                Constraint::Length(8),
-                Constraint::Length(13),
-                Constraint::Length(9),
-                Constraint::Length(10),
-                Constraint::Length(7),
-                Constraint::Fill(1),
-            ],
-        )
-        .header(header)
-        .column_spacing(1),
+        Table::new(rows, widths).header(header).column_spacing(1),
         table,
     );
 }
@@ -1914,6 +2051,11 @@ fn render_filter_bar(d: &Dashboard, f: &mut Frame, area: Rect) {
             " {}",
             format::latency(Duration::from_micros(d.slow_threshold_us))
         )));
+    }
+    if let Some(view) = d.filter.endpoint.and_then(|e| d.endpoints.get(e as usize)) {
+        spans.push(Span::raw("    "));
+        spans.push(Span::styled("ENDPOINT ", Style::new().fg(LABEL).bold()));
+        spans.push(Span::styled(format!(" {} ", view.label), selected));
     }
     spans.push(Span::raw("    "));
     group(&mut spans, "SEARCH", "/");
@@ -2090,22 +2232,38 @@ fn inspector_stats(d: &Dashboard, entry: &LogEntry, w: usize) -> Vec<Line<'stati
             Color::Reset,
             w,
         ));
-        if detail.final_url.trim_end_matches('/') != d.args.url.trim_end_matches('/') {
+        // In API mode the run has many URLs, and which one this request
+        // went to isn't kept, so a redirect can't be told from here
+        if d.endpoints.is_empty()
+            && detail.final_url.trim_end_matches('/') != d.args.url.trim_end_matches('/')
+        {
             lines.push(kv("redirected", dash(), WARN, w));
             lines.push(Line::raw(truncate(&detail.final_url, w)));
         }
     }
 
-    // The request is the same for every run; show what went on the wire
+    // What went on the wire: the one request of the run, or in API mode
+    // this entry's endpoint
     lines.push(Line::raw(""));
     lines.push(heading("request sent"));
     let args = &d.args;
+    let view = d.endpoints.get(entry.stat.endpoint as usize);
+    let (method, url) = match view {
+        Some(view) => (view.method.clone(), view.url.clone()),
+        None => (args.method.clone(), args.url.clone()),
+    };
     lines.push(Line::from(vec![
-        value(format!("{} ", args.method), Color::Magenta),
-        Span::raw(truncate(&args.url, w.saturating_sub(args.method.len() + 1))),
+        value(format!("{method} "), Color::Magenta),
+        Span::raw(truncate(&url, w.saturating_sub(method.len() + 1))),
     ]));
+    if let Some(view) = view.filter(|v| v.variants > 1) {
+        lines.push(Line::from(label(format!(
+            "one of {} URLs this endpoint rotates through",
+            view.variants
+        ))));
+    }
     // Host carries the port unless it's the scheme's default
-    let host = reqwest::Url::parse(&args.url)
+    let host = reqwest::Url::parse(&url)
         .ok()
         .and_then(|u| {
             let host = u.host_str()?.to_string();
@@ -2115,12 +2273,19 @@ fn inspector_stats(d: &Dashboard, entry: &LogEntry, w: usize) -> Vec<Line<'stati
             })
         })
         .unwrap_or_default();
-    let custom: Vec<(String, String)> = args
-        .headers
-        .iter()
-        .filter_map(|h| h.split_once(':'))
-        .map(|(name, value)| (name.trim().to_lowercase(), value.trim().to_string()))
-        .collect();
+    let custom: Vec<(String, String)> = match view {
+        Some(view) => view
+            .headers
+            .iter()
+            .map(|(name, value)| (name.to_lowercase(), value.clone()))
+            .collect(),
+        None => args
+            .headers
+            .iter()
+            .filter_map(|h| h.split_once(':'))
+            .map(|(name, value)| (name.trim().to_lowercase(), value.trim().to_string()))
+            .collect(),
+    };
     let mut sent = vec![("host".to_string(), host)];
     // The default User-Agent unless one was given with -H
     if !custom.iter().any(|(name, _)| name == "user-agent") {
@@ -2137,7 +2302,11 @@ fn inspector_stats(d: &Dashboard, entry: &LogEntry, w: usize) -> Vec<Line<'stati
             Span::raw(truncate(&v, w.saturating_sub(name.len() + 2))),
         ]));
     }
-    match args.body() {
+    let body = match view {
+        Some(view) => view.body.clone(),
+        None => args.body(),
+    };
+    match body {
         Some(body) => {
             lines.push(Line::from(label(format!(
                 "body, {}:",
@@ -2269,7 +2438,8 @@ fn body_lines(
     (Some(format), lines)
 }
 
-fn request_row(e: &LogEntry) -> Row<'static> {
+/// `endpoint`: shown instead of the cache column, in API mode
+fn request_row(e: &LogEntry, endpoint: Option<&str>) -> Row<'static> {
     let cache = e
         .stat
         .cache_status
@@ -2285,7 +2455,10 @@ fn request_row(e: &LogEntry) -> Row<'static> {
         Line::from(status_span(&e.stat)),
         Line::from(Span::raw(format::latency(e.stat.duration))).alignment(Alignment::Right),
         Line::from(label(format::bytes(e.stat.body_bytes as f64))).alignment(Alignment::Right),
-        Line::from(label(cache)),
+        match endpoint {
+            Some(endpoint) => Line::raw(truncate(endpoint, 34)),
+            None => Line::from(label(cache)),
+        },
         Line::raw(outcome_text(&e.stat)),
     ])
 }
@@ -2403,6 +2576,53 @@ mod tests {
                 }),
                 ..Default::default()
             });
+        }
+    }
+
+    #[test]
+    fn api_mode_renders_the_endpoints_tab() {
+        use super::super::EndpointView;
+        let args = Cli::parse_from(["pepe", "api", "spec.json"]);
+        let view = |label: &str| EndpointView {
+            label: label.into(),
+            method: "GET".into(),
+            url: "http://example.com/a?x=1".into(),
+            variants: 2,
+            headers: vec![("Authorization".into(), "Bearer t".into())],
+            body: None,
+        };
+        let mut d = Dashboard::new(args, Plan::Count(100))
+            .with_endpoints(vec![view("GET /a"), view("GET /b/{id}")]);
+        for i in 0..40u64 {
+            d.record(ResponseStats {
+                duration: Duration::from_millis(5 + i),
+                status_code: StatusCode::from_u16(if i % 9 == 0 { 500 } else { 200 }).ok(),
+                endpoint: (i % 2) as u16,
+                ..Default::default()
+            });
+        }
+        let mut terminal = Terminal::new(TestBackend::new(140, 40)).unwrap();
+        terminal.draw(|f| render(&d, f)).unwrap();
+        let screen: String = terminal
+            .backend()
+            .buffer()
+            .content()
+            .iter()
+            .map(|c| c.symbol())
+            .collect();
+        assert!(screen.contains("1 ENDPOINTS") && screen.contains("4 REQUESTS"));
+        assert!(screen.contains("GET /b/{id}") && screen.contains("with failures"));
+
+        for (w, h) in [(60, 18), (100, 30), (220, 60)] {
+            let mut terminal = Terminal::new(TestBackend::new(w, h)).unwrap();
+            for tab in Tab::API {
+                d.tab = tab;
+                terminal.draw(|f| render(&d, f)).unwrap();
+            }
+            d.filter.endpoint = Some(1);
+            d.inspecting = true;
+            terminal.draw(|f| render(&d, f)).unwrap();
+            d.inspecting = false;
         }
     }
 
