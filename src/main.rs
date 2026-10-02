@@ -1,4 +1,4 @@
-use std::io::{stdin, stdout, IsTerminal};
+use std::io::{stderr, stdin, stdout, IsTerminal};
 use std::time::Instant;
 
 use clap::{CommandFactory, Parser};
@@ -224,6 +224,14 @@ async fn run_json(args: &Cli) -> Result<(), Box<dyn std::error::Error>> {
         .with_generator(load.threads(), peak_busy);
     println!("{}", report.to_json()?);
     Ok(())
+}
+
+/// After the report: Pepe mentions a newer release, if the look that
+/// started with the run found one
+async fn say_if_newer(check: update::Check) {
+    if let Some(latest) = check.finish().await {
+        eprint!("{}", update::notice(&latest, stderr().is_terminal()));
+    }
 }
 
 /// What to print once the terminal is back to normal
@@ -504,6 +512,7 @@ async fn run_api(args: &Cli, api: &cli::ApiArgs) -> Result<(), Box<dyn std::erro
         return run_api_json(args, &run).await;
     }
 
+    let check = update::Check::start();
     let report = {
         let _watchdog = CtrlCWatchdog::arm();
         let _terminal = TerminalGuard::enter()?;
@@ -512,7 +521,7 @@ async fn run_api(args: &Cli, api: &cli::ApiArgs) -> Result<(), Box<dyn std::erro
     if let Some(report) = report {
         print!("{report}");
     }
-    update::check_for_updates().await;
+    say_if_newer(check).await;
     Ok(())
 }
 
@@ -522,8 +531,8 @@ async fn run_api(args: &Cli, api: &cli::ApiArgs) -> Result<(), Box<dyn std::erro
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut args = Cli::parse();
 
-    if let Some(cli::Command::SelfUpdate) = args.command {
-        return update::self_update().await;
+    if let Some(cli::Command::SelfUpdate(what)) = &args.command {
+        return update::self_update(what.check, what.verbose).await;
     }
 
     // Release builds abort on panic; restore the terminal first so a crash
@@ -583,6 +592,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         return run_json(&args).await;
     }
 
+    let check = update::Check::start();
     let farewell = run_interactive(&args, setup).await?;
     if let Some(report) = farewell.report {
         print!("{report}");
@@ -590,6 +600,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     if let Some(command) = farewell.command {
         println!("Run this again with:\n  {command}");
     }
-    update::check_for_updates().await;
+    say_if_newer(check).await;
     Ok(())
 }
