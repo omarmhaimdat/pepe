@@ -6,6 +6,35 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+## [0.8.0](https://github.com/omarmhaimdat/pepe/compare/v0.7.0...v0.8.0) - 2026-10-02
+
+### Added
+
+- shell completions and man pages, shipped with every release
+
+  - Completions for bash, zsh, fish and PowerShell, and man pages for pepe
+    and each subcommand, generated from the command definition so they
+    can't drift from the flags. The main page also has the keys of every
+    screen, examples and the environment variables, which --help doesn't.
+  - They live under contrib/, go into every release archive, and Homebrew
+    puts them under share/pepe. contrib/README.md says where each shell
+    wants them.
+  - cargo test fails when the files are out of date;
+    UPDATE_CONTRIB=1 cargo test contrib rewrites them. The pages carry no
+    version and no machine-specific default, so they're the same on every
+    machine and don't change on a release PR.
+
+
+
+### Other
+
+- the setup-screen test no longer depends on the runner's core count
+
+  The command card leaves out -c when it equals the default, which is the
+  machine's core count; the test chose 5, and GitHub's macOS runners now
+  have five cores.
+
+
 ## [0.7.0](https://github.com/omarmhaimdat/pepe/compare/v0.6.1...v0.7.0) - 2026-10-02
 
 ### Added
