@@ -1,13 +1,22 @@
-use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
+//! The load engine: sends a run's requests and reports every result.
+//!
+//! Requests go out from a few shard threads. Each shard has its own
+//! single-threaded tokio runtime, its own `reqwest::Client` (so its own
+//! connection pool and timer wheel) and long-lived worker tasks, one per unit
+//! of concurrency. Nothing on the hot path is shared between shards except a
+//! handful of counters, so there is no lock for threads to queue on, which
+//! is where a shared multi-threaded runtime spent most of its CPU.
+
+use std::sync::atomic::{AtomicBool, AtomicU64, AtomicU8, AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use tokio::sync::{mpsc, watch, OwnedSemaphorePermit, Semaphore};
-use tokio::task::{JoinHandle, JoinSet};
+use tokio::sync::{mpsc, Notify};
+use tokio::task::JoinSet;
 
 use crate::request::Request;
 use crate::response::ResponseStats;
-use crate::utils::resolve_dns;
+use crate::utils::{resolve_dns, thread_cpu_time};
 
 /// Upper bound for live concurrency changes from the dashboard
 pub const MAX_CONCURRENCY: usize = 100_000;
@@ -21,6 +30,11 @@ const DNS_PROBE_INTERVAL: Duration = Duration::from_secs(1);
 /// copying every one would cost real throughput, so they're sampled evenly.
 const DETAILS_PER_SECOND: u32 = 1_000;
 
+/// How often a shard measures how busy its thread is
+const BUSY_SAMPLE: Duration = Duration::from_secs(1);
+/// `Control::busy` entry of a shard that hasn't measured yet
+const BUSY_UNKNOWN: u8 = u8::MAX;
+
 /// How long a run lasts
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Plan {
@@ -30,69 +44,206 @@ pub enum Plan {
     Duration(Duration),
 }
 
+/// Shard threads for a run: what `--threads` asked for, otherwise one. One
+/// thread sends about a hundred thousand plain requests a second, or ten
+/// thousand TLS handshakes, at the lowest CPU per request; more raise the
+/// peak against a target that can take it, and the dashboard says when
+/// that's the case (see `LoadHandle::busy`). Never more than the
+/// concurrency: a shard with no worker would have nothing to do.
+pub fn shards(concurrency: usize, requested: Option<usize>) -> usize {
+    requested
+        .unwrap_or(1)
+        .clamp(1, concurrency.clamp(1, MAX_CONCURRENCY))
+}
+
 /// A running load test. Results arrive on `rx`; the channel closes once every
 /// request has finished (or the run was stopped). Dropping the handle stops it.
 pub struct LoadHandle {
     pub rx: mpsc::UnboundedReceiver<ResponseStats>,
-    /// Requests started so far
-    pub sent: Arc<AtomicU64>,
-    task: JoinHandle<()>,
-    semaphore: Arc<Semaphore>,
-    concurrency: AtomicUsize,
-    paused: watch::Sender<bool>,
+    control: Arc<Control>,
 }
 
 impl LoadHandle {
-    /// Stop sending and cancel in-flight requests
-    pub fn stop(&self) {
-        self.task.abort();
+    /// Take every result waiting on the channel; false once the run is over
+    /// and the last result was taken. Polling this on a timer costs less
+    /// than awaiting each result: a send to a waiting receiver has to wake it
+    /// up through the kernel, which at a hundred thousand results a second
+    /// was a fifth of a run's CPU.
+    pub fn drain(&mut self, mut each: impl FnMut(ResponseStats)) -> bool {
+        loop {
+            match self.rx.try_recv() {
+                Ok(stat) => each(stat),
+                Err(mpsc::error::TryRecvError::Empty) => return true,
+                Err(mpsc::error::TryRecvError::Disconnected) => return false,
+            }
+        }
     }
 
+    /// Stop sending and cancel in-flight requests
+    pub fn stop(&self) {
+        self.control.stopped.store(true, Ordering::Release);
+        self.control.changed.notify_waiters();
+    }
+
+    /// Requests started so far
     pub fn sent(&self) -> u64 {
-        self.sent.load(Ordering::Relaxed)
+        self.control.sent.load(Ordering::Relaxed)
     }
 
     pub fn concurrency(&self) -> usize {
-        self.concurrency.load(Ordering::Relaxed)
+        self.control.concurrency.load(Ordering::Relaxed)
+    }
+
+    /// Shard threads sending
+    pub fn threads(&self) -> usize {
+        self.control.busy.len()
+    }
+
+    /// How busy the busiest sending thread was over its last second, in
+    /// percent of a core. Near 100, pepe is the bottleneck rather than the
+    /// target, and more threads would send more. None until measured, or
+    /// where the platform can't say.
+    pub fn busy(&self) -> Option<u8> {
+        self.control
+            .busy
+            .iter()
+            .map(|b| b.load(Ordering::Relaxed))
+            .filter(|&b| b != BUSY_UNKNOWN)
+            .max()
     }
 
     /// Change how many requests may be in flight, while the run is going.
-    /// Returns the new value, clamped to `1..=MAX_CONCURRENCY`.
+    /// Returns the new value, clamped to `1..=MAX_CONCURRENCY`. Lowering it
+    /// takes effect as the surplus requests finish.
     pub fn set_concurrency(&self, target: usize) -> usize {
         let target = target.clamp(1, MAX_CONCURRENCY);
-        let old = self.concurrency.swap(target, Ordering::Relaxed);
-        match target.cmp(&old) {
-            std::cmp::Ordering::Greater => self.semaphore.add_permits(target - old),
-            std::cmp::Ordering::Less => {
-                // Retire permits as in-flight requests hand them back. The
-                // semaphore is fair, so this waits ahead of new requests and
-                // the lower limit applies as soon as enough requests finish.
-                let semaphore = self.semaphore.clone();
-                let surplus = (old - target) as u32;
-                tokio::spawn(async move {
-                    if let Ok(permits) = semaphore.acquire_many_owned(surplus).await {
-                        permits.forget();
-                    }
-                });
-            }
-            std::cmp::Ordering::Equal => {}
-        }
+        self.control.concurrency.store(target, Ordering::Relaxed);
+        self.control.changed.notify_waiters();
         target
     }
 
-    /// Hold off starting new requests; in-flight ones still complete
+    /// Hold off starting new requests; in-flight ones still complete. A
+    /// timed run's clock stops while paused.
     pub fn set_paused(&self, paused: bool) {
-        self.paused.send_replace(paused);
+        let c = &self.control;
+        if c.paused.swap(paused, Ordering::AcqRel) == paused {
+            return;
+        }
+        let now = c.now_ns();
+        if paused {
+            c.paused_at_ns.store(now, Ordering::Relaxed);
+        } else {
+            let pause = now - c.paused_at_ns.load(Ordering::Relaxed);
+            // Push the deadline back by the pause, so a duration run gets
+            // its full length of sending
+            let _ = c
+                .deadline_ns
+                .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |d| {
+                    (d != NO_DEADLINE).then(|| d + pause)
+                });
+        }
+        c.changed.notify_waiters();
     }
 
     pub fn is_paused(&self) -> bool {
-        *self.paused.borrow()
+        self.control.paused.load(Ordering::Relaxed)
     }
 }
 
 impl Drop for LoadHandle {
     fn drop(&mut self) {
-        self.task.abort();
+        self.stop();
+    }
+}
+
+const NO_DEADLINE: u64 = u64::MAX;
+
+/// What the dashboard can change while a run is going, and how far along
+/// the plan is. Workers read it before every request; every change is
+/// announced on `changed`.
+struct Control {
+    /// Workers that may send at once, over all shards
+    concurrency: AtomicUsize,
+    paused: AtomicBool,
+    /// The plan has ended: start nothing new, let in-flight requests finish
+    draining: AtomicBool,
+    /// Cancel everything, in-flight requests included
+    stopped: AtomicBool,
+    /// Requests started so far. A Count plan's limit is claimed from here,
+    /// so it can't be overshot.
+    sent: AtomicU64,
+    limit: u64,
+    /// Nanoseconds on `clock` when a Duration plan ends; `NO_DEADLINE` otherwise
+    deadline_ns: AtomicU64,
+    paused_at_ns: AtomicU64,
+    clock: Instant,
+    changed: Notify,
+    /// Each shard's latest busy percentage (see `LoadHandle::busy`)
+    busy: Vec<AtomicU8>,
+}
+
+impl Control {
+    fn new(concurrency: usize, plan: Plan, shards: usize) -> Self {
+        let (limit, deadline_ns) = match plan {
+            Plan::Count(n) => (n, NO_DEADLINE),
+            Plan::Duration(d) => (u64::MAX, d.as_nanos() as u64),
+        };
+        Self {
+            concurrency: AtomicUsize::new(concurrency),
+            paused: AtomicBool::new(false),
+            draining: AtomicBool::new(false),
+            stopped: AtomicBool::new(false),
+            sent: AtomicU64::new(0),
+            limit,
+            deadline_ns: AtomicU64::new(deadline_ns),
+            paused_at_ns: AtomicU64::new(0),
+            clock: Instant::now(),
+            changed: Notify::new(),
+            busy: (0..shards).map(|_| AtomicU8::new(BUSY_UNKNOWN)).collect(),
+        }
+    }
+
+    fn now_ns(&self) -> u64 {
+        self.clock.elapsed().as_nanos() as u64
+    }
+
+    /// When sending ends, if the plan is timed
+    fn deadline(&self) -> Option<tokio::time::Instant> {
+        match self.deadline_ns.load(Ordering::Relaxed) {
+            NO_DEADLINE => None,
+            ns => Some((self.clock + Duration::from_nanos(ns)).into()),
+        }
+    }
+
+    /// Take one of the plan's requests; false once they're all started
+    fn claim(&self) -> bool {
+        self.sent
+            .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |n| {
+                (n < self.limit).then_some(n + 1)
+            })
+            .is_ok()
+    }
+
+    fn drain(&self) {
+        self.draining.store(true, Ordering::Release);
+        self.changed.notify_waiters();
+    }
+
+    /// No more requests are to be started
+    fn over(&self) -> bool {
+        self.draining.load(Ordering::Acquire) || self.stopped.load(Ordering::Acquire)
+    }
+
+    /// Resolves once the run is stopped
+    async fn stopped(&self) {
+        loop {
+            // Registered before the check, so a stop in between isn't missed
+            let changed = self.changed.notified();
+            if self.stopped.load(Ordering::Acquire) {
+                return;
+            }
+            changed.await;
+        }
     }
 }
 
@@ -191,7 +342,6 @@ impl DetailBudget {
     }
 }
 
-/// What every request task shares
 /// One request in the mix a run sends
 pub struct Target {
     pub request: Request,
@@ -231,8 +381,8 @@ fn schedule(targets: &[Target]) -> Vec<u16> {
     order
 }
 
+/// What every shard shares: the targets and the run-wide samplers
 struct Shared {
-    client: reqwest::Client,
     targets: Vec<Target>,
     /// Indexes into `targets`, cycled through
     schedule: Vec<u16>,
@@ -246,7 +396,7 @@ struct Shared {
 
 /// Load one request
 pub fn start(
-    client: reqwest::Client,
+    clients: Vec<reqwest::Client>,
     request: Request,
     concurrency: usize,
     plan: Plan,
@@ -258,25 +408,24 @@ pub fn start(
         endpoint: 0,
         weight: 1,
     };
-    start_targets(client, vec![target], concurrency, plan, previews)
+    start_targets(clients, vec![target], concurrency, plan, previews)
 }
 
-/// Load a mix of requests, each in proportion to its weight
+/// Load a mix of requests, each in proportion to its weight. One shard
+/// thread is started per client; `shards` says how many to build.
 pub fn start_targets(
-    client: reqwest::Client,
+    clients: Vec<reqwest::Client>,
     targets: Vec<Target>,
     concurrency: usize,
     plan: Plan,
     previews: bool,
 ) -> LoadHandle {
     assert!(!targets.is_empty(), "a run needs at least one target");
+    assert!(!clients.is_empty(), "a run needs at least one client");
     let (tx, rx) = mpsc::unbounded_channel();
-    let (paused, paused_rx) = watch::channel(false);
-    let sent = Arc::new(AtomicU64::new(0));
     let concurrency = concurrency.clamp(1, MAX_CONCURRENCY);
-    let semaphore = Arc::new(Semaphore::new(concurrency));
+    let control = Arc::new(Control::new(concurrency, plan, clients.len()));
     let shared = Arc::new(Shared {
-        client,
         schedule: schedule(&targets),
         targets,
         next: AtomicUsize::new(0),
@@ -284,118 +433,184 @@ pub fn start_targets(
         previews,
         details: DetailBudget::new(),
     });
-    let task = tokio::spawn(generate(
-        shared,
-        semaphore.clone(),
-        plan,
-        tx,
-        sent.clone(),
-        paused_rx,
-    ));
-    LoadHandle {
-        rx,
-        sent,
-        task,
-        semaphore,
-        concurrency: AtomicUsize::new(concurrency),
-        paused,
+    let count = clients.len();
+    for (index, client) in clients.into_iter().enumerate() {
+        let shard = Arc::new(Shard {
+            index,
+            count,
+            client,
+            shared: shared.clone(),
+            control: control.clone(),
+            tx: tx.clone(),
+            wake: Notify::new(),
+        });
+        std::thread::Builder::new()
+            .name(format!("pepe-load-{index}"))
+            .spawn(move || run_shard(shard))
+            .expect("spawn a load thread");
+    }
+    // Only the shards hold senders now, so the channel closes when they end
+    drop(tx);
+    LoadHandle { rx, control }
+}
+
+/// One load thread: its client and its share of the workers
+struct Shard {
+    index: usize,
+    /// How many shards the run has
+    count: usize,
+    client: reqwest::Client,
+    shared: Arc<Shared>,
+    control: Arc<Control>,
+    tx: mpsc::UnboundedSender<ResponseStats>,
+    /// Woken whenever `control` changed, so parked workers look again
+    wake: Notify,
+}
+
+/// Shard `index` of `count`'s part of `total`; a remainder goes to the first
+/// shards
+fn share_of(total: usize, index: usize, count: usize) -> usize {
+    total / count + usize::from(index < total % count)
+}
+
+impl Shard {
+    /// This shard's part of the concurrency right now
+    fn share(&self) -> usize {
+        share_of(
+            self.control.concurrency.load(Ordering::Relaxed),
+            self.index,
+            self.count,
+        )
+    }
+
+    /// Wait until worker `slot` may send; false once the run is over
+    async fn turn(&self, slot: usize) -> bool {
+        loop {
+            // Registered before the checks, so a change in between isn't missed
+            let wake = self.wake.notified();
+            if self.control.over() {
+                return false;
+            }
+            if !self.control.paused.load(Ordering::Relaxed) && slot < self.share() {
+                return true;
+            }
+            wake.await;
+        }
     }
 }
 
-async fn generate(
-    shared: Arc<Shared>,
-    semaphore: Arc<Semaphore>,
-    plan: Plan,
-    tx: mpsc::UnboundedSender<ResponseStats>,
-    sent: Arc<AtomicU64>,
-    mut paused: watch::Receiver<bool>,
-) {
-    // Owning every request task here means aborting this task (restart,
-    // interrupt, Ctrl-C) drops the JoinSet, which cancels them all.
-    let mut tasks = JoinSet::new();
-    let mut deadline = match plan {
-        Plan::Duration(d) => Some(tokio::time::Instant::now() + d),
-        Plan::Count(_) => None,
-    };
-    let mut started = 0u64;
+fn run_shard(shard: Arc<Shard>) {
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .expect("build a tokio runtime");
+    runtime.block_on(async {
+        tokio::select! {
+            _ = supervise(&shard) => {}
+            // A stop cancels in-flight requests: the runtime is dropped
+            // with them still in it
+            _ = shard.control.stopped() => {}
+        }
+    });
+}
 
+/// Keeps the shard's workers matching its share of the concurrency, ends
+/// the sending when a timed plan reaches its deadline, and measures how
+/// busy the thread is
+async fn supervise(shard: &Arc<Shard>) {
+    let control = &shard.control;
+    let mut workers = JoinSet::new();
+    let mut meter = BusyMeter::start();
+    let mut sample = tokio::time::interval(BUSY_SAMPLE);
+    sample.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
     loop {
-        if let Plan::Count(n) = plan {
-            if started >= n {
-                break;
-            }
+        let changed = control.changed.notified();
+        // Workers are only ever added; surplus ones park themselves
+        while workers.len() < shard.share() {
+            workers.spawn(worker(shard.clone(), workers.len()));
         }
-
-        // Paused: wait for resume, then push the deadline back by the pause
-        // so a duration run gets its full length of sending
-        if *paused.borrow_and_update() {
-            let since = tokio::time::Instant::now();
-            while *paused.borrow_and_update() {
-                if paused.changed().await.is_err() {
-                    break;
-                }
-            }
-            if let Some(deadline) = deadline.as_mut() {
-                *deadline += since.elapsed();
-            }
-            continue;
-        }
-
-        let acquire = semaphore.clone().acquire_owned();
-        let permit = match deadline {
-            // Don't sit waiting for a free slot past the end, and notice a
-            // pause that starts while waiting
-            Some(deadline) => tokio::select! {
-                permit = acquire => permit,
-                _ = tokio::time::sleep_until(deadline) => break,
-                _ = paused.changed() => continue,
-            },
-            None => tokio::select! {
-                permit = acquire => permit,
-                _ = paused.changed() => continue,
-            },
-        };
-        let Ok(permit) = permit else { break };
-        if deadline.is_some_and(|d| tokio::time::Instant::now() >= d) {
+        shard.wake.notify_waiters();
+        if control.over() {
             break;
         }
-
-        started += 1;
-        sent.fetch_add(1, Ordering::Relaxed);
-        tasks.spawn(send_one(shared.clone(), tx.clone(), permit));
-
-        // Reap finished tasks so long runs don't accumulate them
-        while tasks.try_join_next().is_some() {}
+        // A paused run's clock is stopped, so its deadline waits too
+        let deadline = async {
+            match control.deadline() {
+                Some(at) if !control.paused.load(Ordering::Relaxed) => {
+                    tokio::time::sleep_until(at).await
+                }
+                _ => std::future::pending().await,
+            }
+        };
+        tokio::select! {
+            _ = changed => {}
+            _ = deadline => control.drain(),
+            _ = sample.tick() => {
+                if let Some(busy) = meter.sample() {
+                    control.busy[shard.index].store(busy, Ordering::Relaxed);
+                }
+            }
+        }
     }
-
-    while tasks.join_next().await.is_some() {}
-    // `tx` and every clone are dropped now, which closes the channel
+    // Let in-flight requests finish and be reported
+    while workers.join_next().await.is_some() {}
 }
 
-async fn send_one(
-    shared: Arc<Shared>,
-    tx: mpsc::UnboundedSender<ResponseStats>,
-    permit: OwnedSemaphorePermit,
-) {
+/// Measures the share of wall time this thread spends on the CPU
+struct BusyMeter {
+    cpu: Option<Duration>,
+    at: Instant,
+}
+
+impl BusyMeter {
+    fn start() -> Self {
+        Self {
+            cpu: thread_cpu_time(),
+            at: Instant::now(),
+        }
+    }
+
+    /// Percent of the time since the last sample spent on the CPU
+    fn sample(&mut self) -> Option<u8> {
+        let (cpu, now) = (thread_cpu_time()?, Instant::now());
+        let used = cpu.saturating_sub(self.cpu?).as_secs_f64();
+        let passed = now.duration_since(self.at).as_secs_f64();
+        self.cpu = Some(cpu);
+        self.at = now;
+        Some(
+            (used / passed.max(f64::EPSILON) * 100.0)
+                .round()
+                .clamp(0.0, 100.0) as u8,
+        )
+    }
+}
+
+/// Sends requests one after another, whenever it has a turn
+async fn worker(shard: Arc<Shard>, slot: usize) {
+    while shard.turn(slot).await {
+        if !shard.control.claim() {
+            // The last request of the plan is out: tell every shard
+            shard.control.drain();
+            break;
+        }
+        let stats = send_one(&shard).await;
+        if shard.tx.send(stats).is_err() {
+            break;
+        }
+    }
+}
+
+async fn send_one(shard: &Shard) -> ResponseStats {
+    let shared = &shard.shared;
     let turn = shared.next.fetch_add(1, Ordering::Relaxed);
     let target = &shared.targets[shared.schedule[turn % shared.schedule.len()] as usize];
-    let request = &target.request;
-    let dns_times = if shared.dns.claim() {
-        resolve_dns(&request.url).await.ok()
-    } else {
-        None
+    let dns_times = match target.request.url.host_str() {
+        Some(host) if shared.dns.claim() => resolve_dns(host).await.ok(),
+        _ => None,
     };
 
-    let mut builder = shared.client.request(request.method.clone(), &request.url);
-    if !target.headers.is_empty() {
-        builder = builder.headers(target.headers.clone());
-    }
-    if let Some(body) = &request.body {
-        builder = builder.body(body.clone());
-    }
-
     let start = Instant::now();
-    let response = builder.send().await;
+    let response = shard.client.execute(target.build()).await;
     let ttfb = start.elapsed();
     let capture = shared.previews
         && matches!(&response, Ok(r) if shared.details.claim(!r.status().is_success()));
@@ -403,9 +618,23 @@ async fn send_one(
         ResponseStats::from_response(response, start, ttfb, dns_times, shared.previews, capture)
             .await;
     stats.endpoint = target.endpoint;
+    stats
+}
 
-    drop(permit);
-    let _ = tx.send(stats);
+impl Target {
+    /// The request as reqwest sends it. The URL and method were parsed
+    /// once, and the body's bytes are shared, so this is a few small copies.
+    fn build(&self) -> reqwest::Request {
+        let r = &self.request;
+        let mut request = reqwest::Request::new(r.method.clone(), r.url.clone());
+        if !self.headers.is_empty() {
+            *request.headers_mut() = self.headers.clone();
+        }
+        if let Some(body) = &r.body {
+            *request.body_mut() = Some(body.clone().into());
+        }
+        request
+    }
 }
 
 #[cfg(test)]
@@ -494,7 +723,7 @@ mod tests {
     async fn count_plan_sends_exactly_n() {
         let srv = server(Duration::ZERO).await;
         let req = request(&srv.url, "GET", None);
-        let load = start(req.build_client().unwrap(), req, 4, Plan::Count(25), true);
+        let load = start(req.build_clients(2).unwrap(), req, 4, Plan::Count(25), true);
         let results = drain(load).await;
         assert_eq!(results.len(), 25);
         assert!(results
@@ -523,7 +752,7 @@ mod tests {
         let req = request(&srv.url, "GET", None);
         let begin = Instant::now();
         let load = start(
-            req.build_client().unwrap(),
+            req.build_clients(2).unwrap(),
             req,
             2,
             Plan::Duration(Duration::from_millis(300)),
@@ -544,7 +773,7 @@ mod tests {
         let srv = server(Duration::from_secs(30)).await;
         let req = request(&srv.url, "GET", None);
         let load = start(
-            req.build_client().unwrap(),
+            req.build_clients(2).unwrap(),
             req,
             4,
             Plan::Count(1000),
@@ -567,7 +796,7 @@ mod tests {
         for method in ["POST", "PUT", "PATCH"] {
             let req = request(&srv.url, method, Some("hello"));
             drain(start(
-                req.build_client().unwrap(),
+                req.build_clients(2).unwrap(),
                 req,
                 1,
                 Plan::Count(1),
@@ -576,6 +805,34 @@ mod tests {
             .await;
         }
         assert_eq!(srv.bodies.load(Ordering::Relaxed), 3);
+    }
+
+    #[test]
+    fn one_shard_unless_asked_and_never_more_than_workers() {
+        assert_eq!(shards(1, None), 1);
+        assert_eq!(shards(100_000, None), 1);
+        assert_eq!(shards(100_000, Some(16)), 16, "--threads wins");
+        assert_eq!(shards(3, Some(16)), 3, "never more shards than workers");
+        assert_eq!(shards(10, Some(0)), 1);
+    }
+
+    #[tokio::test]
+    async fn busy_is_measured_once_the_run_has_gone_a_second() {
+        let srv = server(Duration::ZERO).await;
+        let req = request(&srv.url, "GET", None);
+        let load = start(
+            req.build_clients(1).unwrap(),
+            req,
+            2,
+            Plan::Duration(Duration::from_millis(1_300)),
+            false,
+        );
+        assert_eq!((load.threads(), load.busy()), (1, None));
+        tokio::time::sleep(Duration::from_millis(1_150)).await;
+        if cfg!(unix) {
+            assert!(load.busy().is_some(), "measured after a second");
+        }
+        drain(load).await;
     }
 
     #[test]
@@ -641,7 +898,7 @@ mod tests {
                 weight,
             }
         };
-        let client = request(&srv.url, "GET", None).build_client().unwrap();
+        let client = request(&srv.url, "GET", None).build_clients(2).unwrap();
         let load = start_targets(
             client,
             vec![target("a", 0, 3), target("b", 1, 1)],
@@ -660,7 +917,7 @@ mod tests {
         let req = request(&srv.url, "GET", None);
         let begin = Instant::now();
         let load = start(
-            req.build_client().unwrap(),
+            req.build_clients(2).unwrap(),
             req,
             2,
             Plan::Duration(Duration::from_millis(400)),
@@ -687,7 +944,7 @@ mod tests {
         let srv = server(Duration::from_millis(40)).await;
         let req = request(&srv.url, "GET", None);
         let load = start(
-            req.build_client().unwrap(),
+            req.build_clients(2).unwrap(),
             req,
             2,
             Plan::Count(10_000),
@@ -717,7 +974,7 @@ mod tests {
         let srv = server(Duration::from_millis(5)).await;
         let req = request(&srv.url, "GET", None);
         let load = start(
-            req.build_client().unwrap(),
+            req.build_clients(2).unwrap(),
             req,
             2,
             Plan::Count(10_000),

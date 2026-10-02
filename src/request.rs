@@ -1,8 +1,16 @@
 use bytes::Bytes;
 use reqwest::header::{HeaderMap, HeaderName, HeaderValue, USER_AGENT};
-use reqwest::{Method, Proxy};
+use reqwest::{Method, Proxy, Url};
 
 use crate::PepeError;
+
+/// Idle connections a client keeps per host. A worker's connection is idle
+/// only for the moment between its requests, so a few is plenty. The cap
+/// matters because whenever a request finds no idle connection the pool
+/// races a new one against waiting for one to be returned, and keeps the
+/// loser as a spare: without it, a run that started a thousand requests at
+/// once held two thousand connections for its whole length.
+const IDLE_CONNECTIONS: usize = 4;
 
 #[derive(Debug, Clone)]
 pub struct RequestSettings {
@@ -18,8 +26,8 @@ pub struct RequestSettings {
 
 #[derive(Debug, Clone)]
 pub struct Request {
-    pub url: String,
-    /// Parsed once here instead of on every request
+    /// Parsed once here, as is the method, instead of on every request
+    pub url: Url,
     pub method: Method,
     /// Bytes clones are a refcount bump, so sending the body costs no copy
     pub body: Option<Bytes>,
@@ -54,6 +62,8 @@ impl Request {
             header_map.append(name, value);
         }
 
+        let url = Url::parse(&url).map_err(|e| PepeError::InvalidUrl(format!("{url:?}: {e}")))?;
+
         Ok(Self {
             url,
             method: Method::from_bytes(method.as_bytes()).unwrap_or(Method::GET),
@@ -61,6 +71,12 @@ impl Request {
             headers: header_map,
             settings,
         })
+    }
+
+    /// One client per load shard (see `load::shards`), each with its own
+    /// connection pool
+    pub fn build_clients(&self, shards: usize) -> Result<Vec<reqwest::Client>, PepeError> {
+        (0..shards.max(1)).map(|_| self.build_client()).collect()
     }
 
     pub fn build_client(&self) -> Result<reqwest::Client, PepeError> {
@@ -78,7 +94,8 @@ impl Request {
 
         let mut client_builder = reqwest::Client::builder()
             .default_headers(request_headers)
-            .timeout(std::time::Duration::from_secs(self.settings.timeout as u64));
+            .timeout(std::time::Duration::from_secs(self.settings.timeout as u64))
+            .pool_max_idle_per_host(IDLE_CONNECTIONS);
 
         if let Some(proxy_url) = &self.settings.proxy {
             let proxy =

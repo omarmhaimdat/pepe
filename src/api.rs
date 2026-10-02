@@ -74,15 +74,24 @@ impl ApiRun {
         headers
     }
 
+    /// One client per load shard
+    pub fn clients(&self, cli: &Cli, shards: usize) -> Result<Vec<reqwest::Client>, PepeError> {
+        self.shared_request(cli)?.build_clients(shards)
+    }
+
     pub fn client(&self, cli: &Cli) -> Result<reqwest::Client, PepeError> {
+        self.shared_request(cli)?.build_client()
+    }
+
+    /// The request every endpoint builds on: the base URL and shared headers
+    fn shared_request(&self, cli: &Cli) -> Result<Request, PepeError> {
         Request::new(
             self.spec.base_url.clone(),
             "GET".into(),
             None,
             &self.shared_headers(cli),
             cli.settings(),
-        )?
-        .build_client()
+        )
     }
 
     /// The requests for these endpoints; results are tagged with the

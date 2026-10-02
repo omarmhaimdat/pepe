@@ -1,4 +1,4 @@
-use hyper::HeaderMap;
+use reqwest::header::HeaderMap;
 
 const CACHE_HEADERS: [&str; 7] = [
     "x-cache",
@@ -86,7 +86,7 @@ impl CacheStatus {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use hyper::header::HeaderValue;
+    use reqwest::header::HeaderValue;
 
     fn headers(name: &'static str, value: &'static str) -> HeaderMap {
         let mut h = HeaderMap::new();

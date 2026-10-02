@@ -37,8 +37,7 @@ enum PepeError {
     HeaderParseError(String),
     IoError(std::io::Error),
     RequestError(reqwest::Error),
-    UrlParseError(hyper::http::uri::InvalidUri),
-    HostParseError,
+    InvalidUrl(String),
 }
 
 impl std::fmt::Display for PepeError {
@@ -47,8 +46,7 @@ impl std::fmt::Display for PepeError {
             Self::HeaderParseError(msg) => write!(f, "Header parse error: {}", msg),
             Self::RequestError(e) => write!(f, "Request error: {}", e),
             Self::IoError(e) => write!(f, "IO error: {}", e),
-            Self::UrlParseError(e) => write!(f, "URL parse error: {}", e),
-            Self::HostParseError => write!(f, "Host parse error"),
+            Self::InvalidUrl(e) => write!(f, "Invalid URL {}", e),
         }
     }
 }
@@ -62,12 +60,26 @@ fn plan(args: &Cli) -> Plan {
     }
 }
 
+/// Shard threads for a run: what `--threads` asked for, or one
+fn shards(args: &Cli, concurrency: usize) -> usize {
+    load::shards(concurrency, args.threads.map(|t| t as usize))
+}
+
+/// One client per load shard
+fn clients_for(
+    request: &request::Request,
+    args: &Cli,
+    concurrency: usize,
+) -> Result<Vec<reqwest::Client>, PepeError> {
+    request.build_clients(shards(args, concurrency))
+}
+
 /// `previews`: keep the start of each body, which only the dashboard shows
 fn start_load(args: &Cli, previews: bool) -> Result<LoadHandle, PepeError> {
     let request = args.request()?;
-    let client = request.build_client()?;
+    let clients = clients_for(&request, args, args.concurrency as usize)?;
     Ok(load::start(
-        client,
+        clients,
         request,
         args.concurrency as usize,
         plan(args),
@@ -181,19 +193,26 @@ impl Drop for TerminalGuard {
     }
 }
 
+/// How often the `--json` modes collect results (see `LoadHandle::drain`)
+const PUMP: std::time::Duration = std::time::Duration::from_millis(25);
+
 /// `--json`: no dashboard; run to completion (or Ctrl-C), print the report
 async fn run_json(args: &Cli) -> Result<(), Box<dyn std::error::Error>> {
     let mut load = start_load(args, false)?;
     let started = Instant::now();
     let mut metrics = Metrics::default();
     let mut interrupted = false;
+    let mut pump = tokio::time::interval(PUMP);
+    let mut peak_busy = None;
 
     loop {
         tokio::select! {
-            stat = load.rx.recv() => match stat {
-                Some(stat) => metrics.record(&stat),
-                None => break,
-            },
+            _ = pump.tick() => {
+                peak_busy = peak_busy.max(load.busy());
+                if !load.drain(|stat| metrics.record(&stat)) {
+                    break;
+                }
+            }
             _ = tokio::signal::ctrl_c(), if !interrupted => {
                 interrupted = true;
                 load.stop();
@@ -201,7 +220,8 @@ async fn run_json(args: &Cli) -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
-    let report = json_report::JsonReport::generate(&metrics, started.elapsed(), interrupted);
+    let report = json_report::JsonReport::generate(&metrics, started.elapsed(), interrupted)
+        .with_generator(load.threads(), peak_busy);
     println!("{}", report.to_json()?);
     Ok(())
 }
@@ -255,7 +275,7 @@ async fn run_interactive(
                 };
                 let request = args.request()?;
                 let mut load = load::start(
-                    request.build_client()?,
+                    clients_for(&request, &args, plan.peak() as usize)?,
                     request,
                     plan.levels[0] as usize,
                     Plan::Duration(UNTIL_STOPPED),
@@ -307,7 +327,7 @@ async fn run_interactive(
 async fn run_ramp_json(args: &Cli, plan: RampPlan) -> Result<(), Box<dyn std::error::Error>> {
     let request = args.request()?;
     let mut load = load::start(
-        request.build_client()?,
+        clients_for(&request, args, plan.peak() as usize)?,
         request,
         plan.levels[0] as usize,
         Plan::Duration(UNTIL_STOPPED),
@@ -315,12 +335,17 @@ async fn run_ramp_json(args: &Cli, plan: RampPlan) -> Result<(), Box<dyn std::er
     );
     let mut ramp = Ramp::new(plan, Instant::now());
     let mut clock = tokio::time::interval(std::time::Duration::from_millis(50));
+    let mut pump = tokio::time::interval(PUMP);
+    let mut peak_busy = None;
     while ramp.end.is_none() {
         tokio::select! {
-            stat = load.rx.recv() => match stat {
-                Some(stat) => ramp.record(&stat, Instant::now()),
-                None => break,
-            },
+            _ = pump.tick() => {
+                peak_busy = peak_busy.max(load.busy());
+                let now = Instant::now();
+                if !load.drain(|stat| ramp.record(&stat, now)) {
+                    break;
+                }
+            }
             _ = clock.tick() => {
                 if let Tick::Level(level) = ramp.tick(Instant::now()) {
                     load.set_concurrency(level as usize);
@@ -332,7 +357,12 @@ async fn run_ramp_json(args: &Cli, plan: RampPlan) -> Result<(), Box<dyn std::er
         }
     }
     load.stop();
-    println!("{}", serde_json::to_string_pretty(&ramp::json(&ramp))?);
+    let mut report = ramp::json(&ramp);
+    report["generator"] = serde_json::to_value(json_report::Generator {
+        threads: load.threads(),
+        peak_busy_percent: peak_busy,
+    })?;
+    println!("{}", serde_json::to_string_pretty(&report)?);
     Ok(())
 }
 
@@ -363,7 +393,7 @@ async fn run_api_json(args: &Cli, run: &api::ApiRun) -> Result<(), Box<dyn std::
     }
     let targets = run.targets(args, &which)?;
     let mut load = load::start_targets(
-        run.client(args)?,
+        run.clients(args, shards(args, args.concurrency as usize))?,
         targets,
         args.concurrency as usize,
         plan(args),
@@ -373,17 +403,22 @@ async fn run_api_json(args: &Cli, run: &api::ApiRun) -> Result<(), Box<dyn std::
     let mut total = Metrics::default();
     let mut each = vec![Metrics::default(); which.len()];
     let mut interrupted = false;
+    let mut pump = tokio::time::interval(PUMP);
+    let mut peak_busy = None;
     loop {
         tokio::select! {
-            stat = load.rx.recv() => match stat {
-                Some(stat) => {
+            _ = pump.tick() => {
+                peak_busy = peak_busy.max(load.busy());
+                let over = !load.drain(|stat| {
                     total.record(&stat);
                     if let Some(metrics) = each.get_mut(stat.endpoint as usize) {
                         metrics.record(&stat);
                     }
+                });
+                if over {
+                    break;
                 }
-                None => break,
-            },
+            }
             _ = tokio::signal::ctrl_c(), if !interrupted => {
                 interrupted = true;
                 load.stop();
@@ -391,7 +426,8 @@ async fn run_api_json(args: &Cli, run: &api::ApiRun) -> Result<(), Box<dyn std::
         }
     }
     let elapsed = started.elapsed();
-    let report = json_report::JsonReport::generate(&total, elapsed, interrupted);
+    let report = json_report::JsonReport::generate(&total, elapsed, interrupted)
+        .with_generator(load.threads(), peak_busy);
     let mut report = serde_json::to_value(&report)?;
     let ms = |d: std::time::Duration| (d.as_secs_f64() * 1_000_000.0).round() / 1000.0;
     let endpoints: Vec<serde_json::Value> = which
@@ -437,7 +473,7 @@ async fn api_session(
         let which = run.enabled();
         let targets = run.targets(&shown, &which)?;
         let mut load = load::start_targets(
-            run.client(&shown)?,
+            run.clients(&shown, shards(&shown, shown.concurrency as usize))?,
             targets,
             shown.concurrency as usize,
             plan(&shown),
@@ -480,7 +516,9 @@ async fn run_api(args: &Cli, api: &cli::ApiArgs) -> Result<(), Box<dyn std::erro
     Ok(())
 }
 
-#[tokio::main]
+// The load engine has its own threads (see `load`); this runtime only runs
+// the screens, the reports and the update check
+#[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut args = Cli::parse();
 

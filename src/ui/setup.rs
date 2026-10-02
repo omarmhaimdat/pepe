@@ -82,6 +82,8 @@ enum Field {
     AddHeader,
     Body,
     Concurrency,
+    /// Threads sending requests; empty for the default
+    Threads,
     RunMode,
     /// The duration or the request count, depending on the run mode
     RunValue,
@@ -127,6 +129,7 @@ pub struct Setup {
     /// The body field was typed in, so it replaces any raw bytes from curl
     body_edited: bool,
     concurrency: String,
+    threads: String,
     by_duration: bool,
     duration: String,
     requests: String,
@@ -187,6 +190,7 @@ impl Setup {
                 .unwrap_or_default(),
             body_edited: false,
             concurrency: cli.concurrency.to_string(),
+            threads: cli.threads.map(|t| t.to_string()).unwrap_or_default(),
             by_duration: cli.duration.is_some(),
             duration: cli.duration.clone().unwrap_or_else(|| "30s".into()),
             requests: cli.number.to_string(),
@@ -240,6 +244,7 @@ impl Setup {
         }
         fields.extend([
             Field::Timeout,
+            Field::Threads,
             Field::Redirects,
             Field::KeepAlive,
             Field::VerifyTls,
@@ -263,6 +268,7 @@ impl Setup {
             Field::Header(i) => self.headers.get_mut(i)?,
             Field::Body => &mut self.body,
             Field::Concurrency => &mut self.concurrency,
+            Field::Threads => &mut self.threads,
             Field::RunValue if self.by_duration => &mut self.duration,
             Field::RunValue => &mut self.requests,
             Field::From => &mut self.from,
@@ -280,7 +286,12 @@ impl Setup {
     /// Fields that only take digits
     fn numeric(&self, field: Field) -> bool {
         match field {
-            Field::Concurrency | Field::Timeout | Field::From | Field::To | Field::Step => true,
+            Field::Concurrency
+            | Field::Threads
+            | Field::Timeout
+            | Field::From
+            | Field::To
+            | Field::Step => true,
             Field::RunValue => !self.by_duration,
             _ => false,
         }
@@ -567,6 +578,10 @@ impl Setup {
             }
         }
         cli.timeout = number("timeout", &self.timeout)?;
+        cli.threads = match self.threads.trim() {
+            "" => None,
+            text => Some(number("threads", text)?.max(1)),
+        };
         cli.disable_redirects = !self.follow_redirects;
         cli.disable_keepalive = !self.keep_alive;
         cli.insecure = !self.verify_tls;
@@ -603,7 +618,7 @@ impl Setup {
             Ok(built) => built,
             Err(e) => return self.message = Some((e.to_string(), true)),
         };
-        let mut load = crate::load::start(client, request, 1, Plan::Count(1), true);
+        let mut load = crate::load::start(vec![client], request, 1, Plan::Count(1), true);
         let wait = Duration::from_secs(cli.timeout as u64 + 2);
         match tokio::time::timeout(wait, load.rx.recv()).await {
             Ok(Some(stat)) => {
@@ -1063,6 +1078,13 @@ impl Setup {
             Field::Timeout,
             "Timeout (s)",
             self.typed(Field::Timeout, &self.timeout, "seconds", room),
+            width,
+        );
+        self.row(
+            &mut options,
+            Field::Threads,
+            "Threads",
+            self.typed(Field::Threads, &self.threads, "auto", room),
             width,
         );
         self.row(

@@ -21,7 +21,6 @@ reqwest = { version = "0.12.12", default-features = false, features = [
     "rustls-tls",
     "socks",
 ] }
-hyper = "1.5.2"
 futures = "0.3.17"
 bytes = "1"
 ratatui = "0.29.0"
@@ -60,3 +59,9 @@ path = "src/main.rs"
 # Profile used by `dist build` for release artifacts.
 [profile.dist]
 inherits = "release"
+
+# Release build with symbols, for `sample` / Instruments. See bench/README.md.
+[profile.profiling]
+inherits = "release"
+debug = true
+strip = false

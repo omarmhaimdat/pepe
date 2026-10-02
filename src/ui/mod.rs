@@ -55,6 +55,8 @@ const DETAIL_BUDGET: usize = 32 * 1024 * 1024;
 const MAX_FAILURE_CAUSES: usize = 32;
 /// How long a notice (e.g. "concurrency 64 → 70") stays in the footer
 const NOTICE_TTL: Duration = Duration::from_secs(2);
+/// A sending thread this busy (percent of a core) is the run's bottleneck
+const SATURATED: u8 = 90;
 
 /// What the user asked for when leaving the dashboard
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -142,6 +144,11 @@ pub struct Dashboard {
     failure_causes: HashMap<Box<str>, u64>,
     sent: u64,
     concurrency: usize,
+    /// Sending threads, and how busy the busiest is now and was at most
+    /// (see `LoadHandle::busy`)
+    threads: usize,
+    busy: Option<u8>,
+    peak_busy: Option<u8>,
     paused: bool,
     /// Time spent paused, which the run's clock leaves out
     paused_total: Duration,
@@ -194,6 +201,9 @@ impl Dashboard {
             error_log: VecDeque::with_capacity(ERROR_LOG_CAPACITY),
             failure_causes: HashMap::new(),
             sent: 0,
+            threads: 1,
+            busy: None,
+            peak_busy: None,
             paused: false,
             paused_total: Duration::ZERO,
             paused_since: None,
@@ -363,8 +373,13 @@ impl Dashboard {
                         self.finished = Some(now);
                         self.timeline.finish(now);
                         let samples: Vec<_> = self.timeline.samples().iter().copied().collect();
-                        self.verdict =
-                            Some(insights::verdict(&self.metrics, &samples, self.interrupted));
+                        let mut verdict =
+                            insights::verdict(&self.metrics, &samples, self.interrupted);
+                        if let Some(note) = self.saturation_note() {
+                            verdict.level = verdict.level.max(note.level);
+                            verdict.notes.push(note);
+                        }
+                        self.verdict = Some(verdict);
                     }
                     break;
                 }
@@ -379,6 +394,9 @@ impl Dashboard {
         }
         self.sent = load.sent();
         self.concurrency = load.concurrency();
+        self.threads = load.threads();
+        self.busy = load.busy();
+        self.peak_busy = self.peak_busy.max(self.busy);
         self.set_paused(load.is_paused());
         if self
             .notice
@@ -387,6 +405,35 @@ impl Dashboard {
         {
             self.notice = None;
         }
+    }
+
+    /// Footer warning while pepe itself is the bottleneck
+    fn saturation_warning(&self) -> Option<String> {
+        let busy = self
+            .busy
+            .filter(|&b| b >= SATURATED && self.finished.is_none())?;
+        Some(format!(
+            "pepe's sending thread is {busy}% busy: the target can take more, add --threads {}",
+            self.threads + 1
+        ))
+    }
+
+    /// End-of-run finding when pepe, not the target, set the pace
+    fn saturation_note(&self) -> Option<insights::Note> {
+        let peak = self.peak_busy.filter(|&b| b >= SATURATED)?;
+        let thread = if self.threads == 1 {
+            "sending thread".to_string()
+        } else {
+            format!("busiest of {} sending threads", self.threads)
+        };
+        Some(insights::Note {
+            level: Level::Degraded,
+            text: format!(
+                "pepe's {thread} reached {peak}% of a core, so these numbers are pepe's \
+                 limit as much as the target's; run again with --threads {}",
+                self.threads + 1
+            ),
+        })
     }
 
     /// Whether anything on screen changes without input
@@ -830,7 +877,7 @@ mod tests {
             .request()
             .unwrap();
         let client = request.build_client().unwrap();
-        crate::load::start(client, request, 1, Plan::Count(0), false)
+        crate::load::start(vec![client], request, 1, Plan::Count(0), false)
     }
 
     fn stat(status: u16) -> ResponseStats {

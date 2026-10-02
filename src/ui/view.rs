@@ -531,7 +531,13 @@ fn render_footer(d: &Dashboard, f: &mut Frame, area: Rect) {
     hints.push(("?", "help"));
     f.render_widget(Paragraph::new(Line::from(key_hints(&hints))), area);
 
-    if let Some((notice, _)) = &d.notice {
+    // A notice has the right-hand end of the footer; otherwise a warning
+    // that pepe itself is the limit
+    let warning = match &d.notice {
+        Some((notice, _)) => Some(notice.clone()),
+        None => d.saturation_warning(),
+    };
+    if let Some(notice) = warning {
         f.render_widget(
             Paragraph::new(Span::styled(
                 format!(" {notice} "),
