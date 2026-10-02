@@ -21,6 +21,7 @@ Pepe is written in Rust and uses the `reqwest` and `tokio` libraries for making 
 - **Interactive Control**: Pause, resume or stop a run, and raise or lower concurrency while it's going.
 - **DNS Resolution Timing**: Sample DNS lookup time once a second during the run.
 - **Detailed Statistics**: Measure and display various performance metrics such as min, max, average, median, percentiles, standard deviation, total data transferred, and error rate.
+- **Light**: One thread sends about 100k requests a second at under half the CPU of comparable tools and a fraction of their memory, and pepe tells you when it, rather than the target, is the limit; see [bench/README.md](bench/README.md) for the measurements.
 
 ## Installation
 
@@ -101,6 +102,19 @@ Let's break down the options used in this command:
 - `-H "Content-Type: application/json"`: Add a custom Content-Type header to the requests.
 - `-m GET`: Use the GET HTTP method.
 - `https://example.com`: The URL to send requests to.
+
+### Threads
+
+pepe sends from one thread, whatever the concurrency. One thread sends about
+100k plain requests a second, or 10k TLS handshakes a second, at the lowest
+CPU per request, and that is more than most targets can take. When it isn't,
+pepe says so: the dashboard's footer shows how busy the sending thread is
+once it passes 90% of a core, the end-of-run verdict notes it, and the JSON
+report has it under `generator`. Then `--threads` adds more:
+
+```bash
+pepe -c 500 --threads 4 -z 30s http://localhost:8080/
+```
 
 
 ### Curl support
@@ -315,6 +329,13 @@ Pepe, the chili in the corner, reacts to how the run is going. When a run ends, 
 | `?` | Show all keys |
 | `q` / `esc` / `Ctrl-C` | Quit |
 
+
+## Resource usage
+
+A load generator should not be the bottleneck of its own test. pepe's CPU and
+memory per request are measured against oha and vegeta on fixed workloads
+with the scripts in [`bench/`](bench/); the method, every result and what
+was changed to get there are in [bench/README.md](bench/README.md).
 
 ## Contributing
 

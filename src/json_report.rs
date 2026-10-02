@@ -8,6 +8,21 @@ use crate::metrics::Metrics;
 #[derive(Serialize)]
 pub struct JsonReport {
     pub summary: JsonSummary,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub generator: Option<Generator>,
+}
+
+/// pepe's own load during the run: whether pepe, rather than the target,
+/// was the limit
+#[derive(Serialize, Clone, Copy)]
+pub struct Generator {
+    /// Threads that were sending (`--threads`)
+    pub threads: usize,
+    /// The busiest second of the busiest sending thread, in percent of a
+    /// core. Near 100, the numbers are pepe's limit; `--threads` adds more.
+    /// Absent where the platform can't measure it.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub peak_busy_percent: Option<u8>,
 }
 
 #[derive(Serialize)]
@@ -49,8 +64,17 @@ fn ms(d: Duration) -> f64 {
 }
 
 impl JsonReport {
+    pub fn with_generator(mut self, threads: usize, peak_busy_percent: Option<u8>) -> Self {
+        self.generator = Some(Generator {
+            threads,
+            peak_busy_percent,
+        });
+        self
+    }
+
     pub fn generate(metrics: &Metrics, elapsed: Duration, interrupted: bool) -> Self {
         Self {
+            generator: None,
             summary: JsonSummary {
                 total_requests: metrics.total,
                 successful_requests: metrics.success,

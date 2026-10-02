@@ -110,6 +110,11 @@ pub struct RampPlan {
 }
 
 impl RampPlan {
+    /// The highest concurrency the ramp reaches
+    pub fn peak(&self) -> u32 {
+        self.levels.iter().copied().max().unwrap_or(1)
+    }
+
     pub fn from_args(args: &RampArgs) -> Result<RampPlan, String> {
         let every = Cli::parse_duration(&args.every)
             .map_err(|_| format!("--every {:?}: expected e.g. 10s, 1m", args.every))?;

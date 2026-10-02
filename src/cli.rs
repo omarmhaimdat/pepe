@@ -49,6 +49,11 @@ pub struct Cli {
     #[arg(short, long, default_value_t = 20, global = true)]
     pub timeout: u32,
 
+    /// Threads sending requests (default 1). One sends about 100k requests
+    /// a second; the dashboard says when it is the limit
+    #[arg(long, global = true, value_parser = clap::value_parser!(u32).range(1..))]
+    pub threads: Option<u32>,
+
     /// HTTP request body
     #[arg(short = 'd', long, global = true)]
     pub body: Option<String>,
@@ -264,6 +269,16 @@ impl Cli {
                 ));
             }
         }
+        // Parsed once more when the run starts; checked here for a clean
+        // message rather than a dashboard full of failures
+        if !self.url.is_empty() {
+            if let Err(e) = reqwest::Url::parse(&self.url) {
+                return Err(Error::raw(
+                    clap::error::ErrorKind::ValueValidation,
+                    format!("Invalid URL {:?}: {e}", self.url),
+                ));
+            }
+        }
         Ok(())
     }
 
@@ -393,6 +408,9 @@ impl Cli {
                 None if self.number != defaults.number => flag("-n", &self.number.to_string()),
                 None => {}
             }
+        }
+        if let Some(threads) = self.threads {
+            flag("--threads", &threads.to_string());
         }
         if self.method != defaults.method {
             flag("-m", &self.method);
@@ -589,7 +607,8 @@ mod tests {
         cli.validate().unwrap();
         let request = cli.request().unwrap();
         let client = request.build_client().unwrap();
-        let mut load = crate::load::start(client, request, 1, crate::load::Plan::Count(1), false);
+        let mut load =
+            crate::load::start(vec![client], request, 1, crate::load::Plan::Count(1), false);
         while load.rx.recv().await.is_some() {}
         String::from_utf8_lossy(&server.await.unwrap()).into_owned()
     }

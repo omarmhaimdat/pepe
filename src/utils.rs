@@ -1,8 +1,5 @@
 use std::{num::NonZeroUsize, thread::available_parallelism};
 
-use hyper::Uri;
-use std::str::FromStr;
-
 use crate::PepeError;
 
 /// Get the number of available cores
@@ -27,21 +24,28 @@ pub fn default_user_agent() -> String {
     format!("pepe/{}", version())
 }
 
-/// Resolve the DNS for a given URL
-/// This function takes a URL string and returns a tuple of two durations
-/// The first duration is the time taken to lookup the DNS
-/// The second duration is the time taken to resolve the DNS
-/// If the DNS lookup fails, an error is returned
-/// # Arguments
-/// * `url` - A string slice that holds the URL
-/// # Returns
-/// A Result containing a tuple of two durations or an error
-pub async fn resolve_dns(
-    url: &str,
-) -> Result<(std::time::Duration, std::time::Duration), PepeError> {
-    let uri = Uri::from_str(url).map_err(PepeError::UrlParseError)?;
-    let host = uri.host().ok_or_else(|| PepeError::HostParseError)?;
+/// CPU time this thread has used so far, where the platform can say
+#[cfg(unix)]
+pub fn thread_cpu_time() -> Option<std::time::Duration> {
+    let mut ts = libc::timespec {
+        tv_sec: 0,
+        tv_nsec: 0,
+    };
+    // SAFETY: clock_gettime only writes the timespec it's given
+    let ok = unsafe { libc::clock_gettime(libc::CLOCK_THREAD_CPUTIME_ID, &mut ts) } == 0;
+    ok.then(|| std::time::Duration::new(ts.tv_sec as u64, ts.tv_nsec as u32))
+}
 
+#[cfg(not(unix))]
+pub fn thread_cpu_time() -> Option<std::time::Duration> {
+    None
+}
+
+/// Resolve `host` and time it: (time until the lookup answered, time to
+/// walk the addresses)
+pub async fn resolve_dns(
+    host: &str,
+) -> Result<(std::time::Duration, std::time::Duration), PepeError> {
     let start = std::time::Instant::now();
     let addrs = tokio::net::lookup_host(format!("{}:0", host))
         .await
