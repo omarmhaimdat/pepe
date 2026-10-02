@@ -1,0 +1,3 @@
+# Generated completions and man pages are compared byte for byte by a test,
+# and shipped in archives built on every OS: keep them LF everywhere
+contrib/** text eol=lf
