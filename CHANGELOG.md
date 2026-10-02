@@ -25,6 +25,67 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/)
 and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [Unreleased]
+## [0.6.1](https://github.com/omarmhaimdat/pepe/compare/v0.6.0...v0.6.1) - 2026-10-02
+
+### Performance
+
+- share-nothing load engine, 4× less CPU for the same requests
+
+  pepe spent most of its CPU coordinating 14 tokio threads rather than
+  sending requests: every request crossed threads through the connection
+  pool's mutex and the timer lock, re-parsed its URL and ran as its own
+  spawned task. Measured before and after (bench/README.md), 200,000
+  requests at concurrency 64 now cost 1.9 s of CPU instead of 8.5 s with
+  the same throughput, which is 2.5× less than oha spends on them.
+
+  What makes it faster:
+
+  - Requests go out from shard threads, one by default, each with its own
+    single-threaded tokio runtime, its own reqwest client (so its own
+    connection pool and timer wheel) and long-lived worker tasks, one per
+    unit of concurrency. Nothing on the hot path is shared between
+    threads, so there is no lock to queue on and no task spawned per
+    request.
+  - The URL and method are parsed once, when the run starts, instead of
+    on every request; that parse ran IDNA on the host and formatted the
+    IP address back to text each time. A bad URL is now a clean error
+    before the run instead of a dashboard full of failures.
+  - --json mode collects results on a 25 ms timer, as the dashboard
+    already did, instead of waking for each one: a send to a waiting
+    receiver goes through the kernel, and at 100k results a second that
+    was a fifth of the run's CPU.
+  - The main runtime is single-threaded too; it only runs the screens.
+  - The client keeps at most four idle connections per host. Whenever a
+    request finds no idle connection, the pool races a new one against
+    waiting for one and keeps the loser as a spare, so a run at -c 1000
+    held 1,999 connections. It now holds 1,003, and peak memory there
+    fell from 116 MB to 68 MB.
+
+  So that one thread is a safe default, pepe now says when it is the
+  bottleneck: each sending thread measures its own CPU time once a
+  second, and past 90% of a core the dashboard's footer shows it, the
+  end-of-run verdict adds a note, and the JSON report carries it under
+  "generator". --threads N adds threads; it is also a field on the setup
+  screen.
+
+  The suite behind the numbers is in bench/: a Go target server, run.sh
+  (pepe against oha and vegeta on fixed workloads), tui.py (the dashboard
+  in a pseudo-terminal) and the raw results.
+
+
+
+### Other
+
+- Merge pull request #41 from omarmhaimdat/perf/share-nothing-engine
+
+- release notes carry each commit's explanation
+
+  The changelog, and so the GitHub release that is built from it, listed
+  only commit subjects. Each entry is now the subject followed by the
+  commit's body, and perf commits get their own Performance section
+  instead of landing under Other.
+
+
 
 ## [0.6.0](https://github.com/omarmhaimdat/pepe/compare/v0.5.1...v0.6.0) - 2026-10-01
 
