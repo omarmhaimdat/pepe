@@ -1,151 +1,198 @@
-# Pepe - HTTP Load Generator
+<div align="center">
 
-Pepe is a command-line HTTP load generator designed to test the performance and reliability of web servers. It allows you to send a large number of HTTP requests to a specified URL and measure various performance metrics such as response times, throughput, and error rates.
+<img src="assets/logo.svg" width="112" alt="Pepe, a pixel-art chili pepper">
 
-Pepe is written in Rust and uses the `reqwest` and `tokio` libraries for making HTTP requests asynchronously. It supports sending multiple requests concurrently, custom headers, request bodies, timeouts, basic authentication, and proxy servers.
+# pepe
 
-![Pepe](assets/pepe.gif)
+**An HTTP load generator with a live dashboard, built to cost less than the server it tests.**
 
-## Features
+[![CI](https://github.com/omarmhaimdat/pepe/actions/workflows/CI.yaml/badge.svg)](https://github.com/omarmhaimdat/pepe/actions/workflows/CI.yaml) [![Release](https://img.shields.io/github/v/release/omarmhaimdat/pepe?display_name=tag&color=brightgreen)](https://github.com/omarmhaimdat/pepe/releases/latest) [![Downloads](https://img.shields.io/github/downloads/omarmhaimdat/pepe/total?color=blue)](https://github.com/omarmhaimdat/pepe/releases) [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE) ![Rust 1.85+](https://img.shields.io/badge/rust-1.85%2B-orange)
 
-- **Concurrency**: Send multiple requests concurrently to simulate real-world load.
-- **Custom Headers**: Add custom headers to the requests.
-- **Request Body**: Send data in the request body from a string or a file.
-- **Timeouts**: Set a timeout for each request.
-- **Basic Authentication**: Use basic authentication for the requests.
-- **Proxy Support**: Send requests through a proxy server.
-- **Setup Screen**: Run `pepe` with no arguments to fill in every option on a form, with the equivalent command shown as you go.
-- **Ramp Mode**: Raise the load step by step and find the concurrency where the target stops keeping up.
-- **API Mode**: Load-test the endpoints of an OpenAPI spec, picked by tag, with their parameters and credentials set on screen.
-- **Live Dashboard**: Throughput and latency charts, status codes, percentiles and a scrollable request log, updated as the test runs.
-- **Interactive Control**: Pause, resume or stop a run, and raise or lower concurrency while it's going.
-- **DNS Resolution Timing**: Sample DNS lookup time once a second during the run.
-- **Detailed Statistics**: Measure and display various performance metrics such as min, max, average, median, percentiles, standard deviation, total data transferred, and error rate.
-- **Light**: One thread sends about 100k requests a second at under half the CPU of comparable tools and a fraction of their memory, and pepe tells you when it, rather than the target, is the limit; see [bench/README.md](bench/README.md) for the measurements.
+[Install](#install) · [Quick start](#quick-start) · [Usage](#usage) · [Dashboard](#the-dashboard) · [How it compares](#how-pepe-compares) · [Contributing](#contributing)
 
-## Installation
+</div>
 
-### macOS and Linux (installer script)
+![pepe load-testing a server, with the live dashboard](assets/pepe.gif)
+
+pepe sends requests to a URL, as many at once as you ask, and shows what came back as it happens: throughput, latency percentiles and a heatmap, status codes, failures by cause, and a log you can open any request from. When the run ends it gives a verdict in plain words. It takes a curl command as input, ramps load to find where a target stops keeping up, and load-tests every endpoint of an OpenAPI spec.
+
+It is also light. One thread sends about 100k requests a second using 2.5× less CPU than comparable tools and a fraction of their memory, and pepe tells you when it, rather than the target, is the limit.
+
+## Highlights
+
+- **Live dashboard** with a latency heatmap, percentile and throughput charts, status codes, failure causes and a scrollable, filterable request log. Press `enter` on a request to see its headers and body, formatted.
+- **A verdict**, not just numbers: Healthy, Degraded or Failing, with findings such as two latency groups, a long tail, or throughput drifting over the run.
+- **Interactive control**: pause, resume, stop, restart, and raise or lower concurrency while the run is going.
+- **Any curl command** from a browser's "Copy as cURL", Postman or Insomnia, sent exactly as curl would.
+- **Setup screen**: run `pepe` with no arguments and fill in every option on a form, with the equivalent command shown as you go.
+- **Ramp mode**: raise concurrency step by step and find the level that held, where throughput stopped following the load, and where it broke.
+- **API mode**: load-test the endpoints of an OpenAPI 3 or Swagger 2 spec, picked by tag, with parameters and credentials set on screen.
+- **JSON output** for scripts and CI, with the same percentiles the dashboard shows.
+- **Light**: a share-nothing engine that is measured against oha and vegeta on every release; the numbers and the method are in [bench/README.md](bench/README.md).
+
+## Install
+
+<details open>
+<summary><b>macOS and Linux</b></summary>
 
 ```bash
 curl -LsSf https://pepe.mhaimdat.com/install.sh | sh
 ```
+</details>
 
-### Windows (PowerShell)
+<details>
+<summary><b>Windows</b> (PowerShell)</summary>
 
 ```powershell
 powershell -ExecutionPolicy Bypass -c "irm https://pepe.mhaimdat.com/install.ps1 | iex"
 ```
+</details>
 
-Installer-based installs can update themselves:
-
-```bash
-pepe self-update
-```
-
-### Homebrew (macOS and Linux)
+<details>
+<summary><b>Homebrew</b> (macOS and Linux)</summary>
 
 ```bash
 brew install omarmhaimdat/pepe/pepe
 ```
+</details>
 
-### Nix
+<details>
+<summary><b>Nix</b></summary>
 
 ```bash
-nix run github:omarmhaimdat/pepe -- https://example.com   # try without installing
-nix profile install github:omarmhaimdat/pepe              # install
+nix run github:omarmhaimdat/pepe -- https://example.com   # try it without installing
+nix profile install github:omarmhaimdat/pepe              # install it
 ```
+</details>
 
-### Prebuilt binaries
+<details>
+<summary><b>Prebuilt binaries</b></summary>
 
 Every [release](https://github.com/omarmhaimdat/pepe/releases) ships binaries for macOS (Apple Silicon and Intel), Linux (x86_64 and ARM64, statically linked) and Windows (x86_64), with SHA-256 checksums and signed build provenance:
 
 ```bash
 gh attestation verify pepe-x86_64-unknown-linux-musl.tar.xz --repo omarmhaimdat/pepe
 ```
+</details>
 
-### From source
+<details>
+<summary><b>From source</b></summary>
 
 ```bash
 cargo install --locked --git https://github.com/omarmhaimdat/pepe
 ```
+</details>
 
-pepe checks for a newer release when it exits. Set `PEPE_NO_UPDATE_CHECK=1` to disable this.
+### Staying up to date
 
-## Releasing
+pepe looks for a newer release once a day and says so when a run ends, with what changed and the command that updates your copy. Installer-based installs update themselves:
 
-Releases are automated. Merging to `master` with [conventional commits](https://www.conventionalcommits.org/) (`feat:`, `fix:`, ...) keeps a **release PR** open that bumps the version and updates `CHANGELOG.md`. Merging that PR tags `vX.Y.Z`, which builds every platform and publishes the GitHub Release, installers, the Homebrew formula and the pepe.mhaimdat.com mirror.
+```bash
+pepe self-update            # install the latest release
+pepe self-update --check    # only say whether there is one (exit code 1 if so)
+```
 
-## Usage
+Homebrew and Nix installs update through `brew upgrade pepe` and `nix profile upgrade pepe`. Set `PEPE_NO_UPDATE_CHECK=1` to turn the check off; it is off in CI already.
 
-### Basic Usage
+## Quick start
 
-To send a simple GET request to a URL, use the following command:
+Send 100 requests, 14 at a time (one per core), and watch:
 
 ```bash
 pepe https://example.com
 ```
 
-### Advanced Usage
+Run for thirty seconds at concurrency 50, with a header and a JSON body:
 
 ```bash
-pepe -n 1000 -c 20 -t 10 -u "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_11_2) AppleWebKit/601.3.9 (KHTML, like Gecko) Version/9.0.2 Safari/601.3.9" -H "Accept: application/json" -H "Content-Type: application/json" -m GET https://example.com
+pepe -z 30s -c 50 -m POST -H 'Content-Type: application/json' -d '{"key":"value"}' https://httpbin.org/post
 ```
 
-Let's break down the options used in this command:
-
-- `-n 1000`: Send a total of 1000 requests.
-- `-c 20`: Use 20 concurrent connections.
-- `-t 10`: Set a timeout of 10 seconds for each request.
-- `-u "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_11_2) AppleWebKit/601.3.9 (KHTML, like Gecko) Version/9.0.2 Safari/601.3.9"`: Set the User-Agent header to simulate a Safari browser on a Mac.
-- `-H "Accept: application/json"`: Add a custom Accept header to the requests.
-- `-H "Content-Type: application/json"`: Add a custom Content-Type header to the requests.
-- `-m GET`: Use the GET HTTP method.
-- `https://example.com`: The URL to send requests to.
-
-### Threads
-
-pepe sends from one thread, whatever the concurrency. One thread sends about
-100k plain requests a second, or 10k TLS handshakes a second, at the lowest
-CPU per request, and that is more than most targets can take. When it isn't,
-pepe says so: the dashboard's footer shows how busy the sending thread is
-once it passes 90% of a core, the end-of-run verdict notes it, and the JSON
-report has it under `generator`. Then `--threads` adds more:
+Load-test a request copied from your browser's dev tools:
 
 ```bash
-pepe -c 500 --threads 4 -z 30s http://localhost:8080/
+pepe -z 30s --curl -- curl 'https://api.example.com/items' -H 'Authorization: Bearer …'
 ```
 
-
-### Curl support
-
-Load-test any curl command, including ones copied from a browser's dev tools ("Copy as cURL"), Postman or Insomnia. pepe sends the same request curl would: same method, URL, headers and body.
+Open the setup screen and fill everything in on a form:
 
 ```bash
-pepe -n 1000 -c 10 --curl -- curl -X POST 'https://httpbin.org/post' \
-  -H 'Content-Type: application/json' \
-  -d '{"key": "value"}'
+pepe
 ```
 
-Put `--` between pepe's options and the curl command. The command can also be given as one quoted string, read from a file, or piped in:
+In the dashboard, `space` pauses, `+` and `-` change concurrency, `tab` switches view, `enter` inspects a request, `?` lists every key, `q` quits and leaves the verdict in your shell.
+
+## Usage
+
+```
+pepe [OPTIONS] [URL]
+pepe ramp [OPTIONS] [URL]      raise the load step by step
+pepe api  [OPTIONS] <SPEC>     load-test an OpenAPI spec
+pepe self-update [--check]     update pepe
+```
+
+### Options
+
+| Option | Default | What it does |
+| --- | --- | --- |
+| `-n`, `--number <N>` | 100 | Requests to send |
+| `-c`, `--concurrency <N>` | number of cores | Requests in flight at once |
+| `-z`, `--duration <TIME>` | | Run for this long instead of a count: `30s`, `3m`, `2h` |
+| `-m`, `--method <METHOD>` | GET | HTTP method |
+| `-H`, `--headers <HEADER>` | | A header, `Name: value`; repeat for more |
+| `-d`, `--body <TEXT>` | | Request body |
+| `-t`, `--timeout <SECONDS>` | 20 | Time to wait for a response |
+| `-u`, `--user-agent <UA>` | `pepe/<version>` | User-Agent header |
+| `-p`, `--proxy <URL>` | | HTTP, HTTPS or SOCKS5 proxy, with credentials if needed |
+| `-k`, `--insecure` | | Accept invalid TLS certificates |
+| `--disable-compression` | | Don't ask for gzip |
+| `--disable-keepalive` | | Open a new connection for every request |
+| `--disable-redirects` | | Don't follow redirects |
+| `--threads <N>` | 1 | Threads sending requests (see [Threads](#threads)) |
+| `--curl` | | Read the request from a curl command (see below) |
+| `-i`, `--setup` | | Open the setup screen filled in from the flags |
+| `--json` | | No dashboard: run to completion and print a JSON report |
+
+### Headers, bodies and methods
 
 ```bash
+pepe -n 1000 -c 20 -H 'Accept: application/json' -H 'X-Request-Id: load' https://example.com
+pepe -n 1000 -c 10 -m PUT -d @payload.json -H 'Content-Type: application/json' https://example.com/items/1
+```
+
+Repeated headers are kept (several `Cookie` headers are sent as several), and a `User-Agent` given with `-H` wins over the default.
+
+### Timed runs
+
+`-z` keeps sending for a duration instead of a count. Pausing stops the clock, so a paused run still gets its full length of sending.
+
+```bash
+pepe -z 2m -c 100 https://example.com
+```
+
+### Load-testing a curl command
+
+pepe sends the same request curl would: same method, URL, headers and body. Put `--` between pepe's options and the curl command, or give it as one quoted string, a file, or on stdin:
+
+```bash
+pepe -n 1000 -c 10 --curl -- curl -X POST 'https://httpbin.org/post' -H 'Content-Type: application/json' -d '{"key": "value"}'
 pepe -z 30s --curl -- @request.txt
 pbpaste | pepe -z 30s --curl
 ```
 
 What's understood:
 
-- Quoting: single and double quotes, backslash escapes, line continuations, bash `$'...'` (Chrome's "Copy as cURL (bash)") and Windows `^` escaping ("Copy as cURL (cmd)").
-- Methods: `-X`, and the ones curl implies: POST for data and forms, PUT for `-T`, HEAD for `-I`, GET for `-G`.
-- Bodies: `-d`/`--data`, `--data-raw`, `--data-binary`, `--data-urlencode`, `--json`, `@file` for any of them, `-F`/`--form` multipart (with file uploads), `-T` uploads, and `-G` to move data into the query string.
-- Headers: `-H` (including `-H @file`, `-H 'Name;'` for an empty value, `-H 'Name:'` to drop one), `-u` basic auth, `--oauth2-bearer`, `-b` cookies, `-A`, `-e`, `-r`, `--compressed`.
-- Connection: `-L` (like curl, redirects are only followed with `-L`), `-k`, `-x`, `-m`, `--no-keepalive`, `--url`, `--url-query`, bunched flags like `-sSLk` and attached values like `-XPOST`.
-- Output, logging and TLS options (`-o`, `-s`, `-v`, `-w`, `--cacert`, ...) are accepted and have no effect. An unknown option is an error, and anything pepe can't reproduce (such as a cookie file) is reported as a note.
+- **Quoting**: single and double quotes, backslash escapes, line continuations, bash `$'...'` (Chrome's "Copy as cURL (bash)") and Windows `^` escaping ("Copy as cURL (cmd)").
+- **Methods**: `-X`, and the ones curl implies: POST for data and forms, PUT for `-T`, HEAD for `-I`, GET for `-G`.
+- **Bodies**: `-d`/`--data`, `--data-raw`, `--data-binary`, `--data-urlencode`, `--json`, `@file` for any of them, `-F`/`--form` multipart (with file uploads), `-T` uploads, and `-G` to move data into the query string.
+- **Headers**: `-H` (including `-H @file`, `-H 'Name;'` for an empty value, `-H 'Name:'` to drop one), `-u` basic auth, `--oauth2-bearer`, `-b` cookies, `-A`, `-e`, `-r`, `--compressed`.
+- **Connection**: `-L` (like curl, redirects are only followed with `-L`), `-k`, `-x`, `-m`, `--no-keepalive`, `--url`, `--url-query`, bunched flags like `-sSLk` and attached values like `-XPOST`.
 
-### Setup screen
+Output, logging and TLS options (`-o`, `-s`, `-v`, `-w`, `--cacert`, ...) are accepted and have no effect. An unknown option is an error, and anything pepe can't reproduce (such as a cookie file) is reported as a note.
 
-Run `pepe` with no URL and it opens a form with every option as a field: URL, method, headers, body, load, timeout, redirects, keep-alive, TLS, proxy and user agent. Add `-i` to any command to open the form filled in from its flags.
+### The setup screen
+
+Run `pepe` with no URL and it opens a form with every option as a field: URL, method, headers, body, load, timeout, threads, redirects, keep-alive, TLS, proxy and user agent. Add `-i` to any command to open the form filled in from its flags.
 
 ```bash
 pepe
@@ -158,7 +205,7 @@ pepe -i -c 50 -z 30s https://example.com
 - `ctrl-t` sends the request once and shows the response, to check it before the run.
 - The command card always shows the flags that reproduce the form. It's printed to your shell when you quit, and `E` in the dashboard brings you back to the form.
 
-### Ramp: finding where the target stops keeping up
+### Ramp mode: finding where the target stops keeping up
 
 `pepe ramp` raises concurrency step by step, measures each step on its own, and says where the target holds, where it stops scaling and where it breaks.
 
@@ -167,10 +214,13 @@ pepe ramp https://example.com --from 10 --to 200 --step 10 --every 15s
 pepe ramp https://example.com --until 'p99 > 500ms' --until 'errors > 1%'
 ```
 
-- `--from`, `--to`, `--step`: the concurrency of the first step, the last, and what's added between (10, 100 and 10 by default).
-- `--every`: how long each step is held (`10s` by default).
-- `--until`: ends the ramp once a step crosses a limit, so a failing target isn't hammered further. Latency percentiles (`p50 > 100ms`, `p99 > 2s`) and `errors > 1%` are understood; give it more than once for several limits.
-- `-m`, `-d`, `-H` and the other request options work as they do without `ramp`. Without a URL, the setup screen opens in Ramp mode.
+| Flag | Default | What it does |
+| --- | --- | --- |
+| `--from`, `--to`, `--step` | 10, 100, 10 | Concurrency of the first step, the last, and what's added between |
+| `--every` | 10s | How long each step is held |
+| `--until <CONDITION>` | | End the ramp once a step crosses a limit: `p50 > 100ms`, `p99 > 2s`, `errors > 1%`; repeat for several |
+
+`-m`, `-d`, `-H` and the other request options work as they do without `ramp`. Without a URL, the setup screen opens in Ramp mode.
 
 The screen shows each step as a row (throughput, p50, p90, p99, the slowest request, errors) with a note when something changes, the run second by second, throughput and p99 at each concurrency, and the result: the level that held, where throughput stopped following the load, where it broke, and the command for a steady run at the level that held. Throughput counts successful responses only, so a target that sheds load quickly doesn't look fast.
 
@@ -219,92 +269,64 @@ Everything on the plan screen has a flag:
 
 With `--json` there is no screen, so name what to run with `--all`, `--tag` or `--only`; the report has a section per endpoint.
 
-## Examples
+### Threads
 
-### Sending a GET Request
-
-```bash
-pepe -n 1000 -c 10 -m GET https://example.com
-```
-
-This command sends 1000 GET requests to `https://example.com` with a concurrency of 10 requests at a time, -m GET specifies the HTTP method to use.
-
-### Sending a POST Request
-
-Send a POST request with a request body as raw text:
+pepe sends from one thread, whatever the concurrency. One thread sends about 100k plain requests a second, or 10k TLS handshakes a second, at the lowest CPU per request, and that is more than most targets can take. When it isn't, pepe says so: the dashboard's footer shows how busy the sending thread is once it passes 90% of a core, the end-of-run verdict notes it, and the JSON report has it under `generator`. Then `--threads` adds more:
 
 ```bash
-pepe -n 1000 -c 10 -m POST -d 'Hello, World!' https://httpbin.org/post
+pepe -c 500 --threads 4 -z 30s http://localhost:8080/
 ```
 
-Send a POST request with a request body in json format:
+### JSON output
 
-```bash
-pepe -n 1000 -c 10 -m POST -d '{"key": "value"}' -H 'Content-Type: application/json' https://httpbin.org/post
-```
-
-### Sending Requests with Custom Headers
-
-```bash
-pepe -n 100 -c 5 -H "User-Agent: Pepe/1.0" -H "X-Custom-Header: Value" https://example.com
-```
-
-### Running for a Fixed Time
-
-Keep sending requests for a duration instead of a fixed count (`s`, `m` or `h`):
-
-```bash
-pepe -z 30s -c 20 https://example.com
-```
-
-### JSON Output for Scripts and CI
-
-`--json` skips the dashboard, runs to completion and prints a JSON summary to stdout. Press Ctrl-C to stop early; the report then has `"interrupted": true`.
+`--json` skips the dashboard, runs to completion and prints a report to stdout. Press Ctrl-C to stop early; the report then has `"interrupted": true`.
 
 ```bash
 pepe --json -n 1000 -c 20 https://example.com > results.json
 jq '.summary.latency.p99_ms' results.json
 ```
 
-### Proxy Support
+```json
+{
+  "summary": {
+    "total_requests": 1000,
+    "successful_requests": 1000,
+    "failed_requests": 0,
+    "http_errors": 0,
+    "timeout_errors": 0,
+    "connection_errors": 0,
+    "interrupted": false,
+    "duration_ms": 1843.2,
+    "requests_per_second": 542.5,
+    "data_transfer_bytes": 1256000,
+    "latency": { "min_ms": 9.1, "max_ms": 212.4, "avg_ms": 36.1, "std_dev_ms": 18.0,
+                 "median_ms": 31.9, "p90_ms": 58.2, "p95_ms": 71.0, "p99_ms": 120.3 },
+    "status_codes": { "200": 1000 }
+  },
+  "generator": { "threads": 1, "peak_busy_percent": 12 }
+}
+```
 
-Send requests through a proxy server (HTTP or HTTPS, SOCKS5):
+### Proxies
 
-Without authentication:
+HTTP, HTTPS and SOCKS5, with or without credentials:
 
 ```bash
 pepe -n 1000 -c 10 -p http://proxy:port https://example.com
-```
-
-
-With authentication:
-
-```bash
 pepe -n 1000 -c 10 -p socks5://username:password@proxy:port https://example.com
 ```
 
-## Output
+### Environment
 
-Pepe provides detailed statistics about the performance of the web server, including:
+| Variable | Effect |
+| --- | --- |
+| `PEPE_NO_UPDATE_CHECK` | Set to anything to skip the once-a-day look for a newer release |
+| `PEPE_GITHUB_TOKEN` | A GitHub token for `pepe self-update`, for forks or rate-limited CI |
+| `PEPE_CACHE_DIR` | Where the update check keeps its answer (defaults to the OS cache directory) |
 
-- **Min Response Time**: The minimum response time observed.
-- **Max Response Time**: The maximum response time observed.
-- **Average Response Time**: The average response time.
-- **Median Response Time**: The median response time.
-- **90th Percentile**: The 90th percentile response time.
-- **95th Percentile**: The 95th percentile response time.
-- **99th Percentile**: The 99th percentile response time.
-- **Standard Deviation**: The standard deviation of the response times.
-- **Total Data Transferred**: The total amount of data transferred.
-- **Error Rate**: The percentage of requests that did not get a 2xx response.
-- **Failures by kind**: non-2xx responses, connection errors and timeouts are counted separately.
-- **Cache Hit Rate**: The percentage of requests that were served from the cache.
-- **Requests Per Second (RPS)**: The number of requests per second.
-- **DNS Lookup Time**: The average time taken to resolve the host, sampled once a second.
+## The dashboard
 
-### Dashboard
-
-The dashboard has three views:
+Three views (four in API mode, with **Endpoints** in front):
 
 - **Live**: the headline numbers, a latency heatmap (time across, latency up, brighter cells mean more requests took that long) with p50 and p99 marked, throughput per second, and a panel with the detailed numbers.
 - **Stats**: every number pepe collects, the test setup, and the latency distribution.
@@ -329,39 +351,45 @@ Pepe, the chili in the corner, reacts to how the run is going. When a run ends, 
 | `?` | Show all keys |
 | `q` / `esc` / `Ctrl-C` | Quit |
 
+### What pepe measures
 
-## Resource usage
+Min, max, mean, median, p90, p95, p99 and standard deviation of latency; requests per second and bytes per second; total data transferred; the error rate, with failures counted separately as non-2xx responses, connection errors and timeouts; status codes; cache hit rate from `X-Cache`, `CF-Cache-Status`, `X-Vercel-Cache` and similar headers; and DNS lookup time, sampled once a second.
 
-A load generator should not be the bottleneck of its own test. pepe's CPU and
-memory per request are measured against oha and vegeta on fixed workloads
-with the scripts in [`bench/`](bench/); the method, every result and what
-was changed to get there are in [bench/README.md](bench/README.md).
+## How pepe compares
+
+Measured with the suite in [`bench/`](bench/) against a local server that answers from memory, so the client is the cost being measured. CPU milliseconds per 1,000 requests, peak memory, and the requests per second each tool reported (the server tops out near 130k):
+
+| Workload | pepe | oha | vegeta |
+| --- | --- | --- | --- |
+| GET, 64 connections | **9.6 ms · 14 MB** · 100k req/s | 23.4 ms · 79 MB · 107k req/s | 88.5 ms · 26 MB · 67k req/s |
+| GET, 1,000 connections | **12.3 ms · 68 MB** · 80k req/s | 24.3 ms · 111 MB · 102k req/s | 48.8 ms · 94 MB · 125k req/s |
+| HTTPS, 64 connections | **9.9 ms · 15 MB** · 97k req/s | 24.9 ms · 58 MB · 107k req/s | 72.7 ms · 31 MB · 80k req/s |
+
+Those are single-thread numbers for pepe. Where a target can take more than one thread sends, pepe says so and `--threads` raises the ceiling. The method, every workload, the profiles and what was changed to get there are in [bench/README.md](bench/README.md).
 
 ## Contributing
 
-Contributions are welcome! Please open an issue or submit a pull request on GitHub.
+Issues and pull requests are welcome.
 
-## License
+```bash
+cargo build --release          # the binary, in target/release/pepe
+cargo test                     # 160+ tests, including the dashboard at many terminal sizes
+cargo clippy --all-targets && cargo fmt --check
+go run bench/server.go &       # then bench/run.sh, to measure a change (see bench/README.md)
+```
 
-This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
-
-## Acknowledgements
-
-- [Clap](https://github.com/clap-rs/clap) for command-line argument parsing.
-- [Reqwest](https://github.com/seanmonstar/reqwest) for HTTP requests.
-- [Tokio](https://github.com/tokio-rs/tokio) for asynchronous runtime.
-- [Crossterm](https://github.com/crossterm-rs/crossterm) for terminal handling.
-- [Ratatui](https://github.com/ratatui/ratatui) for TUI components.
-
+Releases are automated. Commits follow [conventional commits](https://www.conventionalcommits.org/) (`feat:`, `fix:`, `perf:`), and merging to `master` keeps a release PR open that bumps the version and writes the changelog from them; the body of each commit becomes its release note. Merging that PR tags the release, which builds every platform and publishes the GitHub Release, installers, the Homebrew formula and the pepe.mhaimdat.com mirror.
 
 ## Roadmap
 
-- [x] Implement basic functionality for sending HTTP requests.
-- [x] Improve support for curl when the protocol is not specified.
-- [ ] Implement a config file for managing load test settings.
-- [ ] Create an output format for easy integration with monitoring tools.
-  - [x] JSON output.
-  - [ ] CSV output.
-  - [ ] Webhook integration.
-- [ ] Chaining multiple requests.
-- [ ] Implement more advanced load testing scenarios.
+- [ ] A config file for load-test settings
+- [ ] CSV output and webhooks, alongside JSON
+- [ ] Chaining requests
+
+## License
+
+MIT. See [LICENSE](LICENSE).
+
+## Acknowledgements
+
+[reqwest](https://github.com/seanmonstar/reqwest) and [tokio](https://github.com/tokio-rs/tokio) for the requests, [ratatui](https://github.com/ratatui/ratatui) and [crossterm](https://github.com/crossterm-rs/crossterm) for the dashboard, [clap](https://github.com/clap-rs/clap) for the command line, and [oha](https://github.com/hatoo/oha) and [vegeta](https://github.com/tsenart/vegeta) for being good company on the benchmark table.
