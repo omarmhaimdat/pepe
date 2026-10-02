@@ -1,0 +1,40 @@
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.TH pepe-api 1  pepe "User Commands"
+.SH NAME
+pepe\-api \- Load\-test every endpoint of an OpenAPI spec
+.SH SYNOPSIS
+\fBpepe api\fR [\fB\-\-auth\fR] [\fB\-\-server\fR] [\fB\-\-all\fR] [\fB\-\-tag\fR] [\fB\-\-only\fR] [\fB\-\-skip\fR] [\fB\-\-set\fR] [\fB\-\-include\-writes\fR] [\fB\-h\fR|\fB\-\-help\fR] <\fISPEC\fR> 
+.SH DESCRIPTION
+Load\-test every endpoint of an OpenAPI spec
+.SH OPTIONS
+.TP
+\fB\-\-auth\fR \fI<AUTH>\fR
+Credentials: bearer:TOKEN, basic:USER:PASSWORD, apikey:VALUE, header:NAME=VALUE or query:NAME=VALUE
+.TP
+\fB\-\-server\fR \fI<SERVER>\fR
+Base URL to send requests to, instead of the spec\*(Aqs server
+.TP
+\fB\-\-all\fR
+Run every endpoint that has the values it needs. Without \-\-all, \-\-tag or \-\-only, nothing runs until it\*(Aqs picked on the plan screen
+.TP
+\fB\-\-tag\fR \fI<TAG>\fR
+Run the endpoints with this tag, e.g. \-\-tag Billing
+.TP
+\fB\-\-only\fR \fI<ONLY>\fR
+Run the endpoints matching this, e.g. \*(AqGET /pets*\*(Aq or \*(Aq/pets/*\*(Aq
+.TP
+\fB\-\-skip\fR \fI<SKIP>\fR
+Leave out endpoints matching this
+.TP
+\fB\-\-set\fR \fI<NAME=VALUE[,VALUE]>\fR
+A parameter\*(Aqs value(s), rotated through: \-\-set id=1,2,3
+.TP
+\fB\-\-include\-writes\fR
+Let \-\-all, \-\-tag and \-\-only switch on POST, PUT, PATCH and DELETE too
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Print help
+.TP
+<\fISPEC\fR>
+The OpenAPI spec: a file or URL, JSON or YAML

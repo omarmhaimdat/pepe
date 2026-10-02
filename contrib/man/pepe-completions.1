@@ -1,0 +1,36 @@
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.TH pepe-completions 1  pepe "User Commands"
+.SH NAME
+pepe\-completions \- Tab completion for your shell: print the script, or \-\-install it
+.SH SYNOPSIS
+\fBpepe completions\fR [\fB\-\-install\fR] [\fB\-\-dry\-run\fR] [\fB\-h\fR|\fB\-\-help\fR] [\fISHELL\fR] 
+.SH DESCRIPTION
+Tab completion for your shell: print the script, or \-\-install it
+.SH OPTIONS
+.TP
+\fB\-\-install\fR
+Put the script and the man pages in place and add the line the shell\*(Aqs startup file needs, so tab completion works in the next shell
+.TP
+\fB\-\-dry\-run\fR
+With \-\-install: say what would be done, and do nothing
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Print help
+.TP
+[\fISHELL\fR]
+bash, zsh, fish or powershell; the current shell when left out
+.br
+
+.br
+\fIPossible values:\fR
+.RS 14
+.IP \(bu 2
+bash
+.IP \(bu 2
+zsh
+.IP \(bu 2
+fish
+.IP \(bu 2
+powershell
+.RE

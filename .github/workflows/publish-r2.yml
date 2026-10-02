@@ -1,8 +1,11 @@
 # Custom dist publish job (see `publish-jobs` in dist-workspace.toml).
 # Mirrors every release artifact to the R2 bucket behind pepe.mhaimdat.com:
 #
-#   /install.sh, /install.ps1   -> installers for the latest release
-#   /latest/<artifact>          -> latest release artifacts
+#   /install.sh, /install.ps1   -> pepe's installers (install/ in this repo):
+#                                  they run the release installer below, then
+#                                  `pepe completions --install`
+#   /latest/<artifact>          -> latest release artifacts, including the
+#                                  release installers pepe-installer.sh/.ps1
 #   /vX.Y.Z/<artifact>          -> immutable per-version artifacts
 name: Publish to R2
 
@@ -25,6 +28,11 @@ jobs:
       R2_ENDPOINT: ${{ vars.R2_ENDPOINT }}
       TAG: ${{ fromJson(inputs.plan).announcement_tag }}
     steps:
+      # For install/, the installers that wrap the release ones
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+          path: repo
       - name: Fetch artifacts
         uses: actions/download-artifact@v8
         with:
@@ -49,10 +57,10 @@ jobs:
           r2 . "s3://$R2_BUCKET/latest/" --recursive \
             --cache-control "public, max-age=300"
 
-          r2 pepe-installer.sh "s3://$R2_BUCKET/install.sh" \
+          r2 ../repo/install/install.sh "s3://$R2_BUCKET/install.sh" \
             --content-type "text/x-shellscript; charset=utf-8" \
             --cache-control "public, max-age=300"
-          r2 pepe-installer.ps1 "s3://$R2_BUCKET/install.ps1" \
+          r2 ../repo/install/install.ps1 "s3://$R2_BUCKET/install.ps1" \
             --content-type "text/plain; charset=utf-8" \
             --cache-control "public, max-age=300"
 
@@ -60,14 +68,16 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          for path in install.sh install.ps1 "$TAG/sha256.sum"; do
+          for path in install.sh install.ps1 latest/pepe-installer.sh latest/pepe-installer.ps1 "$TAG/sha256.sum"; do
             code=$(curl -s -o /dev/null -w '%{http_code}' "https://pepe.mhaimdat.com/$path")
             echo "$path -> $code"
             [ "$code" = "200" ]
           done
-          # The live install.sh must be the one we just built (query string
-          # bypasses any CDN-cached copy of the previous release). Download
-          # first: piping curl into `grep -q` fails under pipefail, because
-          # grep exits on the first match and curl then can't finish writing.
-          installer=$(curl -fsSL "https://pepe.mhaimdat.com/install.sh?t=$(date +%s)")
+          # The live release installer must be the one we just built (query
+          # string bypasses any CDN-cached copy of the previous release).
+          # Download first: piping curl into `grep -q` fails under pipefail,
+          # because grep exits on the first match and curl then can't finish.
+          installer=$(curl -fsSL "https://pepe.mhaimdat.com/latest/pepe-installer.sh?t=$(date +%s)")
           grep -q "APP_VERSION=\"${TAG#v}\"" <<< "$installer"
+          wrapper=$(curl -fsSL "https://pepe.mhaimdat.com/install.sh?t=$(date +%s)")
+          grep -q "completions --install" <<< "$wrapper"

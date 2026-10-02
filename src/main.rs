@@ -17,6 +17,8 @@ use crate::ramp::{Ramp, RampPlan, Tick};
 mod api;
 mod cache;
 mod cli;
+mod completions;
+mod contrib;
 mod curl;
 mod insights;
 mod json_report;
@@ -533,6 +535,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     if let Some(cli::Command::SelfUpdate(what)) = &args.command {
         return update::self_update(what.check, what.verbose).await;
+    }
+    if let Some(cli::Command::Completions(what)) = &args.command {
+        return completions::run(what);
     }
 
     // Release builds abort on panic; restore the terminal first so a crash

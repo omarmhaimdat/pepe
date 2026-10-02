@@ -1,0 +1,201 @@
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.TH pepe 1  pepe "User Commands"
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.SH NAME
+pepe \- HTTP load generator
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.SH SYNOPSIS
+\fBpepe\fR [\fB\-h\fR|\fB\-\-help\fR] [\fB\-n\fR|\fB\-\-number\fR] [\fB\-c\fR|\fB\-\-concurrency\fR] [\fB\-z\fR|\fB\-\-duration\fR] [\fB\-\-curl\fR] [\fB\-m\fR|\fB\-\-method\fR] [\fB\-H\fR|\fB\-\-headers\fR] [\fB\-t\fR|\fB\-\-timeout\fR] [\fB\-\-threads\fR] [\fB\-d\fR|\fB\-\-body\fR] [\fB\-u\fR|\fB\-\-user\-agent\fR] [\fB\-p\fR|\fB\-\-proxy\fR] [\fB\-k\fR|\fB\-\-insecure\fR] [\fB\-\-disable\-compression\fR] [\fB\-\-disable\-keepalive\fR] [\fB\-\-disable\-redirects\fR] [\fB\-\-json\fR] [\fB\-i\fR|\fB\-\-setup\fR] [\fB\-V\fR|\fB\-\-version\fR] [\fIURL\fR] [\fIARGS\fR] [\fIsubcommands\fR]
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.SH DESCRIPTION
+HTTP load generator
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.SH OPTIONS
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Print help
+.TP
+\fB\-n\fR, \fB\-\-number\fR \fI<NUMBER>\fR [default: 100]
+Number of requests to perform
+.TP
+\fB\-c\fR, \fB\-\-concurrency\fR \fI<CONCURRENCY>\fR [default: one per core]
+Number of concurrent requests at a time
+.TP
+\fB\-z\fR, \fB\-\-duration\fR \fI<DURATION>\fR
+Duration of the test, e.g. 10s, 3m, 2h (mutually exclusive with \-n)
+.TP
+\fB\-\-curl\fR
+Load\-test a curl command: pepe \-\-curl \-\- curl \-X POST http://localhost:8080, or pass it as one quoted string, as @file, or on stdin
+.TP
+\fB\-m\fR, \fB\-\-method\fR \fI<METHOD>\fR [default: GET]
+HTTP method, e.g. GET, POST, PUT, DELETE
+.TP
+\fB\-H\fR, \fB\-\-headers\fR \fI<HEADERS>\fR
+HTTP headers, e.g. \-H \*(AqAccept: application/json\*(Aq
+.TP
+\fB\-t\fR, \fB\-\-timeout\fR \fI<TIMEOUT>\fR [default: 20]
+Time in seconds to wait for a response
+.TP
+\fB\-\-threads\fR \fI<THREADS>\fR
+Threads sending requests (default 1). One sends about 100k requests a second; the dashboard says when it is the limit
+.TP
+\fB\-d\fR, \fB\-\-body\fR \fI<BODY>\fR
+HTTP request body
+.TP
+\fB\-u\fR, \fB\-\-user\-agent\fR \fI<USER_AGENT>\fR
+User\-Agent string, default is pepe/{version}
+.TP
+\fB\-p\fR, \fB\-\-proxy\fR \fI<PROXY>\fR
+Proxy server URL: http://user:pass@host:port or socks5://host:port
+.TP
+\fB\-k\fR, \fB\-\-insecure\fR
+Accept invalid TLS certificates (self\-signed, expired, wrong host)
+.TP
+\fB\-\-disable\-compression\fR
+Disable HTTP compression, e.g. gzip
+.TP
+\fB\-\-disable\-keepalive\fR
+Disable HTTP keepalive, e.g. Connection: close
+.TP
+\fB\-\-disable\-redirects\fR
+Prevent http redirects
+.TP
+\fB\-\-json\fR
+Output results in JSON format
+.TP
+\fB\-i\fR, \fB\-\-setup\fR
+Open the setup screen to review or change the settings before starting (it opens by itself when no URL is given)
+.TP
+\fB\-V\fR, \fB\-\-version\fR
+Print version
+.TP
+[\fIURL\fR] [default: ]
+HTTP url to request
+.TP
+[\fIARGS\fR] [default: ]
+List of arguments to pass to curl command
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.SH SUBCOMMANDS
+.TP
+pepe\-self\-update(1)
+Update pepe to the latest release, or say what\*(Aqs new in it
+.TP
+pepe\-completions(1)
+Tab completion for your shell: print the script, or \-\-install it
+.TP
+pepe\-api(1)
+Load\-test every endpoint of an OpenAPI spec
+.TP
+pepe\-ramp(1)
+Raise the load step by step to find where the target stops keeping up
+.TP
+pepe\-help(1)
+Print this message or the help of the given subcommand(s)
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.SH "DASHBOARD KEYS"
+.TP
+\fBspace, p\fR
+Pause or resume sending; a timed run\*(Aqs clock stops while paused
+.TP
+\fB+, \-\fR
+Raise or lower concurrency by about 10%, live
+.TP
+\fBs, i\fR
+Stop sending and keep the results on screen
+.TP
+\fBr\fR
+Restart with the same settings (and the current concurrency)
+.TP
+\fBE\fR
+Back to the setup screen (or, in API mode, the plan)
+.TP
+\fBtab, left, right, 1\-3\fR
+Switch view
+.TP
+\fBup, down, j, k, PgUp, PgDn, g, G\fR
+Select a request in the log
+.TP
+\fBf\fR
+Filter requests by status: 2xx, 3xx, 4xx, 5xx, no response, failed
+.TP
+\fBl\fR
+Filter requests by latency: at or above p50, p90 or p99
+.TP
+\fB/\fR
+Search the status and response text
+.TP
+\fBe, c\fR
+Show only failed requests; clear all filters
+.TP
+\fBenter\fR
+Inspect the selected request; esc goes back
+.TP
+\fB?\fR
+Show all keys
+.TP
+\fBq, esc, Ctrl\-C\fR
+Quit
+.SH "SETUP SCREEN KEYS"
+.TP
+\fBtab\fR
+Switch mode: Single URL, Ramp or API
+.TP
+\fBup, down\fR
+Move between fields; left, right change a choice
+.TP
+\fBenter\fR
+Start the run (or load the spec, in API mode)
+.TP
+\fBctrl\-t\fR
+Send the request once and show the response
+.TP
+\fBesc\fR
+Quit
+.SH "RAMP KEYS"
+.TP
+\fBup, down\fR
+Pick a step and see everything measured about it; esc follows the run again
+.TP
+\fBspace\fR
+Pause or resume; a step\*(Aqs clock stops while paused
+.TP
+\fBn\fR
+End this step now and go on to the next
+.TP
+\fBs\fR
+Stop the ramp here and keep the results
+.TP
+\fBr, e\fR
+Run again; back to the setup screen
+.SH EXAMPLES
+.TP
+\fBpepe https://example.com\fR
+100 requests, one per core at a time, with the dashboard
+.TP
+\fBpepe \-z 30s \-c 50 https://example.com\fR
+Thirty seconds at concurrency 50
+.TP
+\fBpepe \-\-curl \-\- curl \-X POST https://httpbin.org/post \-d \*(Aq{"a":1}\*(Aq\fR
+The request a curl command would send
+.TP
+\fBpepe ramp https://example.com \-\-to 200 \-\-until \*(Aqp99 > 500ms\*(Aq\fR
+Raise the load until p99 passes 500 ms
+.TP
+\fBpepe \-\-json \-n 1000 https://example.com > results.json\fR
+No dashboard; a JSON report
+.SH ENVIRONMENT
+.TP
+\fBPEPE_NO_UPDATE_CHECK\fR
+Set to anything to skip the look for a newer release
+.TP
+\fBPEPE_GITHUB_TOKEN\fR
+A GitHub token for pepe self\-update, for forks or rate\-limited CI
+.SH "SEE ALSO"
+pepe\-ramp(1), pepe\-api(1), pepe\-self\-update(1), and \fBhttps://github.com/omarmhaimdat/pepe\fR

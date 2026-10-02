@@ -1,0 +1,19 @@
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.TH pepe-self-update 1  pepe "User Commands"
+.SH NAME
+pepe\-self\-update \- Update pepe to the latest release, or say what\*(Aqs new in it
+.SH SYNOPSIS
+\fBpepe self\-update\fR [\fB\-\-check\fR] [\fB\-\-verbose\fR] [\fB\-h\fR|\fB\-\-help\fR] 
+.SH DESCRIPTION
+Update pepe to the latest release, or say what\*(Aqs new in it
+.SH OPTIONS
+.TP
+\fB\-\-check\fR
+Only say whether a newer release exists (exit code 1 if so) and what\*(Aqs in it; don\*(Aqt install it
+.TP
+\fB\-\-verbose\fR
+Show the installer\*(Aqs own output
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Print help
