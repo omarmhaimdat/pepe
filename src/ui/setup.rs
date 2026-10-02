@@ -1626,11 +1626,14 @@ mod tests {
         type_text(&mut s, "http://localhost:3000");
         // The steady load is back, and checked again
         assert!(s.to_cli().unwrap_err().contains("Concurrency"));
-        s.concurrency = "5".into();
+        // A concurrency that is the default on no machine, since the card
+        // leaves out flags at their default
+        let concurrency = crate::utils::num_of_cores() + 1;
+        s.concurrency = concurrency.to_string();
         let cli = s.to_cli().unwrap();
         assert_eq!(
             cli.command_line(),
-            "pepe api --server http://localhost:3000 -c 5 openapi.yaml"
+            format!("pepe api --server http://localhost:3000 -c {concurrency} openapi.yaml")
         );
         press(&mut s, KeyCode::BackTab);
         press(&mut s, KeyCode::BackTab);
