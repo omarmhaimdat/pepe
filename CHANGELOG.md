@@ -6,6 +6,39 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+## [0.7.0](https://github.com/omarmhaimdat/pepe/compare/v0.6.1...v0.7.0) - 2026-10-02
+
+### Added
+
+- pepe says when a newer release is out, and self-update shows what's new
+
+  - Once a day, pepe looks for a newer release while a run is going, and
+    when there is one Pepe says so after the report: the version, what
+    changed since yours (from the changelog), and the command that updates
+    this copy, for however it was installed. It used to ask GitHub every
+    time it quit, and quitting waited for the answer; now the look starts
+    with the run and quitting never waits more than a moment for it. In CI,
+    or with PEPE_NO_UPDATE_CHECK set, nothing is asked or said. The setup
+    screen mentions a newer release the last look found.
+  - pepe self-update shows what's new before installing, keeps the
+    installer's output behind a spinner (--verbose shows it), and says
+    where the new pepe went. For copies installed with Homebrew, Nix or
+    cargo it says so and gives the command that updates them.
+  - pepe self-update --check only reports, with exit code 1 when a newer
+    release exists, so scripts can ask.
+
+
+
+### Other
+
+- one changelog, newest first
+
+  CHANGELOG.md had two changelogs in it, an old header halfway down with
+  the newest releases under it, so 0.6.0 and 0.6.1 sat below 0.5.1. It is
+  one file again, newest release first. The update notice reads what's
+  new from here, so the order matters to more than readers.
+
+
 
 ## [0.6.1](https://github.com/omarmhaimdat/pepe/compare/v0.6.0...v0.6.1) - 2026-10-02
 
