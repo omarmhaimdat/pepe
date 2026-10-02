@@ -7,24 +7,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.5.1](https://github.com/omarmhaimdat/pepe/compare/v0.5.0...v0.5.1) - 2026-09-30
-
-### Fixed
-
-- Windows curl pastes keep backslashes; clippy 1.98 lint
-- parse curl commands the way curl and a shell do
-
-### Other
-
-- stop release-plz from opening duplicate and empty release PRs
-- release v0.5.0
-# Change log
-All notable changes to this project will be documented in this file.
-
-The format is based on [Keep a Changelog](http://keepachangelog.com/)
-and this project adheres to [Semantic Versioning](http://semver.org/).
-
-## [Unreleased]
 ## [0.6.1](https://github.com/omarmhaimdat/pepe/compare/v0.6.0...v0.6.1) - 2026-10-02
 
 ### Performance
@@ -85,8 +67,6 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
   commit's body, and perf commits get their own Performance section
   instead of landing under Other.
 
-
-
 ## [0.6.0](https://github.com/omarmhaimdat/pepe/compare/v0.5.1...v0.6.0) - 2026-10-01
 
 ### Added
@@ -98,6 +78,18 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 ### Other
 
 - the setup screen, ramp mode and API mode
+
+## [0.5.1](https://github.com/omarmhaimdat/pepe/compare/v0.5.0...v0.5.1) - 2026-09-30
+
+### Fixed
+
+- Windows curl pastes keep backslashes; clippy 1.98 lint
+- parse curl commands the way curl and a shell do
+
+### Other
+
+- stop release-plz from opening duplicate and empty release PRs
+- release v0.5.0
 
 ## [0.5.0](https://github.com/omarmhaimdat/pepe/compare/v0.4.0...v0.5.0) - 2026-09-30
 
