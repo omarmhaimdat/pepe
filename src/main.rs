@@ -17,6 +17,7 @@ use crate::ramp::{Ramp, RampPlan, Tick};
 mod api;
 mod cache;
 mod cli;
+mod contrib;
 mod curl;
 mod insights;
 mod json_report;

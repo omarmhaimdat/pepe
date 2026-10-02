@@ -18,6 +18,9 @@ targets = [
 installers = ["shell", "powershell", "homebrew"]
 # Where the shell/PowerShell installers put the binary
 install-path = ["$XDG_BIN_HOME/", "~/.local/bin"]
+# Shell completions and man pages, generated from the command definition
+# (see src/contrib.rs); Homebrew puts them under share/pepe
+include = ["contrib/completions", "contrib/man"]
 tap = "omarmhaimdat/homebrew-pepe"
 formula = "pepe"
 publish-jobs = ["homebrew", "./publish-r2"]

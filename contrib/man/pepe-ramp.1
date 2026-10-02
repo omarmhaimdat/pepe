@@ -1,0 +1,31 @@
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.TH pepe-ramp 1  pepe "User Commands"
+.SH NAME
+pepe\-ramp \- Raise the load step by step to find where the target stops keeping up
+.SH SYNOPSIS
+\fBpepe ramp\fR [\fB\-\-from\fR] [\fB\-\-to\fR] [\fB\-\-step\fR] [\fB\-\-every\fR] [\fB\-\-until\fR] [\fB\-h\fR|\fB\-\-help\fR] [\fIURL\fR] 
+.SH DESCRIPTION
+Raise the load step by step to find where the target stops keeping up
+.SH OPTIONS
+.TP
+\fB\-\-from\fR \fI<FROM>\fR [default: 10]
+Concurrency of the first step
+.TP
+\fB\-\-to\fR \fI<TO>\fR [default: 100]
+Concurrency of the last step
+.TP
+\fB\-\-step\fR \fI<STEP>\fR [default: 10]
+Concurrency added at each step
+.TP
+\fB\-\-every\fR \fI<EVERY>\fR [default: 10s]
+How long each step is held, e.g. 10s, 1m
+.TP
+\fB\-\-until\fR \fI<CONDITION>\fR
+End the ramp once a step crosses this: \*(Aqp99 > 500ms\*(Aq, \*(Aqerrors > 1%\*(Aq
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Print help
+.TP
+[\fIURL\fR]
+HTTP url to request; without one, the setup screen opens
