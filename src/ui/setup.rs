@@ -155,6 +155,8 @@ pub struct Setup {
     cursor: usize,
     /// Shown under the form: (text, is an error)
     message: Option<(String, bool)>,
+    /// A newer release the last update check found, to mention
+    fresher: Option<String>,
     /// The last "try once" response
     tried: Option<ResponseStats>,
 }
@@ -211,6 +213,7 @@ impl Setup {
             focus: 0,
             cursor: 0,
             message: None,
+            fresher: crate::update::known().map(|v| v.to_string()),
             tried: None,
         };
         let first = setup.focused();
@@ -710,6 +713,11 @@ impl Setup {
             ])
         } else if let (Some(stat), false) = (&self.tried, beside) {
             tried_summary(stat)
+        } else if let Some(fresher) = &self.fresher {
+            Line::from(vec![
+                value(" ✦ ", GOOD),
+                label(format!("pepe {fresher} is out · pepe self-update")),
+            ])
         } else if self.mode == Mode::Api {
             Line::from(label(" enter loads the spec and shows its endpoints"))
         } else {

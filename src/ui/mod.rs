@@ -3,7 +3,7 @@ mod body;
 mod filter;
 pub mod format;
 mod kit;
-mod mascot;
+pub(crate) mod mascot;
 mod plan;
 mod ramp;
 mod setup;

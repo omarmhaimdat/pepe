@@ -1,4 +1,4 @@
-use clap::{ArgAction::HelpLong, Error, Parser, Subcommand};
+use clap::{ArgAction::HelpLong, Args, Error, Parser, Subcommand};
 use reqwest::Proxy;
 
 use crate::curl;
@@ -104,10 +104,21 @@ pub struct Cli {
     pub body_bytes: Option<Vec<u8>>,
 }
 
+#[derive(Args, Debug, Clone, Default)]
+pub struct SelfUpdateArgs {
+    /// Only say whether a newer release exists (exit code 1 if so) and
+    /// what's in it; don't install it
+    #[arg(long)]
+    pub check: bool,
+    /// Show the installer's own output
+    #[arg(long)]
+    pub verbose: bool,
+}
+
 #[derive(Subcommand, Debug, Clone)]
 pub enum Command {
-    /// Update pepe to the latest release
-    SelfUpdate,
+    /// Update pepe to the latest release, or say what's new in it
+    SelfUpdate(SelfUpdateArgs),
     /// Load-test every endpoint of an OpenAPI spec
     Api(ApiArgs),
     /// Raise the load step by step to find where the target stops keeping up
