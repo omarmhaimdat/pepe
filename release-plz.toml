@@ -20,3 +20,30 @@ features_always_increment_minor = true
 # CI and docs changes ride along with the next one instead of making their own
 release_commits = "^(feat|fix|perf)[(:!]"
 pr_labels = ["release"]
+
+[changelog]
+# Each entry is the commit's subject followed by its body, indented under
+# it, so the explanation written with the commit is what the release notes
+# say. The hidden comments order the groups.
+body = """
+## [{{ version | trim_start_matches(pat="v") }}]\
+{%- if release_link -%}({{ release_link }}){% endif %} \
+- {{ timestamp | date(format="%Y-%m-%d") }}
+{% for group, commits in commits | group_by(attribute="group") %}
+### {{ group | striptags | trim | upper_first }}
+{% for commit in commits %}
+- {% if commit.scope %}*({{ commit.scope }})* {% endif %}\
+{% if commit.breaking %}[**breaking**] {% endif %}{{ commit.message | trim }}
+{%- if commit.body %}
+
+{{ commit.body | trim | indent(prefix="  ", first=true) }}
+{% endif %}
+{% endfor %}
+{% endfor %}
+"""
+commit_parsers = [
+    { message = "^feat", group = "<!-- 0 -->Added" },
+    { message = "^fix", group = "<!-- 1 -->Fixed" },
+    { message = "^perf", group = "<!-- 2 -->Performance" },
+    { message = "^.*", group = "<!-- 3 -->Other" },
+]
