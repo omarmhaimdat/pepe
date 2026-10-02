@@ -8,7 +8,7 @@
 
 [![CI](https://github.com/omarmhaimdat/pepe/actions/workflows/CI.yaml/badge.svg)](https://github.com/omarmhaimdat/pepe/actions/workflows/CI.yaml) [![Release](https://img.shields.io/github/v/release/omarmhaimdat/pepe?display_name=tag&color=brightgreen)](https://github.com/omarmhaimdat/pepe/releases/latest) [![Downloads](https://img.shields.io/github/downloads/omarmhaimdat/pepe/total?color=blue)](https://github.com/omarmhaimdat/pepe/releases) [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE) ![Rust 1.85+](https://img.shields.io/badge/rust-1.85%2B-orange)
 
-[Install](#install) · [Quick start](#quick-start) · [Usage](#usage) · [Dashboard](#the-dashboard) · [How it compares](#how-pepe-compares) · [Contributing](#contributing)
+[Install](#install) · [Quick start](#quick-start) · [Usage](#usage) · [Dashboard](#the-dashboard) · [How it compares](#how-pepe-compares) · [Roadmap](ROADMAP.md) · [Contributing](#contributing)
 
 </div>
 
@@ -389,9 +389,7 @@ Releases are automated. Commits follow [conventional commits](https://www.conven
 
 ## Roadmap
 
-- [ ] A config file for load-test settings
-- [ ] CSV output and webhooks, alongside JSON
-- [ ] Chaining requests
+Next up: benchmarks in CI and shell completions, then a Docker image and a GitHub Action, latency by phase, an arrival-rate mode and data-driven requests, and thresholds that fail CI. The whole plan, in order, is in [ROADMAP.md](ROADMAP.md).
 
 ## License
 
