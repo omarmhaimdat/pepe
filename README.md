@@ -73,6 +73,8 @@ Every [release](https://github.com/omarmhaimdat/pepe/releases) ships binaries fo
 ```bash
 gh attestation verify pepe-x86_64-unknown-linux-musl.tar.xz --repo omarmhaimdat/pepe
 ```
+
+Each archive also carries shell completions (bash, zsh, fish, PowerShell) and man pages; [contrib/README.md](contrib/README.md) says where each shell wants them.
 </details>
 
 <details>
