@@ -8,7 +8,7 @@
 
 [![CI](https://github.com/omarmhaimdat/pepe/actions/workflows/CI.yaml/badge.svg)](https://github.com/omarmhaimdat/pepe/actions/workflows/CI.yaml) [![Release](https://img.shields.io/github/v/release/omarmhaimdat/pepe?display_name=tag&color=brightgreen)](https://github.com/omarmhaimdat/pepe/releases/latest) [![Downloads](https://img.shields.io/github/downloads/omarmhaimdat/pepe/total?color=blue)](https://github.com/omarmhaimdat/pepe/releases) [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE) ![Rust 1.85+](https://img.shields.io/badge/rust-1.85%2B-orange)
 
-[Install](#install) · [Quick start](#quick-start) · [Usage](#usage) · [Dashboard](#the-dashboard) · [How it compares](#how-pepe-compares) · [Contributing](#contributing)
+[Install](#install) · [Quick start](#quick-start) · [Usage](#usage) · [Dashboard](#the-dashboard) · [How it compares](#how-pepe-compares) · [Roadmap](ROADMAP.md) · [Contributing](#contributing)
 
 </div>
 
@@ -66,6 +66,17 @@ nix profile install github:omarmhaimdat/pepe              # install it
 </details>
 
 <details>
+<summary><b>Docker</b></summary>
+
+```bash
+docker run --rm -it ghcr.io/omarmhaimdat/pepe -z 30s -c 50 https://example.com   # the dashboard needs -it
+docker run --rm ghcr.io/omarmhaimdat/pepe --json -n 1000 https://example.com     # for scripts
+```
+
+An empty image with the static binary in it, a few megabytes, for `linux/amd64` and `linux/arm64`; `:latest` and `:<version>` tags. `docker build -t pepe .` builds the same from source.
+</details>
+
+<details>
 <summary><b>Prebuilt binaries</b></summary>
 
 Every [release](https://github.com/omarmhaimdat/pepe/releases) ships binaries for macOS (Apple Silicon and Intel), Linux (x86_64 and ARM64, statically linked) and Windows (x86_64), with SHA-256 checksums and signed build provenance:
@@ -73,6 +84,8 @@ Every [release](https://github.com/omarmhaimdat/pepe/releases) ships binaries fo
 ```bash
 gh attestation verify pepe-x86_64-unknown-linux-musl.tar.xz --repo omarmhaimdat/pepe
 ```
+
+Each archive also carries the shell completions and man pages; `pepe completions --install` puts them in place for your shell (see [contrib/README.md](contrib/README.md)).
 </details>
 
 <details>
@@ -93,6 +106,8 @@ pepe self-update --check    # only say whether there is one (exit code 1 if so)
 ```
 
 Homebrew and Nix installs update through `brew upgrade pepe` and `nix profile upgrade pepe`. Set `PEPE_NO_UPDATE_CHECK=1` to turn the check off; it is off in CI already.
+
+Tab completion (bash, zsh, fish, PowerShell) and `man pepe` come with the install script and the Homebrew formula. Installed another way, `pepe completions --install` sets them up for the shell you're in; `--dry-run` shows what it would change.
 
 ## Quick start
 
@@ -168,6 +183,15 @@ Repeated headers are kept (several `Cookie` headers are sent as several), and a 
 
 ```bash
 pepe -z 2m -c 100 https://example.com
+```
+
+### Soak runs
+
+For a run that lasts hours, `--snapshot` writes the JSON report so far to a file every minute, whole or not at all, and once more when the run ends, so a crash at hour six or a lost terminal doesn't lose the numbers. The report carries a minute-by-minute timeline of the whole run (throughput, errors, p50, p90, p99), the dashboard's ten-minute charts still show the recent past, and the end-of-run verdict judges the whole run on those minutes.
+
+```bash
+pepe -z 6h -c 50 --snapshot soak.json https://example.com
+jq '.timeline[-1], .snapshot' soak.json       # the last minute, and whether it is still running
 ```
 
 ### Load-testing a curl command
@@ -313,6 +337,22 @@ jq '.summary.latency.p99_ms' results.json
 }
 ```
 
+### In GitHub Actions
+
+The repository is also an action: it installs a pinned release, runs `pepe --json`, puts the numbers in the job summary and in outputs, and can fail the job on a condition over the report.
+
+```yaml
+- uses: omarmhaimdat/pepe@master
+  id: load
+  with:
+    url: https://staging.example.com/api/health
+    args: -z 30s -c 20 -H 'Authorization: Bearer ${{ secrets.TOKEN }}'
+    fail-if: ".summary.latency.p99_ms > 300 or .summary.failed_requests > 0"
+- run: echo "p99 was ${{ steps.load.outputs.p99_ms }} ms at ${{ steps.load.outputs.requests_per_second }} req/s"
+```
+
+Outputs: `total_requests`, `failed_requests`, `requests_per_second`, `p50_ms`, `p99_ms`, and `report`, the path of the JSON. `version` pins a release (`0.9.0`); the default is the latest. Linux and macOS runners.
+
 ### Proxies
 
 HTTP, HTTPS and SOCKS5, with or without credentials:
@@ -385,13 +425,13 @@ go run bench/server.go &       # then bench/run.sh, to measure a change (see ben
 assets/record.sh               # re-record the GIFs above with vhs (assets/tapes/)
 ```
 
+Before a release that touches the screens, the installers, or files and paths, go through [docs/windows-checklist.md](docs/windows-checklist.md) on a Windows machine; CI can't press keys there.
+
 Releases are automated. Commits follow [conventional commits](https://www.conventionalcommits.org/) (`feat:`, `fix:`, `perf:`), and merging to `master` keeps a release PR open that bumps the version and writes the changelog from them; the body of each commit becomes its release note. Merging that PR tags the release, which builds every platform and publishes the GitHub Release, installers, the Homebrew formula and the pepe.mhaimdat.com mirror.
 
 ## Roadmap
 
-- [ ] A config file for load-test settings
-- [ ] CSV output and webhooks, alongside JSON
-- [ ] Chaining requests
+Next up: a Docker image and a GitHub Action, soak mode and distributed runs; then latency by phase, an arrival-rate mode and data-driven requests, and thresholds that fail CI. The whole plan, in order, is in [ROADMAP.md](ROADMAP.md).
 
 ## License
 

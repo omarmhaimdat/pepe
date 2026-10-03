@@ -86,6 +86,13 @@ pub struct Cli {
     #[arg(long, global = true)]
     pub json: bool,
 
+    /// Write the JSON report so far to this file every minute while the
+    /// run goes, and once more when it ends, so a long run's numbers
+    /// survive a crash or a lost terminal; it has a minute-by-minute
+    /// timeline of the whole run
+    #[arg(long, global = true, value_name = "FILE")]
+    pub snapshot: Option<std::path::PathBuf>,
+
     /// Open the setup screen to review or change the settings before
     /// starting (it opens by itself when no URL is given)
     #[arg(short = 'i', long, global = true)]
@@ -437,6 +444,9 @@ impl Cli {
         }
         if let Some(threads) = self.threads {
             flag("--threads", &threads.to_string());
+        }
+        if let Some(path) = &self.snapshot {
+            flag("--snapshot", &path.display().to_string());
         }
         if self.method != defaults.method {
             flag("-m", &self.method);

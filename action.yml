@@ -1,0 +1,120 @@
+name: pepe load test
+description: >-
+  Load-test a URL with pepe and get requests per second, latency percentiles
+  and failures as outputs, with a condition that fails the job
+author: Omar Mhaimdat
+branding:
+  icon: activity
+  color: red
+
+inputs:
+  url:
+    description: The URL to load-test. Can be left empty if it is part of args.
+    required: false
+    default: ""
+  args:
+    description: >-
+      pepe's flags, for example "-n 1000 -c 20 -H 'Accept: application/json'".
+      Don't pass --json; the action does.
+    required: false
+    default: "-n 100"
+  version:
+    description: The pepe release to use, e.g. "0.9.0". "latest" by default.
+    required: false
+    default: latest
+  fail-if:
+    description: >-
+      A jq condition on pepe's JSON report. When it is true the step fails,
+      e.g. ".summary.latency.p99_ms > 300 or .summary.failed_requests > 0".
+    required: false
+    default: ""
+
+outputs:
+  report:
+    description: Path of the JSON report
+    value: ${{ steps.run.outputs.report }}
+  total_requests:
+    description: Requests sent
+    value: ${{ steps.run.outputs.total_requests }}
+  failed_requests:
+    description: Requests without a 2xx response
+    value: ${{ steps.run.outputs.failed_requests }}
+  requests_per_second:
+    description: Throughput over the run
+    value: ${{ steps.run.outputs.requests_per_second }}
+  p50_ms:
+    description: Median latency in milliseconds
+    value: ${{ steps.run.outputs.p50_ms }}
+  p99_ms:
+    description: 99th percentile latency in milliseconds
+    value: ${{ steps.run.outputs.p99_ms }}
+
+runs:
+  using: composite
+  steps:
+    - name: Install pepe
+      shell: bash
+      env:
+        VERSION: ${{ inputs.version }}
+      run: |
+        set -euo pipefail
+        if command -v pepe >/dev/null && [ "$VERSION" = "latest" ]; then
+          echo "using the pepe already installed: $(pepe --version)"
+          exit 0
+        fi
+        case "$RUNNER_OS" in
+          Linux|macOS) ;;
+          *) echo "::error::this action runs on Linux and macOS runners"; exit 1 ;;
+        esac
+        if [ "$VERSION" = "latest" ]; then
+          url="https://pepe.mhaimdat.com/latest/pepe-installer.sh"
+        else
+          url="https://github.com/omarmhaimdat/pepe/releases/download/v${VERSION#v}/pepe-installer.sh"
+        fi
+        curl --proto '=https' --tlsv1.2 -LsSf "$url" | sh -s -- --no-modify-path
+        echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+        "$HOME/.local/bin/pepe" --version
+
+    - name: Run pepe
+      id: run
+      shell: bash
+      env:
+        PEPE_NO_UPDATE_CHECK: "1"
+      run: |
+        set -euo pipefail
+        report="${RUNNER_TEMP}/pepe-report.json"
+        pepe --json ${{ inputs.args }} ${{ inputs.url }} > "$report"
+        {
+          echo "report=$report"
+          echo "total_requests=$(jq -r '.summary.total_requests' "$report")"
+          echo "failed_requests=$(jq -r '.summary.failed_requests' "$report")"
+          echo "requests_per_second=$(jq -r '.summary.requests_per_second' "$report")"
+          echo "p50_ms=$(jq -r '.summary.latency.median_ms' "$report")"
+          echo "p99_ms=$(jq -r '.summary.latency.p99_ms' "$report")"
+        } >> "$GITHUB_OUTPUT"
+        {
+          echo "### pepe · ${{ inputs.url }}"
+          echo
+          echo "| requests | failed | req/s | p50 | p99 | max |"
+          echo "|---|---|---|---|---|---|"
+          jq -r '.summary | "| \(.total_requests) | \(.failed_requests) | \(.requests_per_second | floor) | \(.latency.median_ms) ms | \(.latency.p99_ms) ms | \(.latency.max_ms) ms |"' "$report"
+          if [ "$(jq -r '.generator.peak_busy_percent // 0' "$report")" -ge 90 ]; then
+            echo
+            echo "pepe's sending thread was saturated; the numbers are pepe's limit as much as the target's. Add \`--threads 2\` to args."
+          fi
+        } >> "$GITHUB_STEP_SUMMARY"
+
+    - name: Check the condition
+      if: inputs.fail-if != ''
+      shell: bash
+      env:
+        CONDITION: ${{ inputs.fail-if }}
+        REPORT: ${{ steps.run.outputs.report }}
+      run: |
+        set -euo pipefail
+        if jq -e "$CONDITION" "$REPORT" >/dev/null; then
+          echo "::error::load test failed the condition: $CONDITION"
+          jq '.summary' "$REPORT"
+          exit 1
+        fi
+        echo "condition not met, as wanted: $CONDITION"

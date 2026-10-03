@@ -1,0 +1,9 @@
+# syntax=docker/dockerfile:1
+# The release image: the static binary a release already built, for the
+# platform being built, in an empty image. publish-docker.yml lays the
+# binaries out as bin/amd64/pepe and bin/arm64/pepe first.
+FROM scratch
+ARG TARGETARCH
+COPY bin/${TARGETARCH}/pepe /pepe
+ENV PEPE_NO_UPDATE_CHECK=1
+ENTRYPOINT ["/pepe"]
