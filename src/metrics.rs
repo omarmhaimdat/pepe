@@ -4,6 +4,11 @@ use std::time::Duration;
 use crate::cache::CacheCategory;
 use crate::response::{ErrorKind, ResponseStats};
 
+/// Distinct `Server-Timing` names kept; the rest are counted, not timed
+pub const MAX_SEGMENTS: usize = 8;
+/// Responses the slowest list holds
+pub const SLOWEST_KEPT: usize = 5;
+
 /// Aggregated results for a whole run. Everything is updated incrementally,
 /// so memory stays flat no matter how many requests a run sends.
 #[derive(Debug, Default, Clone)]
@@ -27,6 +32,7 @@ pub struct Metrics {
     sum_sq_us: f64,
     dns_lookup_sum: Duration,
     dns_samples: u64,
+    server_timing: ServerTimings,
 }
 
 impl Metrics {
@@ -61,6 +67,14 @@ impl Metrics {
                 self.cache_hits += 1;
             }
         }
+        if let Some(timing) = &stat.server_timing {
+            self.server_timing.record(timing);
+        }
+    }
+
+    /// What the target's `Server-Timing` headers added up to
+    pub fn server_timing(&self) -> &ServerTimings {
+        &self.server_timing
     }
 
     /// Latency at percentile `q` (0-100), or zero when nothing was recorded
@@ -134,6 +148,131 @@ impl Metrics {
     /// Body bytes per second over `elapsed`
     pub fn throughput(&self, elapsed: Duration) -> f64 {
         per_second(self.bytes as f64, elapsed)
+    }
+}
+
+/// `Server-Timing` over the run: each named segment's durations, and the
+/// server's total per response, to hold against the latency pepe measured
+#[derive(Debug, Default, Clone)]
+pub struct ServerTimings {
+    segments: Vec<Segment>,
+    /// Sum of a response's `dur`s, per response that had one
+    total: Histogram,
+    /// Responses that carried the header at all
+    responses: u64,
+}
+
+#[derive(Debug, Clone)]
+pub struct Segment {
+    pub name: Box<str>,
+    /// Microseconds, like the latency histogram
+    pub durations: Histogram,
+    /// Entries seen, with or without a `dur`
+    pub count: u64,
+}
+
+impl ServerTimings {
+    fn record(&mut self, timing: &[crate::trace::ServerTiming]) {
+        self.responses += 1;
+        let mut total_ms = None;
+        for entry in timing {
+            if let Some(ms) = entry.dur_ms.filter(|ms| ms.is_finite() && *ms >= 0.0) {
+                *total_ms.get_or_insert(0.0) += ms;
+            }
+            let index = match self.segments.iter().position(|s| s.name == entry.name) {
+                Some(index) => index,
+                None if self.segments.len() < MAX_SEGMENTS => {
+                    self.segments.push(Segment {
+                        name: entry.name.clone(),
+                        durations: Histogram::default(),
+                        count: 0,
+                    });
+                    self.segments.len() - 1
+                }
+                None => continue,
+            };
+            let segment = &mut self.segments[index];
+            segment.count += 1;
+            if let Some(ms) = entry.dur_ms.filter(|ms| ms.is_finite() && *ms >= 0.0) {
+                segment.durations.record((ms * 1000.0) as u64);
+            }
+        }
+        if let Some(ms) = total_ms {
+            self.total.record((ms * 1000.0) as u64);
+        }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.responses == 0
+    }
+
+    /// Responses that carried a `Server-Timing` header
+    pub fn responses(&self) -> u64 {
+        self.responses
+    }
+
+    /// Segments in the order first seen
+    pub fn segments(&self) -> &[Segment] {
+        &self.segments
+    }
+
+    /// The server's own time per response, summed over its segments
+    pub fn total(&self) -> &Histogram {
+        &self.total
+    }
+
+    /// The segment that takes the most of the server's time, by median
+    pub fn largest(&self) -> Option<&Segment> {
+        self.segments
+            .iter()
+            .filter(|s| s.durations.count() > 0)
+            .max_by_key(|s| s.durations.percentile(50.0))
+    }
+}
+
+/// The slowest responses of the run, slowest first, with the ids their
+/// backend gave them. Requests that got no response aren't here: a
+/// timeout is always the slowest and has no id to look up.
+#[derive(Debug, Default, Clone)]
+pub struct Slowest {
+    entries: Vec<SlowResponse>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct SlowResponse {
+    /// When it finished, since the run started
+    pub at: Duration,
+    pub latency: Duration,
+    pub status: u16,
+    pub request_id: Option<(&'static str, Box<str>)>,
+}
+
+impl Slowest {
+    pub fn record(&mut self, stat: &ResponseStats, at: Duration) {
+        let Some(status) = stat.status_code else {
+            return;
+        };
+        let full = self.entries.len() == SLOWEST_KEPT;
+        if full && stat.duration <= self.entries[SLOWEST_KEPT - 1].latency {
+            return;
+        }
+        let entry = SlowResponse {
+            at,
+            latency: stat.duration,
+            status: status.as_u16(),
+            request_id: stat.request_id.clone(),
+        };
+        let index = self
+            .entries
+            .iter()
+            .position(|e| e.latency < entry.latency)
+            .unwrap_or(self.entries.len());
+        self.entries.insert(index, entry);
+        self.entries.truncate(SLOWEST_KEPT);
+    }
+
+    pub fn entries(&self) -> &[SlowResponse] {
+        &self.entries
     }
 }
 
@@ -347,6 +486,71 @@ mod tests {
         );
         assert_eq!(m.status_codes.get(&503), Some(&1));
         assert_eq!(m.bytes, 50);
+    }
+
+    #[test]
+    fn server_timing_adds_up_per_response_and_caps_the_names() {
+        use crate::trace::ServerTiming;
+        let entry = |name: &str, ms: Option<f64>| ServerTiming {
+            name: name.into(),
+            dur_ms: ms,
+            desc: None,
+        };
+        let mut m = Metrics::default();
+        let mut s = stat(50, Some(200), None);
+        s.server_timing = Some(vec![entry("db", Some(30.0)), entry("app", Some(10.0))].into());
+        m.record(&s);
+        s.server_timing = Some(vec![entry("db", Some(20.0)), entry("cache", None)].into());
+        m.record(&s);
+        m.record(&stat(5, Some(200), None));
+        let t = m.server_timing();
+        assert_eq!(t.responses(), 2);
+        let names: Vec<&str> = t.segments().iter().map(|s| s.name.as_ref()).collect();
+        assert_eq!(names, ["db", "app", "cache"]);
+        assert_eq!(t.segments()[2].count, 1);
+        assert_eq!(
+            t.segments()[2].durations.count(),
+            0,
+            "no dur, nothing timed"
+        );
+        assert_eq!(t.total().count(), 2);
+        assert!((39_000..=41_000).contains(&t.total().percentile(100.0)));
+        assert_eq!(t.largest().unwrap().name.as_ref(), "db");
+
+        let mut many = Metrics::default();
+        let entries: Vec<ServerTiming> = (0..12)
+            .map(|i| entry(&format!("s{i}"), Some(1.0)))
+            .collect();
+        s.server_timing = Some(entries.into());
+        many.record(&s);
+        assert_eq!(many.server_timing().segments().len(), MAX_SEGMENTS);
+        assert!(Metrics::default().server_timing().is_empty());
+    }
+
+    #[test]
+    fn slowest_keeps_the_top_few_responses_with_their_ids() {
+        let mut slowest = Slowest::default();
+        for (i, ms) in [30u64, 10, 50, 20, 40, 60, 5].iter().enumerate() {
+            let mut s = stat(*ms, Some(200), None);
+            s.request_id = Some(("x-request-id", format!("r{ms}").into()));
+            slowest.record(&s, Duration::from_secs(i as u64));
+        }
+        // A timeout is slower than all of them but has no response
+        slowest.record(
+            &stat(1_000, None, Some(ErrorKind::Timeout)),
+            Duration::from_secs(9),
+        );
+        let order: Vec<u64> = slowest
+            .entries()
+            .iter()
+            .map(|e| e.latency.as_millis() as u64)
+            .collect();
+        assert_eq!(order, [60, 50, 40, 30, 20]);
+        assert_eq!(
+            slowest.entries()[0].request_id.as_ref().unwrap().1.as_ref(),
+            "r60"
+        );
+        assert_eq!(slowest.entries()[0].at, Duration::from_secs(5));
     }
 
     #[test]

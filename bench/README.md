@@ -233,6 +233,16 @@ with the headers and freed the connection before the caller sees it.
 - **Plain HTTP with a new connection per request** got slower with more
   threads for every tool, pepe and oha alike. That is macOS running out of
   ephemeral ports (TIME_WAIT), not the client, so it isn't in the suite.
+- **Reading `Server-Timing` and request ids** (v0.10). Every response is
+  looked at for a `Server-Timing` header and for one of twelve request-id
+  headers. When the target sends none, the gate's four workloads moved
+  0–4%, inside their round-to-round noise. When it sends both (the bench
+  server's `/timed` route: three `Server-Timing` entries and an
+  `X-Request-Id`), parsing them and keeping the id costs 9.45 → 10.00 ms
+  of CPU per 1,000 requests (+6%) and 0.9 MB, best of three alternating
+  rounds on macOS. That is the price of the slowest-requests list and the
+  server's own timing in the report; a run that doesn't get the headers
+  doesn't pay it.
 
 ## Results
 

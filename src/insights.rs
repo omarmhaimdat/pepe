@@ -109,6 +109,28 @@ pub fn verdict(m: &Metrics, samples: &[Sample], interrupted: bool) -> Verdict {
         ));
     }
 
+    // What the server says its own share of the time was
+    let timing = m.server_timing();
+    if timing.total().count() > 0 {
+        let measured = m.percentile(50.0).as_micros() as f64;
+        let server = timing.total().percentile(50.0) as f64;
+        if measured > 0.0 {
+            let share = (server / measured * 100.0).min(100.0);
+            let mostly = timing
+                .largest()
+                .filter(|_| timing.segments().len() > 1)
+                .map_or_else(String::new, |s| format!(", mostly {}", s.name));
+            notes.push(note(
+                Level::Healthy,
+                format!(
+                    "The server says {} of the {} median was its own{mostly}",
+                    pct(share),
+                    ms(measured)
+                ),
+            ));
+        }
+    }
+
     // Trends. The first and last buckets are ramp-up and drain; skip them.
     let steady = samples
         .get(1..samples.len().saturating_sub(1))

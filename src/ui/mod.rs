@@ -186,6 +186,8 @@ pub struct Dashboard {
     notice: Option<(String, Instant)>,
     /// `--snapshot`: where the report so far is written every minute
     snapshot: Option<std::path::PathBuf>,
+    /// The slowest responses so far, with their request ids
+    pub slowest: crate::metrics::Slowest,
 }
 
 impl Dashboard {
@@ -228,6 +230,7 @@ impl Dashboard {
             detail_bytes: 0,
             notice: None,
             snapshot,
+            slowest: Default::default(),
         }
     }
 
@@ -236,6 +239,7 @@ impl Dashboard {
         crate::json_report::JsonReport::generate(&self.metrics, self.elapsed(), self.interrupted)
             .with_generator(load.threads(), self.peak_busy)
             .with_timeline(&self.timeline)
+            .with_slowest(&self.slowest)
     }
 
     /// Write the snapshot, if one was asked for; a failure is said once
@@ -304,6 +308,7 @@ impl Dashboard {
             at: self.active(),
             stat,
         };
+        self.slowest.record(&entry.stat, entry.at);
         if entry.is_error() {
             self.count_failure(&entry.stat);
         }
