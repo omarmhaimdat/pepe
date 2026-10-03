@@ -393,7 +393,7 @@ Releases are automated. Commits follow [conventional commits](https://www.conven
 
 ## Roadmap
 
-Next up: benchmarks in CI and shell completions, then a Docker image and a GitHub Action, latency by phase, an arrival-rate mode and data-driven requests, and thresholds that fail CI. The whole plan, in order, is in [ROADMAP.md](ROADMAP.md).
+Next up: a Docker image and a GitHub Action, soak mode and distributed runs; then latency by phase, an arrival-rate mode and data-driven requests, and thresholds that fail CI. The whole plan, in order, is in [ROADMAP.md](ROADMAP.md).
 
 ## License
 

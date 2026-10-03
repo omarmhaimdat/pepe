@@ -9,41 +9,20 @@ in [issues](https://github.com/omarmhaimdat/pepe/issues).
 
 ## 1. Project health
 
-Keep pepe trustworthy before making it bigger.
-
-- **Shell completions** (S). bash, zsh, fish and PowerShell, generated
-  from the command definition, shipped in the release archives and put
-  in place by the installers and the Homebrew formula.
-- **Man page** (S). Generated the same way, with the key tables from the
-  README in it, shipped alongside.
-- **Installer smoke tests** (S). On every release, one job per OS runs
-  the published installer, then `pepe --version` and
-  `pepe self-update --check`, so a broken installer is caught the day it
-  ships rather than by a user.
-- **Scheduled benchmark run** (S). A weekly job that starts the bench
-  server, runs the suite for pepe and keeps the CSV, so a slow drift in
-  CPU or memory is on record.
-- **Regression gate on release PRs** (M). The suite on the release PR
-  against the last release's numbers, two runs on the same runner to
-  cancel out hardware noise; the release fails if CPU per 1,000 requests
-  grows by more than a set share.
-- **Linux numbers in the benchmark record** (S). `bench/README.md` is one
-  macOS machine today; the CI runs add a Linux column.
-- **Recordings per mode** (S). Short terminal recordings of a plain run,
-  the setup screen, ramp and API mode, for the README and the install
-  page.
-- **An install page that knows your platform** (S). pepe.mhaimdat.com
-  shows the right one-liner first, with the recordings under it.
-- **A Windows terminal checklist** (S). What to try by hand on PowerShell
-  and cmd before a release, since pasting and key codes differ there and
-  CI can't press keys.
+Done: tab completion and man pages that install themselves, installer
+smoke tests after every release, a benchmark gate on release PRs with a
+Linux record and a Linux profile on demand, recordings of each mode
+made by script, the install page, and a Windows checklist. The
+scheduled benchmark run was set aside; the gate on release PRs covers
+what it was for.
 
 ## 2. Scale and operations
 
 Runs that are longer, bigger, or part of a pipeline.
 
-- **Docker image and a GitHub Action** (S). `uses: omarmhaimdat/pepe-action`
-  with a URL and thresholds; the image for everything else.
+- **Docker image and a GitHub Action** (S). In progress: `ghcr.io/omarmhaimdat/pepe`
+  and `uses: omarmhaimdat/pepe@master` with a URL, flags and a `fail-if`
+  condition.
 - **Soak mode** (S). Hours-long runs with periodic snapshots to disk, so a
   crash at hour six doesn't lose the data, and a report that covers the
   whole span.
