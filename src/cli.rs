@@ -115,10 +115,25 @@ pub struct SelfUpdateArgs {
     pub verbose: bool,
 }
 
+#[derive(Args, Debug, Clone, Default)]
+pub struct CompletionsArgs {
+    /// bash, zsh, fish or powershell; the current shell when left out
+    pub shell: Option<crate::completions::Shell>,
+    /// Put the script and the man pages in place and add the line the
+    /// shell's startup file needs, so tab completion works in the next shell
+    #[arg(long)]
+    pub install: bool,
+    /// With --install: say what would be done, and do nothing
+    #[arg(long, requires = "install")]
+    pub dry_run: bool,
+}
+
 #[derive(Subcommand, Debug, Clone)]
 pub enum Command {
     /// Update pepe to the latest release, or say what's new in it
     SelfUpdate(SelfUpdateArgs),
+    /// Tab completion for your shell: print the script, or --install it
+    Completions(CompletionsArgs),
     /// Load-test every endpoint of an OpenAPI spec
     Api(ApiArgs),
     /// Raise the load step by step to find where the target stops keeping up

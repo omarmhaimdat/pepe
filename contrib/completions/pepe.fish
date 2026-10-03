@@ -44,6 +44,7 @@ complete -c pepe -n "__fish_pepe_needs_command" -l json -d 'Output results in JS
 complete -c pepe -n "__fish_pepe_needs_command" -s i -l setup -d 'Open the setup screen to review or change the settings before starting (it opens by itself when no URL is given)'
 complete -c pepe -n "__fish_pepe_needs_command" -s V -l version -d 'Print version'
 complete -c pepe -n "__fish_pepe_needs_command" -a "self-update" -d 'Update pepe to the latest release, or say what\'s new in it'
+complete -c pepe -n "__fish_pepe_needs_command" -a "completions" -d 'Tab completion for your shell: print the script, or --install it'
 complete -c pepe -n "__fish_pepe_needs_command" -a "api" -d 'Load-test every endpoint of an OpenAPI spec'
 complete -c pepe -n "__fish_pepe_needs_command" -a "ramp" -d 'Raise the load step by step to find where the target stops keeping up'
 complete -c pepe -n "__fish_pepe_needs_command" -a "help" -d 'Print this message or the help of the given subcommand(s)'
@@ -66,6 +67,25 @@ complete -c pepe -n "__fish_pepe_using_subcommand self-update" -l disable-keepal
 complete -c pepe -n "__fish_pepe_using_subcommand self-update" -l disable-redirects -d 'Prevent http redirects'
 complete -c pepe -n "__fish_pepe_using_subcommand self-update" -l json -d 'Output results in JSON format'
 complete -c pepe -n "__fish_pepe_using_subcommand self-update" -s i -l setup -d 'Open the setup screen to review or change the settings before starting (it opens by itself when no URL is given)'
+complete -c pepe -n "__fish_pepe_using_subcommand completions" -s n -l number -d 'Number of requests to perform' -r
+complete -c pepe -n "__fish_pepe_using_subcommand completions" -s z -l duration -d 'Duration of the test, e.g. 10s, 3m, 2h (mutually exclusive with -n)' -r
+complete -c pepe -n "__fish_pepe_using_subcommand completions" -s m -l method -d 'HTTP method, e.g. GET, POST, PUT, DELETE' -r
+complete -c pepe -n "__fish_pepe_using_subcommand completions" -s H -l headers -d 'HTTP headers, e.g. -H \'Accept: application/json\'' -r
+complete -c pepe -n "__fish_pepe_using_subcommand completions" -s t -l timeout -d 'Time in seconds to wait for a response' -r
+complete -c pepe -n "__fish_pepe_using_subcommand completions" -l threads -d 'Threads sending requests (default 1). One sends about 100k requests a second; the dashboard says when it is the limit' -r
+complete -c pepe -n "__fish_pepe_using_subcommand completions" -s d -l body -d 'HTTP request body' -r
+complete -c pepe -n "__fish_pepe_using_subcommand completions" -s p -l proxy -d 'Proxy server URL: http://user:pass@host:port or socks5://host:port' -r
+complete -c pepe -n "__fish_pepe_using_subcommand completions" -s c -l concurrency -d 'Number of concurrent requests at a time' -r
+complete -c pepe -n "__fish_pepe_using_subcommand completions" -s u -l user-agent -d 'User-Agent string, default is pepe/{version}' -r
+complete -c pepe -n "__fish_pepe_using_subcommand completions" -l install -d 'Put the script and the man pages in place and add the line the shell\'s startup file needs, so tab completion works in the next shell'
+complete -c pepe -n "__fish_pepe_using_subcommand completions" -l dry-run -d 'With --install: say what would be done, and do nothing'
+complete -c pepe -n "__fish_pepe_using_subcommand completions" -s h -l help -d 'Print help'
+complete -c pepe -n "__fish_pepe_using_subcommand completions" -s k -l insecure -d 'Accept invalid TLS certificates (self-signed, expired, wrong host)'
+complete -c pepe -n "__fish_pepe_using_subcommand completions" -l disable-compression -d 'Disable HTTP compression, e.g. gzip'
+complete -c pepe -n "__fish_pepe_using_subcommand completions" -l disable-keepalive -d 'Disable HTTP keepalive, e.g. Connection: close'
+complete -c pepe -n "__fish_pepe_using_subcommand completions" -l disable-redirects -d 'Prevent http redirects'
+complete -c pepe -n "__fish_pepe_using_subcommand completions" -l json -d 'Output results in JSON format'
+complete -c pepe -n "__fish_pepe_using_subcommand completions" -s i -l setup -d 'Open the setup screen to review or change the settings before starting (it opens by itself when no URL is given)'
 complete -c pepe -n "__fish_pepe_using_subcommand api" -l auth -d 'Credentials: bearer:TOKEN, basic:USER:PASSWORD, apikey:VALUE, header:NAME=VALUE or query:NAME=VALUE' -r
 complete -c pepe -n "__fish_pepe_using_subcommand api" -l server -d 'Base URL to send requests to, instead of the spec\'s server' -r
 complete -c pepe -n "__fish_pepe_using_subcommand api" -l tag -d 'Run the endpoints with this tag, e.g. --tag Billing' -r
@@ -113,7 +133,8 @@ complete -c pepe -n "__fish_pepe_using_subcommand ramp" -l disable-keepalive -d 
 complete -c pepe -n "__fish_pepe_using_subcommand ramp" -l disable-redirects -d 'Prevent http redirects'
 complete -c pepe -n "__fish_pepe_using_subcommand ramp" -l json -d 'Output results in JSON format'
 complete -c pepe -n "__fish_pepe_using_subcommand ramp" -s i -l setup -d 'Open the setup screen to review or change the settings before starting (it opens by itself when no URL is given)'
-complete -c pepe -n "__fish_pepe_using_subcommand help; and not __fish_seen_subcommand_from self-update api ramp help" -f -a "self-update" -d 'Update pepe to the latest release, or say what\'s new in it'
-complete -c pepe -n "__fish_pepe_using_subcommand help; and not __fish_seen_subcommand_from self-update api ramp help" -f -a "api" -d 'Load-test every endpoint of an OpenAPI spec'
-complete -c pepe -n "__fish_pepe_using_subcommand help; and not __fish_seen_subcommand_from self-update api ramp help" -f -a "ramp" -d 'Raise the load step by step to find where the target stops keeping up'
-complete -c pepe -n "__fish_pepe_using_subcommand help; and not __fish_seen_subcommand_from self-update api ramp help" -f -a "help" -d 'Print this message or the help of the given subcommand(s)'
+complete -c pepe -n "__fish_pepe_using_subcommand help; and not __fish_seen_subcommand_from self-update completions api ramp help" -f -a "self-update" -d 'Update pepe to the latest release, or say what\'s new in it'
+complete -c pepe -n "__fish_pepe_using_subcommand help; and not __fish_seen_subcommand_from self-update completions api ramp help" -f -a "completions" -d 'Tab completion for your shell: print the script, or --install it'
+complete -c pepe -n "__fish_pepe_using_subcommand help; and not __fish_seen_subcommand_from self-update completions api ramp help" -f -a "api" -d 'Load-test every endpoint of an OpenAPI spec'
+complete -c pepe -n "__fish_pepe_using_subcommand help; and not __fish_seen_subcommand_from self-update completions api ramp help" -f -a "ramp" -d 'Raise the load step by step to find where the target stops keeping up'
+complete -c pepe -n "__fish_pepe_using_subcommand help; and not __fish_seen_subcommand_from self-update completions api ramp help" -f -a "help" -d 'Print this message or the help of the given subcommand(s)'

@@ -171,10 +171,11 @@ fn main_page() -> String {
 }
 
 /// Each subcommand's page: (subcommand, page name, how it's typed)
-const SUBCOMMANDS: [(&str, &str, &str); 3] = [
+const SUBCOMMANDS: [(&str, &str, &str); 4] = [
     ("ramp", "pepe-ramp", "pepe ramp"),
     ("api", "pepe-api", "pepe api"),
     ("self-update", "pepe-self-update", "pepe self-update"),
+    ("completions", "pepe-completions", "pepe completions"),
 ];
 
 /// `pepe-<sub>.1` for each subcommand

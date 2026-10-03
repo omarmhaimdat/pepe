@@ -677,6 +677,7 @@ pub async fn self_update(
                 cache.current = result.new_version.to_string();
                 cache.write();
             }
+            refresh_completions(std::path::Path::new(result.install_prefix.as_str()));
         }
         Ok(None) => eprintln!("{GREEN}pepe {current} is already the latest release.{NC}"),
         Err(e) => {
@@ -690,6 +691,31 @@ pub async fn self_update(
         }
     }
     Ok(())
+}
+
+/// Completions set up with `pepe completions --install` come out of the
+/// binary, so the new pepe writes them again for the shells they were set
+/// up for; shells never set up are left alone
+fn refresh_completions(install_prefix: &std::path::Path) {
+    let shells = crate::completions::installed_shells();
+    if shells.is_empty() {
+        return;
+    }
+    let pepe = install_prefix.join(if cfg!(windows) { "pepe.exe" } else { "pepe" });
+    for shell in shells {
+        let ok = std::process::Command::new(&pepe)
+            .args(["completions", "--install", shell.arg()])
+            .output()
+            .is_ok_and(|out| out.status.success());
+        if ok {
+            eprintln!("{GREEN}✔{NC} tab completion for {} refreshed", shell.arg());
+        } else {
+            eprintln!(
+                "{DIM}tab completion for {} wasn't refreshed; run{NC} pepe completions --install",
+                shell.arg()
+            );
+        }
+    }
 }
 
 #[cfg(test)]

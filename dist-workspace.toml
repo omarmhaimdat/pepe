@@ -23,7 +23,9 @@ install-path = ["$XDG_BIN_HOME/", "~/.local/bin"]
 include = ["contrib/completions", "contrib/man"]
 tap = "omarmhaimdat/homebrew-pepe"
 formula = "pepe"
-publish-jobs = ["homebrew", "./publish-r2"]
+# The Homebrew job is ours (publish-homebrew.yml): dist's would not install
+# the completions and man pages where Homebrew activates them
+publish-jobs = ["./publish-homebrew", "./publish-r2"]
 # Signed build provenance (`gh attestation verify`)
 github-attestations = true
 # `pepe self-update` is built in via axoupdater, no separate updater binary
