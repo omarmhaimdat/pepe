@@ -14,6 +14,10 @@ use crate::load::{LoadHandle, Plan};
 use crate::metrics::Metrics;
 use crate::ramp::{Ramp, RampPlan, Tick};
 
+#[cfg(feature = "mimalloc")]
+#[global_allocator]
+static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
+
 mod api;
 mod cache;
 mod cli;
