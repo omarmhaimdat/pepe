@@ -30,7 +30,7 @@ jobs:
       TAG: ${{ fromJson(inputs.plan).announcement_tag }}
     steps:
       # For install/, the installers that wrap the release ones
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
           path: repo
