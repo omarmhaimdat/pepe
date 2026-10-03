@@ -1,0 +1,51 @@
+# A small OpenAPI spec for the bench server (bench/server.go), used by the
+# API-mode recording: `pepe api assets/demo/openapi.yaml`.
+openapi: 3.0.3
+info:
+  title: Pet shop
+  version: "1.0"
+servers:
+  - url: http://127.0.0.1:8099
+tags:
+  - name: pets
+  - name: orders
+paths:
+  /json:
+    get:
+      tags: [pets]
+      summary: List pets
+      operationId: listPets
+      responses:
+        "200": { description: The pets }
+  /1k:
+    get:
+      tags: [pets]
+      summary: A pet's details
+      operationId: getPet
+      responses:
+        "200": { description: One pet }
+  /slow:
+    get:
+      tags: [orders]
+      summary: Place an order
+      operationId: placeOrder
+      parameters:
+        - name: ms
+          in: query
+          description: How long the warehouse takes
+          schema: { type: integer, enum: [5, 20, 50] }
+      responses:
+        "200": { description: Placed }
+  /status/{code}:
+    get:
+      tags: [orders]
+      summary: Check an order
+      operationId: orderStatus
+      parameters:
+        - name: code
+          in: path
+          required: true
+          schema: { type: integer, enum: [200, 404, 503] }
+      responses:
+        "200": { description: Found }
+        "404": { description: No such order }

@@ -5,6 +5,7 @@
 //
 //	go run bench/server.go            # http on 127.0.0.1:8089, https on 127.0.0.1:8090
 //	go run bench/server.go -addr :9000 -tls-addr :9443
+//	go run bench/server.go -latency 5ms   # every answer takes at least this long
 //
 // The HTTPS listener uses a self-signed certificate made at startup, so
 // clients need to skip verification (pepe -k, oha --insecure).
@@ -61,6 +62,7 @@ func selfSigned() tls.Certificate {
 func main() {
 	addr := flag.String("addr", "127.0.0.1:8089", "listen address")
 	tlsAddr := flag.String("tls-addr", "127.0.0.1:8090", "HTTPS listen address (empty: none)")
+	latency := flag.Duration("latency", 0, "added to every answer, to look like a real service (recordings use 5ms)")
 	flag.Parse()
 
 	small := []byte("hello from pepe\n")
@@ -105,9 +107,17 @@ func main() {
 		w.Write(small)
 	})
 
+	var handler http.Handler = mux
+	if *latency > 0 {
+		handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			time.Sleep(*latency)
+			mux.ServeHTTP(w, r)
+		})
+	}
+
 	srv := &http.Server{
 		Addr:         *addr,
-		Handler:      mux,
+		Handler:      handler,
 		ReadTimeout:  30 * time.Second,
 		WriteTimeout: 30 * time.Second,
 		IdleTimeout:  120 * time.Second,
@@ -115,7 +125,7 @@ func main() {
 	if *tlsAddr != "" {
 		tlsSrv := &http.Server{
 			Addr:         *tlsAddr,
-			Handler:      mux,
+			Handler:      handler,
 			ReadTimeout:  30 * time.Second,
 			WriteTimeout: 30 * time.Second,
 			IdleTimeout:  120 * time.Second,
