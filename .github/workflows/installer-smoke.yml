@@ -1,0 +1,159 @@
+# After every release: install pepe the ways a user would, from the published
+# locations, and check what they'd get. A broken installer, formula or
+# completion step shows up here within minutes of a release instead of in
+# someone's terminal. Run it by hand with workflow_dispatch to check an
+# older release or re-check the latest.
+name: Installer smoke tests
+
+on:
+  workflow_run:
+    workflows: [Release]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release to expect, e.g. 0.9.0 (empty: the latest on GitHub)"
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  expected:
+    name: Which release
+    # Release also runs on pull requests (pr-run-mode); only a tag push publishes
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.resolve.outputs.version }}
+    steps:
+      - id: resolve
+        env:
+          GH_TOKEN: ${{ github.token }}
+          INPUT: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          if [ -n "$INPUT" ]; then
+            version="${INPUT#v}"
+          else
+            version=$(gh api repos/${{ github.repository }}/releases/latest --jq '.tag_name' | sed 's/^v//')
+          fi
+          echo "expecting pepe $version"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+  shell-installer:
+    name: install.sh on ${{ matrix.os }} with ${{ matrix.shell }}
+    needs: expected
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        shell: [bash, zsh]
+    runs-on: ${{ matrix.os }}
+    env:
+      EXPECTED: ${{ needs.expected.outputs.version }}
+      # The installer sets up completion for the shell it finds here
+      SHELL: /bin/${{ matrix.shell }}
+      # pepe's own update check, without hitting the anonymous API rate limit
+      PEPE_GITHUB_TOKEN: ${{ github.token }}
+    steps:
+      - name: Install with the published script
+        shell: bash
+        run: curl --proto '=https' --tlsv1.2 -LsSf https://pepe.mhaimdat.com/install.sh | sh
+
+      - name: It is the release we expect
+        shell: bash
+        run: |
+          set -euo pipefail
+          pepe="$HOME/.local/bin/pepe"
+          test -x "$pepe"
+          got=$("$pepe" --version | awk '{print $2}')
+          echo "installed pepe $got"
+          [ "$got" = "$EXPECTED" ] || { echo "::error::installed $got, expected $EXPECTED"; exit 1; }
+
+      - name: It knows it is up to date
+        shell: bash
+        run: '"$HOME/.local/bin/pepe" self-update --check'
+
+      - name: Tab completion and man pages are in place
+        shell: bash
+        run: |
+          set -euo pipefail
+          case "$SHELL" in
+            */zsh)
+              test -f ~/.local/share/zsh/site-functions/_pepe
+              grep -q "pepe: tab completion" ~/.zshrc ;;
+            */bash)
+              test -f ~/.local/share/bash-completion/completions/pepe
+              grep -q "pepe: tab completion" ~/.bashrc ~/.bash_profile ;;
+          esac
+          test -f ~/.local/share/man/man1/pepe.1
+          man -w pepe 2>/dev/null || echo "::warning::man can't find pepe.1 on this runner's MANPATH"
+
+      - name: It sends requests
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m http.server 8089 --bind 127.0.0.1 >/dev/null 2>&1 &
+          sleep 1
+          "$HOME/.local/bin/pepe" --json -n 20 -c 2 http://127.0.0.1:8089/ > out.json
+          total=$(jq '.summary.total_requests' out.json)
+          [ "$total" = "20" ] || { echo "::error::sent $total requests, expected 20"; cat out.json; exit 1; }
+
+  powershell-installer:
+    name: install.ps1 on Windows
+    needs: expected
+    runs-on: windows-latest
+    env:
+      EXPECTED: ${{ needs.expected.outputs.version }}
+      PEPE_GITHUB_TOKEN: ${{ github.token }}
+    steps:
+      - name: Install with the published script
+        shell: powershell
+        run: powershell -ExecutionPolicy Bypass -c "irm https://pepe.mhaimdat.com/install.ps1 | iex"
+
+      - name: It is the release we expect, up to date, with completion set up
+        shell: pwsh
+        run: |
+          $pepe = Join-Path $HOME '.local\bin\pepe.exe'
+          if (-not (Test-Path $pepe)) { throw "pepe.exe not found at $pepe" }
+          $got = (& $pepe --version).Split(' ')[1]
+          Write-Host "installed pepe $got"
+          if ($got -ne $env:EXPECTED) { throw "installed $got, expected $env:EXPECTED" }
+          & $pepe self-update --check
+          if ($LASTEXITCODE -ne 0) { throw "self-update --check exited $LASTEXITCODE" }
+          $script = Join-Path $HOME 'Documents\PowerShell\pepe-completions.ps1'
+          if (-not (Test-Path $script)) { throw "completion script not found at $script" }
+          $profilePath = Join-Path $HOME 'Documents\PowerShell\Microsoft.PowerShell_profile.ps1'
+          if (-not (Select-String -Path $profilePath -Pattern 'pepe: tab completion' -Quiet)) { throw "profile has no completion line" }
+
+  homebrew:
+    name: brew install on macOS
+    needs: expected
+    runs-on: macos-latest
+    env:
+      EXPECTED: ${{ needs.expected.outputs.version }}
+      PEPE_GITHUB_TOKEN: ${{ github.token }}
+    steps:
+      - name: brew install omarmhaimdat/pepe/pepe
+        run: |
+          set -euo pipefail
+          brew tap omarmhaimdat/pepe
+          brew install omarmhaimdat/pepe/pepe
+
+      - name: It is the release we expect, with completions where Homebrew activates them
+        run: |
+          set -euo pipefail
+          got=$(pepe --version | awk '{print $2}')
+          echo "installed pepe $got"
+          [ "$got" = "$EXPECTED" ] || { echo "::error::installed $got, expected $EXPECTED"; exit 1; }
+          pepe self-update --check
+          prefix=$(brew --prefix)
+          test -f "$prefix/share/zsh/site-functions/_pepe"
+          test -f "$prefix/etc/bash_completion.d/pepe"
+          test -f "$prefix/share/fish/vendor_completions.d/pepe.fish"
+          test -f "$prefix/share/man/man1/pepe.1"
+          man -w pepe
