@@ -184,10 +184,13 @@ pub struct Dashboard {
     detailed: VecDeque<(u64, usize)>,
     detail_bytes: usize,
     notice: Option<(String, Instant)>,
+    /// `--snapshot`: where the report so far is written every minute
+    snapshot: Option<std::path::PathBuf>,
 }
 
 impl Dashboard {
     pub fn new(args: Cli, plan: Plan) -> Self {
+        let snapshot = args.snapshot.clone();
         Self {
             concurrency: args.concurrency as usize,
             args,
@@ -224,6 +227,29 @@ impl Dashboard {
             detailed: VecDeque::new(),
             detail_bytes: 0,
             notice: None,
+            snapshot,
+        }
+    }
+
+    /// The JSON report of the run so far, as `--json` would print it
+    fn report_json(&self, load: &LoadHandle) -> crate::json_report::JsonReport {
+        crate::json_report::JsonReport::generate(&self.metrics, self.elapsed(), self.interrupted)
+            .with_generator(load.threads(), self.peak_busy)
+            .with_timeline(&self.timeline)
+    }
+
+    /// Write the snapshot, if one was asked for; a failure is said once
+    /// in the footer rather than ending the run
+    fn write_snapshot(&mut self, load: &LoadHandle, running: bool) {
+        let Some(path) = self.snapshot.clone() else {
+            return;
+        };
+        if let Err(e) = self
+            .report_json(load)
+            .with_snapshot(running)
+            .write_to(&path)
+        {
+            self.notify(format!("couldn't write {}: {e}", path.display()));
         }
     }
 
@@ -372,7 +398,9 @@ impl Dashboard {
                         let now = self.active();
                         self.finished = Some(now);
                         self.timeline.finish(now);
-                        let samples: Vec<_> = self.timeline.samples().iter().copied().collect();
+                        // A long run is judged on its minutes, which reach back
+                        // further than the ten minutes of seconds
+                        let samples = self.timeline.whole_run();
                         let mut verdict =
                             insights::verdict(&self.metrics, &samples, self.interrupted);
                         if let Some(note) = self.saturation_note() {
@@ -380,6 +408,7 @@ impl Dashboard {
                             verdict.notes.push(note);
                         }
                         self.verdict = Some(verdict);
+                        self.write_snapshot(load, false);
                     }
                     break;
                 }
@@ -511,7 +540,10 @@ impl Dashboard {
         pump.set_missed_tick_behavior(MissedTickBehavior::Skip);
         let mut size_check = tokio::time::interval(SIZE_CHECK);
         size_check.set_missed_tick_behavior(MissedTickBehavior::Skip);
-        // Ctrl-C arrives as a signal (see `keep_ctrl_c_a_signal`)
+        let mut snapshots = tokio::time::interval(crate::SNAPSHOT_EVERY);
+        snapshots.set_missed_tick_behavior(MissedTickBehavior::Skip);
+        snapshots.tick().await; // the first snapshot is a minute in
+                                // Ctrl-C arrives as a signal (see `keep_ctrl_c_a_signal`)
         let ctrl_c = tokio::signal::ctrl_c();
         tokio::pin!(ctrl_c);
 
@@ -534,6 +566,9 @@ impl Dashboard {
                     self.drain(load);
                     // Show the end of the run right away
                     dirty |= self.finished.is_some();
+                }
+                _ = snapshots.tick(), if self.snapshot.is_some() && self.finished.is_none() => {
+                    self.write_snapshot(load, true);
                 }
                 // Frames redraw at the current size anyway while animating
                 _ = size_check.tick(), if !self.animating() => {

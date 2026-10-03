@@ -30,6 +30,7 @@ _pepe() {
 '--body=[HTTP request body]:BODY:_default' \
 '-p+[Proxy server URL\: http\://user\:pass@host\:port or socks5\://host\:port]:PROXY:_default' \
 '--proxy=[Proxy server URL\: http\://user\:pass@host\:port or socks5\://host\:port]:PROXY:_default' \
+'--snapshot=[Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run'\''s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run]:FILE:_files' \
 '-c+[Number of concurrent requests at a time]:CONCURRENCY:_default' \
 '--concurrency=[Number of concurrent requests at a time]:CONCURRENCY:_default' \
 '-u+[User-Agent string, default is pepe/{version}]:USER_AGENT:_default' \
@@ -75,6 +76,7 @@ _arguments "${_arguments_options[@]}" : \
 '--body=[HTTP request body]:BODY:_default' \
 '-p+[Proxy server URL\: http\://user\:pass@host\:port or socks5\://host\:port]:PROXY:_default' \
 '--proxy=[Proxy server URL\: http\://user\:pass@host\:port or socks5\://host\:port]:PROXY:_default' \
+'--snapshot=[Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run'\''s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run]:FILE:_files' \
 '-c+[Number of concurrent requests at a time]:CONCURRENCY:_default' \
 '--concurrency=[Number of concurrent requests at a time]:CONCURRENCY:_default' \
 '-u+[User-Agent string, default is pepe/{version}]:USER_AGENT:_default' \
@@ -110,6 +112,7 @@ _arguments "${_arguments_options[@]}" : \
 '--body=[HTTP request body]:BODY:_default' \
 '-p+[Proxy server URL\: http\://user\:pass@host\:port or socks5\://host\:port]:PROXY:_default' \
 '--proxy=[Proxy server URL\: http\://user\:pass@host\:port or socks5\://host\:port]:PROXY:_default' \
+'--snapshot=[Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run'\''s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run]:FILE:_files' \
 '-c+[Number of concurrent requests at a time]:CONCURRENCY:_default' \
 '--concurrency=[Number of concurrent requests at a time]:CONCURRENCY:_default' \
 '-u+[User-Agent string, default is pepe/{version}]:USER_AGENT:_default' \
@@ -152,6 +155,7 @@ _arguments "${_arguments_options[@]}" : \
 '--body=[HTTP request body]:BODY:_default' \
 '-p+[Proxy server URL\: http\://user\:pass@host\:port or socks5\://host\:port]:PROXY:_default' \
 '--proxy=[Proxy server URL\: http\://user\:pass@host\:port or socks5\://host\:port]:PROXY:_default' \
+'--snapshot=[Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run'\''s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run]:FILE:_files' \
 '-c+[Number of concurrent requests at a time]:CONCURRENCY:_default' \
 '--concurrency=[Number of concurrent requests at a time]:CONCURRENCY:_default' \
 '-u+[User-Agent string, default is pepe/{version}]:USER_AGENT:_default' \
@@ -193,6 +197,7 @@ _arguments "${_arguments_options[@]}" : \
 '--body=[HTTP request body]:BODY:_default' \
 '-p+[Proxy server URL\: http\://user\:pass@host\:port or socks5\://host\:port]:PROXY:_default' \
 '--proxy=[Proxy server URL\: http\://user\:pass@host\:port or socks5\://host\:port]:PROXY:_default' \
+'--snapshot=[Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run'\''s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run]:FILE:_files' \
 '-c+[Number of concurrent requests at a time]:CONCURRENCY:_default' \
 '--concurrency=[Number of concurrent requests at a time]:CONCURRENCY:_default' \
 '-u+[User-Agent string, default is pepe/{version}]:USER_AGENT:_default' \
