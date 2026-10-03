@@ -24,6 +24,6 @@ rm -f "$out"
 cpu=$(awk -v u="$user" -v s="$sys" 'BEGIN {printf "%.3f", u+s}')
 per_k=""
 if [[ -n "${REQUESTS:-}" ]]; then
-  per_k=$(awk -v c="$cpu" -v n="$REQUESTS" 'BEGIN {printf "%.3f", c*1000/n}')
+  per_k=$(awk -v c="$cpu" -v n="$REQUESTS" 'BEGIN {printf "%.2f", c*1000*1000/n}')
 fi
 echo "$label,$wall,$user,$sys,$cpu,$per_k,$rss"

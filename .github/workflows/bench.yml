@@ -1,0 +1,136 @@
+# The benchmark gate and the Linux benchmark record (see bench/README.md).
+#
+# gate: on a release PR (release-plz labels them "release"), on changes to
+# bench/ itself, and by hand, build the candidate and the last released tag
+# with the same toolchain and compare them with bench/compare.sh. The job
+# fails if CPU per request or peak memory grew past the limits in that
+# script, so a regression can't ship unnoticed.
+#
+# linux-record: the full suite for pepe and oha on this runner, kept as an
+# artifact; bench/README.md's Linux column comes from here.
+name: Benchmarks
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, labeled]
+    paths:
+      - "src/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "bench/**"
+      - ".github/workflows/bench.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  gate:
+    name: Regression gate
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      contains(github.event.pull_request.labels.*.name, 'release') ||
+      contains(github.event.pull_request.title, 'bench')
+    runs-on: ubuntu-latest
+    env:
+      CARGO_TERM_COLOR: always
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+          # Tags, for the baseline
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+          cache: false
+
+      - name: Build the candidate
+        run: cargo build --release --locked && cp target/release/pepe /tmp/pepe-candidate
+
+      - name: Build the baseline, the last release
+        run: |
+          set -euo pipefail
+          tag=$(git tag --list 'v*' --sort=-v:refname | head -1)
+          echo "baseline: $tag"
+          echo "BASELINE_TAG=$tag" >> "$GITHUB_ENV"
+          git worktree add --detach /tmp/baseline "$tag"
+          # Same target dir, so the dependency cache is shared
+          (cd /tmp/baseline && CARGO_TARGET_DIR="$GITHUB_WORKSPACE/target" cargo build --release --locked)
+          cp target/release/pepe /tmp/pepe-baseline
+          /tmp/pepe-baseline --version
+          /tmp/pepe-candidate --version
+
+      - name: Start the target server
+        run: |
+          # Built first: on a cold runner `go run` compiles for longer than
+          # a short wait, and a start that fails should say why
+          go build -o /tmp/bench-server bench/server.go
+          /tmp/bench-server > /tmp/server.log 2>&1 &
+          for i in $(seq 1 150); do curl -sf http://127.0.0.1:8089/ >/dev/null && break; sleep 0.2; done
+          curl -sf http://127.0.0.1:8089/ >/dev/null || { cat /tmp/server.log; exit 1; }
+
+      - name: Compare
+        run: bench/compare.sh /tmp/pepe-baseline /tmp/pepe-candidate 3
+
+  linux-record:
+    name: Linux record (pepe and oha)
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      contains(github.event.pull_request.labels.*.name, 'release') ||
+      contains(github.event.pull_request.title, 'bench')
+    runs-on: ubuntu-latest
+    env:
+      CARGO_TERM_COLOR: always
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+          cache: false
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: oha
+
+      - name: Build pepe
+        run: cargo build --release --locked
+
+      - name: Start the target server
+        run: |
+          # Built first: on a cold runner `go run` compiles for longer than
+          # a short wait, and a start that fails should say why
+          go build -o /tmp/bench-server bench/server.go
+          /tmp/bench-server > /tmp/server.log 2>&1 &
+          for i in $(seq 1 150); do curl -sf http://127.0.0.1:8089/ >/dev/null && break; sleep 0.2; done
+          curl -sf http://127.0.0.1:8089/ >/dev/null || { cat /tmp/server.log; exit 1; }
+
+      - name: Run the suite
+        run: |
+          set -euo pipefail
+          echo "runner: $(nproc) cores, $(uname -sr)" | tee runner.txt
+          oha --version
+          # Many connections at once
+          ulimit -n 65536 || true
+          NO_VEGETA=1 bench/run.sh | tee linux.csv
+          {
+            echo "## Linux record"
+            echo
+            echo "\`$(cat runner.txt)\`"
+            echo
+            echo "| tool | workload | requests | cpu ms / 1k | peak MB | req/s |"
+            echo "|---|---|---|---|---|---|"
+            tail -n +2 linux.csv | awk -F, '{printf "| %s | %s | %s | %s | %s | %s |\n", $1, $2, $3, $8, $9, $10}'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: bench-linux-${{ github.run_number }}
+          path: |
+            linux.csv
+            runner.txt
