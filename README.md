@@ -8,7 +8,7 @@
 
 [![CI](https://github.com/omarmhaimdat/pepe/actions/workflows/CI.yaml/badge.svg)](https://github.com/omarmhaimdat/pepe/actions/workflows/CI.yaml) [![Release](https://img.shields.io/github/v/release/omarmhaimdat/pepe?display_name=tag&color=brightgreen)](https://github.com/omarmhaimdat/pepe/releases/latest) [![Downloads](https://img.shields.io/github/downloads/omarmhaimdat/pepe/total?color=blue)](https://github.com/omarmhaimdat/pepe/releases) [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE) ![Rust 1.85+](https://img.shields.io/badge/rust-1.85%2B-orange)
 
-[Install](#install) · [Quick start](#quick-start) · [Usage](#usage) · [Dashboard](#the-dashboard) · [How it compares](#how-pepe-compares) · [Contributing](#contributing)
+[Install](#install) · [Quick start](#quick-start) · [Usage](#usage) · [Dashboard](#the-dashboard) · [How it compares](#how-pepe-compares) · [Roadmap](ROADMAP.md) · [Contributing](#contributing)
 
 </div>
 
@@ -73,6 +73,8 @@ Every [release](https://github.com/omarmhaimdat/pepe/releases) ships binaries fo
 ```bash
 gh attestation verify pepe-x86_64-unknown-linux-musl.tar.xz --repo omarmhaimdat/pepe
 ```
+
+Each archive also carries the shell completions and man pages; `pepe completions --install` puts them in place for your shell (see [contrib/README.md](contrib/README.md)).
 </details>
 
 <details>
@@ -93,6 +95,8 @@ pepe self-update --check    # only say whether there is one (exit code 1 if so)
 ```
 
 Homebrew and Nix installs update through `brew upgrade pepe` and `nix profile upgrade pepe`. Set `PEPE_NO_UPDATE_CHECK=1` to turn the check off; it is off in CI already.
+
+Tab completion (bash, zsh, fish, PowerShell) and `man pepe` come with the install script and the Homebrew formula. Installed another way, `pepe completions --install` sets them up for the shell you're in; `--dry-run` shows what it would change.
 
 ## Quick start
 
@@ -391,9 +395,7 @@ Releases are automated. Commits follow [conventional commits](https://www.conven
 
 ## Roadmap
 
-- [ ] A config file for load-test settings
-- [ ] CSV output and webhooks, alongside JSON
-- [ ] Chaining requests
+Next up: a Docker image and a GitHub Action, soak mode and distributed runs; then latency by phase, an arrival-rate mode and data-driven requests, and thresholds that fail CI. The whole plan, in order, is in [ROADMAP.md](ROADMAP.md).
 
 ## License
 
