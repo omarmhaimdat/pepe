@@ -216,6 +216,7 @@ pub fn verdict(m: &Metrics, samples: &[Sample], interrupted: bool) -> Verdict {
     let error_pct = m.error_rate();
     if m.success == 0 {
         notes.push(note(Level::Failing, "Every request failed".into()));
+        notes.extend(causes(m, Level::Failing));
     } else if error_pct > 0.0 {
         let level = match error_pct {
             p if p >= FAILING_ERROR_PCT => Level::Failing,
@@ -226,6 +227,7 @@ pub fn verdict(m: &Metrics, samples: &[Sample], interrupted: bool) -> Verdict {
             level,
             format!("{} failed, mostly {}", pct(error_pct), main_failure(m)),
         ));
+        notes.extend(causes(m, level));
     } else {
         notes.push(note(Level::Healthy, "No failed requests".into()));
     }
@@ -338,6 +340,31 @@ fn finish(notes: Vec<Note>) -> Verdict {
 }
 
 /// What most failures were: a status code, timeouts or connection errors
+/// Causes of failure shown in the verdict, and how much of a body
+const MAX_CAUSE_NOTES: usize = 2;
+const EXAMPLE_CHARS: usize = 72;
+
+/// The main causes of failure, each with the first body the target sent
+/// for it, so "503" comes with what the 503 said
+fn causes(m: &Metrics, level: Level) -> Vec<Note> {
+    m.failures()
+        .top()
+        .into_iter()
+        .take(MAX_CAUSE_NOTES)
+        .map(|(cause, c)| {
+            let mut text = format!("{cause} ×{}", format::count(c.count));
+            if let Some(example) = &c.example {
+                let mut shown: String = example.chars().take(EXAMPLE_CHARS).collect();
+                if example.chars().count() > EXAMPLE_CHARS {
+                    shown.push('…');
+                }
+                text.push_str(&format!(": {shown}"));
+            }
+            Note { level, text }
+        })
+        .collect()
+}
+
 fn main_failure(m: &Metrics) -> String {
     let worst_status = m
         .status_codes

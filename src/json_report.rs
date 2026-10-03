@@ -91,6 +91,10 @@ pub struct JsonSummary {
     /// What changed during the run, as it was noticed; left out when nothing did
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub anomalies: Vec<AnomalyNote>,
+    /// Failed requests by cause, most frequent first, each with the first
+    /// response body seen for it; left out when nothing failed
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub failures: Vec<FailureCause>,
 }
 
 #[derive(Serialize, Clone)]
@@ -99,6 +103,14 @@ pub struct AnomalyNote {
     pub at_s: f64,
     pub kind: &'static str,
     pub text: String,
+}
+
+#[derive(Serialize, Clone)]
+pub struct FailureCause {
+    pub cause: String,
+    pub count: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub example_body: Option<String>,
 }
 
 #[derive(Serialize, Clone)]
@@ -197,6 +209,16 @@ impl JsonReport {
                 // Sorted, so output is stable between runs
                 status_codes: metrics.status_codes.iter().map(|(k, v)| (*k, *v)).collect(),
                 anomalies: Vec::new(),
+                failures: metrics
+                    .failures()
+                    .top()
+                    .into_iter()
+                    .map(|(cause, c)| FailureCause {
+                        cause: cause.to_string(),
+                        count: c.count,
+                        example_body: c.example.as_deref().map(str::to_string),
+                    })
+                    .collect(),
             },
         }
     }
