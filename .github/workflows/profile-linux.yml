@@ -1,0 +1,105 @@
+# Where pepe's CPU goes on Linux. Run by hand (workflow_dispatch), or on a
+# PR that changes this file. Builds pepe with symbols, records it under perf
+# on the plain-GET workload, counts syscalls per request for pepe and oha
+# with strace, and keeps the reports as an artifact.
+name: Profile on Linux
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths: [".github/workflows/profile-linux.yml"]
+
+permissions:
+  contents: read
+
+jobs:
+  profile:
+    runs-on: ubuntu-latest
+    env:
+      CARGO_TERM_COLOR: always
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+          cache: false
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: oha
+
+      - name: Install perf and strace
+        run: |
+          set -x
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq strace linux-tools-common linux-tools-generic "linux-tools-$(uname -r)" || true
+          # The perf wrapper insists on a matching version; call a real one
+          PERF=$(ls /usr/lib/linux-tools/*/perf 2>/dev/null | tail -1 || true)
+          [ -n "$PERF" ] || PERF=$(command -v perf)
+          echo "PERF=$PERF" >> "$GITHUB_ENV"
+          "$PERF" version
+          sudo sysctl -w kernel.perf_event_paranoid=-1 kernel.kptr_restrict=0
+
+      - name: Build pepe with symbols
+        run: cargo build --profile profiling --locked && target/profiling/pepe --version
+
+      - name: Start the target server
+        run: |
+          go build -o /tmp/bench-server bench/server.go
+          /tmp/bench-server > /tmp/server.log 2>&1 &
+          for i in $(seq 1 150); do curl -sf http://127.0.0.1:8089/ >/dev/null && break; sleep 0.2; done
+          curl -sf http://127.0.0.1:8089/ >/dev/null || { cat /tmp/server.log; exit 1; }
+
+      - name: CPU per request, pepe and oha, for reference
+        run: |
+          mkdir -p out
+          nproc | tee out/nproc.txt
+          for i in 1 2; do
+            REQUESTS=200000 bench/measure.sh pepe target/profiling/pepe --json -n 200000 -c 64 http://127.0.0.1:8089/
+            REQUESTS=200000 bench/measure.sh oha oha --no-tui --output-format json -n 200000 -c 64 http://127.0.0.1:8089/
+            REQUESTS=200000 bench/measure.sh pepe-2threads target/profiling/pepe --json --threads 2 -n 200000 -c 64 http://127.0.0.1:8089/
+          done | tee out/reference.csv
+
+      - name: perf record pepe
+        run: |
+          set -x
+          $PERF record -F 997 -g -o out/perf.data -- target/profiling/pepe --json -z 8s -c 64 http://127.0.0.1:8089/ > /dev/null
+          $PERF report -i out/perf.data --no-children --sort dso --stdio 2>/dev/null | grep -v "^#" | grep -v "^$" | head -20 > out/perf-by-dso.txt
+          $PERF report -i out/perf.data --no-children --sort symbol --stdio 2>/dev/null | grep -v "^#" | grep -v "^$" | head -60 > out/perf-self.txt
+          $PERF report -i out/perf.data --children --sort symbol --stdio -g none 2>/dev/null | grep -v "^#" | grep -v "^$" | head -80 > out/perf-inclusive.txt
+          $PERF report -i out/perf.data --no-children --sort symbol --stdio -g caller,0.5,callee --percent-limit 2 2>/dev/null | head -400 > out/perf-callgraph.txt
+          rm -f out/perf.data
+
+      - name: perf record oha, for the same picture
+        run: |
+          $PERF record -F 997 -g -o out/perf-oha.data -- oha --no-tui --output-format json -z 8s -c 64 http://127.0.0.1:8089/ > /dev/null
+          $PERF report -i out/perf-oha.data --no-children --sort dso --stdio 2>/dev/null | grep -v "^#" | grep -v "^$" | head -20 > out/perf-oha-by-dso.txt
+          $PERF report -i out/perf-oha.data --no-children --sort symbol --stdio 2>/dev/null | grep -v "^#" | grep -v "^$" | head -40 > out/perf-oha-self.txt
+          rm -f out/perf-oha.data
+
+      - name: Syscalls per request
+        run: |
+          strace -f -c -o out/strace-pepe.txt target/profiling/pepe --json -n 20000 -c 64 http://127.0.0.1:8089/ > /dev/null
+          strace -f -c -o out/strace-oha.txt oha --no-tui --output-format json -n 20000 -c 64 http://127.0.0.1:8089/ > /dev/null
+          strace -f -c -o out/strace-pepe-2threads.txt target/profiling/pepe --json --threads 2 -n 20000 -c 64 http://127.0.0.1:8089/ > /dev/null
+
+      - name: Summary
+        run: |
+          {
+            echo "## Reference ($(cat out/nproc.txt) vCPUs): label,wall,user,sys,cpu,ms per 1k,rss"
+            echo '```'; cat out/reference.csv; echo '```'
+            echo "## pepe, by DSO"; echo '```'; cat out/perf-by-dso.txt; echo '```'
+            echo "## pepe, self time by symbol"; echo '```'; cat out/perf-self.txt; echo '```'
+            echo "## oha, by DSO"; echo '```'; cat out/perf-oha-by-dso.txt; echo '```'
+            echo "## oha, self time by symbol"; echo '```'; cat out/perf-oha-self.txt; echo '```'
+            echo "## syscalls, pepe (20k requests)"; echo '```'; head -25 out/strace-pepe.txt; echo '```'
+            echo "## syscalls, oha (20k requests)"; echo '```'; head -25 out/strace-oha.txt; echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: profile-linux-${{ github.run_number }}
+          path: out/
