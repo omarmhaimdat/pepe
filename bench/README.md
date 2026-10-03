@@ -272,6 +272,43 @@ server's limit at about twice oha's CPU efficiency. Where pepe is slower on
 the table (tiny-c1000, tls16k) one core is saturated, which the dashboard
 and the report now say, and `--threads 2` is the answer.
 
+## Linux
+
+The same suite on GitHub's `ubuntu-latest` runner (4 vCPUs, Azure), from
+the Benchmarks workflow, pepe 0.9.0 and oha 1.16. CPU ms per 1,000
+requests / peak RSS MB / requests per second:
+
+| Workload | pepe | oha |
+| --- | --- | --- |
+| tiny-c64 | 25.8 / 9.6 / 38k | 19.8 / 96.2 / 69k |
+| tiny-c256 | 26.9 / 17.4 / 37k | 19.1 / 99.4 / 72k |
+| tiny-c1000 | 33.5 / 47.5 / 30k | 21.4 / 124.1 / 68k |
+| json-c64 | 25.8 / 9.5 / 38k | 20.4 / 95.5 / 61k |
+| body16k-c64 | 40.0 / 12.0 / 24k | 31.6 / 50.0 / 40k |
+| body256k-c16 | 70.0 / 18.3 / 13k | 70.0 / 46.7 / 18k |
+| slow20ms-c1000 | 37.4 / 45.6 / 26k | 23.6 / 81.1 / 43k |
+| status503-c64 | 25.9 / 9.4 / 38k | 20.1 / 68.4 / 67k |
+| tls-c64 | 27.6 / 10.5 / 36k | 24.0 / 83.7 / 56k |
+| tls16k-c64 | 55.3 / 14.5 / 18k | 59.0 / 41.3 / 26k |
+| post-c64 | 26.3 / 9.5 / 38k | 19.8 / 96.0 / 67k |
+
+Two things to read off this, and one caveat.
+
+- **Memory** is the same story as on macOS: pepe holds a tenth of oha's at
+  64 connections and under half at 1,000.
+- **CPU is not.** On this machine pepe spends about 30% more CPU per
+  request than oha and reaches half its throughput, where on the M4 Pro
+  it spent 2.5× less. oha costs about the same on both platforms, so the
+  difference is pepe's: something in its per-request path is more
+  expensive on Linux than on macOS, and one sending thread on a slow
+  vCPU caps throughput sooner. It is the next thing to profile; until it
+  is understood, the CPU claims above are macOS measurements.
+- **Noise.** Shared runners vary: pepe's tiny-c64 cost came out at 16.9,
+  22.5, 17.4 and 25.8 ms per 1,000 requests in four runs of the same
+  binary. That is why the gate compares two binaries taking turns in one
+  job, and why these absolute numbers are for the shape of the
+  comparison, not for a decimal place.
+
 ## Reproducing
 
 ```bash

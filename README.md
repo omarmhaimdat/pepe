@@ -16,7 +16,7 @@
 
 pepe sends requests to a URL, as many at once as you ask, and shows what came back as it happens: throughput, latency percentiles and a heatmap, status codes, failures by cause, and a log you can open any request from. When the run ends it gives a verdict in plain words. It takes a curl command as input, ramps load to find where a target stops keeping up, and load-tests every endpoint of an OpenAPI spec.
 
-It is also light. One thread sends about 100k requests a second using 2.5× less CPU than comparable tools and a fraction of their memory, and pepe tells you when it, rather than the target, is the limit.
+It is also light. One thread sends about 100k requests a second on an Apple M4 Pro, using 2.5× less CPU than comparable tools there and a fraction of their memory everywhere, and pepe tells you when it, rather than the target, is the limit.
 
 ## Highlights
 
@@ -365,7 +365,7 @@ Measured with the suite in [`bench/`](bench/) against a local server that answer
 | GET, 1,000 connections | **12.3 ms · 68 MB** · 80k req/s | 24.3 ms · 111 MB · 102k req/s | 48.8 ms · 94 MB · 125k req/s |
 | HTTPS, 64 connections | **9.9 ms · 15 MB** · 97k req/s | 24.9 ms · 58 MB · 107k req/s | 72.7 ms · 31 MB · 80k req/s |
 
-Those are single-thread numbers for pepe. Where a target can take more than one thread sends, pepe says so and `--threads` raises the ceiling. The method, every workload, the profiles and what was changed to get there are in [bench/README.md](bench/README.md).
+Those are single-thread numbers for pepe on an Apple M4 Pro. On a 4-vCPU Linux runner the memory advantage holds but the CPU per request does not yet (about 30% more than oha); the Linux table and what is known about why are in [bench/README.md](bench/README.md), with the method, every workload and the profiles. Where a target can take more than one thread sends, pepe says so and `--threads` raises the ceiling.
 
 ## Contributing
 
