@@ -86,7 +86,7 @@ pub struct ResponseStats {
     pub cache_status: Option<CacheStatus>,
     pub error: Option<ErrorKind>,
     /// Why the request failed, in the words of the innermost error (e.g.
-    /// "Connection refused (os error 61)"); kept only when previews are
+    /// "Connection refused (os error 61)")
     pub error_message: Option<Box<str>>,
     /// Which endpoint of the run this request went to (API mode); 0 otherwise
     pub endpoint: u16,
@@ -113,7 +113,7 @@ impl ResponseStats {
     ) -> Self {
         let mut resp = match resp {
             Ok(resp) => resp,
-            Err(e) => return Self::failed(&e, start, dns_times, keep_preview),
+            Err(e) => return Self::failed(&e, start, dns_times),
         };
 
         let status_code = resp.status();
@@ -132,7 +132,9 @@ impl ResponseStats {
         // Stream the body and count it instead of buffering it whole, so
         // large responses cost no memory beyond one chunk
         let mut body_bytes = 0u64;
-        let mut preview = keep_preview.then(Vec::new);
+        // A failed response keeps its start whatever the caller wants: the
+        // verdict shows the first body of each kind of failure
+        let mut preview = (keep_preview || !status_code.is_success()).then(Vec::new);
         loop {
             match resp.chunk().await {
                 Ok(Some(chunk)) => {
@@ -148,7 +150,7 @@ impl ResponseStats {
                 }
                 Ok(None) => break,
                 // The status arrived but the body did not (e.g. timed out mid-body)
-                Err(e) => return Self::failed(&e, start, dns_times, keep_preview),
+                Err(e) => return Self::failed(&e, start, dns_times),
             }
         }
         let duration = start.elapsed();
@@ -174,18 +176,25 @@ impl ResponseStats {
         }
     }
 
-    fn failed(
-        e: &reqwest::Error,
-        start: Instant,
-        dns_times: Option<(Duration, Duration)>,
-        keep_message: bool,
-    ) -> Self {
+    fn failed(e: &reqwest::Error, start: Instant, dns_times: Option<(Duration, Duration)>) -> Self {
         ResponseStats {
             duration: start.elapsed(),
             dns_times,
             error: Some(ErrorKind::from_reqwest(e)),
-            error_message: keep_message.then(|| root_cause(e).into()),
+            error_message: Some(root_cause(e).into()),
             ..Default::default()
+        }
+    }
+
+    /// What to call this failure when counting failures by cause: the
+    /// status for a response, the innermost error's words otherwise
+    pub fn failure_cause(&self) -> Option<String> {
+        match (self.status_code, &self.error_message, self.error) {
+            (Some(code), _, _) if code.is_success() => None,
+            (Some(code), _, _) => Some(format!("HTTP {}", code.as_u16())),
+            (None, Some(message), _) => Some(message.to_string()),
+            (None, None, Some(kind)) => Some(kind.label().to_lowercase()),
+            (None, None, None) => Some("error".to_string()),
         }
     }
 }

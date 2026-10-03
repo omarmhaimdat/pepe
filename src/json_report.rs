@@ -97,6 +97,10 @@ pub struct JsonSummary {
     /// … or `--trace-header`); left out when nothing was tracked
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub slowest_requests: Vec<SlowRequest>,
+    /// Failed requests by cause, most frequent first, each with the first
+    /// response body seen for it; left out when nothing failed
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub failures: Vec<FailureCause>,
 }
 
 #[derive(Serialize, Clone)]
@@ -145,6 +149,14 @@ pub struct SlowRequest {
     /// The response header the id came from
     #[serde(skip_serializing_if = "Option::is_none")]
     pub id_header: Option<String>,
+}
+
+#[derive(Serialize, Clone)]
+pub struct FailureCause {
+    pub cause: String,
+    pub count: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub example_body: Option<String>,
 }
 
 #[derive(Serialize, Clone)]
@@ -263,6 +275,16 @@ impl JsonReport {
                 status_codes: metrics.status_codes.iter().map(|(k, v)| (*k, *v)).collect(),
                 server_timing: server_timing_stats(metrics),
                 slowest_requests: Vec::new(),
+                failures: metrics
+                    .failures()
+                    .top()
+                    .into_iter()
+                    .map(|(cause, c)| FailureCause {
+                        cause: cause.to_string(),
+                        count: c.count,
+                        example_body: c.example.as_deref().map(str::to_string),
+                    })
+                    .collect(),
             },
         }
     }
