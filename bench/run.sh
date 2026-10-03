@@ -16,19 +16,31 @@ TLS_BASE=${TLS_BASE:-https://127.0.0.1:8090}
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 
-# measure LABEL COMMAND...  -> sets wall user sys rss
+# measure LABEL COMMAND...  -> sets wall user sys rss; the tool's own
+# stdout and stderr land in $tmp/stdout and $tmp/stderr
 measure() {
   local out="$tmp/time"
   if [[ "$(uname)" == "Darwin" ]]; then
-    /usr/bin/time -l "$@" >"$tmp/stdout" 2>"$out"
+    # macOS's time has no -o: its report shares stderr with the tool's
+    /usr/bin/time -l "$@" >"$tmp/stdout" 2>"$out" || true
+    cp "$out" "$tmp/stderr"
     wall=$(awk '/real/ {print $1}' "$out")
     user=$(awk '/real/ {print $3}' "$out")
     sys=$(awk '/real/ {print $5}' "$out")
     rss=$(awk '/maximum resident set size/ {printf "%.1f", $1/1048576}' "$out")
   else
-    /usr/bin/time -f '%e %U %S %M' "$@" >"$tmp/stdout" 2>"$out"
+    /usr/bin/time -o "$out" -f '%e %U %S %M' "$@" >"$tmp/stdout" 2>"$tmp/stderr" || true
     read -r wall user sys kb < <(tail -1 "$out")
     rss=$(awk -v kb="$kb" 'BEGIN {printf "%.1f", kb/1024}')
+  fi
+}
+
+# Say why a tool produced no result, instead of an empty row in silence
+complain() { # tool count
+  if [[ -z "$2" || "$2" == "null" ]]; then
+    echo "$1 gave no result; what it said:" >&2
+    head -20 "$tmp/stderr" >&2
+    head -5 "$tmp/stdout" >&2
   fi
 }
 
@@ -52,14 +64,16 @@ workload() {
 
   measure "$PEPE" --json -n "$n" -c "$c" $pepe_tls "$@" "$url"
   local got rps
-  got=$(jq -r '.summary.total_requests' "$tmp/stdout")
-  rps=$(jq -r '.summary.requests_per_second | floor' "$tmp/stdout")
+  got=$(jq -r '.summary.total_requests' "$tmp/stdout" 2>/dev/null)
+  rps=$(jq -r '.summary.requests_per_second | floor' "$tmp/stdout" 2>/dev/null)
+  complain pepe "$got"
   row pepe "$name" "$got" "$rps"
 
   if command -v oha >/dev/null; then
     measure oha --no-tui -j -n "$n" -c "$c" $oha_tls "$url"
-    got=$(jq -r '[.statusCodeDistribution[]] | add' "$tmp/stdout")
-    rps=$(jq -r '.summary.requestsPerSec | floor' "$tmp/stdout")
+    got=$(jq -r '[.statusCodeDistribution[]] | add' "$tmp/stdout" 2>/dev/null)
+    rps=$(jq -r '.summary.requestsPerSec | floor' "$tmp/stdout" 2>/dev/null)
+    complain oha "$got"
     row oha "$name" "$got" "$rps"
   fi
 
@@ -67,8 +81,9 @@ workload() {
     # vegeta runs for a time, not a count: as fast as C workers can go
     local secs=${VEGETA_SECS:-5}
     measure sh -c "echo 'GET $url' | vegeta attack -rate=0 -max-workers=$c -duration=${secs}s -timeout=30s $vegeta_tls | vegeta report -type=json"
-    got=$(jq -r '.requests' "$tmp/stdout")
-    rps=$(jq -r '.rate | floor' "$tmp/stdout")
+    got=$(jq -r '.requests' "$tmp/stdout" 2>/dev/null)
+    rps=$(jq -r '.rate | floor' "$tmp/stdout" 2>/dev/null)
+    complain vegeta "$got"
     row vegeta "$name" "$got" "$rps"
   fi
 }
