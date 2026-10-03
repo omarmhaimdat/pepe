@@ -70,7 +70,7 @@ workload() {
   row pepe "$name" "$got" "$rps"
 
   if command -v oha >/dev/null; then
-    measure oha --no-tui -j -n "$n" -c "$c" $oha_tls "$url"
+    measure oha --no-tui --json -n "$n" -c "$c" $oha_tls "$url"
     got=$(jq -r '[.statusCodeDistribution[]] | add' "$tmp/stdout" 2>/dev/null)
     rps=$(jq -r '.summary.requestsPerSec | floor' "$tmp/stdout" 2>/dev/null)
     complain oha "$got"
