@@ -93,6 +93,42 @@ _arguments "${_arguments_options[@]}" : \
 '--setup[Open the setup screen to review or change the settings before starting (it opens by itself when no URL is given)]' \
 && ret=0
 ;;
+(completions)
+_arguments "${_arguments_options[@]}" : \
+'-n+[Number of requests to perform]:NUMBER:_default' \
+'--number=[Number of requests to perform]:NUMBER:_default' \
+'-z+[Duration of the test, e.g. 10s, 3m, 2h (mutually exclusive with -n)]:DURATION:_default' \
+'--duration=[Duration of the test, e.g. 10s, 3m, 2h (mutually exclusive with -n)]:DURATION:_default' \
+'-m+[HTTP method, e.g. GET, POST, PUT, DELETE]:METHOD:_default' \
+'--method=[HTTP method, e.g. GET, POST, PUT, DELETE]:METHOD:_default' \
+'*-H+[HTTP headers, e.g. -H '\''Accept\: application/json'\'']:HEADERS:_default' \
+'*--headers=[HTTP headers, e.g. -H '\''Accept\: application/json'\'']:HEADERS:_default' \
+'-t+[Time in seconds to wait for a response]:TIMEOUT:_default' \
+'--timeout=[Time in seconds to wait for a response]:TIMEOUT:_default' \
+'--threads=[Threads sending requests (default 1). One sends about 100k requests a second; the dashboard says when it is the limit]:THREADS:_default' \
+'-d+[HTTP request body]:BODY:_default' \
+'--body=[HTTP request body]:BODY:_default' \
+'-p+[Proxy server URL\: http\://user\:pass@host\:port or socks5\://host\:port]:PROXY:_default' \
+'--proxy=[Proxy server URL\: http\://user\:pass@host\:port or socks5\://host\:port]:PROXY:_default' \
+'-c+[Number of concurrent requests at a time]:CONCURRENCY:_default' \
+'--concurrency=[Number of concurrent requests at a time]:CONCURRENCY:_default' \
+'-u+[User-Agent string, default is pepe/{version}]:USER_AGENT:_default' \
+'--user-agent=[User-Agent string, default is pepe/{version}]:USER_AGENT:_default' \
+'--install[Put the script and the man pages in place and add the line the shell'\''s startup file needs, so tab completion works in the next shell]' \
+'--dry-run[With --install\: say what would be done, and do nothing]' \
+'-h[Print help]' \
+'--help[Print help]' \
+'-k[Accept invalid TLS certificates (self-signed, expired, wrong host)]' \
+'--insecure[Accept invalid TLS certificates (self-signed, expired, wrong host)]' \
+'--disable-compression[Disable HTTP compression, e.g. gzip]' \
+'--disable-keepalive[Disable HTTP keepalive, e.g. Connection\: close]' \
+'--disable-redirects[Prevent http redirects]' \
+'--json[Output results in JSON format]' \
+'-i[Open the setup screen to review or change the settings before starting (it opens by itself when no URL is given)]' \
+'--setup[Open the setup screen to review or change the settings before starting (it opens by itself when no URL is given)]' \
+'::shell -- bash, zsh, fish or powershell; the current shell when left out:(bash zsh fish powershell)' \
+&& ret=0
+;;
 (api)
 _arguments "${_arguments_options[@]}" : \
 '*--auth=[Credentials\: bearer\:TOKEN, basic\:USER\:PASSWORD, apikey\:VALUE, header\:NAME=VALUE or query\:NAME=VALUE]:AUTH:_default' \
@@ -190,6 +226,10 @@ _arguments "${_arguments_options[@]}" : \
 _arguments "${_arguments_options[@]}" : \
 && ret=0
 ;;
+(completions)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
 (api)
 _arguments "${_arguments_options[@]}" : \
 && ret=0
@@ -215,6 +255,7 @@ esac
 _pepe_commands() {
     local commands; commands=(
 'self-update:Update pepe to the latest release, or say what'\''s new in it' \
+'completions:Tab completion for your shell\: print the script, or --install it' \
 'api:Load-test every endpoint of an OpenAPI spec' \
 'ramp:Raise the load step by step to find where the target stops keeping up' \
 'help:Print this message or the help of the given subcommand(s)' \
@@ -226,10 +267,16 @@ _pepe__subcmd__api_commands() {
     local commands; commands=()
     _describe -t commands 'pepe api commands' commands "$@"
 }
+(( $+functions[_pepe__subcmd__completions_commands] )) ||
+_pepe__subcmd__completions_commands() {
+    local commands; commands=()
+    _describe -t commands 'pepe completions commands' commands "$@"
+}
 (( $+functions[_pepe__subcmd__help_commands] )) ||
 _pepe__subcmd__help_commands() {
     local commands; commands=(
 'self-update:Update pepe to the latest release, or say what'\''s new in it' \
+'completions:Tab completion for your shell\: print the script, or --install it' \
 'api:Load-test every endpoint of an OpenAPI spec' \
 'ramp:Raise the load step by step to find where the target stops keeping up' \
 'help:Print this message or the help of the given subcommand(s)' \
@@ -240,6 +287,11 @@ _pepe__subcmd__help_commands() {
 _pepe__subcmd__help__subcmd__api_commands() {
     local commands; commands=()
     _describe -t commands 'pepe help api commands' commands "$@"
+}
+(( $+functions[_pepe__subcmd__help__subcmd__completions_commands] )) ||
+_pepe__subcmd__help__subcmd__completions_commands() {
+    local commands; commands=()
+    _describe -t commands 'pepe help completions commands' commands "$@"
 }
 (( $+functions[_pepe__subcmd__help__subcmd__help_commands] )) ||
 _pepe__subcmd__help__subcmd__help_commands() {

@@ -1,0 +1,77 @@
+# Custom dist publish job (see `publish-jobs` in dist-workspace.toml).
+# Publishes the Homebrew formula dist generated, with one addition: the
+# shell completions and man pages the archives carry are installed where
+# Homebrew activates them, so tab completion and `man pepe` work after
+# `brew install`. dist's own Homebrew job would leave them in share/pepe.
+name: Publish to Homebrew
+
+on:
+  workflow_call:
+    inputs:
+      plan:
+        required: true
+        type: string
+
+jobs:
+  publish-homebrew:
+    runs-on: ubuntu-22.04
+    env:
+      PLAN: ${{ inputs.plan }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: true
+          repository: omarmhaimdat/homebrew-pepe
+          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+
+      - name: Fetch the formula dist built
+        uses: actions/download-artifact@v8
+        with:
+          pattern: artifacts-*
+          path: Formula/
+          merge-multiple: true
+
+      - name: Install completions and man pages from the formula
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd Formula
+          rm -f ./*-dist-manifest.json
+          ls -la
+          python3 - <<'PY'
+          import pathlib, re, sys
+          path = pathlib.Path("pepe.rb")
+          formula = path.read_text()
+          anchor = "    install_binary_aliases!\n"
+          lines = (
+              anchor,
+              '    bash_completion.install "completions/pepe.bash" => "pepe"\n',
+              '    zsh_completion.install "completions/_pepe"\n',
+              '    fish_completion.install "completions/pepe.fish"\n',
+              '    man1.install Dir["man/*.1"]\n',
+          )
+          if anchor not in formula:
+              sys.exit("the formula changed shape: no install_binary_aliases! line to add after")
+          formula = formula.replace(anchor, "".join(lines), 1)
+          # Not leftovers any more
+          before = 'leftover_contents = Dir["*"] - doc_files'
+          if before not in formula:
+              sys.exit("the formula changed shape: no leftover_contents line")
+          formula = formula.replace(before, before + ' - ["completions", "man"]', 1)
+          path.write_text(formula)
+          print(formula[formula.index("def install"):])
+          PY
+
+      - name: Commit the formula
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config --global user.name "pepe release"
+          git config --global user.email "noreply@github.com"
+          version=$(echo "$PLAN" | jq -r '.releases[] | select(.app_name == "pepe") | .app_version')
+          export PATH="/home/linuxbrew/.linuxbrew/bin:$PATH"
+          brew update
+          brew style --except-cops FormulaAudit/Homepage,FormulaAudit/Desc,FormulaAuditStrict --fix Formula/pepe.rb || true
+          git add Formula/pepe.rb
+          git commit -m "pepe ${version}"
+          git push

@@ -1,45 +1,46 @@
 # Shell completions and man pages
 
-Generated from pepe's command definition, so they always match the
-binary's flags. Every release archive carries this directory; Homebrew
-installs it under `$(brew --prefix)/share/pepe/`.
+Tab completion for bash, zsh, fish and PowerShell, and man pages for
+`pepe` and its subcommands. They are generated from pepe's command
+definition (`src/contrib.rs`), so they always match the binary's flags;
+`cargo test` fails when these files are out of date, and
+`UPDATE_CONTRIB=1 cargo test contrib` regenerates them.
 
-To regenerate after changing a flag: `UPDATE_CONTRIB=1 cargo test contrib`.
-`cargo test` fails when these files are out of date.
+## You shouldn't need this directory
 
-## Completions
+- **Installed with the install script or `pepe self-update`**: completion
+  and the man pages are set up for your shell as part of the install.
+- **Installed with Homebrew**: the formula puts them where Homebrew
+  activates them. For zsh that is `$(brew --prefix)/share/zsh/site-functions`,
+  which Homebrew's own setup instructions add to `fpath`.
+- **Anything else** (cargo, Nix, a downloaded archive):
 
-| Shell | File | Where to put it |
+  ```bash
+  pepe completions --install            # for the shell you're in
+  pepe completions --install --dry-run  # see what it would change first
+  ```
+
+  It writes the completion file and the man pages under `~/.local/share`
+  (fish: `~/.config/fish/completions`), and appends what the shell needs
+  to its startup file, once, marked with a comment. It is safe to run
+  again; `pepe self-update` runs it for you after an update.
+
+`pepe completions zsh` (or bash, fish, powershell) prints the script for
+packagers and dotfile setups.
+
+## By hand
+
+The same files, if you'd rather place them yourself. They are in every
+release archive under `completions/` and `man/`, and here under `contrib/`.
+
+| Shell | File | Where it goes |
 | --- | --- | --- |
 | bash | `completions/pepe.bash` | `~/.local/share/bash-completion/completions/pepe`, or `source` it from `~/.bashrc` |
-| zsh | `completions/_pepe` | A directory on `$fpath`, e.g. `~/.zsh/completions/`, then `compinit` |
+| zsh | `completions/_pepe` | A directory on `$fpath`, before `compinit` runs |
 | fish | `completions/pepe.fish` | `~/.config/fish/completions/` |
-| PowerShell | `completions/_pepe.ps1` | Dot-source it from your `$PROFILE` |
+| PowerShell | `completions/_pepe.ps1` | Dot-source it from `$PROFILE` |
 
-For example, with the archive unpacked in the current directory:
-
-```bash
-# bash
-mkdir -p ~/.local/share/bash-completion/completions
-cp contrib/completions/pepe.bash ~/.local/share/bash-completion/completions/pepe
-
-# zsh
-mkdir -p ~/.zsh/completions && cp contrib/completions/_pepe ~/.zsh/completions/
-# then in ~/.zshrc, before compinit: fpath=(~/.zsh/completions $fpath)
-
-# fish
-cp contrib/completions/pepe.fish ~/.config/fish/completions/
-```
-
-With a Homebrew install, the files are at `$(brew --prefix)/share/pepe/completions/`.
-
-## Man pages
-
-`man/pepe.1` covers the command, the keys of every screen, examples and
-environment variables; `pepe-ramp.1`, `pepe-api.1` and
-`pepe-self-update.1` cover the subcommands.
-
-```bash
-man ./contrib/man/pepe.1                       # read it in place
-sudo cp contrib/man/*.1 /usr/local/share/man/man1/   # or install it
-```
+Man pages: `man ./man/pepe.1` reads one in place; `~/.local/share/man/man1/`
+or `/usr/local/share/man/man1/` installs them. `pepe.1` has the keys of
+every screen, examples and the environment variables, which `--help`
+doesn't.
