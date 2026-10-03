@@ -74,7 +74,7 @@ Every [release](https://github.com/omarmhaimdat/pepe/releases) ships binaries fo
 gh attestation verify pepe-x86_64-unknown-linux-musl.tar.xz --repo omarmhaimdat/pepe
 ```
 
-Each archive also carries shell completions (bash, zsh, fish, PowerShell) and man pages; [contrib/README.md](contrib/README.md) says where each shell wants them.
+Each archive also carries the shell completions and man pages; `pepe completions --install` puts them in place for your shell (see [contrib/README.md](contrib/README.md)).
 </details>
 
 <details>
@@ -95,6 +95,8 @@ pepe self-update --check    # only say whether there is one (exit code 1 if so)
 ```
 
 Homebrew and Nix installs update through `brew upgrade pepe` and `nix profile upgrade pepe`. Set `PEPE_NO_UPDATE_CHECK=1` to turn the check off; it is off in CI already.
+
+Tab completion (bash, zsh, fish, PowerShell) and `man pepe` come with the install script and the Homebrew formula. Installed another way, `pepe completions --install` sets them up for the shell you're in; `--dry-run` shows what it would change.
 
 ## Quick start
 
