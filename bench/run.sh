@@ -70,7 +70,7 @@ workload() {
   row pepe "$name" "$got" "$rps"
 
   if command -v oha >/dev/null; then
-    measure oha --no-tui --json -n "$n" -c "$c" $oha_tls "$url"
+    measure oha --no-tui $OHA_JSON -n "$n" -c "$c" $oha_tls "$url"
     got=$(jq -r '[.statusCodeDistribution[]] | add' "$tmp/stdout" 2>/dev/null)
     rps=$(jq -r '.summary.requestsPerSec | floor' "$tmp/stdout" 2>/dev/null)
     complain oha "$got"
@@ -87,6 +87,12 @@ workload() {
     row vegeta "$name" "$got" "$rps"
   fi
 }
+
+# oha's JSON flag: --output-format json since 1.5, -j before
+OHA_JSON="-j"
+if command -v oha >/dev/null && oha --help 2>/dev/null | grep -q -- "--output-format"; then
+  OHA_JSON="--output-format json"
+fi
 
 echo "tool,workload,requests,wall_s,user_s,sys_s,cpu_s,cpu_ms_per_1k,peak_rss_mb,rps"
 workload tiny-c64      200000  64   /

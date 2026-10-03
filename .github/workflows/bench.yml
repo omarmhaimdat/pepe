@@ -65,9 +65,12 @@ jobs:
 
       - name: Start the target server
         run: |
-          go run bench/server.go > /tmp/server.log 2>&1 &
-          for i in $(seq 1 50); do curl -sf http://127.0.0.1:8089/ >/dev/null && break; sleep 0.2; done
-          curl -sf http://127.0.0.1:8089/ >/dev/null
+          # Built first: on a cold runner `go run` compiles for longer than
+          # a short wait, and a start that fails should say why
+          go build -o /tmp/bench-server bench/server.go
+          /tmp/bench-server > /tmp/server.log 2>&1 &
+          for i in $(seq 1 150); do curl -sf http://127.0.0.1:8089/ >/dev/null && break; sleep 0.2; done
+          curl -sf http://127.0.0.1:8089/ >/dev/null || { cat /tmp/server.log; exit 1; }
 
       - name: Compare
         run: bench/compare.sh /tmp/pepe-baseline /tmp/pepe-candidate 3
@@ -100,9 +103,12 @@ jobs:
 
       - name: Start the target server
         run: |
-          go run bench/server.go > /tmp/server.log 2>&1 &
-          for i in $(seq 1 50); do curl -sf http://127.0.0.1:8089/ >/dev/null && break; sleep 0.2; done
-          curl -sf http://127.0.0.1:8089/ >/dev/null
+          # Built first: on a cold runner `go run` compiles for longer than
+          # a short wait, and a start that fails should say why
+          go build -o /tmp/bench-server bench/server.go
+          /tmp/bench-server > /tmp/server.log 2>&1 &
+          for i in $(seq 1 150); do curl -sf http://127.0.0.1:8089/ >/dev/null && break; sleep 0.2; done
+          curl -sf http://127.0.0.1:8089/ >/dev/null || { cat /tmp/server.log; exit 1; }
 
       - name: Run the suite
         run: |
