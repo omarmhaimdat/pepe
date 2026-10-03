@@ -13,7 +13,7 @@ pub use plan::{PlanOutcome, PlanScreen};
 pub use ramp::RampScreen;
 pub use setup::{Setup, SetupOutcome};
 
-use std::collections::{HashMap, VecDeque};
+use std::collections::VecDeque;
 use std::time::{Duration, Instant};
 
 use crossterm::event::{Event, EventStream, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
@@ -51,8 +51,6 @@ const LOG_CAPACITY: usize = 2_000;
 const ERROR_LOG_CAPACITY: usize = 500;
 /// Memory the inspector's full responses may use; the oldest are dropped first
 const DETAIL_BUDGET: usize = 32 * 1024 * 1024;
-/// Distinct failure causes counted; any more are counted as "other"
-const MAX_FAILURE_CAUSES: usize = 32;
 /// How long a notice (e.g. "concurrency 64 → 70") stays in the footer
 const NOTICE_TTL: Duration = Duration::from_secs(2);
 /// A sending thread this busy (percent of a core) is the run's bottleneck
@@ -140,8 +138,6 @@ pub struct Dashboard {
     endpoint_cursor: usize,
     log: VecDeque<LogEntry>,
     error_log: VecDeque<LogEntry>,
-    /// Failed requests by cause ("HTTP 503", "Connection refused ...")
-    failure_causes: HashMap<Box<str>, u64>,
     sent: u64,
     concurrency: usize,
     /// Sending threads, and how busy the busiest is now and was at most
@@ -202,7 +198,6 @@ impl Dashboard {
             endpoint_cursor: 0,
             log: VecDeque::with_capacity(LOG_CAPACITY),
             error_log: VecDeque::with_capacity(ERROR_LOG_CAPACITY),
-            failure_causes: HashMap::new(),
             sent: 0,
             threads: 1,
             busy: None,
@@ -304,9 +299,6 @@ impl Dashboard {
             at: self.active(),
             stat,
         };
-        if entry.is_error() {
-            self.count_failure(&entry.stat);
-        }
         // The list holds still while a request is open in the inspector: at
         // high rates new rows would push the one being read out within
         // milliseconds. Everything else keeps counting.
@@ -360,31 +352,14 @@ impl Dashboard {
         }
     }
 
-    fn count_failure(&mut self, stat: &ResponseStats) {
-        let cause = match (stat.status_code, &stat.error_message, stat.error) {
-            (Some(code), _, _) => format!("HTTP {}", code.as_u16()),
-            (None, Some(message), _) => message.to_string(),
-            (None, None, Some(kind)) => kind.label().to_lowercase(),
-            (None, None, None) => "error".to_string(),
-        };
-        if let Some(n) = self.failure_causes.get_mut(cause.as_str()) {
-            *n += 1;
-        } else if self.failure_causes.len() < MAX_FAILURE_CAUSES {
-            self.failure_causes.insert(cause.into(), 1);
-        } else {
-            *self.failure_causes.entry("other".into()).or_insert(0) += 1;
-        }
-    }
-
     /// Failure causes, most frequent first
     fn top_failure_causes(&self) -> Vec<(&str, u64)> {
-        let mut causes: Vec<(&str, u64)> = self
-            .failure_causes
-            .iter()
-            .map(|(cause, &n)| (cause.as_ref(), n))
-            .collect();
-        causes.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(b.0)));
-        causes
+        self.metrics
+            .failures()
+            .top()
+            .into_iter()
+            .map(|(cause, c)| (cause, c.count))
+            .collect()
     }
 
     /// Pull everything the load generator produced since the last frame
@@ -1027,11 +1002,7 @@ mod tests {
         for code in 400..450 {
             d.record(stat(code));
         }
-        assert_eq!(
-            d.failure_causes.len(),
-            MAX_FAILURE_CAUSES + 1,
-            "capped, plus other"
-        );
+        assert_eq!(d.metrics.failures().top().len(), 33, "capped, plus other");
     }
 
     #[test]
