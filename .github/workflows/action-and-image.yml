@@ -1,0 +1,77 @@
+# The GitHub Action (action.yml) and the from-source Dockerfile, tried on
+# every change to them.
+name: Action and image
+
+on:
+  pull_request:
+    paths:
+      - action.yml
+      - Dockerfile
+      - Dockerfile.release
+      - .github/workflows/action-and-image.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  action:
+    name: The action, against a local server
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - name: A target
+        run: |
+          python3 -m http.server 8089 --bind 127.0.0.1 >/dev/null 2>&1 &
+          sleep 1
+      - name: Run pepe through the action
+        id: pepe
+        uses: ./
+        with:
+          url: http://127.0.0.1:8089/
+          args: -n 300 -c 4
+      - name: Outputs
+        env:
+          TOTAL: ${{ steps.pepe.outputs.total_requests }}
+          FAILED: ${{ steps.pepe.outputs.failed_requests }}
+          RPS: ${{ steps.pepe.outputs.requests_per_second }}
+          P99: ${{ steps.pepe.outputs.p99_ms }}
+        run: |
+          echo "total=$TOTAL failed=$FAILED rps=$RPS p99=$P99"
+          [ "$TOTAL" = "300" ] && [ "$FAILED" = "0" ]
+          test -f "${{ steps.pepe.outputs.report }}"
+      - name: A condition that must fail the step
+        id: should-fail
+        continue-on-error: true
+        uses: ./
+        with:
+          url: http://127.0.0.1:8089/
+          args: -n 50 -c 2
+          fail-if: ".summary.total_requests == 50"
+      - name: It failed
+        run: '[ "${{ steps.should-fail.outcome }}" = "failure" ]'
+
+  image:
+    name: The from-source image
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          load: true
+          tags: pepe:test
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: It runs, and is small
+        run: |
+          docker run --rm pepe:test --version
+          docker image inspect pepe:test --format 'size {{.Size}} bytes'
+          python3 -m http.server 8089 --bind 0.0.0.0 >/dev/null 2>&1 &
+          sleep 1
+          docker run --rm --network host pepe:test --json -n 50 -c 2 http://127.0.0.1:8089/ | jq '.summary.total_requests'
