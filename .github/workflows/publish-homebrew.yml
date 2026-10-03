@@ -18,7 +18,7 @@ jobs:
     env:
       PLAN: ${{ inputs.plan }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           persist-credentials: true
           repository: omarmhaimdat/homebrew-pepe
