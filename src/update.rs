@@ -178,10 +178,18 @@ fn disabled() -> bool {
 }
 
 async fn fetch(url: &str) -> Option<String> {
-    reqwest::Client::new()
+    let mut request = reqwest::Client::new()
         .get(url)
         .header("User-Agent", default_user_agent())
-        .timeout(FETCH_TIMEOUT)
+        .timeout(FETCH_TIMEOUT);
+    // Anonymous calls to GitHub's API are rate-limited per address, which
+    // shared CI runners exhaust; a token, where one is set, lifts that
+    if let Ok(token) = std::env::var("PEPE_GITHUB_TOKEN") {
+        if url.starts_with("https://api.github.com/") && !token.is_empty() {
+            request = request.bearer_auth(token);
+        }
+    }
+    request
         .send()
         .await
         .ok()?
