@@ -385,6 +385,8 @@ go run bench/server.go &       # then bench/run.sh, to measure a change (see ben
 assets/record.sh               # re-record the GIFs above with vhs (assets/tapes/)
 ```
 
+Before a release that touches the screens, the installers, or files and paths, go through [docs/windows-checklist.md](docs/windows-checklist.md) on a Windows machine; CI can't press keys there.
+
 Releases are automated. Commits follow [conventional commits](https://www.conventionalcommits.org/) (`feat:`, `fix:`, `perf:`), and merging to `master` keeps a release PR open that bumps the version and writes the changelog from them; the body of each commit becomes its release note. Merging that PR tags the release, which builds every platform and publishes the GitHub Release, installers, the Homebrew formula and the pepe.mhaimdat.com mirror.
 
 ## Roadmap
