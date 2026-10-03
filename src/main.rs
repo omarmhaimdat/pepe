@@ -203,6 +203,9 @@ async fn run_json(args: &Cli) -> Result<(), Box<dyn std::error::Error>> {
     let mut load = start_load(args, false)?;
     let started = Instant::now();
     let mut metrics = Metrics::default();
+    let mut timeline = timeline::Timeline::default();
+    let mut watch = insights::Watch::default();
+    let mut anomalies = Vec::new();
     let mut interrupted = false;
     let mut pump = tokio::time::interval(PUMP);
     let mut peak_busy = None;
@@ -211,7 +214,13 @@ async fn run_json(args: &Cli) -> Result<(), Box<dyn std::error::Error>> {
         tokio::select! {
             _ = pump.tick() => {
                 peak_busy = peak_busy.max(load.busy());
-                if !load.drain(|stat| metrics.record(&stat)) {
+                let over = !load.drain(|stat| {
+                    metrics.record(&stat);
+                    timeline.record(&stat);
+                });
+                timeline.advance(started.elapsed());
+                anomalies.extend(watch.observe(timeline.samples(), false));
+                if over {
                     break;
                 }
             }
@@ -223,7 +232,8 @@ async fn run_json(args: &Cli) -> Result<(), Box<dyn std::error::Error>> {
     }
 
     let report = json_report::JsonReport::generate(&metrics, started.elapsed(), interrupted)
-        .with_generator(load.threads(), peak_busy);
+        .with_generator(load.threads(), peak_busy)
+        .with_anomalies(&anomalies);
     println!("{}", report.to_json()?);
     Ok(())
 }

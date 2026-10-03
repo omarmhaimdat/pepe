@@ -55,6 +55,10 @@ const DETAIL_BUDGET: usize = 32 * 1024 * 1024;
 const MAX_FAILURE_CAUSES: usize = 32;
 /// How long a notice (e.g. "concurrency 64 → 70") stays in the footer
 const NOTICE_TTL: Duration = Duration::from_secs(2);
+/// Longer for something the watch noticed, which is worth reading
+const ANOMALY_TTL: Duration = Duration::from_secs(6);
+/// Anomalies the verdict repeats; the rest are in the report
+const MAX_VERDICT_ANOMALIES: usize = 3;
 /// A sending thread this busy (percent of a core) is the run's bottleneck
 const SATURATED: u8 = 90;
 
@@ -159,6 +163,9 @@ pub struct Dashboard {
     interrupted: bool,
     /// Findings, worked out once the run is over
     verdict: Option<Verdict>,
+    /// Watches each second for a change worth a word, and what it said
+    watch: insights::Watch,
+    anomalies: Vec<insights::Anomaly>,
     /// Frames drawn while live, for the mascot's animation
     frame: u64,
 
@@ -183,7 +190,7 @@ pub struct Dashboard {
     /// Requests holding a full response, oldest first, with their size
     detailed: VecDeque<(u64, usize)>,
     detail_bytes: usize,
-    notice: Option<(String, Instant)>,
+    notice: Option<(String, Instant, Duration)>,
 }
 
 impl Dashboard {
@@ -211,6 +218,8 @@ impl Dashboard {
             finished: None,
             interrupted: false,
             verdict: None,
+            watch: insights::Watch::default(),
+            anomalies: Vec::new(),
             frame: 0,
             tab: Tab::Live,
             show_help: false,
@@ -261,6 +270,7 @@ impl Dashboard {
             (false, Some(since)) => {
                 self.paused_total += since.elapsed();
                 self.paused_since = None;
+                self.watch.resumed(self.active());
             }
             _ => {}
         }
@@ -375,6 +385,10 @@ impl Dashboard {
                         let samples: Vec<_> = self.timeline.samples().iter().copied().collect();
                         let mut verdict =
                             insights::verdict(&self.metrics, &samples, self.interrupted);
+                        for note in self.anomaly_notes() {
+                            verdict.level = verdict.level.max(note.level);
+                            verdict.notes.push(note);
+                        }
                         if let Some(note) = self.saturation_note() {
                             verdict.level = verdict.level.max(note.level);
                             verdict.notes.push(note);
@@ -387,6 +401,10 @@ impl Dashboard {
         }
         if self.finished.is_none() {
             self.timeline.advance(self.active());
+            for anomaly in self.watch.observe(self.timeline.samples(), self.paused) {
+                self.notify_for(anomaly.text.clone(), ANOMALY_TTL);
+                self.anomalies.push(anomaly);
+            }
         }
         self.refresh_slow_threshold();
         if self.scroll > 0 {
@@ -401,7 +419,7 @@ impl Dashboard {
         if self
             .notice
             .as_ref()
-            .is_some_and(|(_, at)| at.elapsed() >= NOTICE_TTL)
+            .is_some_and(|(_, at, ttl)| at.elapsed() >= *ttl)
         {
             self.notice = None;
         }
@@ -495,7 +513,32 @@ impl Dashboard {
     }
 
     fn notify(&mut self, message: String) {
-        self.notice = Some((message, Instant::now()));
+        self.notify_for(message, NOTICE_TTL);
+    }
+
+    fn notify_for(&mut self, message: String, ttl: Duration) {
+        self.notice = Some((message, Instant::now(), ttl));
+    }
+
+    /// The verdict's lines for what the watch noticed, the first few
+    fn anomaly_notes(&self) -> Vec<insights::Note> {
+        let mut notes: Vec<insights::Note> = self
+            .anomalies
+            .iter()
+            .take(MAX_VERDICT_ANOMALIES)
+            .map(|a| insights::Note {
+                level: Level::Degraded,
+                text: format!("During the run, {}", a.text),
+            })
+            .collect();
+        let rest = self.anomalies.len().saturating_sub(MAX_VERDICT_ANOMALIES);
+        if rest > 0 {
+            notes.push(insights::Note {
+                level: Level::Degraded,
+                text: format!("…and {rest} more such moments, in the report"),
+            });
+        }
+        notes
     }
 
     pub async fn run(
