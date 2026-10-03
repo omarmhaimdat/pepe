@@ -52,6 +52,16 @@ the Requests tab first.
 symbols; `sample <pid> 5` (macOS) gives the call tree the findings below
 come from.
 
+**Regression gate.** [`compare.sh`](compare.sh) runs the four workloads
+that matter most (plain, 16 KB bodies, 1,000 slow connections, TLS) with
+two binaries taking turns, three rounds each, and compares the best round
+of each. CI ([`.github/workflows/bench.yml`](../.github/workflows/bench.yml))
+runs it on every release PR, candidate against the last released tag built
+with the same toolchain, and fails the PR if CPU per 1,000 requests grew
+by more than 15% or peak memory by more than 25%. The same workflow runs
+the full suite for pepe and oha on the Linux runner and keeps the CSV; the
+Linux table below comes from it.
+
 **Machine.** Apple M4 Pro (14 cores), 24 GB, macOS 26.5, Rust 1.85,
 pepe built with `--release` (LTO, one codegen unit). oha 1.x and vegeta
 12.x from Homebrew. Numbers are from single runs unless noted; run-to-run
