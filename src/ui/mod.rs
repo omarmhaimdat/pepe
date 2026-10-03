@@ -244,7 +244,11 @@ impl Dashboard {
         let Some(path) = self.snapshot.clone() else {
             return;
         };
-        if let Err(e) = self.report_json(load).with_snapshot(running).write_to(&path) {
+        if let Err(e) = self
+            .report_json(load)
+            .with_snapshot(running)
+            .write_to(&path)
+        {
             self.notify(format!("couldn't write {}: {e}", path.display()));
         }
     }
