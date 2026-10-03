@@ -22,6 +22,7 @@ pub struct Metrics {
     pub bytes: u64,
     pub status_codes: HashMap<u16, u64>,
     pub cache_hits: u64,
+    failures: Failures,
     latency: Histogram,
     /// Time to the response headers, and from there to the end of the body
     first_byte: Histogram,
@@ -48,6 +49,9 @@ impl Metrics {
             (None, _) => self.errors += 1,
         }
         self.bytes += stat.body_bytes;
+        if let Some(cause) = stat.failure_cause() {
+            self.failures.count(cause, stat.preview_text());
+        }
 
         let us = stat.duration.as_micros() as u64;
         self.latency.record(us);
@@ -100,6 +104,11 @@ impl Metrics {
             Phase::FirstByte => &self.first_byte,
             Phase::Download => &self.download,
         }
+    }
+
+    /// Failed requests by cause
+    pub fn failures(&self) -> &Failures {
+        &self.failures
     }
 
     /// Requests that did not get a 2xx response, in percent
@@ -168,6 +177,52 @@ fn per_second(amount: f64, elapsed: Duration) -> f64 {
 pub enum Phase {
     FirstByte,
     Download,
+}
+
+/// Distinct failure causes counted; any more are counted as "other"
+const MAX_FAILURE_CAUSES: usize = 32;
+
+/// Failed requests grouped by cause ("HTTP 503", "Connection refused (os
+/// error 61)"), each with the first response body seen for it, so the
+/// verdict can show what the target actually said
+#[derive(Debug, Default, Clone)]
+pub struct Failures {
+    causes: HashMap<Box<str>, Cause>,
+}
+
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+pub struct Cause {
+    pub count: u64,
+    /// The first response body (its start, one line) seen for this cause;
+    /// failures without a response have none
+    pub example: Option<Box<str>>,
+}
+
+impl Failures {
+    fn count(&mut self, cause: String, example: Option<String>) {
+        if let Some(entry) = self.causes.get_mut(cause.as_str()) {
+            entry.count += 1;
+            return;
+        }
+        let key: Box<str> = if self.causes.len() < MAX_FAILURE_CAUSES {
+            cause.into()
+        } else {
+            "other".into()
+        };
+        let entry = self.causes.entry(key).or_default();
+        entry.count += 1;
+        if entry.example.is_none() {
+            entry.example = example.filter(|e| !e.is_empty()).map(Into::into);
+        }
+    }
+
+    /// Causes, most frequent first (ties by name, so the order is stable)
+    pub fn top(&self) -> Vec<(&str, &Cause)> {
+        let mut causes: Vec<(&str, &Cause)> =
+            self.causes.iter().map(|(k, v)| (k.as_ref(), v)).collect();
+        causes.sort_by(|a, b| b.1.count.cmp(&a.1.count).then(a.0.cmp(b.0)));
+        causes
+    }
 }
 
 /// Log-linear histogram (HDR-style). Values below 2^SUB_BITS are exact;
@@ -391,6 +446,45 @@ mod tests {
         let p50 = |phase| Duration::from_micros(m.phase(phase).percentile(50.0));
         assert!((19..=21).contains(&p50(Phase::FirstByte).as_millis()));
         assert!((9..=11).contains(&p50(Phase::Download).as_millis()));
+    }
+
+    #[test]
+    fn failures_are_grouped_by_cause_with_the_first_body() {
+        let mut m = Metrics::default();
+        let failed = |code: u16, body: &str| ResponseStats {
+            status_code: StatusCode::from_u16(code).ok(),
+            preview: Some(bytes::Bytes::copy_from_slice(body.as_bytes())),
+            ..Default::default()
+        };
+        m.record(&failed(503, "{\"error\":\"upstream timed out\"}"));
+        m.record(&failed(503, "a later body, not kept"));
+        m.record(&failed(500, ""));
+        m.record(&ResponseStats {
+            error: Some(ErrorKind::Connect),
+            error_message: Some("Connection refused (os error 61)".into()),
+            ..Default::default()
+        });
+        m.record(&stat(1, Some(200), None));
+        let top = m.failures().top();
+        assert_eq!(top[0].0, "HTTP 503");
+        assert_eq!(top[0].1.count, 2);
+        assert_eq!(
+            top[0].1.example.as_deref(),
+            Some("{\"error\":\"upstream timed out\"}")
+        );
+        // Ties go by name, so the order is the same every time
+        assert_eq!(top[1].0, "Connection refused (os error 61)");
+        assert_eq!(top[1].1.example, None, "no response, no body");
+        assert_eq!(top[2].0, "HTTP 500");
+        assert_eq!(top[2].1.example, None, "an empty body is no example");
+        for code in 400..450 {
+            m.record(&failed(code, "x"));
+        }
+        assert_eq!(
+            m.failures().top().len(),
+            MAX_FAILURE_CAUSES + 1,
+            "capped, plus other"
+        );
     }
 
     #[test]
