@@ -66,6 +66,17 @@ nix profile install github:omarmhaimdat/pepe              # install it
 </details>
 
 <details>
+<summary><b>Docker</b></summary>
+
+```bash
+docker run --rm -it ghcr.io/omarmhaimdat/pepe -z 30s -c 50 https://example.com   # the dashboard needs -it
+docker run --rm ghcr.io/omarmhaimdat/pepe --json -n 1000 https://example.com     # for scripts
+```
+
+An empty image with the static binary in it, a few megabytes, for `linux/amd64` and `linux/arm64`; `:latest` and `:<version>` tags. `docker build -t pepe .` builds the same from source.
+</details>
+
+<details>
 <summary><b>Prebuilt binaries</b></summary>
 
 Every [release](https://github.com/omarmhaimdat/pepe/releases) ships binaries for macOS (Apple Silicon and Intel), Linux (x86_64 and ARM64, statically linked) and Windows (x86_64), with SHA-256 checksums and signed build provenance:
@@ -316,6 +327,22 @@ jq '.summary.latency.p99_ms' results.json
   "generator": { "threads": 1, "peak_busy_percent": 12 }
 }
 ```
+
+### In GitHub Actions
+
+The repository is also an action: it installs a pinned release, runs `pepe --json`, puts the numbers in the job summary and in outputs, and can fail the job on a condition over the report.
+
+```yaml
+- uses: omarmhaimdat/pepe@master
+  id: load
+  with:
+    url: https://staging.example.com/api/health
+    args: -z 30s -c 20 -H 'Authorization: Bearer ${{ secrets.TOKEN }}'
+    fail-if: ".summary.latency.p99_ms > 300 or .summary.failed_requests > 0"
+- run: echo "p99 was ${{ steps.load.outputs.p99_ms }} ms at ${{ steps.load.outputs.requests_per_second }} req/s"
+```
+
+Outputs: `total_requests`, `failed_requests`, `requests_per_second`, `p50_ms`, `p99_ms`, and `report`, the path of the JSON. `version` pins a release (`0.9.0`); the default is the latest. Linux and macOS runners.
 
 ### Proxies
 
