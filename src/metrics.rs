@@ -23,6 +23,9 @@ pub struct Metrics {
     pub status_codes: HashMap<u16, u64>,
     pub cache_hits: u64,
     latency: Histogram,
+    /// Time to the response headers, and from there to the end of the body
+    first_byte: Histogram,
+    download: Histogram,
     sum_us: f64,
     sum_sq_us: f64,
     dns_lookup_sum: Duration,
@@ -48,6 +51,11 @@ impl Metrics {
 
         let us = stat.duration.as_micros() as u64;
         self.latency.record(us);
+        if let Some(ttfb) = stat.ttfb {
+            self.first_byte.record(ttfb.as_micros() as u64);
+            self.download
+                .record(stat.duration.saturating_sub(ttfb).as_micros() as u64);
+        }
         self.sum_us += us as f64;
         self.sum_sq_us += (us as f64) * (us as f64);
 
@@ -83,6 +91,15 @@ impl Metrics {
 
     pub fn latency(&self) -> &Histogram {
         &self.latency
+    }
+
+    /// Latency at percentile `q` of one phase of the requests that got a
+    /// response: the wait for the headers, or the body after them
+    pub fn phase(&self, phase: Phase) -> &Histogram {
+        match phase {
+            Phase::FirstByte => &self.first_byte,
+            Phase::Download => &self.download,
+        }
     }
 
     /// Requests that did not get a 2xx response, in percent
@@ -144,6 +161,13 @@ fn per_second(amount: f64, elapsed: Duration) -> f64 {
     } else {
         0.0
     }
+}
+
+/// The two parts of a request's time that every response has
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Phase {
+    FirstByte,
+    Download,
 }
 
 /// Log-linear histogram (HDR-style). Values below 2^SUB_BITS are exact;
@@ -347,6 +371,26 @@ mod tests {
         );
         assert_eq!(m.status_codes.get(&503), Some(&1));
         assert_eq!(m.bytes, 50);
+    }
+
+    #[test]
+    fn phases_split_the_requests_that_got_a_response() {
+        let mut m = Metrics::default();
+        for _ in 0..10 {
+            m.record(&ResponseStats {
+                duration: Duration::from_millis(30),
+                ttfb: Some(Duration::from_millis(20)),
+                status_code: StatusCode::from_u16(200).ok(),
+                ..Default::default()
+            });
+        }
+        // A failed request has no phases
+        m.record(&stat(500, None, Some(ErrorKind::Connect)));
+        assert_eq!(m.phase(Phase::FirstByte).count(), 10);
+        assert_eq!(m.phase(Phase::Download).count(), 10);
+        let p50 = |phase| Duration::from_micros(m.phase(phase).percentile(50.0));
+        assert!((19..=21).contains(&p50(Phase::FirstByte).as_millis()));
+        assert!((9..=11).contains(&p50(Phase::Download).as_millis()));
     }
 
     #[test]

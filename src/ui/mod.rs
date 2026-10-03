@@ -184,6 +184,8 @@ pub struct Dashboard {
     detailed: VecDeque<(u64, usize)>,
     detail_bytes: usize,
     notice: Option<(String, Instant)>,
+    /// How long the run's connections took to open, when measured
+    connects: Option<std::sync::Arc<crate::request::ConnectTimes>>,
 }
 
 impl Dashboard {
@@ -224,7 +226,19 @@ impl Dashboard {
             detailed: VecDeque::new(),
             detail_bytes: 0,
             notice: None,
+            connects: None,
         }
+    }
+
+    /// Show how long connections took to open, from the clients' timing
+    pub fn with_connects(mut self, connects: std::sync::Arc<crate::request::ConnectTimes>) -> Self {
+        self.connects = Some(connects);
+        self
+    }
+
+    /// Connection times so far, if measured
+    fn connect_times(&self) -> Option<crate::metrics::Histogram> {
+        self.connects.as_ref().map(|c| c.histogram())
     }
 
     /// API mode: show results per endpoint, starting on the Endpoints tab
