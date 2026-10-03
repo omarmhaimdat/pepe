@@ -1,0 +1,29 @@
+--- a/src/async_impl/client.rs	2006-07-24 01:21:28
++++ b/src/async_impl/client.rs	2026-10-03 16:03:23
+@@ -3074,13 +3074,23 @@
+             },
+         };
+ 
++        // EXPERIMENT: the response's final URI is the request's unless a
++        // redirect was followed; only then is a string round trip and a
++        // full Url parse worth it
+         if let Some(url) = &res
+             .extensions()
+             .get::<tower_http::follow_redirect::RequestUri>()
+         {
+-            self.url = match Url::parse(&url.0.to_string()) {
+-                Ok(url) => url,
+-                Err(e) => return Poll::Ready(Err(crate::error::decode(e))),
++            let same = url.0.path() == self.url.path()
++                && url.0.host() == self.url.host_str()
++                && url.0.port_u16() == self.url.port()
++                && url.0.query() == self.url.query()
++                && url.0.scheme_str() == Some(self.url.scheme());
++            if !same {
++                self.url = match Url::parse(&url.0.to_string()) {
++                    Ok(url) => url,
++                    Err(e) => return Poll::Ready(Err(crate::error::decode(e))),
++                }
+             }
+         };
+ 
