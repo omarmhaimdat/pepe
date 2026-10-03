@@ -46,15 +46,14 @@ jobs:
       - name: Build pepe with symbols
         run: cargo build --profile profiling --locked && target/profiling/pepe --version
 
-      - name: Build the variants under test
+      - name: Build the variant under test
+        # reqwest patched to skip its per-response URL re-parse (see
+        # bench/patches and bench/README.md). mimalloc was tried here too:
+        # 1-4% less CPU for 50-90% more memory on Linux, so it isn't kept.
         run: |
           set -euo pipefail
           mkdir -p out
           cp target/profiling/pepe out/pepe-base
-          # mimalloc as the global allocator
-          cargo build --profile profiling --features mimalloc
-          cp target/profiling/pepe out/pepe-mimalloc
-          # reqwest patched to skip its per-response URL re-parse
           mkdir -p /tmp/vendor && cd /tmp/vendor
           curl -sSL https://crates.io/api/v1/crates/reqwest/0.12.28/download | tar xz
           (cd reqwest-0.12.28 && patch -p1 < "$GITHUB_WORKSPACE/bench/patches/reqwest-0.12.28-skip-url-reparse.patch")
@@ -63,9 +62,9 @@ jobs:
           printf '\n[patch.crates-io]\nreqwest = { path = "/tmp/vendor/reqwest-0.12.28" }\n' >> Cargo.toml
           cargo build --profile profiling
           cp target/profiling/pepe out/pepe-reqwest-patched
-          cargo build --profile profiling --features mimalloc
-          cp target/profiling/pepe out/pepe-both
           cp /tmp/Cargo.toml.keep Cargo.toml && cp /tmp/Cargo.lock.keep Cargo.lock
+          # perf below records the unpatched build
+          cargo build --profile profiling --locked
 
       - name: Start the target server
         run: |
@@ -74,21 +73,17 @@ jobs:
           for i in $(seq 1 150); do curl -sf http://127.0.0.1:8089/ >/dev/null && break; sleep 0.2; done
           curl -sf http://127.0.0.1:8089/ >/dev/null || { cat /tmp/server.log; exit 1; }
 
-      - name: "CPU per request: variants and oha, taking turns"
+      - name: "CPU per request: pepe, the variant and oha, taking turns"
         run: |
           nproc | tee out/nproc.txt
           for i in 1 2 3; do
-            for v in base mimalloc reqwest-patched both; do
+            for v in base reqwest-patched; do
               REQUESTS=200000 bench/measure.sh "pepe-$v" out/pepe-$v --json -n 200000 -c 64 http://127.0.0.1:8089/
             done
             REQUESTS=200000 bench/measure.sh oha oha --no-tui --output-format json -n 200000 -c 64 http://127.0.0.1:8089/
           done | tee out/reference.csv
-          echo "--- 1,000 connections, 20 ms target: memory ---"
-          for v in base mimalloc both; do
-            REQUESTS=50000 bench/measure.sh "pepe-$v-c1000" out/pepe-$v --json -n 50000 -c 1000 'http://127.0.0.1:8089/slow?ms=20'
-          done | tee -a out/reference.csv
-          echo "--- gate: base vs both ---"
-          bench/compare.sh out/pepe-base out/pepe-both 2 | tee out/gate-base-vs-both.md
+          echo "--- gate: base vs reqwest-patched ---"
+          bench/compare.sh out/pepe-base out/pepe-reqwest-patched 2 | tee out/gate.md
 
       - name: perf record pepe
         run: |

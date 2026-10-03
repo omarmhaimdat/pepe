@@ -303,7 +303,33 @@ Two things to read off this, and one caveat.
   expensive on Linux than on macOS, and one sending thread on a slow
   vCPU caps throughput sooner. It is the next thing to profile; until it
   is understood, the CPU claims above are macOS measurements.
-- **Noise.** Shared runners vary: pepe's tiny-c64 cost came out at 16.9,
+- **Where the Linux cost is**, from `perf` on the runner (the Profile on
+  Linux workflow): per request, pepe and oha both make exactly one
+  `writev`, one `recvfrom` and an `epoll_wait` every fifteen or so, so it
+  isn't syscalls. The difference is user space, and it is reqwest's
+  per-request plumbing: reqwest's tower follow-redirect layer formats the
+  request URI to a string and runs a full `Url::parse` (IDNA included) on
+  **every** response, redirect or not (`client.rs`, `Pending::poll`); the
+  connector is cloned and dropped per request; the pool checkout hashes the
+  authority; the default headers' `Bytes` are refcounted up and down.
+  Together about a tenth of pepe's CPU on Linux, less on macOS where
+  those paths are cheaper. Two things were tried, each measured on the same
+  runner against the same baseline:
+  - **reqwest without the per-response re-parse**
+    ([`patches/`](patches/)): 3.5–4% less CPU on Linux, 2–5% on macOS, no
+    memory change. It belongs upstream; pepe doesn't carry a fork.
+  - **mimalloc as the global allocator**: 1–4% less CPU on Linux but
+    50–90% more peak memory (10 → 18 MB at 64 connections, 45 → 68 MB at
+    1,000), the gate flagged it, and it is not kept. On macOS it was 5–7%
+    less CPU and slightly less memory, which is not enough to carry a
+    platform split.
+  What's left is the shape of the reqwest and hyper-util stack; removing
+  it means a leaner HTTP/1.1 path of pepe's own, which is a different
+  project (see "Not now" in ROADMAP.md).
+- **Noise.** Shared runners vary a lot: the same pepe binary cost 25.7 ms
+  per 1,000 requests on one `ubuntu-latest` run and 13.4 on another an
+  hour later, with oha moving from 19.8 to 10.1 alongside it, so the
+  ratio held while the absolutes halved. Shared runners also vary: pepe's tiny-c64 cost came out at 16.9,
   22.5, 17.4 and 25.8 ms per 1,000 requests in four runs of the same
   binary. That is why the gate compares two binaries taking turns in one
   job, and why these absolute numbers are for the shape of the
