@@ -8,7 +8,7 @@ pepe \- HTTP load generator
 .ie \n(.g .ds Aq \(aq
 .el .ds Aq '
 .SH SYNOPSIS
-\fBpepe\fR [\fB\-h\fR|\fB\-\-help\fR] [\fB\-n\fR|\fB\-\-number\fR] [\fB\-c\fR|\fB\-\-concurrency\fR] [\fB\-z\fR|\fB\-\-duration\fR] [\fB\-\-curl\fR] [\fB\-m\fR|\fB\-\-method\fR] [\fB\-H\fR|\fB\-\-headers\fR] [\fB\-t\fR|\fB\-\-timeout\fR] [\fB\-\-threads\fR] [\fB\-d\fR|\fB\-\-body\fR] [\fB\-u\fR|\fB\-\-user\-agent\fR] [\fB\-p\fR|\fB\-\-proxy\fR] [\fB\-k\fR|\fB\-\-insecure\fR] [\fB\-\-disable\-compression\fR] [\fB\-\-disable\-keepalive\fR] [\fB\-\-disable\-redirects\fR] [\fB\-\-json\fR] [\fB\-i\fR|\fB\-\-setup\fR] [\fB\-V\fR|\fB\-\-version\fR] [\fIURL\fR] [\fIARGS\fR] [\fIsubcommands\fR]
+\fBpepe\fR [\fB\-h\fR|\fB\-\-help\fR] [\fB\-n\fR|\fB\-\-number\fR] [\fB\-c\fR|\fB\-\-concurrency\fR] [\fB\-z\fR|\fB\-\-duration\fR] [\fB\-\-curl\fR] [\fB\-m\fR|\fB\-\-method\fR] [\fB\-H\fR|\fB\-\-headers\fR] [\fB\-t\fR|\fB\-\-timeout\fR] [\fB\-\-threads\fR] [\fB\-d\fR|\fB\-\-body\fR] [\fB\-u\fR|\fB\-\-user\-agent\fR] [\fB\-p\fR|\fB\-\-proxy\fR] [\fB\-k\fR|\fB\-\-insecure\fR] [\fB\-\-disable\-compression\fR] [\fB\-\-disable\-keepalive\fR] [\fB\-\-disable\-redirects\fR] [\fB\-\-json\fR] [\fB\-\-snapshot\fR] [\fB\-i\fR|\fB\-\-setup\fR] [\fB\-V\fR|\fB\-\-version\fR] [\fIURL\fR] [\fIARGS\fR] [\fIsubcommands\fR]
 .ie \n(.g .ds Aq \(aq
 .el .ds Aq '
 .SH DESCRIPTION
@@ -67,6 +67,9 @@ Prevent http redirects
 .TP
 \fB\-\-json\fR
 Output results in JSON format
+.TP
+\fB\-\-snapshot\fR \fI<FILE>\fR
+Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run\*(Aqs numbers survive a crash or a lost terminal; it has a minute\-by\-minute timeline of the whole run
 .TP
 \fB\-i\fR, \fB\-\-setup\fR
 Open the setup screen to review or change the settings before starting (it opens by itself when no URL is given)

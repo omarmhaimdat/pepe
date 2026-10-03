@@ -84,6 +84,8 @@ enum Field {
     Concurrency,
     /// Threads sending requests; empty for the default
     Threads,
+    /// A file the report is written to every minute; empty for none
+    Snapshot,
     RunMode,
     /// The duration or the request count, depending on the run mode
     RunValue,
@@ -130,6 +132,7 @@ pub struct Setup {
     body_edited: bool,
     concurrency: String,
     threads: String,
+    snapshot: String,
     by_duration: bool,
     duration: String,
     requests: String,
@@ -193,6 +196,11 @@ impl Setup {
             body_edited: false,
             concurrency: cli.concurrency.to_string(),
             threads: cli.threads.map(|t| t.to_string()).unwrap_or_default(),
+            snapshot: cli
+                .snapshot
+                .as_ref()
+                .map(|p| p.display().to_string())
+                .unwrap_or_default(),
             by_duration: cli.duration.is_some(),
             duration: cli.duration.clone().unwrap_or_else(|| "30s".into()),
             requests: cli.number.to_string(),
@@ -248,6 +256,7 @@ impl Setup {
         fields.extend([
             Field::Timeout,
             Field::Threads,
+            Field::Snapshot,
             Field::Redirects,
             Field::KeepAlive,
             Field::VerifyTls,
@@ -272,6 +281,7 @@ impl Setup {
             Field::Body => &mut self.body,
             Field::Concurrency => &mut self.concurrency,
             Field::Threads => &mut self.threads,
+            Field::Snapshot => &mut self.snapshot,
             Field::RunValue if self.by_duration => &mut self.duration,
             Field::RunValue => &mut self.requests,
             Field::From => &mut self.from,
@@ -584,6 +594,10 @@ impl Setup {
         cli.threads = match self.threads.trim() {
             "" => None,
             text => Some(number("threads", text)?.max(1)),
+        };
+        cli.snapshot = match self.snapshot.trim() {
+            "" => None,
+            path => Some(path.into()),
         };
         cli.disable_redirects = !self.follow_redirects;
         cli.disable_keepalive = !self.keep_alive;
@@ -1093,6 +1107,18 @@ impl Setup {
             Field::Threads,
             "Threads",
             self.typed(Field::Threads, &self.threads, "auto", room),
+            width,
+        );
+        self.row(
+            &mut options,
+            Field::Snapshot,
+            "Snapshot",
+            self.typed(
+                Field::Snapshot,
+                &self.snapshot,
+                "a file for the report, every minute",
+                room,
+            ),
             width,
         );
         self.row(

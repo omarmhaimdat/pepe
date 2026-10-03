@@ -170,6 +170,15 @@ Repeated headers are kept (several `Cookie` headers are sent as several), and a 
 pepe -z 2m -c 100 https://example.com
 ```
 
+### Soak runs
+
+For a run that lasts hours, `--snapshot` writes the JSON report so far to a file every minute, whole or not at all, and once more when the run ends, so a crash at hour six or a lost terminal doesn't lose the numbers. The report carries a minute-by-minute timeline of the whole run (throughput, errors, p50, p90, p99), the dashboard's ten-minute charts still show the recent past, and the end-of-run verdict judges the whole run on those minutes.
+
+```bash
+pepe -z 6h -c 50 --snapshot soak.json https://example.com
+jq '.timeline[-1], .snapshot' soak.json       # the last minute, and whether it is still running
+```
+
 ### Load-testing a curl command
 
 pepe sends the same request curl would: same method, URL, headers and body. Put `--` between pepe's options and the curl command, or give it as one quoted string, a file, or on stdin:
