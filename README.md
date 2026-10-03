@@ -12,7 +12,7 @@
 
 </div>
 
-![pepe load-testing a server, with the live dashboard](assets/pepe.gif)
+![pepe load-testing a server: the live dashboard, the request log, and the verdict](assets/run.gif)
 
 pepe sends requests to a URL, as many at once as you ask, and shows what came back as it happens: throughput, latency percentiles and a heatmap, status codes, failures by cause, and a log you can open any request from. When the run ends it gives a verdict in plain words. It takes a curl command as input, ramps load to find where a target stops keeping up, and load-tests every endpoint of an OpenAPI spec.
 
@@ -192,6 +192,8 @@ Output, logging and TLS options (`-o`, `-s`, `-v`, `-w`, `--cacert`, ...) are ac
 
 ### The setup screen
 
+![The setup screen: a form with every option, a try-once response, and the command as flags](assets/setup.gif)
+
 Run `pepe` with no URL and it opens a form with every option as a field: URL, method, headers, body, load, timeout, threads, redirects, keep-alive, TLS, proxy and user agent. Add `-i` to any command to open the form filled in from its flags.
 
 ```bash
@@ -206,6 +208,8 @@ pepe -i -c 50 -z 30s https://example.com
 - The command card always shows the flags that reproduce the form. It's printed to your shell when you quit, and `E` in the dashboard brings you back to the form.
 
 ### Ramp mode: finding where the target stops keeping up
+
+![Ramp mode: concurrency raised step by step, with each step measured on its own](assets/ramp.gif)
 
 `pepe ramp` raises concurrency step by step, measures each step on its own, and says where the target holds, where it stops scaling and where it breaks.
 
@@ -236,6 +240,8 @@ The screen shows each step as a row (throughput, p50, p90, p99, the slowest requ
 `--json` runs the ramp without a screen and prints every step and the findings.
 
 ### API mode: load-testing an OpenAPI spec
+
+![API mode: the endpoints of a spec picked on screen, then a dashboard with a row per endpoint](assets/api.gif)
 
 `pepe api` reads an OpenAPI 3 (or Swagger 2) spec, from a file or a URL, in JSON or YAML, and turns its operations into requests.
 
@@ -376,6 +382,7 @@ cargo build --release          # the binary, in target/release/pepe
 cargo test                     # 160+ tests, including the dashboard at many terminal sizes
 cargo clippy --all-targets && cargo fmt --check
 go run bench/server.go &       # then bench/run.sh, to measure a change (see bench/README.md)
+assets/record.sh               # re-record the GIFs above with vhs (assets/tapes/)
 ```
 
 Releases are automated. Commits follow [conventional commits](https://www.conventionalcommits.org/) (`feat:`, `fix:`, `perf:`), and merging to `master` keeps a release PR open that bumps the version and writes the changelog from them; the body of each commit becomes its release note. Merging that PR tags the release, which builds every platform and publishes the GitHub Release, installers, the Homebrew formula and the pepe.mhaimdat.com mirror.
