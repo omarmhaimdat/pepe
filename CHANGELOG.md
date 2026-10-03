@@ -6,6 +6,29 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+## [0.9.0](https://github.com/omarmhaimdat/pepe/compare/v0.8.0...v0.9.0) - 2026-10-03
+
+### Added
+
+- tab completion and man pages that work out of the box
+
+  The completions and man pages shipped in 0.8.0's archives, but nothing
+  put them in place. Now:
+
+  - pepe completions --install sets up tab completion for the shell you're
+    in (bash, zsh, fish or PowerShell) and installs the man pages: it
+    writes the files under ~/.local/share and appends the line the shell's
+    startup file needs, once. --dry-run says what it would change;
+    `pepe completions zsh` prints the script for packagers. The files are
+    built into the binary, so this works however pepe was installed.
+  - The install script at pepe.mhaimdat.com runs it after installing, and
+    pepe self-update runs it again for the shells it was set up for, so
+    completions never fall behind the binary.
+  - The Homebrew formula installs the completions and man pages where
+    Homebrew activates them, through a publish job of our own in place of
+    dist's.
+
+
 ## [0.8.0](https://github.com/omarmhaimdat/pepe/compare/v0.7.0...v0.8.0) - 2026-10-02
 
 ### Added
