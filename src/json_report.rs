@@ -1,15 +1,59 @@
 use std::collections::BTreeMap;
-use std::time::Duration;
+use std::path::Path;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use serde::Serialize;
 
 use crate::metrics::Metrics;
+use crate::timeline::{Sample, Timeline};
 
-#[derive(Serialize)]
+#[derive(Serialize, Clone)]
 pub struct JsonReport {
     pub summary: JsonSummary,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub generator: Option<Generator>,
+    /// One point per minute over the whole run; empty for runs under a
+    /// minute, and left out then
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub timeline: Vec<TimelinePoint>,
+    /// Present when the report was written by `--snapshot`, which writes
+    /// it every minute while the run goes and once more when it ends
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub snapshot: Option<Snapshot>,
+}
+
+#[derive(Serialize, Clone, Copy, PartialEq, Debug)]
+pub struct TimelinePoint {
+    /// Seconds since the run started, at the end of the minute
+    pub at_s: f64,
+    pub requests_per_second: f64,
+    /// Non-2xx responses and failed requests per second
+    pub errors_per_second: f64,
+    pub p50_ms: f64,
+    pub p90_ms: f64,
+    pub p99_ms: f64,
+}
+
+impl From<&Sample> for TimelinePoint {
+    fn from(s: &Sample) -> Self {
+        let round = |v: f64| (v * 1000.0).round() / 1000.0;
+        Self {
+            at_s: round(s.at),
+            requests_per_second: round(s.rps),
+            errors_per_second: round(s.errors),
+            p50_ms: round(s.p50_ms),
+            p90_ms: round(s.p90_ms),
+            p99_ms: round(s.p99_ms),
+        }
+    }
+}
+
+#[derive(Serialize, Clone, Copy, PartialEq, Debug)]
+pub struct Snapshot {
+    /// When it was written, in seconds since the Unix epoch
+    pub unix_time: u64,
+    /// The run was still going; false in the last one
+    pub running: bool,
 }
 
 /// pepe's own load during the run: whether pepe, rather than the target,
@@ -25,7 +69,7 @@ pub struct Generator {
     pub peak_busy_percent: Option<u8>,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Clone)]
 pub struct JsonSummary {
     pub total_requests: u64,
     /// 2xx responses
@@ -57,7 +101,7 @@ pub struct AnomalyNote {
     pub text: String,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Clone)]
 pub struct LatencyStats {
     pub min_ms: f64,
     pub max_ms: f64,
@@ -96,9 +140,39 @@ impl JsonReport {
         self
     }
 
+    /// The minute-by-minute series of a run
+    pub fn with_timeline(mut self, timeline: &Timeline) -> Self {
+        self.timeline = timeline.minutes().iter().map(TimelinePoint::from).collect();
+        self
+    }
+
+    /// Mark the report as a snapshot of a run, still going or just over
+    pub fn with_snapshot(mut self, running: bool) -> Self {
+        self.snapshot = Some(Snapshot {
+            unix_time: SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .map_or(0, |d| d.as_secs()),
+            running,
+        });
+        self
+    }
+
+    /// Write the report to `path`, whole or not at all: it goes to a file
+    /// next to it first and is renamed into place, so a reader never sees
+    /// half a report and a crash mid-write leaves the previous one
+    pub fn write_to(&self, path: &Path) -> std::io::Result<()> {
+        let json = self.to_json()?;
+        let mut tmp = path.as_os_str().to_owned();
+        tmp.push(".tmp");
+        std::fs::write(&tmp, json)?;
+        std::fs::rename(&tmp, path)
+    }
+
     pub fn generate(metrics: &Metrics, elapsed: Duration, interrupted: bool) -> Self {
         Self {
             generator: None,
+            timeline: Vec::new(),
+            snapshot: None,
             summary: JsonSummary {
                 total_requests: metrics.total,
                 successful_requests: metrics.success,
@@ -136,6 +210,48 @@ impl JsonReport {
 mod tests {
     use super::*;
     use crate::response::{ErrorKind, ResponseStats};
+
+    #[test]
+    fn snapshots_carry_the_minutes_and_land_whole() {
+        let mut timeline = Timeline::default();
+        for second in 0..130u64 {
+            timeline.record(&ResponseStats {
+                duration: Duration::from_millis(20),
+                status_code: reqwest::StatusCode::from_u16(200).ok(),
+                ..Default::default()
+            });
+            timeline.advance(Duration::from_secs(second + 1));
+        }
+        let report = JsonReport::generate(&Metrics::default(), Duration::from_secs(130), false)
+            .with_timeline(&timeline)
+            .with_snapshot(true);
+        assert_eq!(report.timeline.len(), 2);
+        assert_eq!(report.timeline[1].at_s, 120.0);
+        assert!(report.snapshot.unwrap().running);
+        let json = report.to_json().unwrap();
+        assert!(json.contains("\"timeline\"") && json.contains("\"running\": true"));
+
+        let dir = std::env::temp_dir().join(format!("pepe-snapshot-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("soak.json");
+        report.write_to(&path).unwrap();
+        let again = JsonReport::generate(&Metrics::default(), Duration::from_secs(131), false)
+            .with_snapshot(false);
+        again.write_to(&path).unwrap();
+        let text = std::fs::read_to_string(&path).unwrap();
+        assert!(
+            text.contains("\"running\": false"),
+            "the newer report replaced the older"
+        );
+        assert!(
+            !dir.join("soak.json.tmp").exists(),
+            "nothing left beside it"
+        );
+        // A report under a minute has no timeline key at all
+        let short = JsonReport::generate(&Metrics::default(), Duration::from_secs(5), false);
+        assert!(!short.to_json().unwrap().contains("timeline"));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 
     #[test]
     fn report_covers_every_request() {

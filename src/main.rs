@@ -197,6 +197,8 @@ impl Drop for TerminalGuard {
 
 /// How often the `--json` modes collect results (see `LoadHandle::drain`)
 const PUMP: std::time::Duration = std::time::Duration::from_millis(25);
+/// How often `--snapshot` writes the report so far
+pub const SNAPSHOT_EVERY: std::time::Duration = std::time::Duration::from_secs(60);
 
 /// `--json`: no dashboard; run to completion (or Ctrl-C), print the report
 async fn run_json(args: &Cli) -> Result<(), Box<dyn std::error::Error>> {
@@ -205,10 +207,23 @@ async fn run_json(args: &Cli) -> Result<(), Box<dyn std::error::Error>> {
     let mut metrics = Metrics::default();
     let mut timeline = timeline::Timeline::default();
     let mut watch = insights::Watch::default();
-    let mut anomalies = Vec::new();
+    let mut anomalies: Vec<insights::Anomaly> = Vec::new();
     let mut interrupted = false;
     let mut pump = tokio::time::interval(PUMP);
+    let mut snapshots = tokio::time::interval(SNAPSHOT_EVERY);
+    snapshots.tick().await; // the first tick is now; the first snapshot is in a minute
     let mut peak_busy = None;
+    let report = |metrics: &Metrics,
+                  timeline: &timeline::Timeline,
+                  anomalies: &[insights::Anomaly],
+                  load: &LoadHandle,
+                  peak_busy,
+                  interrupted| {
+        json_report::JsonReport::generate(metrics, started.elapsed(), interrupted)
+            .with_generator(load.threads(), peak_busy)
+            .with_timeline(timeline)
+            .with_anomalies(anomalies)
+    };
 
     loop {
         tokio::select! {
@@ -224,6 +239,12 @@ async fn run_json(args: &Cli) -> Result<(), Box<dyn std::error::Error>> {
                     break;
                 }
             }
+            _ = snapshots.tick(), if args.snapshot.is_some() => {
+                let path = args.snapshot.as_ref().expect("checked");
+                if let Err(e) = report(&metrics, &timeline, &anomalies, &load, peak_busy, interrupted).with_snapshot(true).write_to(path) {
+                    eprintln!("couldn't write the snapshot to {}: {e}", path.display());
+                }
+            }
             _ = tokio::signal::ctrl_c(), if !interrupted => {
                 interrupted = true;
                 load.stop();
@@ -231,9 +252,18 @@ async fn run_json(args: &Cli) -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
-    let report = json_report::JsonReport::generate(&metrics, started.elapsed(), interrupted)
-        .with_generator(load.threads(), peak_busy)
-        .with_anomalies(&anomalies);
+    timeline.finish(started.elapsed());
+    let report = report(
+        &metrics,
+        &timeline,
+        &anomalies,
+        &load,
+        peak_busy,
+        interrupted,
+    );
+    if let Some(path) = &args.snapshot {
+        report.clone().with_snapshot(false).write_to(path)?;
+    }
     println!("{}", report.to_json()?);
     Ok(())
 }

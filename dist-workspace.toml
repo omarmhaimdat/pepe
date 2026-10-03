@@ -25,7 +25,7 @@ tap = "omarmhaimdat/homebrew-pepe"
 formula = "pepe"
 # The Homebrew job is ours (publish-homebrew.yml): dist's would not install
 # the completions and man pages where Homebrew activates them
-publish-jobs = ["./publish-homebrew", "./publish-r2"]
+publish-jobs = ["./publish-homebrew", "./publish-r2", "./publish-docker"]
 # Signed build provenance (`gh attestation verify`)
 github-attestations = true
 # `pepe self-update` is built in via axoupdater, no separate updater binary
