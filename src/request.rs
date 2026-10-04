@@ -90,7 +90,12 @@ where
 /// races a new one against waiting for one to be returned, and keeps the
 /// loser as a spare: without it, a run that started a thousand requests at
 /// once held two thousand connections for its whole length.
-const IDLE_CONNECTIONS: usize = 4;
+///
+/// A paced run (`--rate`) is the exception: its workers wait between
+/// requests, so their connections are idle most of the time, and a cap
+/// this low would close and reopen them in waves. It keeps up to its
+/// concurrency instead (see `RequestSettings::idle_connections`).
+pub const IDLE_CONNECTIONS: usize = 4;
 
 #[derive(Debug, Clone)]
 pub struct RequestSettings {
@@ -102,6 +107,9 @@ pub struct RequestSettings {
     pub disable_redirects: bool,
     pub proxy: Option<String>,
     pub user_agent: String,
+    /// Idle connections the pool keeps per host: `IDLE_CONNECTIONS`, or
+    /// the concurrency when the run is paced
+    pub idle_connections: usize,
 }
 
 #[derive(Debug, Clone)]
@@ -191,7 +199,7 @@ impl Request {
         let mut client_builder = reqwest::Client::builder()
             .default_headers(request_headers)
             .timeout(std::time::Duration::from_secs(self.settings.timeout as u64))
-            .pool_max_idle_per_host(IDLE_CONNECTIONS);
+            .pool_max_idle_per_host(self.settings.idle_connections);
 
         if let Some(proxy_url) = &self.settings.proxy {
             let proxy =
@@ -237,6 +245,7 @@ mod tests {
             disable_redirects: false,
             proxy: None,
             user_agent: "pepe/test".into(),
+            idle_connections: IDLE_CONNECTIONS,
         }
     }
 
