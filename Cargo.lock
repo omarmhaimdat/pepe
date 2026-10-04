@@ -1223,6 +1223,8 @@ dependencies = [
  "serde_json",
  "serde_norway",
  "tokio",
+ "tower-layer",
+ "tower-service",
 ]
 
 [[package]]
