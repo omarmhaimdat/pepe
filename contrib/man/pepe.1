@@ -8,7 +8,7 @@ pepe \- HTTP load generator
 .ie \n(.g .ds Aq \(aq
 .el .ds Aq '
 .SH SYNOPSIS
-\fBpepe\fR [\fB\-h\fR|\fB\-\-help\fR] [\fB\-n\fR|\fB\-\-number\fR] [\fB\-c\fR|\fB\-\-concurrency\fR] [\fB\-z\fR|\fB\-\-duration\fR] [\fB\-\-curl\fR] [\fB\-m\fR|\fB\-\-method\fR] [\fB\-H\fR|\fB\-\-headers\fR] [\fB\-t\fR|\fB\-\-timeout\fR] [\fB\-\-threads\fR] [\fB\-\-rate\fR] [\fB\-d\fR|\fB\-\-body\fR] [\fB\-u\fR|\fB\-\-user\-agent\fR] [\fB\-p\fR|\fB\-\-proxy\fR] [\fB\-k\fR|\fB\-\-insecure\fR] [\fB\-\-disable\-compression\fR] [\fB\-\-disable\-keepalive\fR] [\fB\-\-disable\-redirects\fR] [\fB\-\-json\fR] [\fB\-\-trace\-header\fR] [\fB\-\-snapshot\fR] [\fB\-i\fR|\fB\-\-setup\fR] [\fB\-\-config\fR] [\fB\-\-write\-config\fR] [\fB\-V\fR|\fB\-\-version\fR] [\fIURL\fR] [\fIARGS\fR] [\fIsubcommands\fR]
+\fBpepe\fR [\fB\-h\fR|\fB\-\-help\fR] [\fB\-n\fR|\fB\-\-number\fR] [\fB\-c\fR|\fB\-\-concurrency\fR] [\fB\-z\fR|\fB\-\-duration\fR] [\fB\-\-curl\fR] [\fB\-m\fR|\fB\-\-method\fR] [\fB\-H\fR|\fB\-\-headers\fR] [\fB\-t\fR|\fB\-\-timeout\fR] [\fB\-\-warmup\fR] [\fB\-\-threads\fR] [\fB\-\-rate\fR] [\fB\-d\fR|\fB\-\-body\fR] [\fB\-u\fR|\fB\-\-user\-agent\fR] [\fB\-p\fR|\fB\-\-proxy\fR] [\fB\-k\fR|\fB\-\-insecure\fR] [\fB\-\-disable\-compression\fR] [\fB\-\-disable\-keepalive\fR] [\fB\-\-disable\-redirects\fR] [\fB\-\-json\fR] [\fB\-\-trace\-header\fR] [\fB\-\-snapshot\fR] [\fB\-i\fR|\fB\-\-setup\fR] [\fB\-\-config\fR] [\fB\-\-write\-config\fR] [\fB\-V\fR|\fB\-\-version\fR] [\fIURL\fR] [\fIARGS\fR] [\fIsubcommands\fR]
 .ie \n(.g .ds Aq \(aq
 .el .ds Aq '
 .SH DESCRIPTION
@@ -40,6 +40,9 @@ HTTP headers, e.g. \-H \*(AqAccept: application/json\*(Aq
 .TP
 \fB\-t\fR, \fB\-\-timeout\fR \fI<TIMEOUT>\fR [default: 20]
 Time in seconds to wait for a response
+.TP
+\fB\-\-warmup\fR \fI<TIME>\fR
+Send for this long before measuring, e.g. 5s: connections open, caches fill and JITs settle without counting against the run
 .TP
 \fB\-\-threads\fR \fI<THREADS>\fR
 Threads sending requests (default 1). One sends about 100k requests a second; the dashboard says when it is the limit

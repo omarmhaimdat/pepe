@@ -158,6 +158,10 @@ pub struct Dashboard {
     paused_total: Duration,
     paused_since: Option<Instant>,
     started: Instant,
+    /// `--warmup`: still in it, what's left of it, and what it sent
+    warming: bool,
+    warmup_left: Option<Duration>,
+    warmup_requests: u64,
     /// Set once every request has finished (or the run was stopped)
     finished: Option<Duration>,
     interrupted: bool,
@@ -202,6 +206,7 @@ pub struct Dashboard {
 impl Dashboard {
     pub fn new(args: Cli, plan: Plan) -> Self {
         let snapshot = args.snapshot.clone();
+        let warmup = args.warmup();
         Self {
             concurrency: args.concurrency as usize,
             rate: args.rate,
@@ -223,6 +228,9 @@ impl Dashboard {
             paused_total: Duration::ZERO,
             paused_since: None,
             started: Instant::now(),
+            warming: warmup.is_some(),
+            warmup_left: warmup,
+            warmup_requests: 0,
             finished: None,
             interrupted: false,
             verdict: None,
@@ -259,6 +267,7 @@ impl Dashboard {
             self.peak_busy,
             self.rate.map(|r| (r, self.rate_missed)),
         )
+        .with_warmup(self.args.warmup(), self.warmup_requests)
         .with_timeline(&self.timeline)
         .with_slowest(&self.slowest)
         .with_anomalies(&self.anomalies);
@@ -336,6 +345,10 @@ impl Dashboard {
     }
 
     fn record(&mut self, stat: ResponseStats) {
+        if stat.warmup {
+            self.warmup_requests += 1;
+            return;
+        }
         self.metrics.record(&stat);
         self.timeline.record(&stat);
         if let Some(metrics) = self.endpoint_metrics.get_mut(stat.endpoint as usize) {
@@ -444,7 +457,7 @@ impl Dashboard {
                 }
             }
         }
-        if self.finished.is_none() {
+        if self.finished.is_none() && !self.warming {
             self.timeline.advance(self.active());
             for anomaly in self.watch.observe(self.timeline.samples(), self.paused) {
                 self.notify_for(anomaly.text.clone(), ANOMALY_TTL);
@@ -462,6 +475,14 @@ impl Dashboard {
         self.busy = load.busy();
         self.peak_busy = self.peak_busy.max(self.busy);
         self.set_paused(load.is_paused());
+        self.warmup_left = load.warmup_left();
+        if self.warming && !load.warming() {
+            // The run's clock starts here
+            self.warming = false;
+            self.started = Instant::now();
+            self.paused_total = Duration::ZERO;
+            self.paused_since = self.paused.then(Instant::now);
+        }
         if self
             .notice
             .as_ref()

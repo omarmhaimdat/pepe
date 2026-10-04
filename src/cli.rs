@@ -49,6 +49,11 @@ pub struct Cli {
     #[arg(short, long, default_value_t = 20, global = true)]
     pub timeout: u32,
 
+    /// Send for this long before measuring, e.g. 5s: connections open,
+    /// caches fill and JITs settle without counting against the run
+    #[arg(long, global = true, value_name = "TIME")]
+    pub warmup: Option<String>,
+
     /// Threads sending requests (default 1). One sends about 100k requests
     /// a second; the dashboard says when it is the limit
     #[arg(long, global = true, value_parser = clap::value_parser!(u32).range(1..))]
@@ -256,6 +261,9 @@ pub struct ApiArgs {
 
 impl Cli {
     pub fn validate(&mut self) -> Result<(), Error> {
+        if let Some(warmup) = &self.warmup {
+            Self::parse_duration(warmup)?;
+        }
         if let Some(rate) = self.rate {
             if !(rate > 0.0 && rate.is_finite()) {
                 return Err(Error::raw(
@@ -488,6 +496,9 @@ impl Cli {
         if let Some(threads) = self.threads {
             flag("--threads", &threads.to_string());
         }
+        if let Some(warmup) = &self.warmup {
+            flag("--warmup", warmup);
+        }
         if let Some(rate) = self.rate {
             flag("--rate", &rate.to_string());
         }
@@ -552,6 +563,15 @@ impl Cli {
     }
 
     /// Test length for `--duration` runs (already validated by `validate`)
+    /// `--warmup`, parsed (already validated by `validate`)
+    pub fn warmup(&self) -> Option<std::time::Duration> {
+        self.warmup
+            .as_deref()
+            .and_then(|d| Self::parse_duration(d).ok())
+            .map(std::time::Duration::from_millis)
+            .filter(|d| !d.is_zero())
+    }
+
     pub fn run_duration(&self) -> Option<std::time::Duration> {
         self.duration
             .as_deref()

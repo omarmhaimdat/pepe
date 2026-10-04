@@ -164,6 +164,7 @@ pepe self-update [--check]     update pepe
 | `--disable-compression` | | Don't ask for gzip |
 | `--disable-keepalive` | | Open a new connection for every request |
 | `--disable-redirects` | | Don't follow redirects |
+| `--warmup <TIME>` | | Send for this long before counting anything (see [Warm-up](#warm-up)) |
 | `--threads <N>` | 1 | Threads sending requests (see [Threads](#threads)) |
 | `--rate <PER_SECOND>` | | Start this many requests a second, spread evenly (see [Arrival rate](#arrival-rate)) |
 | `--curl` | | Read the request from a curl command (see below) |
@@ -215,6 +216,14 @@ Repeated headers are kept (several `Cookie` headers are sent as several), and a 
 
 ```bash
 pepe -z 2m -c 100 https://example.com
+```
+
+### Warm-up
+
+The first seconds of a run are not like the rest: connections open, caches fill, JITs settle. `--warmup 5s` sends at the run's concurrency for that long first and counts none of it: not in the numbers, the charts, the verdict or the report, and not against `-n` or `-z`, whose clock starts when the warm-up ends. The header says `warming up` with the time left while it goes, and the Stats tab and the JSON report (`generator.warmup_s`, `warmup_requests`) say how much was sent and not counted. A ramp has no warm-up: its first step is one.
+
+```bash
+pepe --warmup 5s -z 1m -c 50 https://example.com
 ```
 
 ### Arrival rate

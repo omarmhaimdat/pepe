@@ -84,6 +84,8 @@ enum Field {
     Concurrency,
     /// Threads sending requests; empty for the default
     Threads,
+    /// Sent before measuring, e.g. "5s"; empty for none
+    Warmup,
     /// Requests started per second; empty for as many as -c allows
     Rate,
     /// A file the report is written to every minute; empty for none
@@ -136,6 +138,7 @@ pub struct Setup {
     body_edited: bool,
     concurrency: String,
     threads: String,
+    warmup: String,
     rate: String,
     snapshot: String,
     by_duration: bool,
@@ -203,6 +206,7 @@ impl Setup {
             body_edited: false,
             concurrency: cli.concurrency.to_string(),
             threads: cli.threads.map(|t| t.to_string()).unwrap_or_default(),
+            warmup: cli.warmup.clone().unwrap_or_default(),
             rate: cli.rate.map(|r| r.to_string()).unwrap_or_default(),
             snapshot: cli
                 .snapshot
@@ -269,6 +273,7 @@ impl Setup {
         fields.extend([
             Field::Timeout,
             Field::Threads,
+            Field::Warmup,
             Field::Rate,
             Field::Snapshot,
             Field::Redirects,
@@ -295,6 +300,7 @@ impl Setup {
             Field::Body => &mut self.body,
             Field::Concurrency => &mut self.concurrency,
             Field::Threads => &mut self.threads,
+            Field::Warmup => &mut self.warmup,
             Field::Rate => &mut self.rate,
             Field::Snapshot => &mut self.snapshot,
             Field::RunValue if self.by_duration => &mut self.duration,
@@ -611,6 +617,14 @@ impl Setup {
         cli.threads = match self.threads.trim() {
             "" => None,
             text => Some(number("threads", text)?.max(1)),
+        };
+        cli.warmup = match self.warmup.trim() {
+            "" => None,
+            text => {
+                Cli::parse_duration(text)
+                    .map_err(|_| format!("warm-up {text:?} needs a unit: 5s, 1m"))?;
+                Some(text.to_string())
+            }
         };
         cli.rate = match self.rate.trim() {
             "" => None,
@@ -1151,6 +1165,18 @@ impl Setup {
             Field::Threads,
             "Threads",
             self.typed(Field::Threads, &self.threads, "auto", room),
+            width,
+        );
+        self.row(
+            &mut options,
+            Field::Warmup,
+            "Warm-up",
+            self.typed(
+                Field::Warmup,
+                &self.warmup,
+                "e.g. 5s, sent before counting",
+                room,
+            ),
             width,
         );
         self.row(
