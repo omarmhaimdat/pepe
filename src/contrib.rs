@@ -92,10 +92,14 @@ const ENVIRONMENT: [(&str, &str); 2] = [
     ),
 ];
 
-const EXAMPLES: [(&str, &str); 6] = [
+const EXAMPLES: [(&str, &str); 7] = [
     (
         "pepe replay access.log --base-url https://staging.example.com -c 50 -z 2m",
         "The log's URLs, in their real proportions",
+    ),
+    (
+        "pepe flow checkout.toml -c 20 -z 1m",
+        "A sequence of requests, each step fed by the one before",
     ),
     (
         "pepe https://example.com",
@@ -175,10 +179,11 @@ fn main_page() -> String {
 }
 
 /// Each subcommand's page: (subcommand, page name, how it's typed)
-const SUBCOMMANDS: [(&str, &str, &str); 5] = [
+const SUBCOMMANDS: [(&str, &str, &str); 6] = [
     ("ramp", "pepe-ramp", "pepe ramp"),
     ("api", "pepe-api", "pepe api"),
     ("replay", "pepe-replay", "pepe replay"),
+    ("flow", "pepe-flow", "pepe flow"),
     ("self-update", "pepe-self-update", "pepe self-update"),
     ("completions", "pepe-completions", "pepe completions"),
 ];

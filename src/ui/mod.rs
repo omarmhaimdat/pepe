@@ -115,10 +115,11 @@ pub struct EndpointView {
     pub body: Option<Vec<u8>>,
 }
 
-/// What the per-row tab lists: an API's endpoints, or a replayed log's URLs
+/// What the per-row tab lists: an API's endpoints, or a flow's steps
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Rows {
     Endpoints,
+    Steps,
     Urls,
 }
 
@@ -126,6 +127,7 @@ impl Rows {
     pub(super) fn tab(self) -> &'static str {
         match self {
             Rows::Endpoints => "Endpoints",
+            Rows::Steps => "Steps",
             Rows::Urls => "URLs",
         }
     }
@@ -133,6 +135,7 @@ impl Rows {
     pub(super) fn plural(self) -> &'static str {
         match self {
             Rows::Endpoints => "endpoints",
+            Rows::Steps => "steps",
             Rows::Urls => "urls",
         }
     }
@@ -140,6 +143,7 @@ impl Rows {
     pub(super) fn singular(self) -> &'static str {
         match self {
             Rows::Endpoints => "endpoint",
+            Rows::Steps => "step",
             Rows::Urls => "share  url",
         }
     }
@@ -348,6 +352,12 @@ impl Dashboard {
     pub fn with_rows(mut self, rows: Rows, views: Vec<EndpointView>) -> Self {
         self.rows = rows;
         self.with_endpoints(views)
+    }
+
+    /// A flow's steps, one row each, like endpoints
+    pub fn with_steps(mut self, steps: Vec<EndpointView>) -> Self {
+        self.rows = Rows::Steps;
+        self.with_endpoints(steps)
     }
 
     fn tabs(&self) -> &'static [Tab] {

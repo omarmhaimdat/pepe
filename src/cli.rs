@@ -178,6 +178,14 @@ pub enum Command {
     Ramp(RampArgs),
     /// Send the URLs of an access log in their real proportions
     Replay(ReplayArgs),
+    /// Run a sequence of requests from a flow file, each step fed by the last
+    Flow(FlowArgs),
+}
+
+#[derive(clap::Args, Debug, Clone, PartialEq)]
+pub struct FlowArgs {
+    /// The flow: a TOML file of [[step]]s (see the README)
+    pub file: std::path::PathBuf,
 }
 
 #[derive(clap::Args, Debug, Clone, PartialEq)]
@@ -469,6 +477,7 @@ impl Cli {
             Some(Command::Ramp(_)) => parts.push("ramp".into()),
             Some(Command::Api(_)) => parts.push("api".into()),
             Some(Command::Replay(_)) => parts.push("replay".into()),
+            Some(Command::Flow(_)) => parts.push("flow".into()),
             _ => {}
         }
         let mut flag = |name: &str, value: &str| {
@@ -515,6 +524,7 @@ impl Cli {
                     flag("--rows", &replay.rows.to_string());
                 }
             }
+            Some(Command::Flow(flow)) => target = flow.file.display().to_string(),
             _ => {}
         }
         if ramp.is_none() {

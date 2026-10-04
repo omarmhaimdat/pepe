@@ -316,6 +316,44 @@ Once four clean steps are in, a saturation curve (the Universal Scalability Law)
 
 `--json` runs the ramp without a screen and prints every step, the findings, and `capacity` (`requests_per_second`, `concurrency`, `extrapolated`, `latency_doubles_at_concurrency`; `null` when the curve hadn't bent).
 
+### Flows: a sequence of requests
+
+`pepe flow` runs a chain of requests where a value from one response feeds the next: log in, take the token, use it. Each unit of concurrency is one user walking the steps in order with its own values, over and over; each step is a row on the dashboard, as endpoints are in API mode, with its own throughput, latency and statuses.
+
+```bash
+pepe flow checkout.toml -c 20 -z 1m
+```
+
+```toml
+# checkout.toml
+name = "checkout"
+
+[vars]
+host = "https://shop.example.com"
+
+[[step]]
+name = "login"
+method = "POST"
+url = "{{host}}/login"
+headers = ["Content-Type: application/json"]
+body = '{"user": "demo", "password": "demo"}'
+capture = { token = "json:$.token", session = "header:Set-Cookie" }
+
+[[step]]
+name = "cart"
+url = "{{host}}/cart"
+headers = ["Authorization: Bearer {{token}}"]
+capture = { cart = "json:$.items[0].id" }
+
+[[step]]
+name = "checkout"
+method = "POST"
+url = "{{host}}/cart/{{cart}}/checkout"
+headers = ["Authorization: Bearer {{token}}"]
+expect = 201
+```
+
+`{{name}}` holes are filled from `[vars]` and from earlier steps' captures; a hole nothing fills is an error when the file is read, naming the step and the variable. A capture is `json:$.path.to[0].value`, `header:Name`, `regex:pattern` (the first group) or `body`. A step passes when it gets a 2xx, or the status `expect` names; a step that fails, or whose capture finds nothing, ends the chain with that said in the failure causes, and the user starts over. `-n` counts chains, not requests; `-c`, `-z`, `-H` (sent with every step), `-t`, `--rate` (which paces every request, steps included) and the other options work as usual. `--json` prints the usual report plus `flow.steps`, one entry per step, and how many chains started and completed.
 ### Replaying an access log
 
 Real traffic is not one URL. `pepe replay` reads an access log and sends its URLs in the proportions the log had: a path seen 3,000 times gets 30× the requests of one seen 100 times, mixed evenly rather than in bursts.

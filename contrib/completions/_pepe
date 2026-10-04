@@ -283,6 +283,46 @@ _arguments "${_arguments_options[@]}" : \
 ':log -- The log\: nginx or Apache (common or combined), Caddy JSON, AWS ALB, or one URL or path per line:_files' \
 && ret=0
 ;;
+(flow)
+_arguments "${_arguments_options[@]}" : \
+'-n+[Number of requests to perform]:NUMBER:_default' \
+'--number=[Number of requests to perform]:NUMBER:_default' \
+'-z+[Duration of the test, e.g. 10s, 3m, 2h (mutually exclusive with -n)]:DURATION:_default' \
+'--duration=[Duration of the test, e.g. 10s, 3m, 2h (mutually exclusive with -n)]:DURATION:_default' \
+'-m+[HTTP method, e.g. GET, POST, PUT, DELETE]:METHOD:_default' \
+'--method=[HTTP method, e.g. GET, POST, PUT, DELETE]:METHOD:_default' \
+'*-H+[HTTP headers, e.g. -H '\''Accept\: application/json'\'']:HEADERS:_default' \
+'*--headers=[HTTP headers, e.g. -H '\''Accept\: application/json'\'']:HEADERS:_default' \
+'-t+[Time in seconds to wait for a response]:TIMEOUT:_default' \
+'--timeout=[Time in seconds to wait for a response]:TIMEOUT:_default' \
+'--warmup=[Send for this long before measuring, e.g. 5s\: connections open, caches fill and JITs settle without counting against the run]:TIME:_default' \
+'--threads=[Threads sending requests (default 1). One sends about 100k requests a second; the dashboard says when it is the limit]:THREADS:_default' \
+'--rate=[Start this many requests a second, spread evenly, instead of as many as the concurrency allows; -c is then the most in flight at once, and pepe says when it holds the rate back]:PER_SECOND:_default' \
+'-d+[HTTP request body]:BODY:_default' \
+'--body=[HTTP request body]:BODY:_default' \
+'-p+[Proxy server URL\: http\://user\:pass@host\:port or socks5\://host\:port]:PROXY:_default' \
+'--proxy=[Proxy server URL\: http\://user\:pass@host\:port or socks5\://host\:port]:PROXY:_default' \
+'--trace-header=[Response header holding the request id to show for the slowest requests and in the inspector, so they can be found in the server'\''s logs; without it, X-Request-Id, traceparent, CF-Ray, X-Amzn-Trace-Id and other common ones are looked for]:NAME:_default' \
+'--snapshot=[Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run'\''s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run]:FILE:_files' \
+'--config=[Read settings from this file instead of ./pepe.toml; flags on the command line win over it]:FILE:_files' \
+'--write-config=[Write the settings as they stand to this file, as a pepe.toml, and exit]:FILE:_files' \
+'-c+[Number of concurrent requests at a time]:CONCURRENCY:_default' \
+'--concurrency=[Number of concurrent requests at a time]:CONCURRENCY:_default' \
+'-u+[User-Agent string, default is pepe/{version}]:USER_AGENT:_default' \
+'--user-agent=[User-Agent string, default is pepe/{version}]:USER_AGENT:_default' \
+'-h[Print help]' \
+'--help[Print help]' \
+'-k[Accept invalid TLS certificates (self-signed, expired, wrong host)]' \
+'--insecure[Accept invalid TLS certificates (self-signed, expired, wrong host)]' \
+'--disable-compression[Disable HTTP compression, e.g. gzip]' \
+'--disable-keepalive[Disable HTTP keepalive, e.g. Connection\: close]' \
+'--disable-redirects[Prevent http redirects]' \
+'--json[Output results in JSON format]' \
+'-i[Open the setup screen to review or change the settings before starting (it opens by itself when no URL is given)]' \
+'--setup[Open the setup screen to review or change the settings before starting (it opens by itself when no URL is given)]' \
+':file -- The flow\: a TOML file of \[\[step\]\]s (see the README):_files' \
+&& ret=0
+;;
 (help)
 _arguments "${_arguments_options[@]}" : \
 ":: :_pepe__subcmd__help_commands" \
@@ -315,6 +355,10 @@ _arguments "${_arguments_options[@]}" : \
 _arguments "${_arguments_options[@]}" : \
 && ret=0
 ;;
+(flow)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
 (help)
 _arguments "${_arguments_options[@]}" : \
 && ret=0
@@ -336,6 +380,7 @@ _pepe_commands() {
 'api:Load-test every endpoint of an OpenAPI spec' \
 'ramp:Raise the load step by step to find where the target stops keeping up' \
 'replay:Send the URLs of an access log in their real proportions' \
+'flow:Run a sequence of requests from a flow file, each step fed by the last' \
 'help:Print this message or the help of the given subcommand(s)' \
     )
     _describe -t commands 'pepe commands' commands "$@"
@@ -350,6 +395,11 @@ _pepe__subcmd__completions_commands() {
     local commands; commands=()
     _describe -t commands 'pepe completions commands' commands "$@"
 }
+(( $+functions[_pepe__subcmd__flow_commands] )) ||
+_pepe__subcmd__flow_commands() {
+    local commands; commands=()
+    _describe -t commands 'pepe flow commands' commands "$@"
+}
 (( $+functions[_pepe__subcmd__help_commands] )) ||
 _pepe__subcmd__help_commands() {
     local commands; commands=(
@@ -358,6 +408,7 @@ _pepe__subcmd__help_commands() {
 'api:Load-test every endpoint of an OpenAPI spec' \
 'ramp:Raise the load step by step to find where the target stops keeping up' \
 'replay:Send the URLs of an access log in their real proportions' \
+'flow:Run a sequence of requests from a flow file, each step fed by the last' \
 'help:Print this message or the help of the given subcommand(s)' \
     )
     _describe -t commands 'pepe help commands' commands "$@"
@@ -371,6 +422,11 @@ _pepe__subcmd__help__subcmd__api_commands() {
 _pepe__subcmd__help__subcmd__completions_commands() {
     local commands; commands=()
     _describe -t commands 'pepe help completions commands' commands "$@"
+}
+(( $+functions[_pepe__subcmd__help__subcmd__flow_commands] )) ||
+_pepe__subcmd__help__subcmd__flow_commands() {
+    local commands; commands=()
+    _describe -t commands 'pepe help flow commands' commands "$@"
 }
 (( $+functions[_pepe__subcmd__help__subcmd__help_commands] )) ||
 _pepe__subcmd__help__subcmd__help_commands() {
