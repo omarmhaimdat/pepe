@@ -53,7 +53,7 @@ _pepe() {
 
     case "${cmd}" in
         pepe)
-            opts="-h -n -z -m -H -t -d -p -k -i -c -u -V --help --number --duration --curl --method --headers --timeout --threads --body --proxy --insecure --disable-compression --disable-keepalive --disable-redirects --json --trace-header --snapshot --setup --config --write-config --concurrency --user-agent --version self-update completions api ramp help"
+            opts="-h -n -z -m -H -t -d -p -k -i -c -u -V --help --number --duration --curl --method --headers --timeout --threads --rate --body --proxy --insecure --disable-compression --disable-keepalive --disable-redirects --json --trace-header --snapshot --setup --config --write-config --concurrency --user-agent --version self-update completions api ramp help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 1 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -100,6 +100,10 @@ _pepe() {
                     return 0
                     ;;
                 --threads)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --rate)
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0
                     ;;
@@ -159,7 +163,7 @@ _pepe() {
             return 0
             ;;
         pepe__subcmd__api)
-            opts="-h -n -z -m -H -t -d -p -k -i -c -u --auth --server --all --tag --only --skip --set --include-writes --help --number --duration --method --headers --timeout --threads --body --proxy --insecure --disable-compression --disable-keepalive --disable-redirects --json --trace-header --snapshot --setup --config --write-config --concurrency --user-agent"
+            opts="-h -n -z -m -H -t -d -p -k -i -c -u --auth --server --all --tag --only --skip --set --include-writes --help --number --duration --method --headers --timeout --threads --rate --body --proxy --insecure --disable-compression --disable-keepalive --disable-redirects --json --trace-header --snapshot --setup --config --write-config --concurrency --user-agent"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -233,6 +237,10 @@ _pepe() {
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0
                     ;;
+                --rate)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
                 --body)
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0
@@ -289,7 +297,7 @@ _pepe() {
             return 0
             ;;
         pepe__subcmd__completions)
-            opts="-h -n -z -m -H -t -d -p -k -i -c -u --install --dry-run --help --number --duration --method --headers --timeout --threads --body --proxy --insecure --disable-compression --disable-keepalive --disable-redirects --json --trace-header --snapshot --setup --config --write-config --concurrency --user-agent bash zsh fish powershell"
+            opts="-h -n -z -m -H -t -d -p -k -i -c -u --install --dry-run --help --number --duration --method --headers --timeout --threads --rate --body --proxy --insecure --disable-compression --disable-keepalive --disable-redirects --json --trace-header --snapshot --setup --config --write-config --concurrency --user-agent bash zsh fish powershell"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -336,6 +344,10 @@ _pepe() {
                     return 0
                     ;;
                 --threads)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --rate)
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0
                     ;;
@@ -479,7 +491,7 @@ _pepe() {
             return 0
             ;;
         pepe__subcmd__ramp)
-            opts="-h -n -z -m -H -t -d -p -k -i -c -u --from --to --step --every --until --help --number --duration --method --headers --timeout --threads --body --proxy --insecure --disable-compression --disable-keepalive --disable-redirects --json --trace-header --snapshot --setup --config --write-config --concurrency --user-agent"
+            opts="-h -n -z -m -H -t -d -p -k -i -c -u --from --to --step --every --until --help --number --duration --method --headers --timeout --threads --rate --body --proxy --insecure --disable-compression --disable-keepalive --disable-redirects --json --trace-header --snapshot --setup --config --write-config --concurrency --user-agent"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -549,6 +561,10 @@ _pepe() {
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0
                     ;;
+                --rate)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
                 --body)
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0
@@ -605,7 +621,7 @@ _pepe() {
             return 0
             ;;
         pepe__subcmd__self__subcmd__update)
-            opts="-h -n -z -m -H -t -d -p -k -i -c -u --check --verbose --help --number --duration --method --headers --timeout --threads --body --proxy --insecure --disable-compression --disable-keepalive --disable-redirects --json --trace-header --snapshot --setup --config --write-config --concurrency --user-agent"
+            opts="-h -n -z -m -H -t -d -p -k -i -c -u --check --verbose --help --number --duration --method --headers --timeout --threads --rate --body --proxy --insecure --disable-compression --disable-keepalive --disable-redirects --json --trace-header --snapshot --setup --config --write-config --concurrency --user-agent"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -652,6 +668,10 @@ _pepe() {
                     return 0
                     ;;
                 --threads)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --rate)
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0
                     ;;

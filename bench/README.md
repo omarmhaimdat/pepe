@@ -233,6 +233,18 @@ with the headers and freed the connection before the caller sees it.
 - **Plain HTTP with a new connection per request** got slower with more
   threads for every tool, pepe and oha alike. That is macOS running out of
   ephemeral ports (TIME_WAIT), not the client, so it isn't in the suite.
+- **Paced runs** (`--rate`, v0.10). A paced worker sleeps until its
+  next start, so pacing costs a timer wake-up per request on top of the
+  request itself: at 20,000 a second with `-c 64`, 3 s of plain HTTP cost
+  pepe 1.33 s of CPU and 14.7 MB against 1.47 s unpaced for five times the
+  requests. The same rate cost oha 1.8 (`-q`) 2.40 s and 46.8 MB and vegeta
+  3.44 s and 27.2 MB; at 5,000 a second, pepe 0.72 s and 12.0 MB, oha 1.04 s
+  and 33.9 MB, vegeta 0.97 s and 24.5 MB (macOS, one round each). The first
+  paced build cost 23 s of system time for the same run: paced workers idle
+  between requests, so their connections sat idle, the four-connection idle
+  cap closed them, and every wake-up reconnected (`sample` showed the load
+  thread in `connect`). A paced run now keeps up to its concurrency of idle
+  connections.
 - **Reading `Server-Timing` and request ids** (v0.10). Every response is
   looked at for a `Server-Timing` header and for one of twelve request-id
   headers. When the target sends none, the gate's four workloads moved
