@@ -28,7 +28,7 @@ tower-layer = "0.3"
 tower-service = "0.3"
 ratatui = "0.29.0"
 # event-stream: read keys asynchronously instead of blocking a runtime thread
-crossterm = { version = "0.28.1", features = ["event-stream"] }
+crossterm = { version = "0.29.0", features = ["event-stream"] }
 gethostname = "1.0.0"
 serde = { version = "1.0.130", features = ["derive"] }
 # preserve_order: the request inspector shows JSON keys in the order sent
