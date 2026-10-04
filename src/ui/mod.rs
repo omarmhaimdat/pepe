@@ -191,6 +191,8 @@ pub struct Dashboard {
     connects: Option<std::sync::Arc<crate::request::ConnectTimes>>,
     /// `--snapshot`: where the report so far is written every minute
     snapshot: Option<std::path::PathBuf>,
+    /// The slowest responses so far, with their request ids
+    pub slowest: crate::metrics::Slowest,
 }
 
 impl Dashboard {
@@ -235,6 +237,7 @@ impl Dashboard {
             notice: None,
             connects: None,
             snapshot,
+            slowest: Default::default(),
         }
     }
 
@@ -247,6 +250,7 @@ impl Dashboard {
         )
         .with_generator(load.threads(), self.peak_busy)
         .with_timeline(&self.timeline)
+        .with_slowest(&self.slowest)
         .with_anomalies(&self.anomalies);
         match &self.connects {
             Some(connects) => report.with_connects(connects),
@@ -332,6 +336,7 @@ impl Dashboard {
             at: self.active(),
             stat,
         };
+        self.slowest.record(&entry.stat, entry.at);
         // The list holds still while a request is open in the inspector: at
         // high rates new rows would push the one being read out within
         // milliseconds. Everything else keeps counting.

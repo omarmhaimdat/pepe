@@ -86,6 +86,13 @@ pub struct Cli {
     #[arg(long, global = true)]
     pub json: bool,
 
+    /// Response header holding the request id to show for the slowest
+    /// requests and in the inspector, so they can be found in the
+    /// server's logs; without it, X-Request-Id, traceparent, CF-Ray,
+    /// X-Amzn-Trace-Id and other common ones are looked for
+    #[arg(long, global = true, value_name = "NAME")]
+    pub trace_header: Option<String>,
+
     /// Write the JSON report so far to this file every minute while the
     /// run goes, and once more when it ends, so a long run's numbers
     /// survive a crash or a lost terminal; it has a minute-by-minute
@@ -229,6 +236,14 @@ pub struct ApiArgs {
 
 impl Cli {
     pub fn validate(&mut self) -> Result<(), Error> {
+        if let Some(name) = &self.trace_header {
+            if reqwest::header::HeaderName::from_bytes(name.as_bytes()).is_err() {
+                return Err(Error::raw(
+                    clap::error::ErrorKind::ValueValidation,
+                    format!("--trace-header {name:?} is not a valid header name"),
+                ));
+            }
+        }
         // A ramp sets its own concurrency and runs for as long as its steps
         let ramp = matches!(self.command, Some(Command::Ramp(_)));
         if self.concurrency > self.number && self.duration.is_none() && !ramp {

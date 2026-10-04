@@ -27,6 +27,7 @@ It is also light. One thread sends about 100k requests a second on an Apple M4 P
 - **Setup screen**: run `pepe` with no arguments and fill in every option on a form, with the equivalent command shown as you go.
 - **Ramp mode**: raise concurrency step by step and find the level that held, where throughput stopped following the load, and where it broke.
 - **API mode**: load-test the endpoints of an OpenAPI 3 or Swagger 2 spec, picked by tag, with parameters and credentials set on screen.
+- **What the server says**: `Server-Timing` headers are added up and held against the latency measured here, and the slowest requests are listed with the ids their backend gave them (`X-Request-Id`, `traceparent`, `CF-Ray`, …), ready to search in its logs.
 - **JSON output** for scripts and CI, with the same percentiles the dashboard shows.
 - **Light**: a share-nothing engine that is measured against oha and vegeta on every release; the numbers and the method are in [bench/README.md](bench/README.md).
 
@@ -167,6 +168,7 @@ pepe self-update [--check]     update pepe
 | `--curl` | | Read the request from a curl command (see below) |
 | `-i`, `--setup` | | Open the setup screen filled in from the flags |
 | `--json` | | No dashboard: run to completion and print a JSON report |
+| `--trace-header <NAME>` | | Response header holding the request id, if not one of the usual ones |
 
 ### Headers, bodies and methods
 
@@ -333,11 +335,18 @@ jq '.summary.latency.p99_ms' results.json
     "data_transfer_bytes": 1256000,
     "latency": { "min_ms": 9.1, "max_ms": 212.4, "avg_ms": 36.1, "std_dev_ms": 18.0,
                  "median_ms": 31.9, "p90_ms": 58.2, "p95_ms": 71.0, "p99_ms": 120.3 },
-    "status_codes": { "200": 1000 }
+    "status_codes": { "200": 1000 },
+    "server_timing": { "responses": 1000, "total": { "count": 1000, "median_ms": 24.1, "p90_ms": 40.2, "p99_ms": 88.0 },
+                       "segments": { "db": { "count": 1000, "median_ms": 18.3, "p90_ms": 31.0, "p99_ms": 70.2 },
+                                     "app": { "count": 1000, "median_ms": 5.8, "p90_ms": 9.1, "p99_ms": 17.9 } } },
+    "slowest_requests": [ { "at_s": 1.204, "latency_ms": 212.4, "status": 200,
+                            "request_id": "8f3c1a2e-7b9d", "id_header": "x-request-id" } ]
   },
   "generator": { "threads": 1, "peak_busy_percent": 12 }
 }
 ```
+
+`server_timing` is there when the target sends `Server-Timing` headers, and `slowest_requests` lists the five slowest responses with the request id their backend gave them, so they can be found in its logs.
 
 ### In GitHub Actions
 
@@ -377,7 +386,7 @@ pepe -n 1000 -c 10 -p socks5://username:password@proxy:port https://example.com
 Three views (four in API mode, with **Endpoints** in front):
 
 - **Live**: the headline numbers, a latency heatmap (time across, latency up, brighter cells mean more requests took that long) with p50 and p99 marked, throughput per second, and a panel with the detailed numbers.
-- **Stats**: every number pepe collects, the test setup, and the latency distribution.
+- **Stats**: every number pepe collects, the test setup, and the latency distribution. When the target sends `Server-Timing`, a card shows its own time against the median measured here and each segment's p50 and p99. Another lists the five slowest responses with their request ids, taken from `X-Request-Id`, `traceparent`, `CF-Ray`, `X-Amzn-Trace-Id` and other common headers, or the one named with `--trace-header`.
 - **Requests**: the last 2,000 requests (and older failures), filterable by status, latency and text. Press `enter` on one to inspect it: status, total time split into time to first byte and body download, how it ranks in the run, DNS, server address, protocol, cache status, the request as sent, and the full response headers and body, with JSON, HTML and XML indented and highlighted. Walk to the next request with `←`/`→`. Up to 1,000 responses a second are kept in full, an even sample above that (marked `●`, reached with `[`/`]`).
 
 Pepe, the chili in the corner, reacts to how the run is going. While it runs, each second is compared with the thirty before it, and a p99 that jumps, throughput that falls or errors that appear are called out in the footer as they happen ("p99 jumped 4.5× to 45ms at 26s"), then repeated in the verdict and listed in the JSON report. When a run ends, the header turns into a verdict (Healthy, Degraded or Failing) with findings such as failed requests, two separate latency groups, a long tail, or throughput and latency drifting over the run. The same summary is printed to your shell when you quit.
