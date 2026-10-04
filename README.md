@@ -252,6 +252,8 @@ pepe ramp https://example.com --until 'p99 > 500ms' --until 'errors > 1%'
 
 The screen shows each step as a row (throughput, p50, p90, p99, the slowest request, errors) with a note when something changes, the run second by second, throughput and p99 at each concurrency, and the result: the level that held, where throughput stopped following the load, where it broke, and the command for a steady run at the level that held. Throughput counts successful responses only, so a target that sheds load quickly doesn't look fast.
 
+Once four clean steps are in, a saturation curve (the Universal Scalability Law) is fitted to throughput against concurrency, and the result states the capacity read off it: "Capacity about 3.0k req/s · reached around 30 concurrent · median latency doubles around 34". When the curve is still climbing at the last step but has begun to bend, the estimate says so ("Capacity beyond the ramp … past the ramp's 50"); when it hasn't bent at all, no number is given, because none would be honest. The estimate is kept only when the curve reproduces every measured step within 25%.
+
 | Key | Action |
 | --- | --- |
 | `↑` `↓` | Pick a step and see everything measured about it; `esc` goes back to following the run |
@@ -261,7 +263,7 @@ The screen shows each step as a row (throughput, p50, p90, p99, the slowest requ
 | `r` / `e` | Run again / back to the setup screen |
 | `q` / `Ctrl-C` | Quit; the table and the result are printed to your shell |
 
-`--json` runs the ramp without a screen and prints every step and the findings.
+`--json` runs the ramp without a screen and prints every step, the findings, and `capacity` (`requests_per_second`, `concurrency`, `extrapolated`, `latency_doubles_at_concurrency`; `null` when the curve hadn't bent).
 
 ### API mode: load-testing an OpenAPI spec
 
