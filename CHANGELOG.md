@@ -6,6 +6,81 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+## [0.10.2](https://github.com/omarmhaimdat/pepe/compare/v0.10.1...v0.10.2) - 2026-10-04
+
+### Fixed
+
+- *(ci)* release-plz saw only merge commits, so no release came ([#74](https://github.com/omarmhaimdat/pepe/pull/74))
+
+  Since v0.10.1, four feature PRs merged (#66, #63, #65, #67) and every
+  release-plz run ended with `pepe: no commit matches the release_commits
+  regex`, so no release PR appeared.
+
+  ## Why
+  Reproduced locally with the same release-plz (0.3.169) on a clone of
+  master. It walks `git log` in commit-date order, checking each commit
+  out until it reaches one that is an ancestor of the last release tag.
+  The feature commits were authored on Oct 3 and merged on Oct 4, after
+  the v0.10.1 tag (Oct 4, 09:27), so the walk reaches the tag first and
+  never sees them. The commits it does see are the merge commits, whose
+  subjects start with `Merge pull request` or `Merge master into`, which
+  `release_commits = "^(feat|fix|perf)[(:!]"` rejects. v0.10.1 only
+  happened because #72 was a single commit newer than the v0.10.0 tag,
+  which git's path simplification walks straight into.
+
+  Widening the regex is not a fix: git skips two of the four merge commits
+  as tree-same with their branch, so the result was a patch bump with a
+  changelog of "Merge master into…" lines.
+
+  ## Fix
+  1. **Squash-merge pull requests** from now on, with the PR title as the
+  commit subject. That gives master one conventional commit per PR, dated
+  when it lands, which is what release-plz expects. This is a repository
+  setting, not something in this PR:
+     ```bash
+  gh api -X PATCH repos/omarmhaimdat/pepe -F allow_squash_merge=true -f
+  squash_merge_commit_title=PR_TITLE -f
+  squash_merge_commit_message=PR_BODY -F allow_merge_commit=false
+     ```
+  2. This PR makes the changelog skip `Merge …` commits, so a merge commit
+  that does get counted doesn't become an entry.
+  3. The four features that already merged are written under `Unreleased`
+  in CHANGELOG.md by hand. Verified locally: release-plz folds that block
+  into the next release's section, so 0.11.0 lists them alongside whatever
+  lands squashed.
+
+  Merging this PR (squashed, or as it is: it is one commit newer than the
+  tag) is itself what makes release-plz open the next release PR.
+
+
+
+### Added
+
+- a capacity estimate from the ramp's curve (#66)
+
+  Once four clean steps are in, a saturation curve is fitted to throughput
+  against concurrency and the result states what it reads off it:
+  "Capacity about 3.0k req/s · reached around 30 concurrent · median
+  latency doubles around 34", or that the curve points past the ramp.
+  `--json` has `capacity`.
+- anomaly notes during the run (#63)
+
+  Each second is judged against the median of the thirty before it; a p99
+  jump, a throughput fall or errors appearing are said in the footer as
+  they happen, repeated in the verdict and listed in the JSON report under
+  `summary.anomalies`.
+- Server-Timing and request ids, to read what the server says (#65)
+
+  `Server-Timing` headers are added up and held against the latency
+  measured here, and the five slowest responses are listed with the id
+  their backend gave them (`X-Request-Id`, `traceparent`, `CF-Ray`, … or
+  `--trace-header`), in the Stats tab, the inspector and the JSON report.
+- `--rate`, an arrival rate instead of a closed loop (#67)
+
+  Start a fixed number of requests a second, spread evenly across every
+  sending thread; the footer and the verdict say when `-c` can't carry the
+  rate and what would. A paused run resumes on schedule. Paced runs keep
+  up to their concurrency of idle connections.
 ## [0.10.1](https://github.com/omarmhaimdat/pepe/compare/v0.10.0...v0.10.1) - 2026-10-04
 
 ### Fixed

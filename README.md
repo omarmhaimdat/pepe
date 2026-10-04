@@ -165,6 +165,7 @@ pepe self-update [--check]     update pepe
 | `--disable-keepalive` | | Open a new connection for every request |
 | `--disable-redirects` | | Don't follow redirects |
 | `--threads <N>` | 1 | Threads sending requests (see [Threads](#threads)) |
+| `--rate <PER_SECOND>` | | Start this many requests a second, spread evenly (see [Arrival rate](#arrival-rate)) |
 | `--curl` | | Read the request from a curl command (see below) |
 | `-i`, `--setup` | | Open the setup screen filled in from the flags |
 | `--json` | | No dashboard: run to completion and print a JSON report |
@@ -186,6 +187,16 @@ Repeated headers are kept (several `Cookie` headers are sent as several), and a 
 ```bash
 pepe -z 2m -c 100 https://example.com
 ```
+
+### Arrival rate
+
+Without `--rate`, pepe is a closed loop: each unit of concurrency sends its next request the moment the last one answers, so a slower target gets fewer requests. That finds the most a target can do. Real traffic doesn't wait for the target: users arrive at their own rate, and a target that slows down gets the same arrivals and a growing queue. `--rate` sends like that, an open loop:
+
+```bash
+pepe https://example.com --rate 500 -c 64 -z 2m
+```
+
+Starts are spread evenly over each second, across every sending thread. `-c` is then the most requests in flight at once, and it has to be enough: at 500 a second and 40 ms a response, 20 are in flight on average (Little's law), more when the target has a bad moment. When the concurrency can't carry the rate, the footer says so as it happens ("behind the rate: 410 of 500 req/s · all 8 in flight; try -c 25"), and the verdict says what was asked and what was sent. A schedule that falls more than a second behind is not caught up with a burst; those starts are counted as missed instead (`generator.rate_missed` in the JSON report), because a burst would say nothing true about the target. A paused run resumes on schedule.
 
 ### Soak runs
 
@@ -304,7 +315,7 @@ headers = ["Authorization: Bearer {{token}}"]
 expect = 201
 ```
 
-`{{name}}` holes are filled from `[vars]` and from earlier steps' captures; a hole nothing fills is an error when the file is read, naming the step and the variable. A capture is `json:$.path.to[0].value`, `header:Name`, `regex:pattern` (the first group) or `body`. A step passes when it gets a 2xx, or the status `expect` names; a step that fails, or whose capture finds nothing, ends the chain with that said in the failure causes, and the user starts over. `-n` counts chains, not requests; `-c`, `-z`, `-H` (sent with every step), `-t` and the other options work as usual. `--json` prints the usual report plus `flow.steps`, one entry per step, and how many chains started and completed.
+`{{name}}` holes are filled from `[vars]` and from earlier steps' captures; a hole nothing fills is an error when the file is read, naming the step and the variable. A capture is `json:$.path.to[0].value`, `header:Name`, `regex:pattern` (the first group) or `body`. A step passes when it gets a 2xx, or the status `expect` names; a step that fails, or whose capture finds nothing, ends the chain with that said in the failure causes, and the user starts over. `-n` counts chains, not requests; `-c`, `-z`, `-H` (sent with every step), `-t`, `--rate` (which paces every request, steps included) and the other options work as usual. `--json` prints the usual report plus `flow.steps`, one entry per step, and how many chains started and completed.
 
 ### API mode: load-testing an OpenAPI spec
 

@@ -26,6 +26,7 @@ _pepe() {
 '-t+[Time in seconds to wait for a response]:TIMEOUT:_default' \
 '--timeout=[Time in seconds to wait for a response]:TIMEOUT:_default' \
 '--threads=[Threads sending requests (default 1). One sends about 100k requests a second; the dashboard says when it is the limit]:THREADS:_default' \
+'--rate=[Start this many requests a second, spread evenly, instead of as many as the concurrency allows; -c is then the most in flight at once, and pepe says when it holds the rate back]:PER_SECOND:_default' \
 '-d+[HTTP request body]:BODY:_default' \
 '--body=[HTTP request body]:BODY:_default' \
 '-p+[Proxy server URL\: http\://user\:pass@host\:port or socks5\://host\:port]:PROXY:_default' \
@@ -73,6 +74,7 @@ _arguments "${_arguments_options[@]}" : \
 '-t+[Time in seconds to wait for a response]:TIMEOUT:_default' \
 '--timeout=[Time in seconds to wait for a response]:TIMEOUT:_default' \
 '--threads=[Threads sending requests (default 1). One sends about 100k requests a second; the dashboard says when it is the limit]:THREADS:_default' \
+'--rate=[Start this many requests a second, spread evenly, instead of as many as the concurrency allows; -c is then the most in flight at once, and pepe says when it holds the rate back]:PER_SECOND:_default' \
 '-d+[HTTP request body]:BODY:_default' \
 '--body=[HTTP request body]:BODY:_default' \
 '-p+[Proxy server URL\: http\://user\:pass@host\:port or socks5\://host\:port]:PROXY:_default' \
@@ -110,6 +112,7 @@ _arguments "${_arguments_options[@]}" : \
 '-t+[Time in seconds to wait for a response]:TIMEOUT:_default' \
 '--timeout=[Time in seconds to wait for a response]:TIMEOUT:_default' \
 '--threads=[Threads sending requests (default 1). One sends about 100k requests a second; the dashboard says when it is the limit]:THREADS:_default' \
+'--rate=[Start this many requests a second, spread evenly, instead of as many as the concurrency allows; -c is then the most in flight at once, and pepe says when it holds the rate back]:PER_SECOND:_default' \
 '-d+[HTTP request body]:BODY:_default' \
 '--body=[HTTP request body]:BODY:_default' \
 '-p+[Proxy server URL\: http\://user\:pass@host\:port or socks5\://host\:port]:PROXY:_default' \
@@ -154,6 +157,7 @@ _arguments "${_arguments_options[@]}" : \
 '-t+[Time in seconds to wait for a response]:TIMEOUT:_default' \
 '--timeout=[Time in seconds to wait for a response]:TIMEOUT:_default' \
 '--threads=[Threads sending requests (default 1). One sends about 100k requests a second; the dashboard says when it is the limit]:THREADS:_default' \
+'--rate=[Start this many requests a second, spread evenly, instead of as many as the concurrency allows; -c is then the most in flight at once, and pepe says when it holds the rate back]:PER_SECOND:_default' \
 '-d+[HTTP request body]:BODY:_default' \
 '--body=[HTTP request body]:BODY:_default' \
 '-p+[Proxy server URL\: http\://user\:pass@host\:port or socks5\://host\:port]:PROXY:_default' \
@@ -197,6 +201,7 @@ _arguments "${_arguments_options[@]}" : \
 '-t+[Time in seconds to wait for a response]:TIMEOUT:_default' \
 '--timeout=[Time in seconds to wait for a response]:TIMEOUT:_default' \
 '--threads=[Threads sending requests (default 1). One sends about 100k requests a second; the dashboard says when it is the limit]:THREADS:_default' \
+'--rate=[Start this many requests a second, spread evenly, instead of as many as the concurrency allows; -c is then the most in flight at once, and pepe says when it holds the rate back]:PER_SECOND:_default' \
 '-d+[HTTP request body]:BODY:_default' \
 '--body=[HTTP request body]:BODY:_default' \
 '-p+[Proxy server URL\: http\://user\:pass@host\:port or socks5\://host\:port]:PROXY:_default' \
@@ -233,6 +238,7 @@ _arguments "${_arguments_options[@]}" : \
 '-t+[Time in seconds to wait for a response]:TIMEOUT:_default' \
 '--timeout=[Time in seconds to wait for a response]:TIMEOUT:_default' \
 '--threads=[Threads sending requests (default 1). One sends about 100k requests a second; the dashboard says when it is the limit]:THREADS:_default' \
+'--rate=[Start this many requests a second, spread evenly, instead of as many as the concurrency allows; -c is then the most in flight at once, and pepe says when it holds the rate back]:PER_SECOND:_default' \
 '-d+[HTTP request body]:BODY:_default' \
 '--body=[HTTP request body]:BODY:_default' \
 '-p+[Proxy server URL\: http\://user\:pass@host\:port or socks5\://host\:port]:PROXY:_default' \
