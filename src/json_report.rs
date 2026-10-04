@@ -4,7 +4,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use serde::Serialize;
 
-use crate::metrics::{Histogram, Metrics, Slowest};
+use crate::metrics::{Histogram, Metrics, Phase, Slowest};
 use crate::timeline::{Sample, Timeline};
 
 #[derive(Serialize, Clone)]
@@ -169,6 +169,43 @@ pub struct LatencyStats {
     pub p90_ms: f64,
     pub p95_ms: f64,
     pub p99_ms: f64,
+    /// Where the time went: opening connections, waiting for the headers,
+    /// and reading the body
+    pub phases: Phases,
+}
+
+#[derive(Serialize, Clone)]
+pub struct Phases {
+    /// Opening a connection, TCP and TLS together; one entry per connection
+    /// opened, so a keep-alive run has few. Absent when nothing measured it.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub connect: Option<PhaseStats>,
+    /// From sending the request to the response headers
+    pub first_byte: PhaseStats,
+    /// From the headers to the end of the body
+    pub download: PhaseStats,
+    /// The DNS probe, sampled once a second
+    pub dns_lookup_avg_ms: f64,
+}
+
+#[derive(Serialize, Clone)]
+pub struct PhaseStats {
+    pub count: u64,
+    pub median_ms: f64,
+    pub p99_ms: f64,
+    pub max_ms: f64,
+}
+
+impl PhaseStats {
+    fn of(hist: &crate::metrics::Histogram) -> Self {
+        let ms = |us: u64| (us as f64) / 1000.0;
+        Self {
+            count: hist.count(),
+            median_ms: ms(hist.percentile(50.0)),
+            p99_ms: ms(hist.percentile(99.0)),
+            max_ms: ms(hist.percentile(100.0)),
+        }
+    }
 }
 
 fn server_timing_stats(metrics: &Metrics) -> Option<ServerTimingStats> {
@@ -198,6 +235,15 @@ impl JsonReport {
             threads,
             peak_busy_percent,
         });
+        self
+    }
+
+    /// How long the run's connections took to open
+    pub fn with_connects(mut self, connects: &crate::request::ConnectTimes) -> Self {
+        let hist = connects.histogram();
+        if hist.count() > 0 {
+            self.summary.latency.phases.connect = Some(PhaseStats::of(&hist));
+        }
         self
     }
 
@@ -270,6 +316,12 @@ impl JsonReport {
                     p90_ms: ms(metrics.percentile(90.0)),
                     p95_ms: ms(metrics.percentile(95.0)),
                     p99_ms: ms(metrics.percentile(99.0)),
+                    phases: Phases {
+                        connect: None,
+                        first_byte: PhaseStats::of(metrics.phase(Phase::FirstByte)),
+                        download: PhaseStats::of(metrics.phase(Phase::Download)),
+                        dns_lookup_avg_ms: ms(metrics.avg_dns_lookup()),
+                    },
                 },
                 // Sorted, so output is stable between runs
                 status_codes: metrics.status_codes.iter().map(|(k, v)| (*k, *v)).collect(),
