@@ -1,5 +1,8 @@
 //! Plain-language findings about a run, for the end-of-run verdict
 
+use std::collections::VecDeque;
+use std::time::Duration;
+
 use crate::metrics::{Histogram, Metrics};
 use crate::timeline::{bin_floor_us, bin_of, Sample, BINS, BINS_PER_DECADE};
 use crate::ui::format;
@@ -41,6 +44,154 @@ pub struct Verdict {
     /// The worst level among the notes
     pub level: Level,
     pub notes: Vec<Note>,
+}
+
+/// Something that changed during the run, said as it happened
+#[derive(Debug, Clone, PartialEq)]
+pub struct Anomaly {
+    /// Seconds since the run started, at the end of the second it was seen in
+    pub at: Duration,
+    pub kind: AnomalyKind,
+    pub text: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AnomalyKind {
+    Latency,
+    Throughput,
+    Errors,
+}
+
+impl AnomalyKind {
+    pub fn name(self) -> &'static str {
+        match self {
+            AnomalyKind::Latency => "latency",
+            AnomalyKind::Throughput => "throughput",
+            AnomalyKind::Errors => "errors",
+        }
+    }
+}
+
+/// Seconds a second is compared against: the median of these, before it
+const BASELINE_SECS: usize = 30;
+/// Fewer than this many seconds of history and nothing is said
+const MIN_HISTORY: usize = 10;
+/// Once something is said about a kind, it isn't said again for this long
+const COOLDOWN: Duration = Duration::from_secs(30);
+/// p99 this many times the baseline, and at least this much slower, is a jump
+const LATENCY_JUMP: f64 = 3.0;
+const LATENCY_FLOOR_MS: f64 = 5.0;
+/// Throughput at or below this share of the baseline is a fall
+const THROUGHPUT_FALL: f64 = 0.5;
+/// Errors reaching this share of a second's requests, from under 1%, is a rise
+const ERROR_SHARE: f64 = 0.05;
+
+/// Watches the per-second timeline for things worth a word as they happen:
+/// a latency jump, a throughput fall, errors appearing. Each second is
+/// judged against the median of the thirty before it.
+#[derive(Debug, Default)]
+pub struct Watch {
+    /// `at` of the last second judged
+    seen: f64,
+    /// `at` of the last word on each kind, for the cooldown
+    said: [Option<f64>; 3],
+    /// Say nothing about seconds ending before this: a resume leaves a
+    /// partial second that looks like a fall
+    quiet_until: f64,
+}
+
+impl Watch {
+    /// Judge the seconds closed since the last call. `paused`: the run is
+    /// paused now, so a quiet second is expected.
+    pub fn observe(&mut self, samples: &VecDeque<Sample>, paused: bool) -> Vec<Anomaly> {
+        let mut found = Vec::new();
+        let Some(first_new) = samples.iter().position(|s| s.at > self.seen) else {
+            return found;
+        };
+        for i in first_new..samples.len() {
+            let s = samples[i];
+            self.seen = s.at;
+            if paused || s.at < self.quiet_until {
+                continue;
+            }
+            let base: Vec<Sample> = samples
+                .range(i.saturating_sub(BASELINE_SECS)..i)
+                .filter(|b| b.rps > 0.0)
+                .copied()
+                .collect();
+            if base.len() < MIN_HISTORY {
+                continue;
+            }
+            let median = |pick: fn(&Sample) -> f64| {
+                let mut v: Vec<f64> = base.iter().map(pick).collect();
+                v.sort_by(f64::total_cmp);
+                v[v.len() / 2]
+            };
+            let when = format::span(Duration::from_secs_f64(s.at));
+
+            let p99_base = median(|b| b.p99_ms);
+            if s.rps > 0.0
+                && s.p99_ms >= LATENCY_JUMP * p99_base
+                && s.p99_ms - p99_base >= LATENCY_FLOOR_MS
+            {
+                self.say(
+                    &mut found,
+                    s.at,
+                    AnomalyKind::Latency,
+                    format!(
+                        "p99 jumped {:.1}× to {} at {when}",
+                        s.p99_ms / p99_base,
+                        format::latency_short((s.p99_ms * 1000.0) as u64)
+                    ),
+                );
+            }
+
+            let rps_base = median(|b| b.rps);
+            if rps_base >= 10.0 && s.rps <= THROUGHPUT_FALL * rps_base {
+                self.say(
+                    &mut found,
+                    s.at,
+                    AnomalyKind::Throughput,
+                    format!(
+                        "throughput fell {}% to {} req/s at {when}",
+                        // Floored: a fall to a trickle reads 99%, not 100%
+                        ((1.0 - s.rps / rps_base) * 100.0).floor(),
+                        format::compact(s.rps)
+                    ),
+                );
+            }
+
+            let share = if s.rps > 0.0 { s.errors / s.rps } else { 0.0 };
+            let share_base = median(|b| b.errors / b.rps.max(f64::EPSILON));
+            if share >= ERROR_SHARE && share_base < 0.01 {
+                self.say(
+                    &mut found,
+                    s.at,
+                    AnomalyKind::Errors,
+                    format!("errors rose to {} at {when}", pct(share * 100.0)),
+                );
+            }
+        }
+        found
+    }
+
+    /// The run was resumed: give it a moment before judging again
+    pub fn resumed(&mut self, now: Duration) {
+        self.quiet_until = now.as_secs_f64() + 2.0;
+    }
+
+    fn say(&mut self, found: &mut Vec<Anomaly>, at: f64, kind: AnomalyKind, text: String) {
+        let slot = &mut self.said[kind as usize];
+        if slot.is_some_and(|last| at - last < COOLDOWN.as_secs_f64()) {
+            return;
+        }
+        *slot = Some(at);
+        found.push(Anomaly {
+            at: Duration::from_secs_f64(at),
+            kind,
+            text,
+        });
+    }
 }
 
 /// Error share (percent) at which a run is failing, or merely degraded
@@ -480,6 +631,103 @@ mod tests {
             "{texts:?}"
         );
         assert_eq!(texts.last(), Some(&"Stopped early"));
+    }
+
+    fn seconds(n: usize, rps: f64, p99: f64, errors: f64) -> VecDeque<Sample> {
+        (1..=n)
+            .map(|i| Sample {
+                at: i as f64,
+                rps,
+                errors,
+                p50_ms: p99 / 2.0,
+                p90_ms: p99 * 0.8,
+                p99_ms: p99,
+            })
+            .collect()
+    }
+
+    #[test]
+    fn a_jump_is_said_once_and_not_before_there_is_history() {
+        let mut watch = Watch::default();
+        let mut s = seconds(9, 1_000.0, 10.0, 0.0);
+        assert!(watch.observe(&s, false).is_empty());
+        // Tenth second: still no baseline of ten before it
+        s.push_back(Sample {
+            at: 10.0,
+            p99_ms: 100.0,
+            ..s[0]
+        });
+        assert!(watch.observe(&s, false).is_empty(), "no history yet");
+        for i in 11..=25 {
+            s.push_back(Sample {
+                at: i as f64,
+                ..s[0]
+            });
+        }
+        assert!(watch.observe(&s, false).is_empty(), "flat is quiet");
+        s.push_back(Sample {
+            at: 26.0,
+            p99_ms: 45.0,
+            ..s[0]
+        });
+        let found = watch.observe(&s, false);
+        assert_eq!(found.len(), 1);
+        assert_eq!(found[0].kind, AnomalyKind::Latency);
+        assert_eq!(found[0].text, "p99 jumped 4.5× to 45ms at 26s");
+        // Still slow five seconds later: said already
+        for i in 27..=31 {
+            s.push_back(Sample {
+                at: i as f64,
+                p99_ms: 45.0,
+                ..s[0]
+            });
+        }
+        assert!(watch.observe(&s, false).is_empty(), "within the cooldown");
+    }
+
+    #[test]
+    fn falls_and_errors_are_said_but_not_while_paused() {
+        let mut watch = Watch::default();
+        let mut s = seconds(20, 1_000.0, 10.0, 0.0);
+        assert!(watch.observe(&s, false).is_empty());
+        s.push_back(Sample {
+            at: 21.0,
+            rps: 300.0,
+            ..s[0]
+        });
+        let found = watch.observe(&s, false);
+        assert_eq!(found.len(), 1);
+        assert_eq!(found[0].text, "throughput fell 70% to 300 req/s at 21s");
+        s.push_back(Sample {
+            at: 22.0,
+            rps: 1_000.0,
+            errors: 80.0,
+            ..s[0]
+        });
+        let found = watch.observe(&s, false);
+        assert_eq!(found[0].kind, AnomalyKind::Errors);
+        assert!(
+            found[0].text.starts_with("errors rose to 8%"),
+            "{}",
+            found[0].text
+        );
+        // A quiet second while paused is expected, and so is the one after resuming
+        s.push_back(Sample {
+            at: 23.0,
+            rps: 0.0,
+            ..s[0]
+        });
+        assert!(watch.observe(&s, true).is_empty());
+        watch.resumed(Duration::from_secs(23));
+        s.push_back(Sample {
+            at: 24.0,
+            rps: 100.0,
+            ..s[0]
+        });
+        assert!(
+            watch.observe(&s, false).is_empty(),
+            "the second after a resume"
+        );
     }
 
     #[test]

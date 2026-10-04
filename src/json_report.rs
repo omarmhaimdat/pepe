@@ -97,6 +97,9 @@ pub struct JsonSummary {
     /// … or `--trace-header`); left out when nothing was tracked
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub slowest_requests: Vec<SlowRequest>,
+    /// What changed during the run, as it was noticed; left out when nothing did
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub anomalies: Vec<AnomalyNote>,
     /// Failed requests by cause, most frequent first, each with the first
     /// response body seen for it; left out when nothing failed
     #[serde(skip_serializing_if = "Vec::is_empty")]
@@ -149,6 +152,14 @@ pub struct SlowRequest {
     /// The response header the id came from
     #[serde(skip_serializing_if = "Option::is_none")]
     pub id_header: Option<String>,
+}
+
+#[derive(Serialize, Clone)]
+pub struct AnomalyNote {
+    /// Seconds since the run started
+    pub at_s: f64,
+    pub kind: &'static str,
+    pub text: String,
 }
 
 #[derive(Serialize, Clone)]
@@ -235,6 +246,19 @@ impl JsonReport {
             threads,
             peak_busy_percent,
         });
+        self
+    }
+
+    /// What the watch noticed during the run
+    pub fn with_anomalies(mut self, anomalies: &[crate::insights::Anomaly]) -> Self {
+        self.summary.anomalies = anomalies
+            .iter()
+            .map(|a| AnomalyNote {
+                at_s: (a.at.as_secs_f64() * 1000.0).round() / 1000.0,
+                kind: a.kind.name(),
+                text: a.text.clone(),
+            })
+            .collect();
         self
     }
 
@@ -327,6 +351,7 @@ impl JsonReport {
                 status_codes: metrics.status_codes.iter().map(|(k, v)| (*k, *v)).collect(),
                 server_timing: server_timing_stats(metrics),
                 slowest_requests: Vec::new(),
+                anomalies: Vec::new(),
                 failures: metrics
                     .failures()
                     .top()

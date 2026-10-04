@@ -254,6 +254,8 @@ pepe ramp https://example.com --until 'p99 > 500ms' --until 'errors > 1%'
 
 The screen shows each step as a row (throughput, p50, p90, p99, the slowest request, errors) with a note when something changes, the run second by second, throughput and p99 at each concurrency, and the result: the level that held, where throughput stopped following the load, where it broke, and the command for a steady run at the level that held. Throughput counts successful responses only, so a target that sheds load quickly doesn't look fast.
 
+Once four clean steps are in, a saturation curve (the Universal Scalability Law) is fitted to throughput against concurrency, and the result states the capacity read off it: "Capacity about 3.0k req/s · reached around 30 concurrent · median latency doubles around 34". When the curve is still climbing at the last step but has begun to bend, the estimate says so ("Capacity beyond the ramp … past the ramp's 50"); when it hasn't bent at all, no number is given, because none would be honest. The estimate is kept only when the curve reproduces every measured step within 25%.
+
 | Key | Action |
 | --- | --- |
 | `↑` `↓` | Pick a step and see everything measured about it; `esc` goes back to following the run |
@@ -263,7 +265,7 @@ The screen shows each step as a row (throughput, p50, p90, p99, the slowest requ
 | `r` / `e` | Run again / back to the setup screen |
 | `q` / `Ctrl-C` | Quit; the table and the result are printed to your shell |
 
-`--json` runs the ramp without a screen and prints every step and the findings.
+`--json` runs the ramp without a screen and prints every step, the findings, and `capacity` (`requests_per_second`, `concurrency`, `extrapolated`, `latency_doubles_at_concurrency`; `null` when the curve hadn't bent).
 
 ### API mode: load-testing an OpenAPI spec
 
@@ -387,7 +389,7 @@ Three views (four in API mode, with **Endpoints** in front):
 - **Stats**: every number pepe collects, the test setup, and the latency distribution. When the target sends `Server-Timing`, a card shows its own time against the median measured here and each segment's p50 and p99. Another lists the five slowest responses with their request ids, taken from `X-Request-Id`, `traceparent`, `CF-Ray`, `X-Amzn-Trace-Id` and other common headers, or the one named with `--trace-header`.
 - **Requests**: the last 2,000 requests (and older failures), filterable by status, latency and text. Press `enter` on one to inspect it: status, total time split into time to first byte and body download, how it ranks in the run, DNS, server address, protocol, cache status, the request as sent, and the full response headers and body, with JSON, HTML and XML indented and highlighted. Walk to the next request with `←`/`→`. Up to 1,000 responses a second are kept in full, an even sample above that (marked `●`, reached with `[`/`]`).
 
-Pepe, the chili in the corner, reacts to how the run is going. When a run ends, the header turns into a verdict (Healthy, Degraded or Failing) with findings such as failed requests, two separate latency groups, a long tail, or throughput and latency drifting over the run. The same summary is printed to your shell when you quit.
+Pepe, the chili in the corner, reacts to how the run is going. While it runs, each second is compared with the thirty before it, and a p99 that jumps, throughput that falls or errors that appear are called out in the footer as they happen ("p99 jumped 4.5× to 45ms at 26s"), then repeated in the verdict and listed in the JSON report. When a run ends, the header turns into a verdict (Healthy, Degraded or Failing) with findings such as failed requests, two separate latency groups, a long tail, or throughput and latency drifting over the run. The same summary is printed to your shell when you quit.
 
 | Key | Action |
 | --- | --- |

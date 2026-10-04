@@ -213,6 +213,8 @@ async fn run_json(args: &Cli) -> Result<(), Box<dyn std::error::Error>> {
     let mut metrics = Metrics::default();
     let mut timeline = timeline::Timeline::default();
     let mut slowest = metrics::Slowest::default();
+    let mut watch = insights::Watch::default();
+    let mut anomalies: Vec<insights::Anomaly> = Vec::new();
     let mut interrupted = false;
     let mut pump = tokio::time::interval(PUMP);
     let mut snapshots = tokio::time::interval(SNAPSHOT_EVERY);
@@ -221,6 +223,7 @@ async fn run_json(args: &Cli) -> Result<(), Box<dyn std::error::Error>> {
     let report = |metrics: &Metrics,
                   timeline: &timeline::Timeline,
                   slowest: &metrics::Slowest,
+                  anomalies: &[insights::Anomaly],
                   load: &LoadHandle,
                   peak_busy,
                   interrupted| {
@@ -228,6 +231,7 @@ async fn run_json(args: &Cli) -> Result<(), Box<dyn std::error::Error>> {
             .with_generator(load.threads(), peak_busy)
             .with_timeline(timeline)
             .with_slowest(slowest)
+            .with_anomalies(anomalies)
             .with_connects(&connects)
     };
 
@@ -242,13 +246,14 @@ async fn run_json(args: &Cli) -> Result<(), Box<dyn std::error::Error>> {
                     slowest.record(&stat, now);
                 });
                 timeline.advance(started.elapsed());
+                anomalies.extend(watch.observe(timeline.samples(), false));
                 if over {
                     break;
                 }
             }
             _ = snapshots.tick(), if args.snapshot.is_some() => {
                 let path = args.snapshot.as_ref().expect("checked");
-                if let Err(e) = report(&metrics, &timeline, &slowest, &load, peak_busy, interrupted).with_snapshot(true).write_to(path) {
+                if let Err(e) = report(&metrics, &timeline, &slowest, &anomalies, &load, peak_busy, interrupted).with_snapshot(true).write_to(path) {
                     eprintln!("couldn't write the snapshot to {}: {e}", path.display());
                 }
             }
@@ -260,7 +265,15 @@ async fn run_json(args: &Cli) -> Result<(), Box<dyn std::error::Error>> {
     }
 
     timeline.finish(started.elapsed());
-    let report = report(&metrics, &timeline, &slowest, &load, peak_busy, interrupted);
+    let report = report(
+        &metrics,
+        &timeline,
+        &slowest,
+        &anomalies,
+        &load,
+        peak_busy,
+        interrupted,
+    );
     if let Some(path) = &args.snapshot {
         report.clone().with_snapshot(false).write_to(path)?;
     }

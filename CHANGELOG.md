@@ -6,6 +6,30 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+## [0.10.1](https://github.com/omarmhaimdat/pepe/compare/v0.10.0...v0.10.1) - 2026-10-04
+
+### Fixed
+
+- *(ci)* the Docker publish job asked for more than the release grants
+
+  The v0.10.0 release failed at startup: release.yml calls
+  publish-docker.yml with `packages: write` and `id-token: write`, and a
+  called workflow may only request a subset of that. The job asked for
+  `contents: read` as well, which made the whole workflow invalid before
+  any job ran.
+
+  The job now inherits the caller's permissions, like the Homebrew and R2
+  publish jobs do. Checkout of this public repository works without
+  `contents: read`, as those two jobs have shown on every release.
+
+
+
+### Other
+
+- Merge pull request #61 from omarmhaimdat/feat/latency-phases
+
+- Merge master into feat/latency-phases
+
 ## [0.10.0](https://github.com/omarmhaimdat/pepe/compare/v0.9.0...v0.10.0) - 2026-10-03
 
 ### Added
