@@ -17,6 +17,7 @@
 //	/json        a small JSON object
 //	/slow?ms=20  sleeps before answering
 //	/status/503  answers with that status
+//	/timed       like /, with Server-Timing and X-Request-Id headers
 package main
 
 import (
@@ -33,6 +34,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 )
 
@@ -96,6 +98,16 @@ func main() {
 			ms = 10
 		}
 		time.Sleep(time.Duration(ms) * time.Millisecond)
+		w.Write(small)
+	})
+	// What a traced backend sends: a few Server-Timing segments and the
+	// request's id, to measure what reading them costs pepe
+	var served atomic.Uint64
+	mux.HandleFunc("/timed", func(w http.ResponseWriter, r *http.Request) {
+		n := served.Add(1)
+		h := w.Header()
+		h.Set("Server-Timing", "db;dur=2.4;desc=\"primary\", app;dur=0.7, cache;desc=HIT")
+		h.Set("X-Request-Id", fmt.Sprintf("req-%012d", n))
 		w.Write(small)
 	})
 	mux.HandleFunc("/status/", func(w http.ResponseWriter, r *http.Request) {
