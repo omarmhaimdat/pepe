@@ -41,6 +41,15 @@ pub struct Config {
     pub timeout: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub threads: Option<u32>,
+    /// `--rate`: requests started per second
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub rate: Option<f64>,
+    /// `--warmup`, e.g. "5s"
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub warmup: Option<String>,
+    /// `--trace-header`: the response header holding the request id
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub trace_header: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub user_agent: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -182,6 +191,15 @@ impl Config {
         if cli.threads.is_none() {
             cli.threads = self.threads;
         }
+        if cli.rate.is_none() {
+            cli.rate = self.rate;
+        }
+        if cli.warmup.is_none() {
+            cli.warmup = self.warmup.clone();
+        }
+        if cli.trace_header.is_none() {
+            cli.trace_header = self.trace_header.clone();
+        }
         if cli.proxy.is_none() {
             cli.proxy = self.proxy.clone();
         }
@@ -262,6 +280,9 @@ impl Config {
             concurrency: Some(cli.concurrency),
             timeout: (cli.timeout != defaults.timeout).then_some(cli.timeout),
             threads: cli.threads,
+            rate: cli.rate,
+            warmup: cli.warmup.clone(),
+            trace_header: cli.trace_header.clone(),
             user_agent: differs(&cli.user_agent, &default_user_agent()),
             proxy: cli.proxy.clone(),
             insecure: cli.insecure.then_some(true),
@@ -348,6 +369,9 @@ mod tests {
             concurrency = 50
             timeout = 5
             keep-alive = false
+            rate = 500
+            warmup = "5s"
+            trace-header = "X-Req"
             "#,
         )
         .unwrap();
@@ -363,6 +387,10 @@ mod tests {
             (Some("30s"), 50, 5)
         );
         assert!(cli.disable_keepalive && !cli.disable_redirects);
+        assert_eq!(
+            (cli.rate, cli.warmup.as_deref(), cli.trace_header.as_deref()),
+            (Some(500.0), Some("5s"), Some("X-Req"))
+        );
 
         // Typed flags win, including ones that equal the default
         let (mut cli, matches) = parse_argv(&[
@@ -443,6 +471,12 @@ mod tests {
             "3",
             "--threads",
             "2",
+            "--rate",
+            "250",
+            "--warmup",
+            "3s",
+            "--trace-header",
+            "X-Req",
             "--disable-redirects",
             "-k",
             "https://example.com/",

@@ -185,6 +185,7 @@ headers = ["Accept: application/json", "Authorization: Bearer ..."]
 duration = "1m"        # or requests = 1000
 concurrency = 50
 timeout = 5
+rate = 500             # requests started per second; warmup = "5s" and trace-header work too
 keep-alive = true      # compression, redirects, insecure, threads, proxy, user-agent, snapshot, body too
 
 [ramp]                 # defaults for `pepe ramp`
