@@ -2,7 +2,7 @@ use std::io::{stderr, stdin, stdout, IsTerminal};
 use std::sync::Arc;
 use std::time::Instant;
 
-use clap::{CommandFactory, Parser};
+use clap::{CommandFactory, FromArgMatches};
 use crossterm::{
     cursor::{Hide, Show},
     event::{DisableBracketedPaste, EnableBracketedPaste},
@@ -19,6 +19,7 @@ mod api;
 mod cache;
 mod cli;
 mod completions;
+mod config;
 mod contrib;
 mod curl;
 mod flow;
@@ -801,7 +802,32 @@ async fn run_api(args: &Cli, api: &cli::ApiArgs) -> Result<(), Box<dyn std::erro
 // the screens, the reports and the update check
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let mut args = Cli::parse();
+    // Parsed by hand so the config file can tell typed flags from defaults
+    let matches = Cli::command().get_matches();
+    let mut args = Cli::from_arg_matches(&matches).unwrap_or_else(|e| e.exit());
+    match config::load(args.config.as_deref()) {
+        Ok(Some((path, file))) => {
+            file.apply(&mut args, &matches);
+            args.config_loaded = Some(path);
+        }
+        Ok(None) => {}
+        Err(e) => {
+            eprintln!("error: {e}");
+            std::process::exit(1);
+        }
+    }
+    if let Some(path) = args.write_config.take() {
+        if let Err(e) = config::write(&path, &args) {
+            eprintln!("error: {e}");
+            std::process::exit(1);
+        }
+        println!(
+            "wrote {} · run it with: pepe --config {}",
+            path.display(),
+            path.display()
+        );
+        return Ok(());
+    }
     // Which response header carries the request id; `validate` rejects a
     // name that isn't one
     if let Some(name) = args
@@ -835,6 +861,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         return run_flow(&args, &what).await;
     }
     if let Some(cli::Command::Api(api)) = args.command.clone() {
+        if api.spec.is_empty() {
+            eprintln!("error: api needs a spec: pepe api openapi.yaml, or `spec` under [api] in pepe.toml");
+            std::process::exit(2);
+        }
         if let Err(e) = args.validate() {
             eprintln!("{}", e);
             std::process::exit(1);

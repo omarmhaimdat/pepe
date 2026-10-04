@@ -6,6 +6,59 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+## [0.12.0](https://github.com/omarmhaimdat/pepe/compare/v0.11.0...v0.12.0) - 2026-10-04
+
+### Added
+
+- pepe.toml, a load test that lives next to the code it tests ([#68](https://github.com/omarmhaimdat/pepe/pull/68))
+
+  Roadmap item 10 (scale and operations): a config file, which the setup
+  screen can write.
+
+  ## What
+  - **`pepe.toml`** in the current directory is read by every run;
+  `--config FILE` reads another (and must exist). Precedence is command
+  line > file > defaults. The parser's value sources tell typed flags from
+  defaults, so `-c 100` typed wins over `concurrency = 50` in the file
+  even though 100 is the default. On/off settings can only be switched on
+  from the command line, so the file says them the positive way
+  (`keep-alive = false`) and can't undo a flag.
+  - **Schema:** `url`, `method`, `headers`, `body`, `requests`,
+  `duration`, `concurrency`, `timeout`, `threads`, `user-agent`, `proxy`,
+  `insecure`, `compression`, `keep-alive`, `redirects`, `snapshot`, plus
+  `[ramp]` (`from`, `to`, `step`, `every`, `until`) and `[api]` (`spec`,
+  `server`, `auth`, `all`, `tag`, `only`, `skip`, `set`, `include-writes`)
+  as defaults for those modes. Unknown keys are rejected with the key
+  named and the known ones listed. (`rate` and `trace-header` join the
+  schema once #67 and #65 are in.)
+  - **Writing it:** `--write-config FILE` writes the settings as given and
+  exits, with the line to run it. `ctrl-s` on the setup screen writes the
+  form to the file that was read, or `./pepe.toml`, and the status line
+  says `✔ saved pepe.toml · pepe here runs it`. The file carries two
+  comment lines on how it's used, and leaves defaults out so it says only
+  what was chosen (a ramp's file says the ramp, not a concurrency). The
+  setup header shows `from pepe.toml` when one was read.
+  - `pepe api` with no spec on either side says `api needs a spec: pepe
+  api openapi.yaml, or spec under [api] in pepe.toml` instead of a parse
+  error.
+  - New dependency: `toml` 0.8.
+
+  ## Checked
+  - Unit tests: the file fills in what the command line left unsaid and
+  typed flags win (including ones equal to the default); `[ramp]` and
+  `[api]` feed their subcommands with typed values winning; settings
+  written with `--write-config` read back to the same command line, for a
+  plain run and a ramp; a typo is named with its position.
+  - End to end: `--write-config` then `pepe --json` in that directory runs
+  the file's 30 POSTs; `-n 7` on top sends 7; a typo'd file, a missing
+  `--config` file and `pepe api` without a spec each exit with the message
+  above. The setup screen, driven in a pty: typing a URL and `ctrl-s`
+  writes the file and shows the message; reopening shows `from pepe.toml`
+  with the URL prefilled.
+  - `cargo test`, `cargo clippy --all-targets`, `cargo fmt --check`;
+  contrib completions and man page regenerated.
+
+
 ## [0.11.0](https://github.com/omarmhaimdat/pepe/compare/v0.10.2...v0.11.0) - 2026-10-04
 
 ### Added
