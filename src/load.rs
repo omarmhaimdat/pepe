@@ -139,6 +139,12 @@ impl LoadHandle {
             // A paced run resumes on schedule from now, not with a burst
             c.next_slot_ns.store(now, Ordering::Relaxed);
             let pause = now - c.paused_at_ns.load(Ordering::Relaxed);
+            // A warm-up still going gets its full length too
+            let _ = c
+                .warmup_end_ns
+                .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |end| {
+                    (end > c.paused_at_ns.load(Ordering::Relaxed)).then(|| end + pause)
+                });
             // Push the deadline back by the pause, so a duration run gets
             // its full length of sending
             let _ = c
@@ -152,6 +158,33 @@ impl LoadHandle {
 
     pub fn is_paused(&self) -> bool {
         self.control.paused.load(Ordering::Relaxed)
+    }
+
+    /// `--warmup`: for this long from now, requests are sent but marked
+    /// `warmup` and not counted against a Count plan; a Duration plan's
+    /// clock starts after it. Set before the first request.
+    pub fn set_warmup(&self, warmup: Duration) {
+        let c = &self.control;
+        let ns = warmup.as_nanos() as u64;
+        c.warmup_end_ns.store(c.now_ns() + ns, Ordering::Relaxed);
+        let _ = c
+            .deadline_ns
+            .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |d| {
+                (d != NO_DEADLINE).then(|| d + ns)
+            });
+    }
+
+    /// Still in the warm-up
+    pub fn warming(&self) -> bool {
+        self.control.warming()
+    }
+
+    /// What's left of the warm-up, while there is one
+    pub fn warmup_left(&self) -> Option<Duration> {
+        let c = &self.control;
+        let end = c.warmup_end_ns.load(Ordering::Relaxed);
+        let now = c.now_ns();
+        (end > now).then(|| Duration::from_nanos(end - now))
     }
 
     /// `--rate`: start this many requests a second, spread evenly, instead
@@ -211,6 +244,8 @@ struct Control {
     changed: Notify,
     /// Each shard's latest busy percentage (see `LoadHandle::busy`)
     busy: Vec<AtomicU8>,
+    /// Nanoseconds on `clock` when the warm-up ends; 0 when there is none
+    warmup_end_ns: AtomicU64,
     /// `--rate` as nanoseconds between starts; 0 when unpaced
     interval_ns: AtomicU64,
     /// Nanoseconds on `clock` of the next start the schedule allows
@@ -237,10 +272,16 @@ impl Control {
             clock: Instant::now(),
             changed: Notify::new(),
             busy: (0..shards).map(|_| AtomicU8::new(BUSY_UNKNOWN)).collect(),
+            warmup_end_ns: AtomicU64::new(0),
             interval_ns: AtomicU64::new(0),
             next_slot_ns: AtomicU64::new(0),
             missed: AtomicU64::new(0),
         }
+    }
+
+    fn warming(&self) -> bool {
+        let end = self.warmup_end_ns.load(Ordering::Relaxed);
+        end != 0 && self.now_ns() < end
     }
 
     /// `--rate`: take the next start on the schedule and say how long until
@@ -289,8 +330,12 @@ impl Control {
         }
     }
 
-    /// Take one of the plan's requests; false once they're all started
+    /// Take one of the plan's requests; false once they're all started.
+    /// Warm-up requests aren't the plan's: they're always allowed.
     fn claim(&self) -> bool {
+        if self.warming() {
+            return true;
+        }
         self.sent
             .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |n| {
                 (n < self.limit).then_some(n + 1)
@@ -673,7 +718,9 @@ async fn worker(shard: Arc<Shard>, slot: usize) {
             shard.control.drain();
             break;
         }
-        let stats = send_one(&shard).await;
+        let warmup = shard.control.warming();
+        let mut stats = send_one(&shard).await;
+        stats.warmup = warmup;
         if shard.tx.send(stats).is_err() {
             break;
         }
@@ -874,6 +921,48 @@ mod tests {
         }
         assert!(n < 100, "sent {n}");
         assert!(rx_load.missed() > 100, "missed {}", rx_load.missed());
+    }
+
+    #[tokio::test]
+    async fn warmup_requests_are_marked_and_not_the_plans() {
+        let srv = server(Duration::ZERO).await;
+        let req = request(&srv.url, "GET", None);
+        let load = start(
+            req.build_clients(1).unwrap().0,
+            req,
+            2,
+            Plan::Count(10),
+            false,
+        );
+        load.set_warmup(Duration::from_millis(200));
+        assert!(load.warming() && load.warmup_left().is_some());
+        let results = drain(load).await;
+        let warm = results.iter().filter(|r| r.warmup).count();
+        assert_eq!(
+            results.len() - warm,
+            10,
+            "the plan's ten, after the warm-up"
+        );
+        assert!(warm > 0, "warm-up requests were sent");
+
+        // A timed run's clock starts after the warm-up
+        let req = request(&srv.url, "GET", None);
+        let begin = Instant::now();
+        let load = start(
+            req.build_clients(1).unwrap().0,
+            req,
+            1,
+            Plan::Duration(Duration::from_millis(200)),
+            false,
+        );
+        load.set_warmup(Duration::from_millis(200));
+        let results = drain(load).await;
+        assert!(
+            begin.elapsed() >= Duration::from_millis(390),
+            "{:?}",
+            begin.elapsed()
+        );
+        assert!(results.iter().any(|r| r.warmup) && results.iter().any(|r| !r.warmup));
     }
 
     #[tokio::test]
