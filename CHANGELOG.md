@@ -6,6 +6,63 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+## [0.14.0](https://github.com/omarmhaimdat/pepe/compare/v0.13.0...v0.14.0) - 2026-10-04
+
+### Added
+
+- pepe replay, an access log's URLs in their real proportions ([#71](https://github.com/omarmhaimdat/pepe/pull/71))
+
+  Roadmap item 13 (scenarios and realism): read an nginx, Caddy or ALB log
+  and send its URLs in their real proportions.
+
+  ## What
+  - **`pepe replay LOG [--base-url URL] [--include-writes] [--rows N]`**
+  with the usual `-c`, `-n`, `-z`, `-H`, `-t`. Each distinct (method, URL)
+  becomes a target weighted by how often the log had it, and the engine's
+  smooth weighted schedule mixes them evenly, so the mix holds at every
+  moment of the run rather than only on average.
+  - **Formats:** nginx and Apache common and combined logs and AWS ALB
+  logs (the quoted `"GET /path HTTP/1.1"`), Caddy's JSON access lines
+  (`request.method`, `request.host`, `request.uri`, `https` when `tls` is
+  present) and flat JSON with `method` and `url`/`path`, and plain lists
+  of `/path`, `GET /path` or a full URL per line. Blank lines and `#`
+  comments are skipped; anything else is counted as unparsed.
+  - **`--base-url`** goes in front of paths and replaces the host of full
+  URLs, so production's log runs against staging. Without it, full URLs go
+  where they point and paths can't go anywhere: `its 2000 requests have
+  paths but no host: say where to send them with --base-url`. A log with
+  nothing readable, or only writes, says that instead.
+  - **Writes** (POST, PUT, PATCH, DELETE) are left out unless
+  `--include-writes`; access logs have no bodies, so they go without one.
+  The 5,000 most frequent URLs are kept; a longer tail is counted and
+  dropped, and the report says so.
+  - **Dashboard:** the first tab is **URLs**: the top `--rows` (20) with
+  their share of the log, throughput, p50, p99, errors and statuses, then
+  one row `4.9% 1,204 other URLs`. The title reads `REPLAY access.log`.
+  - **JSON:** `replay: { log, requests_in_log, replayed_from_log,
+  distinct_urls, left_out: {unparsed_lines, writes, no_host, rare_urls},
+  urls: [{method, url, share_in_log, requests, failed_requests,
+  requests_per_second, median_ms, p99_ms, status_codes}] }`.
+  - Man page `pepe-replay(1)` and completions regenerated; README section
+  "Replaying an access log". New dependency: `regex-lite`.
+
+  ## Checked
+  - Unit tests: a combined-log line, an ALB line with a full URL and port,
+  a Caddy JSON line (host and TLS assembled into an https URL), plain
+  forms, and lines that are nothing; counting with writes left out or
+  kept, paths with and without a base, a base replacing a host; the
+  dashboard's rows and the shared tail row, and targets with the right
+  weights and row tags.
+  - End to end: a generated log of 2,000 GETs over four paths
+  (60/25/10/5%), 40 POSTs and a garbage line, replayed against the bench
+  server with `-n 4000 -c 16 --json`: shares sent 0.589 / 0.263 / 0.100 /
+  0.049 against 0.589 / 0.263 / 0.100 / 0.049 in the log, writes and the
+  garbage line reported as left out; `--include-writes` sends the POSTs;
+  no `--base-url` exits with the message above; the dashboard (recorded in
+  a pty) shows the URLs tab with shares and the "other URLs" row.
+  - `cargo test`, `cargo clippy --all-targets`, `cargo fmt --check`.
+
+
 ## [0.13.0](https://github.com/omarmhaimdat/pepe/compare/v0.12.0...v0.13.0) - 2026-10-04
 
 ### Added
