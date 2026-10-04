@@ -6,6 +6,34 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+
+### Added
+
+- a capacity estimate from the ramp's curve (#66)
+
+  Once four clean steps are in, a saturation curve is fitted to throughput
+  against concurrency and the result states what it reads off it:
+  "Capacity about 3.0k req/s · reached around 30 concurrent · median
+  latency doubles around 34", or that the curve points past the ramp.
+  `--json` has `capacity`.
+- anomaly notes during the run (#63)
+
+  Each second is judged against the median of the thirty before it; a p99
+  jump, a throughput fall or errors appearing are said in the footer as
+  they happen, repeated in the verdict and listed in the JSON report under
+  `summary.anomalies`.
+- Server-Timing and request ids, to read what the server says (#65)
+
+  `Server-Timing` headers are added up and held against the latency
+  measured here, and the five slowest responses are listed with the id
+  their backend gave them (`X-Request-Id`, `traceparent`, `CF-Ray`, … or
+  `--trace-header`), in the Stats tab, the inspector and the JSON report.
+- `--rate`, an arrival rate instead of a closed loop (#67)
+
+  Start a fixed number of requests a second, spread evenly across every
+  sending thread; the footer and the verdict say when `-c` can't carry the
+  rate and what would. A paused run resumes on schedule. Paced runs keep
+  up to their concurrency of idle connections.
 ## [0.10.1](https://github.com/omarmhaimdat/pepe/compare/v0.10.0...v0.10.1) - 2026-10-04
 
 ### Fixed
