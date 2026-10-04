@@ -479,11 +479,13 @@ fn fit_parts(parts: &[String], width: usize) -> String {
 }
 
 fn render_tabs(d: &Dashboard, f: &mut Frame, area: Rect) {
-    let titles = d
-        .tabs()
-        .iter()
-        .enumerate()
-        .map(|(i, t)| Line::from(format!("{} {}", i + 1, t.title().to_uppercase())));
+    let titles = d.tabs().iter().enumerate().map(|(i, t)| {
+        let title = match t {
+            Tab::Endpoints => d.rows.tab(),
+            other => other.title(),
+        };
+        Line::from(format!("{} {}", i + 1, title.to_uppercase()))
+    });
     f.render_widget(
         Tabs::new(titles)
             .select(d.tab.index(d.tabs()))
@@ -2006,7 +2008,7 @@ fn render_endpoints(d: &Dashboard, f: &mut Frame, area: Rect) {
     } else {
         Line::from(label("waiting for responses"))
     };
-    section(f, title, "endpoints", Some(summary));
+    section(f, title, d.rows.plural(), Some(summary));
 
     let elapsed = d.elapsed();
     // The slowest p99 among endpoints with traffic gets pointed out
@@ -2078,7 +2080,7 @@ fn render_endpoints(d: &Dashboard, f: &mut Frame, area: Rect) {
             }
         });
     let header = Row::new([
-        "endpoint",
+        d.rows.singular(),
         "requests",
         "req/s",
         "p50",

@@ -1,0 +1,16 @@
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.TH pepe-flow 1  pepe "User Commands"
+.SH NAME
+pepe\-flow \- Run a sequence of requests from a flow file, each step fed by the last
+.SH SYNOPSIS
+\fBpepe flow\fR [\fB\-h\fR|\fB\-\-help\fR] <\fIFILE\fR> 
+.SH DESCRIPTION
+Run a sequence of requests from a flow file, each step fed by the last
+.SH OPTIONS
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Print help
+.TP
+<\fIFILE\fR>
+The flow: a TOML file of [[step]]s (see the README)

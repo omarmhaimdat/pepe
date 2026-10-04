@@ -113,6 +113,9 @@ Load\-test every endpoint of an OpenAPI spec
 pepe\-ramp(1)
 Raise the load step by step to find where the target stops keeping up
 .TP
+pepe\-flow(1)
+Run a sequence of requests from a flow file, each step fed by the last
+.TP
 pepe\-help(1)
 Print this message or the help of the given subcommand(s)
 .ie \n(.g .ds Aq \(aq
@@ -193,6 +196,9 @@ Stop the ramp here and keep the results
 \fBr, e\fR
 Run again; back to the setup screen
 .SH EXAMPLES
+.TP
+\fBpepe flow checkout.toml \-c 20 \-z 1m\fR
+A sequence of requests, each step fed by the one before
 .TP
 \fBpepe https://example.com\fR
 100 requests, one per core at a time, with the dashboard

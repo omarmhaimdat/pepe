@@ -115,6 +115,36 @@ pub struct EndpointView {
     pub body: Option<Vec<u8>>,
 }
 
+/// What the per-row tab lists: an API's endpoints, or a flow's steps
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Rows {
+    Endpoints,
+    Steps,
+}
+
+impl Rows {
+    pub(super) fn tab(self) -> &'static str {
+        match self {
+            Rows::Endpoints => "Endpoints",
+            Rows::Steps => "Steps",
+        }
+    }
+
+    pub(super) fn plural(self) -> &'static str {
+        match self {
+            Rows::Endpoints => "endpoints",
+            Rows::Steps => "steps",
+        }
+    }
+
+    pub(super) fn singular(self) -> &'static str {
+        match self {
+            Rows::Endpoints => "endpoint",
+            Rows::Steps => "step",
+        }
+    }
+}
+
 /// A finished request as shown in the log
 struct LogEntry {
     /// 1-based completion order
@@ -138,6 +168,8 @@ pub struct Dashboard {
     /// API mode: the endpoints in the run, and results for each
     endpoints: Vec<EndpointView>,
     endpoint_metrics: Vec<Metrics>,
+    /// What those rows are
+    pub(super) rows: Rows,
     /// Selected row on the Endpoints tab
     endpoint_cursor: usize,
     log: VecDeque<LogEntry>,
@@ -216,6 +248,7 @@ impl Dashboard {
             timeline: Timeline::default(),
             endpoints: Vec::new(),
             endpoint_metrics: Vec::new(),
+            rows: Rows::Endpoints,
             endpoint_cursor: 0,
             log: VecDeque::with_capacity(LOG_CAPACITY),
             error_log: VecDeque::with_capacity(ERROR_LOG_CAPACITY),
@@ -309,6 +342,12 @@ impl Dashboard {
         self.endpoints = endpoints;
         self.tab = Tab::Endpoints;
         self
+    }
+
+    /// A flow's steps, one row each, like endpoints
+    pub fn with_steps(mut self, steps: Vec<EndpointView>) -> Self {
+        self.rows = Rows::Steps;
+        self.with_endpoints(steps)
     }
 
     fn tabs(&self) -> &'static [Tab] {

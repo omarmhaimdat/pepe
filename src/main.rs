@@ -22,6 +22,7 @@ mod completions;
 mod config;
 mod contrib;
 mod curl;
+mod flow;
 mod insights;
 mod json_report;
 mod load;
@@ -615,6 +616,163 @@ async fn api_session(
 }
 
 /// API mode: read the spec, then the plan screen and the dashboard
+/// `pepe flow FILE`: the steps in order, each worker one user
+async fn run_flow(args: &Cli, what: &cli::FlowArgs) -> Result<(), Box<dyn std::error::Error>> {
+    let flow = match flow::load(&what.file) {
+        Ok(flow) => flow,
+        Err(e) => {
+            eprintln!("error: {e}");
+            std::process::exit(1);
+        }
+    };
+    // The dashboard's title shows the flow rather than one URL
+    let mut shown = args.clone();
+    shown.method = "FLOW".into();
+    shown.url = flow.name.clone();
+    if args.json {
+        return run_flow_json(&shown, flow).await;
+    }
+    let check = update::Check::start();
+    let report = {
+        let _watchdog = CtrlCWatchdog::arm();
+        let _terminal = TerminalGuard::enter()?;
+        flow_session(&mut shown, flow).await?
+    };
+    if let Some(report) = report {
+        print!("{report}");
+    }
+    say_if_newer(check).await;
+    Ok(())
+}
+
+/// One client per shard, built around the flow's first URL: the shared
+/// headers and settings are what matter
+fn flow_clients(
+    args: &Cli,
+    flow: &flow::Flow,
+    concurrency: usize,
+) -> Result<(Vec<reqwest::Client>, std::sync::Arc<request::ConnectTimes>), PepeError> {
+    let base = request::Request::new(
+        flow.base_url(),
+        "GET".into(),
+        None,
+        &args.headers,
+        args.settings(),
+    )?;
+    base.build_clients(shards(args, concurrency))
+}
+
+async fn flow_session(
+    shown: &mut Cli,
+    flow: flow::Flow,
+) -> Result<Option<String>, Box<dyn std::error::Error>> {
+    loop {
+        let (clients, connects) = flow_clients(shown, &flow, shown.concurrency as usize)?;
+        let mut load = load::start_flow(
+            clients,
+            flow.clone(),
+            shown.concurrency as usize,
+            plan(shown),
+            true,
+        );
+        load.set_rate(shown.rate);
+        if let Some(warmup) = shown.warmup() {
+            load.set_warmup(warmup);
+        }
+        let mut dashboard = ui::Dashboard::new(shown.clone(), plan(shown))
+            .with_steps(flow.views())
+            .with_connects(connects);
+        let outcome = dashboard.run(&mut load).await?;
+        shown.concurrency = load.concurrency() as u32;
+        match outcome {
+            // There is no setup screen for a flow: edit the file, run again
+            ui::Outcome::Restart | ui::Outcome::Edit => {}
+            ui::Outcome::Quit => return Ok(dashboard.report()),
+        }
+    }
+}
+
+async fn run_flow_json(args: &Cli, flow: flow::Flow) -> Result<(), Box<dyn std::error::Error>> {
+    let views = flow.views();
+    let (clients, connects) = flow_clients(args, &flow, args.concurrency as usize)?;
+    let mut load = load::start_flow(clients, flow, args.concurrency as usize, plan(args), false);
+    load.set_rate(args.rate);
+    if let Some(warmup) = args.warmup() {
+        load.set_warmup(warmup);
+    }
+    let mut started = Instant::now();
+    let mut warming = load.warming();
+    let mut warmup_requests = 0;
+    let mut total = Metrics::default();
+    let mut each = vec![Metrics::default(); views.len()];
+    let mut interrupted = false;
+    let mut pump = tokio::time::interval(PUMP);
+    let mut peak_busy = None;
+    loop {
+        tokio::select! {
+            _ = pump.tick() => {
+                peak_busy = peak_busy.max(load.busy());
+                if warming && !load.warming() {
+                    warming = false;
+                    started = Instant::now();
+                }
+                let over = !load.drain(|stat| {
+                    if stat.warmup {
+                        warmup_requests += 1;
+                        return;
+                    }
+                    total.record(&stat);
+                    if let Some(metrics) = each.get_mut(stat.endpoint as usize) {
+                        metrics.record(&stat);
+                    }
+                });
+                if over {
+                    break;
+                }
+            }
+            _ = tokio::signal::ctrl_c(), if !interrupted => {
+                interrupted = true;
+                load.stop();
+            }
+        }
+    }
+    let elapsed = started.elapsed();
+    let report = json_report::JsonReport::generate(&total, elapsed, interrupted)
+        .with_generator(
+            load.threads(),
+            peak_busy,
+            load.rate().map(|r| (r, load.missed())),
+        )
+        .with_warmup(args.warmup(), warmup_requests)
+        .with_connects(&connects);
+    let mut report = serde_json::to_value(&report)?;
+    let ms = |d: std::time::Duration| (d.as_secs_f64() * 1_000_000.0).round() / 1000.0;
+    let steps: Vec<serde_json::Value> = views
+        .iter()
+        .zip(&each)
+        .map(|(view, m)| {
+            serde_json::json!({
+                "step": view.label,
+                "requests": m.total,
+                "failed_requests": m.total - m.success,
+                "requests_per_second": m.rps(elapsed),
+                "median_ms": ms(m.percentile(50.0)),
+                "p99_ms": ms(m.percentile(99.0)),
+                "status_codes": m.status_codes.iter().map(|(k, v)| (k.to_string(), *v)).collect::<std::collections::BTreeMap<_, _>>(),
+            })
+        })
+        .collect();
+    // Chains that went all the way: the last step's successes
+    report["flow"] = serde_json::json!({
+        "name": args.url,
+        "chains_started": each.first().map_or(0, |m| m.total),
+        "chains_completed": each.last().map_or(0, |m| m.success),
+        "steps": steps,
+    });
+    println!("{}", serde_json::to_string_pretty(&report)?);
+    Ok(())
+}
+
 async fn run_api(args: &Cli, api: &cli::ApiArgs) -> Result<(), Box<dyn std::error::Error>> {
     let mut run = match api::ApiRun::load(api).await {
         Ok(run) => run,
@@ -695,6 +853,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         default_hook(info);
     }));
 
+    if let Some(cli::Command::Flow(what)) = args.command.clone() {
+        if let Err(e) = args.validate() {
+            eprintln!("{}", e);
+            std::process::exit(1);
+        }
+        return run_flow(&args, &what).await;
+    }
     if let Some(cli::Command::Api(api)) = args.command.clone() {
         if api.spec.is_empty() {
             eprintln!("error: api needs a spec: pepe api openapi.yaml, or `spec` under [api] in pepe.toml");

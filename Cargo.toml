@@ -37,6 +37,7 @@ axoupdater = "0.10.2"
 semver = "1.0.28"
 # OpenAPI specs are often YAML; this is the maintained fork of serde_yaml
 serde_norway = "0.9"
+regex-lite = "0.1"
 toml = "0.8"
 
 [dev-dependencies]
