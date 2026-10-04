@@ -1,6 +1,6 @@
 # Print an optspec for argparse to handle cmd's options that are independent of any subcommand.
 function __fish_pepe_global_optspecs
-    string join \n h/help n/number= z/duration= curl m/method= H/headers= t/timeout= threads= rate= d/body= p/proxy= k/insecure disable-compression disable-keepalive disable-redirects json trace-header= snapshot= i/setup c/concurrency= u/user-agent= V/version
+    string join \n h/help n/number= z/duration= curl m/method= H/headers= t/timeout= warmup= threads= rate= d/body= p/proxy= k/insecure disable-compression disable-keepalive disable-redirects json trace-header= snapshot= i/setup c/concurrency= u/user-agent= V/version
 end
 
 function __fish_pepe_needs_command
@@ -29,6 +29,7 @@ complete -c pepe -n "__fish_pepe_needs_command" -s z -l duration -d 'Duration of
 complete -c pepe -n "__fish_pepe_needs_command" -s m -l method -d 'HTTP method, e.g. GET, POST, PUT, DELETE' -r
 complete -c pepe -n "__fish_pepe_needs_command" -s H -l headers -d 'HTTP headers, e.g. -H \'Accept: application/json\'' -r
 complete -c pepe -n "__fish_pepe_needs_command" -s t -l timeout -d 'Time in seconds to wait for a response' -r
+complete -c pepe -n "__fish_pepe_needs_command" -l warmup -d 'Send for this long before measuring, e.g. 5s: connections open, caches fill and JITs settle without counting against the run' -r
 complete -c pepe -n "__fish_pepe_needs_command" -l threads -d 'Threads sending requests (default 1). One sends about 100k requests a second; the dashboard says when it is the limit' -r
 complete -c pepe -n "__fish_pepe_needs_command" -l rate -d 'Start this many requests a second, spread evenly, instead of as many as the concurrency allows; -c is then the most in flight at once, and pepe says when it holds the rate back' -r
 complete -c pepe -n "__fish_pepe_needs_command" -s d -l body -d 'HTTP request body' -r
@@ -57,6 +58,7 @@ complete -c pepe -n "__fish_pepe_using_subcommand self-update" -s z -l duration 
 complete -c pepe -n "__fish_pepe_using_subcommand self-update" -s m -l method -d 'HTTP method, e.g. GET, POST, PUT, DELETE' -r
 complete -c pepe -n "__fish_pepe_using_subcommand self-update" -s H -l headers -d 'HTTP headers, e.g. -H \'Accept: application/json\'' -r
 complete -c pepe -n "__fish_pepe_using_subcommand self-update" -s t -l timeout -d 'Time in seconds to wait for a response' -r
+complete -c pepe -n "__fish_pepe_using_subcommand self-update" -l warmup -d 'Send for this long before measuring, e.g. 5s: connections open, caches fill and JITs settle without counting against the run' -r
 complete -c pepe -n "__fish_pepe_using_subcommand self-update" -l threads -d 'Threads sending requests (default 1). One sends about 100k requests a second; the dashboard says when it is the limit' -r
 complete -c pepe -n "__fish_pepe_using_subcommand self-update" -l rate -d 'Start this many requests a second, spread evenly, instead of as many as the concurrency allows; -c is then the most in flight at once, and pepe says when it holds the rate back' -r
 complete -c pepe -n "__fish_pepe_using_subcommand self-update" -s d -l body -d 'HTTP request body' -r
@@ -79,6 +81,7 @@ complete -c pepe -n "__fish_pepe_using_subcommand completions" -s z -l duration 
 complete -c pepe -n "__fish_pepe_using_subcommand completions" -s m -l method -d 'HTTP method, e.g. GET, POST, PUT, DELETE' -r
 complete -c pepe -n "__fish_pepe_using_subcommand completions" -s H -l headers -d 'HTTP headers, e.g. -H \'Accept: application/json\'' -r
 complete -c pepe -n "__fish_pepe_using_subcommand completions" -s t -l timeout -d 'Time in seconds to wait for a response' -r
+complete -c pepe -n "__fish_pepe_using_subcommand completions" -l warmup -d 'Send for this long before measuring, e.g. 5s: connections open, caches fill and JITs settle without counting against the run' -r
 complete -c pepe -n "__fish_pepe_using_subcommand completions" -l threads -d 'Threads sending requests (default 1). One sends about 100k requests a second; the dashboard says when it is the limit' -r
 complete -c pepe -n "__fish_pepe_using_subcommand completions" -l rate -d 'Start this many requests a second, spread evenly, instead of as many as the concurrency allows; -c is then the most in flight at once, and pepe says when it holds the rate back' -r
 complete -c pepe -n "__fish_pepe_using_subcommand completions" -s d -l body -d 'HTTP request body' -r
@@ -107,6 +110,7 @@ complete -c pepe -n "__fish_pepe_using_subcommand api" -s z -l duration -d 'Dura
 complete -c pepe -n "__fish_pepe_using_subcommand api" -s m -l method -d 'HTTP method, e.g. GET, POST, PUT, DELETE' -r
 complete -c pepe -n "__fish_pepe_using_subcommand api" -s H -l headers -d 'HTTP headers, e.g. -H \'Accept: application/json\'' -r
 complete -c pepe -n "__fish_pepe_using_subcommand api" -s t -l timeout -d 'Time in seconds to wait for a response' -r
+complete -c pepe -n "__fish_pepe_using_subcommand api" -l warmup -d 'Send for this long before measuring, e.g. 5s: connections open, caches fill and JITs settle without counting against the run' -r
 complete -c pepe -n "__fish_pepe_using_subcommand api" -l threads -d 'Threads sending requests (default 1). One sends about 100k requests a second; the dashboard says when it is the limit' -r
 complete -c pepe -n "__fish_pepe_using_subcommand api" -l rate -d 'Start this many requests a second, spread evenly, instead of as many as the concurrency allows; -c is then the most in flight at once, and pepe says when it holds the rate back' -r
 complete -c pepe -n "__fish_pepe_using_subcommand api" -s d -l body -d 'HTTP request body' -r
@@ -134,6 +138,7 @@ complete -c pepe -n "__fish_pepe_using_subcommand ramp" -s z -l duration -d 'Dur
 complete -c pepe -n "__fish_pepe_using_subcommand ramp" -s m -l method -d 'HTTP method, e.g. GET, POST, PUT, DELETE' -r
 complete -c pepe -n "__fish_pepe_using_subcommand ramp" -s H -l headers -d 'HTTP headers, e.g. -H \'Accept: application/json\'' -r
 complete -c pepe -n "__fish_pepe_using_subcommand ramp" -s t -l timeout -d 'Time in seconds to wait for a response' -r
+complete -c pepe -n "__fish_pepe_using_subcommand ramp" -l warmup -d 'Send for this long before measuring, e.g. 5s: connections open, caches fill and JITs settle without counting against the run' -r
 complete -c pepe -n "__fish_pepe_using_subcommand ramp" -l threads -d 'Threads sending requests (default 1). One sends about 100k requests a second; the dashboard says when it is the limit' -r
 complete -c pepe -n "__fish_pepe_using_subcommand ramp" -l rate -d 'Start this many requests a second, spread evenly, instead of as many as the concurrency allows; -c is then the most in flight at once, and pepe says when it holds the rate back' -r
 complete -c pepe -n "__fish_pepe_using_subcommand ramp" -s d -l body -d 'HTTP request body' -r
@@ -156,6 +161,7 @@ complete -c pepe -n "__fish_pepe_using_subcommand replay" -s z -l duration -d 'D
 complete -c pepe -n "__fish_pepe_using_subcommand replay" -s m -l method -d 'HTTP method, e.g. GET, POST, PUT, DELETE' -r
 complete -c pepe -n "__fish_pepe_using_subcommand replay" -s H -l headers -d 'HTTP headers, e.g. -H \'Accept: application/json\'' -r
 complete -c pepe -n "__fish_pepe_using_subcommand replay" -s t -l timeout -d 'Time in seconds to wait for a response' -r
+complete -c pepe -n "__fish_pepe_using_subcommand replay" -l warmup -d 'Send for this long before measuring, e.g. 5s: connections open, caches fill and JITs settle without counting against the run' -r
 complete -c pepe -n "__fish_pepe_using_subcommand replay" -l threads -d 'Threads sending requests (default 1). One sends about 100k requests a second; the dashboard says when it is the limit' -r
 complete -c pepe -n "__fish_pepe_using_subcommand replay" -l rate -d 'Start this many requests a second, spread evenly, instead of as many as the concurrency allows; -c is then the most in flight at once, and pepe says when it holds the rate back' -r
 complete -c pepe -n "__fish_pepe_using_subcommand replay" -s d -l body -d 'HTTP request body' -r

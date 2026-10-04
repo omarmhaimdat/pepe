@@ -6,6 +6,47 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+## [0.11.0](https://github.com/omarmhaimdat/pepe/compare/v0.10.2...v0.11.0) - 2026-10-04
+
+### Added
+
+- --warmup, sending before counting ([#69](https://github.com/omarmhaimdat/pepe/pull/69))
+
+  Roadmap item 11 (scale and operations): a warm-up, so a run's first
+  seconds don't set its numbers.
+
+  ## What
+  - **`--warmup <TIME>`** (and a Warm-up field on the setup screen): for
+  that long from the start, requests go out at the run's concurrency but
+  count for nothing. The engine marks each request it starts during the
+  warm-up; a Count plan doesn't claim them, so `-n 50 --warmup 2s` still
+  sends 50 counted requests; a Duration plan's deadline moves back by the
+  warm-up, so `-z 3s --warmup 2s` measures 3 s and runs 5. A pause during
+  the warm-up extends it, like it does the deadline.
+  - **On screen:** the title says `◌ warming up` with the time left in
+  place of the clock, the progress line reads `0% warming up · 1,204 sent,
+  not counted`, and the Stats tab's test card has a `warm-up 5s · 1,204
+  not counted` row. The run's clock, timeline and verdict start when the
+  warm-up ends; nothing from it reaches the metrics, the request log or
+  the report.
+  - **JSON:** `generator.warmup_s` and `generator.warmup_requests`, in
+  `--json`, API mode and the dashboard's report.
+  - A ramp has no warm-up: its first step is one. A value without a unit
+  is rejected like `-z` would.
+
+  ## Checked
+  - Engine tests: a Count plan of 10 with a 200 ms warm-up yields exactly
+  10 unmarked results plus some marked ones; a 200 ms Duration plan with a
+  200 ms warm-up runs at least 390 ms and has both kinds.
+  - End to end against the bench server: `--warmup 2s -n 50` reports 50
+  requests over 174 ms with 668 warm-up requests, in 2.8 s of wall time;
+  `--warmup 2s -z 3s` reports 3,026 ms measured in 5.0 s of wall time; the
+  dashboard (recorded in a pty) shows the warming-up title, the time left
+  and the progress line, then a verdict over the measured part only.
+  - `cargo test`, `cargo clippy --all-targets`, `cargo fmt --check`;
+  contrib completions and man page regenerated.
+
+
 ## [0.10.2](https://github.com/omarmhaimdat/pepe/compare/v0.10.1...v0.10.2) - 2026-10-04
 
 ### Fixed
