@@ -534,7 +534,7 @@ fn render_footer(d: &Dashboard, f: &mut Frame, area: Rect) {
     // A notice has the right-hand end of the footer; otherwise a warning
     // that pepe itself is the limit
     let warning = match &d.notice {
-        Some((notice, _)) => Some(notice.clone()),
+        Some((notice, _, _)) => Some(notice.clone()),
         None => d.saturation_warning(),
     };
     if let Some(notice) = warning {
@@ -1400,7 +1400,7 @@ fn render_stats_tab(d: &Dashboard, f: &mut Frame, area: Rect) {
     let columns = ((area.width + CARD_GAP) / (CARD_WIDTH + CARD_GAP)).clamp(1, 4);
     let width = (area.width + CARD_GAP) / columns - CARD_GAP;
     let w = width as usize;
-    let cards = [
+    let mut cards = vec![
         requests_card(d, w),
         latency_card(d, w),
         phases_card(d, w),
@@ -1410,6 +1410,8 @@ fn render_stats_tab(d: &Dashboard, f: &mut Frame, area: Rect) {
         test_card(d, w),
         network_card(d, w),
     ];
+    cards.extend(server_timing_card(d, w));
+    cards.extend(slowest_card(d, w));
 
     // Masonry: each card goes to the shortest column so far
     let mut heights = vec![0u16; columns as usize];
@@ -1751,6 +1753,117 @@ fn network_card(d: &Dashboard, w: usize) -> Card {
             w,
         )
         .row("cores", num_of_cores().to_string(), Color::Reset, w)
+}
+
+/// What the target's `Server-Timing` headers say: its own time against
+/// the latency measured here, then each segment. Only when it sends them.
+fn server_timing_card(d: &Dashboard, w: usize) -> Option<Card> {
+    let m = &d.metrics;
+    let timing = m.server_timing();
+    if timing.is_empty() {
+        return None;
+    }
+    let mut card = Card::new("server timing");
+    let total = timing.total();
+    if total.count() > 0 {
+        let server = Duration::from_micros(total.percentile(50.0));
+        let measured = m.percentile(50.0);
+        let share = if measured.is_zero() {
+            0.0
+        } else {
+            server.as_secs_f64() / measured.as_secs_f64() * 100.0
+        };
+        card = card.row(
+            "server p50",
+            format!(
+                "{} of {} measured",
+                format::latency(server),
+                format::latency(measured)
+            ),
+            Color::Reset,
+            w,
+        );
+        card = card.row(
+            "its share",
+            format!("{share:.0}%"),
+            match share {
+                s if s >= 90.0 => WARN,
+                _ => Color::Reset,
+            },
+            w,
+        );
+    }
+    for segment in timing.segments() {
+        let name = truncate(&segment.name, 12);
+        let h = &segment.durations;
+        let text = if h.count() > 0 {
+            format!(
+                "p50 {} · p99 {}",
+                format::latency(Duration::from_micros(h.percentile(50.0))),
+                format::latency(Duration::from_micros(h.percentile(99.0)))
+            )
+        } else {
+            format!("{} seen, no dur", format::count(segment.count))
+        };
+        card = card.row(&name, text, Color::Reset, w);
+    }
+    card = card.line(Line::from(label(format!(
+        "on {} of {} responses",
+        format::count(timing.responses()),
+        format::count(m.success + m.failed)
+    ))));
+    Some(card)
+}
+
+/// The slowest responses so far, with the ids their backend gave them, so
+/// they can be looked up in its logs
+fn slowest_card(d: &Dashboard, w: usize) -> Option<Card> {
+    let entries = d.slowest.entries();
+    if entries.is_empty() {
+        return None;
+    }
+    let header = entries
+        .iter()
+        .find_map(|e| e.request_id.as_ref().map(|(name, _)| *name));
+    let title = match header {
+        Some(name) => format!("slowest · {name}"),
+        None => "slowest".to_string(),
+    };
+    let mut card = Card::new(&title);
+    let n = entries.len();
+    for (i, e) in entries.iter().enumerate() {
+        let lead = format!(
+            "{:>8}  {}  {}  ",
+            format::latency(e.latency),
+            e.status,
+            format::clock(e.at)
+        );
+        let id = e
+            .request_id
+            .as_ref()
+            .map_or_else(|| "—".to_string(), |(_, id)| id.to_string());
+        card = card.line(Line::from(vec![
+            value(
+                format!("{:>8}", format::latency(e.latency)),
+                heat(n - 1 - i, n),
+            ),
+            Span::raw("  "),
+            Span::styled(
+                e.status.to_string(),
+                Style::new().fg(status_color(e.status)),
+            ),
+            Span::raw("  "),
+            label(format::clock(e.at)),
+            Span::raw("  "),
+            Span::raw(truncate(&id, w.saturating_sub(lead.len()))),
+        ]));
+    }
+    if header.is_none() {
+        card = card.line(Line::from(label(
+            "no request id seen · --trace-header NAME",
+        )));
+    }
+    Some(card)
 }
 
 /// Latency histogram on a log x-axis and a square-root y-axis (so the tail
@@ -2262,6 +2375,37 @@ fn inspector_stats(d: &Dashboard, entry: &LogEntry, w: usize) -> Vec<Line<'stati
         Color::Reset,
         w,
     ));
+    if let Some((name, id)) = &stat.request_id {
+        lines.push(kv(
+            name,
+            truncate(id, w.saturating_sub(name.len() + 2)),
+            Color::Reset,
+            w,
+        ));
+    }
+    if let Some(timing) = &stat.server_timing {
+        lines.push(Line::raw(""));
+        lines.push(heading("server timing"));
+        for entry in timing.iter() {
+            let text = match (entry.dur_ms, &entry.desc) {
+                (Some(ms), Some(desc)) => {
+                    format!(
+                        "{} · {desc}",
+                        format::latency(Duration::from_secs_f64(ms / 1000.0))
+                    )
+                }
+                (Some(ms), None) => format::latency(Duration::from_secs_f64(ms / 1000.0)),
+                (None, Some(desc)) => desc.to_string(),
+                (None, None) => dash(),
+            };
+            lines.push(kv(
+                &truncate(&entry.name, 12),
+                truncate(&text, w / 2),
+                Color::Reset,
+                w,
+            ));
+        }
+    }
     if let Some(detail) = detail {
         lines.push(kv(
             "protocol",
