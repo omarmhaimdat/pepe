@@ -839,7 +839,7 @@ mod tests {
         let req = request(&srv.url, "GET", None);
         let begin = Instant::now();
         let load = start(
-            req.build_clients(1).unwrap(),
+            req.build_clients(1).unwrap().0,
             req,
             4,
             Plan::Count(20),
@@ -860,7 +860,7 @@ mod tests {
         let srv = server(Duration::from_millis(30)).await;
         let req = request(&srv.url, "GET", None);
         let load = start(
-            req.build_clients(1).unwrap(),
+            req.build_clients(1).unwrap().0,
             req,
             1,
             Plan::Duration(Duration::from_millis(1_600)),
