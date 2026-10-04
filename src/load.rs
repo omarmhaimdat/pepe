@@ -14,6 +14,7 @@ use std::time::{Duration, Instant};
 use tokio::sync::{mpsc, Notify};
 use tokio::task::JoinSet;
 
+use crate::flow::Flow;
 use crate::request::Request;
 use crate::response::ResponseStats;
 use crate::utils::{resolve_dns, thread_cpu_time};
@@ -392,6 +393,8 @@ struct Shared {
     /// some responses in full for its inspector
     previews: bool,
     details: DetailBudget,
+    /// A flow instead of targets: workers walk its steps in order
+    flow: Option<Flow>,
 }
 
 /// Load one request
@@ -421,6 +424,31 @@ pub fn start_targets(
     previews: bool,
 ) -> LoadHandle {
     assert!(!targets.is_empty(), "a run needs at least one target");
+    start_shared(clients, targets, None, concurrency, plan, previews)
+}
+
+/// Load a flow: each worker walks its steps in order, with its own
+/// values, and starts over when the chain ends or a step fails. A Count
+/// plan counts chains, not requests.
+pub fn start_flow(
+    clients: Vec<reqwest::Client>,
+    flow: Flow,
+    concurrency: usize,
+    plan: Plan,
+    previews: bool,
+) -> LoadHandle {
+    assert!(!flow.steps.is_empty(), "a flow needs at least one step");
+    start_shared(clients, Vec::new(), Some(flow), concurrency, plan, previews)
+}
+
+fn start_shared(
+    clients: Vec<reqwest::Client>,
+    targets: Vec<Target>,
+    flow: Option<Flow>,
+    concurrency: usize,
+    plan: Plan,
+    previews: bool,
+) -> LoadHandle {
     assert!(!clients.is_empty(), "a run needs at least one client");
     let (tx, rx) = mpsc::unbounded_channel();
     let concurrency = concurrency.clamp(1, MAX_CONCURRENCY);
@@ -432,6 +460,7 @@ pub fn start_targets(
         dns: DnsSampler::new(),
         previews,
         details: DetailBudget::new(),
+        flow,
     });
     let count = clients.len();
     for (index, client) in clients.into_iter().enumerate() {
@@ -481,6 +510,21 @@ impl Shard {
             self.index,
             self.count,
         )
+    }
+
+    /// Between a chain's steps: wait out a pause; false once the run is
+    /// stopped outright (a plan that merely ended lets the chain finish)
+    async fn between_steps(&self) -> bool {
+        loop {
+            let wake = self.wake.notified();
+            if self.control.stopped.load(Ordering::Acquire) {
+                return false;
+            }
+            if !self.control.paused.load(Ordering::Relaxed) {
+                return true;
+            }
+            wake.await;
+        }
     }
 
     /// Wait until worker `slot` may send; false once the run is over
@@ -587,6 +631,9 @@ impl BusyMeter {
 
 /// Sends requests one after another, whenever it has a turn
 async fn worker(shard: Arc<Shard>, slot: usize) {
+    if shard.shared.flow.is_some() {
+        return flow_worker(shard, slot).await;
+    }
     while shard.turn(slot).await {
         if !shard.control.claim() {
             // The last request of the plan is out: tell every shard
@@ -598,6 +645,97 @@ async fn worker(shard: Arc<Shard>, slot: usize) {
             break;
         }
     }
+}
+
+/// One user of a flow: the steps in order with its own values, over and
+/// over. A step that fails (no response, a status other than expected, a
+/// capture that finds nothing) ends the chain; the next starts clean.
+async fn flow_worker(shard: Arc<Shard>, slot: usize) {
+    let flow = shard
+        .shared
+        .flow
+        .as_ref()
+        .expect("a flow worker has a flow");
+    let mut vars = std::collections::HashMap::new();
+    'chains: while shard.turn(slot).await {
+        if !shard.control.claim() {
+            shard.control.drain();
+            break;
+        }
+        vars.clear();
+        vars.extend(flow.vars.iter().cloned());
+        for (index, step) in flow.steps.iter().enumerate() {
+            // A chain that has started gets to finish when the plan ends;
+            // a pause holds it between steps, a stop ends it
+            if index > 0 && !shard.between_steps().await {
+                break 'chains;
+            }
+            let (stats, ok) = send_step(&shard, step, index as u16, &mut vars).await;
+            if shard.tx.send(stats).is_err() {
+                break 'chains;
+            }
+            if !ok {
+                break;
+            }
+        }
+    }
+}
+
+/// One step of a chain; false when the chain can't go on
+async fn send_step(
+    shard: &Shard,
+    step: &crate::flow::Step,
+    index: u16,
+    vars: &mut std::collections::HashMap<String, String>,
+) -> (ResponseStats, bool) {
+    let shared = &shard.shared;
+    let request = match step.build(vars) {
+        Ok(request) => request,
+        Err(why) => {
+            let mut stats = ResponseStats {
+                endpoint: index,
+                ..Default::default()
+            };
+            stats.fail_step(format!("couldn't build the request: {why}"));
+            return (stats, false);
+        }
+    };
+    let start = Instant::now();
+    let response = shard.client.execute(request).await;
+    let ttfb = start.elapsed();
+    let capture = shared.previews
+        && matches!(&response, Ok(r) if shared.details.claim(!r.status().is_success()));
+    let body_cap = if step.captures.is_empty() {
+        0
+    } else {
+        crate::flow::BODY_CAP
+    };
+    let (mut stats, kept) =
+        ResponseStats::with_body(response, start, ttfb, shared.previews, capture, body_cap).await;
+    stats.endpoint = index;
+    let Some(status) = stats.status_code else {
+        return (stats, false);
+    };
+    let wanted = match step.expect {
+        Some(code) => status.as_u16() == code,
+        None => status.is_success(),
+    };
+    if !wanted {
+        if let Some(code) = step.expect {
+            stats.fail_step(format!(
+                "HTTP {} where {code} was expected",
+                status.as_u16()
+            ));
+        }
+        return (stats, false);
+    }
+    if let Some((headers, body)) = kept {
+        if let Err(name) = step.capture(&headers, &body, vars) {
+            stats.fail_step(format!("nothing for {{{{{name}}}}} in the response"));
+            return (stats, false);
+        }
+    }
+    (stats, true)
 }
 
 async fn send_one(shard: &Shard) -> ResponseStats {
@@ -744,6 +882,137 @@ mod tests {
         // DNS is sampled, not probed for every request
         let probes = results.iter().filter(|r| r.dns_times.is_some()).count();
         assert!((1..5).contains(&probes), "probes={probes}");
+    }
+
+    /// A two-route server: /login hands out a token in JSON and a header,
+    /// /me wants it back as a bearer
+    async fn token_server() -> String {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let url = format!("http://{}", listener.local_addr().unwrap());
+        tokio::spawn(async move {
+            loop {
+                let (mut socket, _) = listener.accept().await.unwrap();
+                tokio::spawn(async move {
+                    let mut buf = vec![0u8; 4096];
+                    loop {
+                        let mut head = Vec::new();
+                        loop {
+                            let n = socket.read(&mut buf).await.unwrap_or(0);
+                            if n == 0 {
+                                return;
+                            }
+                            head.extend_from_slice(&buf[..n]);
+                            if head.windows(4).any(|w| w == b"\r\n\r\n") {
+                                break;
+                            }
+                        }
+                        let text = String::from_utf8_lossy(&head).to_string();
+                        let (status, body) = if text.starts_with("POST /login") {
+                            ("200 OK", r#"{"token":"t-123","user":{"id":7}}"#)
+                        } else if text.contains("authorization: Bearer t-123")
+                            || text.contains("Authorization: Bearer t-123")
+                        {
+                            ("200 OK", r#"{"me":7}"#)
+                        } else {
+                            ("401 Unauthorized", "no")
+                        };
+                        let response = format!(
+                            "HTTP/1.1 {status}\r\nContent-Length: {}\r\nX-Sid: s9\r\nContent-Type: application/json\r\n\r\n{body}",
+                            body.len()
+                        );
+                        if socket.write_all(response.as_bytes()).await.is_err() {
+                            return;
+                        }
+                    }
+                });
+            }
+        });
+        url
+    }
+
+    #[tokio::test]
+    async fn a_flow_feeds_one_step_into_the_next_and_counts_chains() {
+        let url = token_server().await;
+        let flow = crate::flow::parse(&format!(
+            r#"
+            [[step]]
+            name = "login"
+            method = "POST"
+            url = "{url}/login"
+            capture = {{ token = "json:$.token", sid = "header:X-Sid", id = "json:$.user.id" }}
+            [[step]]
+            name = "me"
+            url = "{url}/me/{{{{id}}}}?sid={{{{sid}}}}"
+            headers = ["Authorization: Bearer {{{{token}}}}"]
+            "#
+        ))
+        .unwrap();
+        let req = request(&url, "GET", None);
+        let load = start_flow(
+            req.build_clients(1).unwrap(),
+            flow,
+            2,
+            Plan::Count(5),
+            false,
+        );
+        let results = drain(load).await;
+        assert_eq!(results.len(), 10, "five chains of two steps");
+        assert!(
+            results
+                .iter()
+                .all(|r| r.status_code.is_some_and(|s| s.is_success())),
+            "{results:?}"
+        );
+        assert_eq!(results.iter().filter(|r| r.endpoint == 1).count(), 5);
+
+        // A capture that finds nothing fails the step and ends the chain
+        let flow = crate::flow::parse(&format!(
+            r#"
+            [[step]]
+            method = "POST"
+            url = "{url}/login"
+            capture = {{ token = "json:$.nope" }}
+            [[step]]
+            url = "{url}/me"
+            headers = ["Authorization: Bearer {{{{token}}}}"]
+            "#
+        ))
+        .unwrap();
+        let req = request(&url, "GET", None);
+        let load = start_flow(
+            req.build_clients(1).unwrap(),
+            flow,
+            1,
+            Plan::Count(3),
+            false,
+        );
+        let results = drain(load).await;
+        assert_eq!(results.len(), 3, "the second step never runs");
+        assert!(results
+            .iter()
+            .all(|r| r.endpoint == 0 && r.status_code.is_none()));
+        assert_eq!(
+            results[0].error_message.as_deref(),
+            Some("nothing for {{token}} in the response")
+        );
+
+        // A status other than the expected one fails the step too
+        let flow =
+            crate::flow::parse(&format!("[[step]]\nurl = \"{url}/me\"\nexpect = 200\n")).unwrap();
+        let req = request(&url, "GET", None);
+        let load = start_flow(
+            req.build_clients(1).unwrap(),
+            flow,
+            1,
+            Plan::Count(2),
+            false,
+        );
+        let results = drain(load).await;
+        assert_eq!(results.len(), 2);
+        assert_eq!(
+            results[0].error_message.as_deref(),
+            Some("HTTP 401 where 200 was expected")
+        );
     }
 
     #[tokio::test]

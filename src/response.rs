@@ -105,10 +105,39 @@ impl ResponseStats {
         keep_preview: bool,
         capture: bool,
     ) -> Self {
+        Self::read(resp, start, ttfb, dns_times, keep_preview, capture, 0)
+            .await
+            .0
+    }
+
+    /// Like `from_response`, and also the response's headers and up to
+    /// `body_cap` bytes of its body, for a flow step's captures
+    pub async fn with_body(
+        resp: Result<reqwest::Response, reqwest::Error>,
+        start: Instant,
+        ttfb: Duration,
+        keep_preview: bool,
+        capture: bool,
+        body_cap: usize,
+    ) -> (Self, Option<(HeaderMap, Bytes)>) {
+        Self::read(resp, start, ttfb, None, keep_preview, capture, body_cap).await
+    }
+
+    async fn read(
+        resp: Result<reqwest::Response, reqwest::Error>,
+        start: Instant,
+        ttfb: Duration,
+        dns_times: Option<(Duration, Duration)>,
+        keep_preview: bool,
+        capture: bool,
+        body_cap: usize,
+    ) -> (Self, Option<(HeaderMap, Bytes)>) {
         let mut resp = match resp {
             Ok(resp) => resp,
-            Err(e) => return Self::failed(&e, start, dns_times),
+            Err(e) => return (Self::failed(&e, start, dns_times), None),
         };
+        let kept_headers = (body_cap > 0).then(|| resp.headers().clone());
+        let mut kept_body = Vec::new();
 
         let status_code = resp.status();
         let cache_status = CacheStatus::parse_headers(resp.headers());
@@ -139,10 +168,14 @@ impl ResponseStats {
                         let want = BODY_CAPTURE.saturating_sub(captured.len());
                         captured.extend_from_slice(&chunk[..want.min(chunk.len())]);
                     }
+                    if body_cap > 0 {
+                        let want = body_cap.saturating_sub(kept_body.len());
+                        kept_body.extend_from_slice(&chunk[..want.min(chunk.len())]);
+                    }
                 }
                 Ok(None) => break,
                 // The status arrived but the body did not (e.g. timed out mid-body)
-                Err(e) => return Self::failed(&e, start, dns_times),
+                Err(e) => return (Self::failed(&e, start, dns_times), None),
             }
         }
         let duration = start.elapsed();
@@ -151,7 +184,7 @@ impl ResponseStats {
             detail.body = Bytes::from(captured);
         }
 
-        ResponseStats {
+        let stats = ResponseStats {
             duration,
             endpoint: 0,
             ttfb: Some(ttfb),
@@ -163,7 +196,18 @@ impl ResponseStats {
             cache_status,
             error: None,
             error_message: None,
-        }
+        };
+        (stats, kept_headers.map(|h| (h, Bytes::from(kept_body))))
+    }
+
+    /// Turn a response into a failed step: the request got an answer, but
+    /// not the one the flow needed (a wrong status, a capture that found
+    /// nothing), so it counts as failed with that said
+    pub fn fail_step(&mut self, why: String) {
+        self.status_code = None;
+        self.error = Some(ErrorKind::Other);
+        self.error_message = Some(why.into());
+        self.preview = None;
     }
 
     fn failed(e: &reqwest::Error, start: Instant, dns_times: Option<(Duration, Duration)>) -> Self {
