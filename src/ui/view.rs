@@ -276,15 +276,21 @@ fn render_title(d: &Dashboard, f: &mut Frame, area: Rect) {
         ("✔ done", GOOD)
     } else if d.paused {
         ("‖ paused", WARN)
+    } else if d.warming {
+        ("◌ warming up", WARN)
     } else {
         ("● running", GOOD)
+    };
+    let clock = match (d.warming, d.warmup_left) {
+        (true, Some(left)) => format!("{} left", format::span(left)),
+        _ => format::clock(d.elapsed()),
     };
     let right = Line::from(vec![
         value(state, color),
         label("   concurrency "),
         value(d.concurrency.to_string(), Color::Reset),
         label("   "),
-        value(format::clock(d.elapsed()), Color::Reset),
+        value(clock, Color::Reset),
     ]);
 
     let prefix = format!("pepe  {} ", d.args.method);
@@ -304,9 +310,17 @@ fn render_progress(d: &Dashboard, f: &mut Frame, area: Rect) {
     let m = &d.metrics;
     let elapsed = d.elapsed();
     let finished = d.finished.is_some();
-    let percent = progress_percent(d.plan, m.total, elapsed, finished);
+    let percent = if d.warming {
+        0
+    } else {
+        progress_percent(d.plan, m.total, elapsed, finished)
+    };
 
     let detail = match d.plan {
+        _ if d.warming => format!(
+            "warming up · {} sent, not counted",
+            format::count(d.warmup_requests)
+        ),
         Plan::Count(n) => {
             let mut s = format!("{} of {}", format::count(m.total), format::count(n));
             let rate = m.rps(elapsed);
@@ -1662,6 +1676,19 @@ fn test_card(d: &Dashboard, w: usize) -> Card {
             Span::raw(truncate(&args.url, w.saturating_sub(args.method.len() + 1))),
         ]))
         .row("run", plan, Color::Reset, w)
+        .row(
+            "warm-up",
+            match args.warmup() {
+                Some(warmup) => format!(
+                    "{} · {} not counted",
+                    format::span(warmup),
+                    format::count(d.warmup_requests)
+                ),
+                None => "none".into(),
+            },
+            Color::Reset,
+            w,
+        )
         .row("concurrency", concurrency, Color::Reset, w)
         .row("timeout", format!("{}s", args.timeout), Color::Reset, w)
         .row("headers", args.headers.len().to_string(), Color::Reset, w)

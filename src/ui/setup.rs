@@ -84,6 +84,8 @@ enum Field {
     Concurrency,
     /// Threads sending requests; empty for the default
     Threads,
+    /// Sent before measuring, e.g. "5s"; empty for none
+    Warmup,
     /// A file the report is written to every minute; empty for none
     Snapshot,
     RunMode,
@@ -132,6 +134,7 @@ pub struct Setup {
     body_edited: bool,
     concurrency: String,
     threads: String,
+    warmup: String,
     snapshot: String,
     by_duration: bool,
     duration: String,
@@ -196,6 +199,7 @@ impl Setup {
             body_edited: false,
             concurrency: cli.concurrency.to_string(),
             threads: cli.threads.map(|t| t.to_string()).unwrap_or_default(),
+            warmup: cli.warmup.clone().unwrap_or_default(),
             snapshot: cli
                 .snapshot
                 .as_ref()
@@ -256,6 +260,7 @@ impl Setup {
         fields.extend([
             Field::Timeout,
             Field::Threads,
+            Field::Warmup,
             Field::Snapshot,
             Field::Redirects,
             Field::KeepAlive,
@@ -281,6 +286,7 @@ impl Setup {
             Field::Body => &mut self.body,
             Field::Concurrency => &mut self.concurrency,
             Field::Threads => &mut self.threads,
+            Field::Warmup => &mut self.warmup,
             Field::Snapshot => &mut self.snapshot,
             Field::RunValue if self.by_duration => &mut self.duration,
             Field::RunValue => &mut self.requests,
@@ -594,6 +600,14 @@ impl Setup {
         cli.threads = match self.threads.trim() {
             "" => None,
             text => Some(number("threads", text)?.max(1)),
+        };
+        cli.warmup = match self.warmup.trim() {
+            "" => None,
+            text => {
+                Cli::parse_duration(text)
+                    .map_err(|_| format!("warm-up {text:?} needs a unit: 5s, 1m"))?;
+                Some(text.to_string())
+            }
         };
         cli.snapshot = match self.snapshot.trim() {
             "" => None,
@@ -1107,6 +1121,18 @@ impl Setup {
             Field::Threads,
             "Threads",
             self.typed(Field::Threads, &self.threads, "auto", room),
+            width,
+        );
+        self.row(
+            &mut options,
+            Field::Warmup,
+            "Warm-up",
+            self.typed(
+                Field::Warmup,
+                &self.warmup,
+                "e.g. 5s, sent before counting",
+                room,
+            ),
             width,
         );
         self.row(

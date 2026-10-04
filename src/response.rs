@@ -93,6 +93,8 @@ pub struct ResponseStats {
     pub ttfb: Option<Duration>,
     /// Full headers and body, when this request was picked for capture
     pub detail: Option<Arc<Detail>>,
+    /// Sent during `--warmup`: shown as such, counted in nothing
+    pub warmup: bool,
 }
 
 impl ResponseStats {
@@ -163,6 +165,7 @@ impl ResponseStats {
             cache_status,
             error: None,
             error_message: None,
+            warmup: false,
         }
     }
 

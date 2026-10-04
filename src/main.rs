@@ -80,13 +80,17 @@ fn clients_for(
 fn start_load(args: &Cli, previews: bool) -> Result<LoadHandle, PepeError> {
     let request = args.request()?;
     let clients = clients_for(&request, args, args.concurrency as usize)?;
-    Ok(load::start(
+    let load = load::start(
         clients,
         request,
         args.concurrency as usize,
         plan(args),
         previews,
-    ))
+    );
+    if let Some(warmup) = args.warmup() {
+        load.set_warmup(warmup);
+    }
+    Ok(load)
 }
 
 fn restore_terminal() {
@@ -203,7 +207,10 @@ pub const SNAPSHOT_EVERY: std::time::Duration = std::time::Duration::from_secs(6
 /// `--json`: no dashboard; run to completion (or Ctrl-C), print the report
 async fn run_json(args: &Cli) -> Result<(), Box<dyn std::error::Error>> {
     let mut load = start_load(args, false)?;
-    let started = Instant::now();
+    // The clock starts when the warm-up, if any, is over
+    let mut started = Instant::now();
+    let mut warming = load.warming();
+    let mut warmup_requests = 0;
     let mut metrics = Metrics::default();
     let mut timeline = timeline::Timeline::default();
     let mut interrupted = false;
@@ -214,10 +221,13 @@ async fn run_json(args: &Cli) -> Result<(), Box<dyn std::error::Error>> {
     let report = |metrics: &Metrics,
                   timeline: &timeline::Timeline,
                   load: &LoadHandle,
+                  elapsed: std::time::Duration,
+                  warmup_requests: u64,
                   peak_busy,
                   interrupted| {
-        json_report::JsonReport::generate(metrics, started.elapsed(), interrupted)
+        json_report::JsonReport::generate(metrics, elapsed, interrupted)
             .with_generator(load.threads(), peak_busy)
+            .with_warmup(args.warmup(), warmup_requests)
             .with_timeline(timeline)
     };
 
@@ -225,18 +235,28 @@ async fn run_json(args: &Cli) -> Result<(), Box<dyn std::error::Error>> {
         tokio::select! {
             _ = pump.tick() => {
                 peak_busy = peak_busy.max(load.busy());
+                if warming && !load.warming() {
+                    warming = false;
+                    started = Instant::now();
+                }
                 let over = !load.drain(|stat| {
+                    if stat.warmup {
+                        warmup_requests += 1;
+                        return;
+                    }
                     metrics.record(&stat);
                     timeline.record(&stat);
                 });
-                timeline.advance(started.elapsed());
+                if !warming {
+                    timeline.advance(started.elapsed());
+                }
                 if over {
                     break;
                 }
             }
             _ = snapshots.tick(), if args.snapshot.is_some() => {
                 let path = args.snapshot.as_ref().expect("checked");
-                if let Err(e) = report(&metrics, &timeline, &load, peak_busy, interrupted).with_snapshot(true).write_to(path) {
+                if let Err(e) = report(&metrics, &timeline, &load, started.elapsed(), warmup_requests, peak_busy, interrupted).with_snapshot(true).write_to(path) {
                     eprintln!("couldn't write the snapshot to {}: {e}", path.display());
                 }
             }
@@ -248,7 +268,15 @@ async fn run_json(args: &Cli) -> Result<(), Box<dyn std::error::Error>> {
     }
 
     timeline.finish(started.elapsed());
-    let report = report(&metrics, &timeline, &load, peak_busy, interrupted);
+    let report = report(
+        &metrics,
+        &timeline,
+        &load,
+        started.elapsed(),
+        warmup_requests,
+        peak_busy,
+        interrupted,
+    );
     if let Some(path) = &args.snapshot {
         report.clone().with_snapshot(false).write_to(path)?;
     }
@@ -399,6 +427,8 @@ async fn run_ramp_json(args: &Cli, plan: RampPlan) -> Result<(), Box<dyn std::er
     report["generator"] = serde_json::to_value(json_report::Generator {
         threads: load.threads(),
         peak_busy_percent: peak_busy,
+        warmup_s: None,
+        warmup_requests: None,
     })?;
     println!("{}", serde_json::to_string_pretty(&report)?);
     Ok(())
@@ -437,7 +467,12 @@ async fn run_api_json(args: &Cli, run: &api::ApiRun) -> Result<(), Box<dyn std::
         plan(args),
         false,
     );
-    let started = Instant::now();
+    if let Some(warmup) = args.warmup() {
+        load.set_warmup(warmup);
+    }
+    let mut started = Instant::now();
+    let mut warming = load.warming();
+    let mut warmup_requests = 0;
     let mut total = Metrics::default();
     let mut each = vec![Metrics::default(); which.len()];
     let mut interrupted = false;
@@ -447,7 +482,15 @@ async fn run_api_json(args: &Cli, run: &api::ApiRun) -> Result<(), Box<dyn std::
         tokio::select! {
             _ = pump.tick() => {
                 peak_busy = peak_busy.max(load.busy());
+                if warming && !load.warming() {
+                    warming = false;
+                    started = Instant::now();
+                }
                 let over = !load.drain(|stat| {
+                    if stat.warmup {
+                        warmup_requests += 1;
+                        return;
+                    }
                     total.record(&stat);
                     if let Some(metrics) = each.get_mut(stat.endpoint as usize) {
                         metrics.record(&stat);
@@ -465,7 +508,8 @@ async fn run_api_json(args: &Cli, run: &api::ApiRun) -> Result<(), Box<dyn std::
     }
     let elapsed = started.elapsed();
     let report = json_report::JsonReport::generate(&total, elapsed, interrupted)
-        .with_generator(load.threads(), peak_busy);
+        .with_generator(load.threads(), peak_busy)
+        .with_warmup(args.warmup(), warmup_requests);
     let mut report = serde_json::to_value(&report)?;
     let ms = |d: std::time::Duration| (d.as_secs_f64() * 1_000_000.0).round() / 1000.0;
     let endpoints: Vec<serde_json::Value> = which
@@ -517,6 +561,9 @@ async fn api_session(
             plan(&shown),
             true,
         );
+        if let Some(warmup) = shown.warmup() {
+            load.set_warmup(warmup);
+        }
         let mut dashboard = ui::Dashboard::new(shown.clone(), plan(&shown))
             .with_endpoints(run.views(&shown, &which));
         let outcome = dashboard.run(&mut load).await?;
