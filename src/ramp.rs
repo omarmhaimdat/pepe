@@ -1163,17 +1163,19 @@ mod tests {
 
     #[test]
     fn capacity_is_read_off_the_fitted_curve() {
-        // σ 0.05, κ 0.0005: the peak is at √((1−σ)/κ) ≈ 43.6 concurrent
+        // σ 0.05, κ 0.0005: the peak is 1,074 req/s at √((1−σ)/κ) ≈ 43.6
+        // concurrent, and the step at 30 already gets 97% of it
         let steps = usl(&[10, 20, 30, 40, 50, 60], 0.05, 0.0005);
         let c = capacity(&steps).unwrap();
-        assert!((42.0..=45.0).contains(&c.at), "at {}", c.at);
         assert!((1_050.0..=1_100.0).contains(&c.rps), "rps {}", c.rps);
+        assert_eq!(c.at, 30.0, "reached by a measured step");
         assert!(!c.extrapolated);
         assert_eq!(c.latency_doubles_at, None, "latency was flat");
 
-        // Stopped before the peak: the same curve, said to be extrapolated
-        let c = capacity(&steps[..4]).unwrap();
+        // Stopped well before the peak: the same curve, extrapolated to it
+        let c = capacity(&usl(&[5, 10, 15, 20], 0.05, 0.0005)).unwrap();
         assert!((42.0..=45.0).contains(&c.at), "at {}", c.at);
+        assert!((1_050.0..=1_100.0).contains(&c.rps), "rps {}", c.rps);
         assert!(c.extrapolated);
 
         // No coherency cost: throughput levels off instead of turning down.
