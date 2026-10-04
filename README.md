@@ -167,6 +167,35 @@ pepe self-update [--check]     update pepe
 | `--curl` | | Read the request from a curl command (see below) |
 | `-i`, `--setup` | | Open the setup screen filled in from the flags |
 | `--json` | | No dashboard: run to completion and print a JSON report |
+| `--config <FILE>` | `./pepe.toml` if present | Read settings from a file (see [Config file](#config-file)) |
+| `--write-config <FILE>` | | Write the settings as given to a file and exit |
+
+### Config file
+
+A load test can live next to the code it tests. Put a `pepe.toml` in the directory and `pepe` alone runs it; flags on the command line win over the file, and the file wins over pepe's defaults.
+
+```toml
+url = "https://api.example.com/health"
+method = "GET"
+headers = ["Accept: application/json", "Authorization: Bearer ..."]
+duration = "1m"        # or requests = 1000
+concurrency = 50
+timeout = 5
+keep-alive = true      # compression, redirects, insecure, threads, proxy, user-agent, snapshot, body too
+
+[ramp]                 # defaults for `pepe ramp`
+from = 10
+to = 200
+step = 10
+every = "15s"
+until = ["p99 > 500ms", "errors > 1%"]
+
+[api]                  # defaults for `pepe api`
+spec = "openapi.yaml"
+tag = ["Billing"]
+```
+
+Keys are the long flags' names; the on/off ones are said the positive way. A key pepe doesn't know is an error that names it. `--config FILE` reads another file; `--write-config FILE` writes the settings as given on the command line and exits, and `ctrl-s` on the setup screen writes the form the same way, so a test worked out on screen can be kept and run again with `pepe`.
 
 ### Headers, bodies and methods
 

@@ -110,6 +110,8 @@ enum Field {
 enum Action {
     Start,
     Try,
+    /// Write the form to the config file
+    Save,
     Quit,
 }
 
@@ -162,6 +164,8 @@ pub struct Setup {
     fresher: Option<String>,
     /// The last "try once" response
     tried: Option<ResponseStats>,
+    /// Where ctrl-s writes the form: the config read, or ./pepe.toml
+    config_path: std::path::PathBuf,
 }
 
 impl Setup {
@@ -223,6 +227,11 @@ impl Setup {
             message: None,
             fresher: crate::update::known().map(|v| v.to_string()),
             tried: None,
+            config_path: cli
+                .config
+                .clone()
+                .or_else(|| cli.config_loaded.clone())
+                .unwrap_or_else(|| crate::config::DEFAULT_PATH.into()),
         };
         let first = setup.focused();
         setup.cursor = setup.text(first).map_or(0, |t| t.chars().count());
@@ -429,6 +438,7 @@ impl Setup {
             KeyCode::Esc => return Some(Action::Quit),
             KeyCode::Enter => return Some(Action::Start),
             KeyCode::Char('t') if ctrl => return Some(Action::Try),
+            KeyCode::Char('s') if ctrl => return Some(Action::Save),
             KeyCode::Tab => self.switch_mode(1),
             KeyCode::BackTab => self.switch_mode(-1),
             KeyCode::Up => self.move_focus(-1),
@@ -683,6 +693,22 @@ impl Setup {
                         Err(e) => self.message = Some((e, true)),
                     }
                 }
+                Some(Action::Save) => {
+                    self.message = Some(
+                        match self.to_cli().and_then(|cli| {
+                            crate::config::write(&self.config_path, &cli).map(|()| cli)
+                        }) {
+                            Ok(_) => (
+                                format!(
+                                    "saved {} · `pepe` here runs it",
+                                    self.config_path.display()
+                                ),
+                                false,
+                            ),
+                            Err(e) => (e, true),
+                        },
+                    );
+                }
                 Some(Action::Try) => {
                     self.message = Some(("sending one request…".into(), false));
                     terminal.draw(|f| self.render(f))?;
@@ -754,6 +780,7 @@ impl Setup {
                     },
                 ),
                 ("ctrl-t", "try once"),
+                ("ctrl-s", "save pepe.toml"),
                 ("esc", "quit"),
             ])),
             footer,
@@ -799,6 +826,12 @@ impl Setup {
                 Span::styled(" setup ", Style::new().bg(SELECTED).fg(Color::White)),
                 Span::raw("  "),
                 Span::styled("new load test", Style::new().bold()),
+                match &self.base.config_loaded {
+                    Some(path) => {
+                        Span::styled(format!("  from {}", path.display()), Style::new().fg(FAINT))
+                    }
+                    None => Span::raw(""),
+                },
             ]),
             Line::from(tabs),
             Line::from(label(truncate(self.mode.about(), area.width as usize))),
