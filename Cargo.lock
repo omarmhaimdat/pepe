@@ -1204,7 +1204,7 @@ checksum = "57c0d7b74b563b49d38dae00a0c37d4d6de9b432382b2892f0574ddcae73fd0a"
 
 [[package]]
 name = "pepe"
-version = "0.9.0"
+version = "0.10.1"
 dependencies = [
  "axoupdater",
  "bytes",
@@ -1224,6 +1224,8 @@ dependencies = [
  "serde_json",
  "serde_norway",
  "tokio",
+ "tower-layer",
+ "tower-service",
 ]
 
 [[package]]

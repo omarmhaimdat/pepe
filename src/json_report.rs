@@ -4,7 +4,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use serde::Serialize;
 
-use crate::metrics::Metrics;
+use crate::metrics::{Histogram, Metrics, Phase, Slowest};
 use crate::timeline::{Sample, Timeline};
 
 #[derive(Serialize, Clone)]
@@ -88,10 +88,78 @@ pub struct JsonSummary {
     pub data_transfer_bytes: u64,
     pub latency: LatencyStats,
     pub status_codes: BTreeMap<u16, u64>,
+    /// What the target's `Server-Timing` headers said; left out when it
+    /// sent none
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub server_timing: Option<ServerTimingStats>,
+    /// The slowest responses, slowest first, with the request ids their
+    /// backend gave them (from `X-Request-Id`, `traceparent`, `CF-Ray`,
+    /// … or `--trace-header`); left out when nothing was tracked
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub slowest_requests: Vec<SlowRequest>,
+    /// What changed during the run, as it was noticed; left out when nothing did
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub anomalies: Vec<AnomalyNote>,
     /// Failed requests by cause, most frequent first, each with the first
     /// response body seen for it; left out when nothing failed
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub failures: Vec<FailureCause>,
+}
+
+#[derive(Serialize, Clone)]
+pub struct ServerTimingStats {
+    /// Responses that carried the header
+    pub responses: u64,
+    /// The server's own time per response: its `dur`s added up
+    pub total: TimingStats,
+    /// Each named entry, in the order first seen
+    pub segments: BTreeMap<String, TimingStats>,
+}
+
+#[derive(Serialize, Clone)]
+pub struct TimingStats {
+    /// Entries seen, with or without a duration
+    pub count: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub median_ms: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub p90_ms: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub p99_ms: Option<f64>,
+}
+
+impl TimingStats {
+    fn of(count: u64, durations: &Histogram) -> Self {
+        let q =
+            |q| (durations.count() > 0).then(|| ms(Duration::from_micros(durations.percentile(q))));
+        Self {
+            count,
+            median_ms: q(50.0),
+            p90_ms: q(90.0),
+            p99_ms: q(99.0),
+        }
+    }
+}
+
+#[derive(Serialize, Clone)]
+pub struct SlowRequest {
+    /// Seconds since the run started, when it finished
+    pub at_s: f64,
+    pub latency_ms: f64,
+    pub status: u16,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub request_id: Option<String>,
+    /// The response header the id came from
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub id_header: Option<String>,
+}
+
+#[derive(Serialize, Clone)]
+pub struct AnomalyNote {
+    /// Seconds since the run started
+    pub at_s: f64,
+    pub kind: &'static str,
+    pub text: String,
 }
 
 #[derive(Serialize, Clone)]
@@ -112,6 +180,59 @@ pub struct LatencyStats {
     pub p90_ms: f64,
     pub p95_ms: f64,
     pub p99_ms: f64,
+    /// Where the time went: opening connections, waiting for the headers,
+    /// and reading the body
+    pub phases: Phases,
+}
+
+#[derive(Serialize, Clone)]
+pub struct Phases {
+    /// Opening a connection, TCP and TLS together; one entry per connection
+    /// opened, so a keep-alive run has few. Absent when nothing measured it.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub connect: Option<PhaseStats>,
+    /// From sending the request to the response headers
+    pub first_byte: PhaseStats,
+    /// From the headers to the end of the body
+    pub download: PhaseStats,
+    /// The DNS probe, sampled once a second
+    pub dns_lookup_avg_ms: f64,
+}
+
+#[derive(Serialize, Clone)]
+pub struct PhaseStats {
+    pub count: u64,
+    pub median_ms: f64,
+    pub p99_ms: f64,
+    pub max_ms: f64,
+}
+
+impl PhaseStats {
+    fn of(hist: &crate::metrics::Histogram) -> Self {
+        let ms = |us: u64| (us as f64) / 1000.0;
+        Self {
+            count: hist.count(),
+            median_ms: ms(hist.percentile(50.0)),
+            p99_ms: ms(hist.percentile(99.0)),
+            max_ms: ms(hist.percentile(100.0)),
+        }
+    }
+}
+
+fn server_timing_stats(metrics: &Metrics) -> Option<ServerTimingStats> {
+    let timing = metrics.server_timing();
+    if timing.is_empty() {
+        return None;
+    }
+    Some(ServerTimingStats {
+        responses: timing.responses(),
+        total: TimingStats::of(timing.total().count(), timing.total()),
+        segments: timing
+            .segments()
+            .iter()
+            .map(|s| (s.name.to_string(), TimingStats::of(s.count, &s.durations)))
+            .collect(),
+    })
 }
 
 fn ms(d: Duration) -> f64 {
@@ -125,6 +246,28 @@ impl JsonReport {
             threads,
             peak_busy_percent,
         });
+        self
+    }
+
+    /// What the watch noticed during the run
+    pub fn with_anomalies(mut self, anomalies: &[crate::insights::Anomaly]) -> Self {
+        self.summary.anomalies = anomalies
+            .iter()
+            .map(|a| AnomalyNote {
+                at_s: (a.at.as_secs_f64() * 1000.0).round() / 1000.0,
+                kind: a.kind.name(),
+                text: a.text.clone(),
+            })
+            .collect();
+        self
+    }
+
+    /// How long the run's connections took to open
+    pub fn with_connects(mut self, connects: &crate::request::ConnectTimes) -> Self {
+        let hist = connects.histogram();
+        if hist.count() > 0 {
+            self.summary.latency.phases.connect = Some(PhaseStats::of(&hist));
+        }
         self
     }
 
@@ -156,6 +299,22 @@ impl JsonReport {
         std::fs::rename(&tmp, path)
     }
 
+    /// The slowest responses and their request ids
+    pub fn with_slowest(mut self, slowest: &Slowest) -> Self {
+        self.summary.slowest_requests = slowest
+            .entries()
+            .iter()
+            .map(|e| SlowRequest {
+                at_s: (e.at.as_secs_f64() * 1000.0).round() / 1000.0,
+                latency_ms: ms(e.latency),
+                status: e.status,
+                request_id: e.request_id.as_ref().map(|(_, id)| id.to_string()),
+                id_header: e.request_id.as_ref().map(|(name, _)| name.to_string()),
+            })
+            .collect();
+        self
+    }
+
     pub fn generate(metrics: &Metrics, elapsed: Duration, interrupted: bool) -> Self {
         Self {
             generator: None,
@@ -181,9 +340,18 @@ impl JsonReport {
                     p90_ms: ms(metrics.percentile(90.0)),
                     p95_ms: ms(metrics.percentile(95.0)),
                     p99_ms: ms(metrics.percentile(99.0)),
+                    phases: Phases {
+                        connect: None,
+                        first_byte: PhaseStats::of(metrics.phase(Phase::FirstByte)),
+                        download: PhaseStats::of(metrics.phase(Phase::Download)),
+                        dns_lookup_avg_ms: ms(metrics.avg_dns_lookup()),
+                    },
                 },
                 // Sorted, so output is stable between runs
                 status_codes: metrics.status_codes.iter().map(|(k, v)| (*k, *v)).collect(),
+                server_timing: server_timing_stats(metrics),
+                slowest_requests: Vec::new(),
+                anomalies: Vec::new(),
                 failures: metrics
                     .failures()
                     .top()

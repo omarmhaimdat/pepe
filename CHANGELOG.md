@@ -6,6 +6,98 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+## [0.10.1](https://github.com/omarmhaimdat/pepe/compare/v0.10.0...v0.10.1) - 2026-10-04
+
+### Fixed
+
+- *(ci)* the Docker publish job asked for more than the release grants
+
+  The v0.10.0 release failed at startup: release.yml calls
+  publish-docker.yml with `packages: write` and `id-token: write`, and a
+  called workflow may only request a subset of that. The job asked for
+  `contents: read` as well, which made the whole workflow invalid before
+  any job ran.
+
+  The job now inherits the caller's permissions, like the Homebrew and R2
+  publish jobs do. Checkout of this public repository works without
+  `contents: read`, as those two jobs have shown on every release.
+
+
+
+### Other
+
+- Merge pull request #61 from omarmhaimdat/feat/latency-phases
+
+- Merge master into feat/latency-phases
+
+## [0.10.0](https://github.com/omarmhaimdat/pepe/compare/v0.9.0...v0.10.0) - 2026-10-03
+
+### Added
+
+- failures grouped by cause, with what the target said
+
+  The verdict now names the main causes of failure with the first response
+  body seen for each, so a run that failed on 503s says what the 503 said
+  without opening the log. Failures are counted by cause in the metrics
+  ("HTTP 503", "Connection refused (os error 61)"), which the dashboard's
+  errors panel reads too, and the JSON report lists them under
+  summary.failures with the example body. Failed responses keep the start
+  of their body and their error's words in --json mode as well, where
+  previews are otherwise off.
+
+
+
+### Other
+
+- Merge pull request #62 from omarmhaimdat/feat/error-clustering
+
+- what the Linux profile found
+
+  The Linux CPU gap to oha is reqwest's per-request plumbing, not
+  syscalls: its follow-redirect layer re-parses the URL on every response,
+  the connector is cloned per request, and so on. A reqwest patched to skip
+  the re-parse is 3.5-4% cheaper on Linux and is kept as a patch file for
+  an upstream change; mimalloc was 1-4% cheaper for 50-90% more memory and
+  is dropped. The record says so, and the profile workflow keeps the
+  reqwest variant for re-measuring.
+
+
+- the Linux profile also measures mimalloc and a reqwest without the per-response URL re-parse
+
+- a Linux profile of pepe on demand
+
+- Merge pull request #53 from omarmhaimdat/docs/recordings
+
+- the Linux numbers, and what they say
+
+  The Linux record from the Benchmarks workflow goes into bench/README.md:
+  pepe keeps its memory advantage there, but spends about 30% more CPU per
+  request than oha and reaches half its throughput, the reverse of the M4
+  Pro, while oha costs the same on both. So the CPU claims are stated as
+  macOS measurements until the Linux cost is understood, in both READMEs.
+
+
+- build the target before starting it; find oha's JSON flag
+
+- oha 1.16 has no -j; use --json
+
+- say why a tool gave no result; raise the file limit on the runner
+
+- a benchmark gate on release PRs, and a Linux benchmark record
+
+  bench/compare.sh runs the plain, 16 KB body, 1,000 slow connections and
+  TLS workloads with two binaries taking turns, three rounds each, and
+  compares the best round of each: it fails when CPU per 1,000 requests
+  grew by more than 15% or peak memory by more than 25%. The Benchmarks
+  workflow runs it on release PRs, candidate against the last released
+  tag built with the same toolchain, so a regression can't ship unnoticed;
+  it also runs the full suite for pepe and oha on the Linux runner and
+  keeps the CSV, which is where bench/README.md's Linux numbers come from.
+
+  bench/measure.sh reports CPU per 1,000 requests in milliseconds, like
+  run.sh does.
+
+
 ## [0.9.0](https://github.com/omarmhaimdat/pepe/compare/v0.8.0...v0.9.0) - 2026-10-03
 
 ### Added

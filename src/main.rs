@@ -1,4 +1,5 @@
 use std::io::{stderr, stdin, stdout, IsTerminal};
+use std::sync::Arc;
 use std::time::Instant;
 
 use clap::{CommandFactory, Parser};
@@ -30,6 +31,7 @@ mod replay;
 mod request;
 mod response;
 mod timeline;
+mod trace;
 mod ui;
 mod update;
 mod utils;
@@ -68,26 +70,30 @@ fn shards(args: &Cli, concurrency: usize) -> usize {
     load::shards(concurrency, args.threads.map(|t| t as usize))
 }
 
-/// One client per load shard
+/// One client per load shard, and where their connection times go
 fn clients_for(
     request: &request::Request,
     args: &Cli,
     concurrency: usize,
-) -> Result<Vec<reqwest::Client>, PepeError> {
+) -> Result<(Vec<reqwest::Client>, Arc<request::ConnectTimes>), PepeError> {
     request.build_clients(shards(args, concurrency))
 }
 
 /// `previews`: keep the start of each body, which only the dashboard shows
-fn start_load(args: &Cli, previews: bool) -> Result<LoadHandle, PepeError> {
+fn start_load(
+    args: &Cli,
+    previews: bool,
+) -> Result<(LoadHandle, Arc<request::ConnectTimes>), PepeError> {
     let request = args.request()?;
-    let clients = clients_for(&request, args, args.concurrency as usize)?;
-    Ok(load::start(
+    let (clients, connects) = clients_for(&request, args, args.concurrency as usize)?;
+    let load = load::start(
         clients,
         request,
         args.concurrency as usize,
         plan(args),
         previews,
-    ))
+    );
+    Ok((load, connects))
 }
 
 fn restore_terminal() {
@@ -203,10 +209,13 @@ pub const SNAPSHOT_EVERY: std::time::Duration = std::time::Duration::from_secs(6
 
 /// `--json`: no dashboard; run to completion (or Ctrl-C), print the report
 async fn run_json(args: &Cli) -> Result<(), Box<dyn std::error::Error>> {
-    let mut load = start_load(args, false)?;
+    let (mut load, connects) = start_load(args, false)?;
     let started = Instant::now();
     let mut metrics = Metrics::default();
     let mut timeline = timeline::Timeline::default();
+    let mut slowest = metrics::Slowest::default();
+    let mut watch = insights::Watch::default();
+    let mut anomalies: Vec<insights::Anomaly> = Vec::new();
     let mut interrupted = false;
     let mut pump = tokio::time::interval(PUMP);
     let mut snapshots = tokio::time::interval(SNAPSHOT_EVERY);
@@ -214,30 +223,38 @@ async fn run_json(args: &Cli) -> Result<(), Box<dyn std::error::Error>> {
     let mut peak_busy = None;
     let report = |metrics: &Metrics,
                   timeline: &timeline::Timeline,
+                  slowest: &metrics::Slowest,
+                  anomalies: &[insights::Anomaly],
                   load: &LoadHandle,
                   peak_busy,
                   interrupted| {
         json_report::JsonReport::generate(metrics, started.elapsed(), interrupted)
             .with_generator(load.threads(), peak_busy)
             .with_timeline(timeline)
+            .with_slowest(slowest)
+            .with_anomalies(anomalies)
+            .with_connects(&connects)
     };
 
     loop {
         tokio::select! {
             _ = pump.tick() => {
                 peak_busy = peak_busy.max(load.busy());
+                let now = started.elapsed();
                 let over = !load.drain(|stat| {
                     metrics.record(&stat);
                     timeline.record(&stat);
+                    slowest.record(&stat, now);
                 });
                 timeline.advance(started.elapsed());
+                anomalies.extend(watch.observe(timeline.samples(), false));
                 if over {
                     break;
                 }
             }
             _ = snapshots.tick(), if args.snapshot.is_some() => {
                 let path = args.snapshot.as_ref().expect("checked");
-                if let Err(e) = report(&metrics, &timeline, &load, peak_busy, interrupted).with_snapshot(true).write_to(path) {
+                if let Err(e) = report(&metrics, &timeline, &slowest, &anomalies, &load, peak_busy, interrupted).with_snapshot(true).write_to(path) {
                     eprintln!("couldn't write the snapshot to {}: {e}", path.display());
                 }
             }
@@ -249,7 +266,15 @@ async fn run_json(args: &Cli) -> Result<(), Box<dyn std::error::Error>> {
     }
 
     timeline.finish(started.elapsed());
-    let report = report(&metrics, &timeline, &load, peak_busy, interrupted);
+    let report = report(
+        &metrics,
+        &timeline,
+        &slowest,
+        &anomalies,
+        &load,
+        peak_busy,
+        interrupted,
+    );
     if let Some(path) = &args.snapshot {
         report.clone().with_snapshot(false).write_to(path)?;
     }
@@ -314,7 +339,7 @@ async fn run_interactive(
                 };
                 let request = args.request()?;
                 let mut load = load::start(
-                    clients_for(&request, &args, plan.peak() as usize)?,
+                    clients_for(&request, &args, plan.peak() as usize)?.0,
                     request,
                     plan.levels[0] as usize,
                     Plan::Duration(UNTIL_STOPPED),
@@ -343,8 +368,9 @@ async fn run_interactive(
                 return Ok(farewell);
             }
             _ => {
-                let mut load = start_load(&args, true)?;
-                let mut dashboard = ui::Dashboard::new(args.clone(), plan(&args));
+                let (mut load, connects) = start_load(&args, true)?;
+                let mut dashboard =
+                    ui::Dashboard::new(args.clone(), plan(&args)).with_connects(connects);
                 let outcome = dashboard.run(&mut load).await?;
                 // Keep any concurrency the user dialed in during the run.
                 // Dropping `load` stops the previous run before the next starts.
@@ -366,7 +392,7 @@ async fn run_interactive(
 async fn run_ramp_json(args: &Cli, plan: RampPlan) -> Result<(), Box<dyn std::error::Error>> {
     let request = args.request()?;
     let mut load = load::start(
-        clients_for(&request, args, plan.peak() as usize)?,
+        clients_for(&request, args, plan.peak() as usize)?.0,
         request,
         plan.levels[0] as usize,
         Plan::Duration(UNTIL_STOPPED),
@@ -431,8 +457,9 @@ async fn run_api_json(args: &Cli, run: &api::ApiRun) -> Result<(), Box<dyn std::
         std::process::exit(1);
     }
     let targets = run.targets(args, &which)?;
+    let (clients, connects) = run.clients(args, shards(args, args.concurrency as usize))?;
     let mut load = load::start_targets(
-        run.clients(args, shards(args, args.concurrency as usize))?,
+        clients,
         targets,
         args.concurrency as usize,
         plan(args),
@@ -466,7 +493,8 @@ async fn run_api_json(args: &Cli, run: &api::ApiRun) -> Result<(), Box<dyn std::
     }
     let elapsed = started.elapsed();
     let report = json_report::JsonReport::generate(&total, elapsed, interrupted)
-        .with_generator(load.threads(), peak_busy);
+        .with_generator(load.threads(), peak_busy)
+        .with_connects(&connects);
     let mut report = serde_json::to_value(&report)?;
     let ms = |d: std::time::Duration| (d.as_secs_f64() * 1_000_000.0).round() / 1000.0;
     let endpoints: Vec<serde_json::Value> = which
@@ -511,15 +539,18 @@ async fn api_session(
         }
         let which = run.enabled();
         let targets = run.targets(&shown, &which)?;
+        let (clients, connects) =
+            run.clients(&shown, shards(&shown, shown.concurrency as usize))?;
         let mut load = load::start_targets(
-            run.clients(&shown, shards(&shown, shown.concurrency as usize))?,
+            clients,
             targets,
             shown.concurrency as usize,
             plan(&shown),
             true,
         );
         let mut dashboard = ui::Dashboard::new(shown.clone(), plan(&shown))
-            .with_endpoints(run.views(&shown, &which));
+            .with_endpoints(run.views(&shown, &which))
+            .with_connects(connects);
         let outcome = dashboard.run(&mut load).await?;
         shown.concurrency = load.concurrency() as u32;
         match outcome {
@@ -570,7 +601,7 @@ fn replay_clients(
     args: &Cli,
     replay: &replay::Replay,
     concurrency: usize,
-) -> Result<Vec<reqwest::Client>, PepeError> {
+) -> Result<(Vec<reqwest::Client>, std::sync::Arc<request::ConnectTimes>), PepeError> {
     let base = request::Request::new(
         replay.urls[0].url.clone(),
         "GET".into(),
@@ -587,15 +618,17 @@ async fn replay_session(
     what: &cli::ReplayArgs,
 ) -> Result<Option<String>, Box<dyn std::error::Error>> {
     loop {
+        let (clients, connects) = replay_clients(shown, replay, shown.concurrency as usize)?;
         let mut load = load::start_targets(
-            replay_clients(shown, replay, shown.concurrency as usize)?,
+            clients,
             replay.targets(shown, what.rows)?,
             shown.concurrency as usize,
             plan(shown),
             true,
         );
         let mut dashboard = ui::Dashboard::new(shown.clone(), plan(shown))
-            .with_rows(ui::Rows::Urls, replay.views(what.rows));
+            .with_rows(ui::Rows::Urls, replay.views(what.rows))
+            .with_connects(connects);
         let outcome = dashboard.run(&mut load).await?;
         shown.concurrency = load.concurrency() as u32;
         match outcome {
@@ -612,8 +645,9 @@ async fn run_replay_json(
     what: &cli::ReplayArgs,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let views = replay.views(what.rows);
+    let (clients, connects) = replay_clients(args, replay, args.concurrency as usize)?;
     let mut load = load::start_targets(
-        replay_clients(args, replay, args.concurrency as usize)?,
+        clients,
         replay.targets(args, what.rows)?,
         args.concurrency as usize,
         plan(args),
@@ -647,7 +681,8 @@ async fn run_replay_json(
     }
     let elapsed = started.elapsed();
     let report = json_report::JsonReport::generate(&total, elapsed, interrupted)
-        .with_generator(load.threads(), peak_busy);
+        .with_generator(load.threads(), peak_busy)
+        .with_connects(&connects);
     let mut report = serde_json::to_value(&report)?;
     let ms = |d: std::time::Duration| (d.as_secs_f64() * 1_000_000.0).round() / 1000.0;
     let kept = replay.kept().max(1) as f64;
@@ -720,6 +755,15 @@ async fn run_api(args: &Cli, api: &cli::ApiArgs) -> Result<(), Box<dyn std::erro
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut args = Cli::parse();
+    // Which response header carries the request id; `validate` rejects a
+    // name that isn't one
+    if let Some(name) = args
+        .trace_header
+        .as_deref()
+        .and_then(|n| reqwest::header::HeaderName::from_bytes(n.as_bytes()).ok())
+    {
+        trace::use_id_header(name);
+    }
 
     if let Some(cli::Command::SelfUpdate(what)) = &args.command {
         return update::self_update(what.check, what.verbose).await;

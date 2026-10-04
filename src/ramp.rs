@@ -19,6 +19,18 @@ const ERRORS_BREAK: f64 = 5.0;
 /// Throughput that grows by less than this share of the added load has
 /// stopped scaling
 const FLAT_GAIN: f64 = 0.5;
+/// A capacity fit is kept only when it reproduces every measured step's
+/// throughput within this share of it
+const FIT_TOLERANCE: f64 = 0.25;
+/// Clean steps a capacity fit needs: a parabola goes through any three
+/// points, so three say nothing about how well it fits
+const FIT_STEPS: usize = 4;
+/// How far past the last level the fitted curve is read, as a multiple
+/// of it
+const FIT_REACH: f64 = 3.0;
+/// A curve still growing by more than this share over that reach hasn't
+/// begun to bend: that is "no limit found", not an estimate
+const STILL_GROWING: f64 = 0.25;
 
 /// What a stop condition looks at
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -545,6 +557,146 @@ pub struct Findings {
     pub holds: Option<u32>,
 }
 
+/// What the ramp's curve says about the target: the throughput it is
+/// heading for, and the concurrency where the median latency doubles
+#[derive(Debug, Clone, PartialEq)]
+pub struct Capacity {
+    /// The most successful requests per second the fitted curve reaches
+    pub rps: f64,
+    /// The concurrency it reaches that at
+    pub at: f64,
+    /// `at` lies past the highest level measured: the curve was still
+    /// climbing when the ramp ended
+    pub extrapolated: bool,
+    /// Where the median latency is twice the first step's, between the
+    /// two steps it happened in; None while it hasn't
+    pub latency_doubles_at: Option<f64>,
+}
+
+/// Fit a saturation curve to throughput against concurrency. The model
+/// is the Universal Scalability Law, X(N) = λN / (1 + σ(N−1) + κN(N−1)):
+/// linear scaling, less a share lost to contention (σ) and a share lost
+/// to coordination that grows with the square of the load (κ). N/X is a
+/// quadratic in N, so the fit is plain least squares; the peak is where
+/// its derivative is zero. Only clean steps are fitted: a failing target
+/// sheds load, and what it answers then isn't its capacity.
+pub fn capacity(steps: &[Step]) -> Option<Capacity> {
+    let points: Vec<(f64, f64)> = steps
+        .iter()
+        .filter(|s| s.clean() && s.rps() > 0.0)
+        .map(|s| (s.level as f64, s.rps()))
+        .collect();
+    if points.len() < FIT_STEPS {
+        return None;
+    }
+    let (a, b, c) = fit_quadratic(&points.iter().map(|&(n, x)| (n, n / x)).collect::<Vec<_>>())?;
+    let model = |n: f64| n / (a + b * n + c * n * n);
+    // The fit has to describe what was measured before it says anything
+    // about what wasn't
+    let fits = points
+        .iter()
+        .all(|&(n, x)| ((model(n) - x) / x).abs() <= FIT_TOLERANCE);
+    if !fits || a <= 0.0 {
+        return None;
+    }
+    // Read the curve from the first level to a few times the last: where
+    // it peaks, or how much it still grows if it doesn't
+    let (first, last) = (points[0].0, points[points.len() - 1].0);
+    let reach = last * FIT_REACH;
+    let samples = 1000;
+    let along = |i: usize| first + (reach - first) * i as f64 / samples as f64;
+    let (mut at, mut rps) = (first, model(first));
+    for i in 1..=samples {
+        let (n, x) = (along(i), model(along(i)));
+        if x > rps {
+            (at, rps) = (n, x);
+        }
+    }
+    let measured = points.iter().map(|&(_, x)| x).fold(0.0, f64::max);
+    if !rps.is_finite() || rps <= 0.0 || rps < measured * 0.9 {
+        return None;
+    }
+    if at >= reach {
+        // No peak in reach. Levelling off is still a capacity: the point
+        // where the curve is within 5% of what it reaches. Still climbing
+        // is not.
+        if rps > model(last) * (1.0 + STILL_GROWING) {
+            return None;
+        }
+        at = (1..=samples)
+            .map(along)
+            .find(|&n| model(n) >= rps * 0.95)
+            .unwrap_or(reach);
+    }
+    // A step that already got within 5% of it is where it was reached;
+    // nothing to extrapolate then
+    if let Some(&(n, _)) = points.iter().find(|&&(_, x)| x >= rps * 0.95) {
+        at = at.min(n);
+    }
+    Some(Capacity {
+        rps,
+        at,
+        extrapolated: at > last * 1.05,
+        latency_doubles_at: latency_doubling(steps),
+    })
+}
+
+/// Least-squares a + bN + cN² through `(n, y)` points, by the normal
+/// equations; None when the points don't pin a parabola down
+fn fit_quadratic(points: &[(f64, f64)]) -> Option<(f64, f64, f64)> {
+    let mut s = [0.0f64; 5]; // Σn^0 … Σn^4
+    let mut t = [0.0f64; 3]; // Σy, Σny, Σn²y
+    for &(n, y) in points {
+        let mut p = 1.0;
+        for (k, sum) in s.iter_mut().enumerate() {
+            *sum += p;
+            if k < 3 {
+                t[k] += p * y;
+            }
+            p *= n;
+        }
+    }
+    let m = [[s[0], s[1], s[2]], [s[1], s[2], s[3]], [s[2], s[3], s[4]]];
+    let det = |m: &[[f64; 3]; 3]| {
+        m[0][0] * (m[1][1] * m[2][2] - m[1][2] * m[2][1])
+            - m[0][1] * (m[1][0] * m[2][2] - m[1][2] * m[2][0])
+            + m[0][2] * (m[1][0] * m[2][1] - m[1][1] * m[2][0])
+    };
+    let d = det(&m);
+    if d.abs() < 1e-12 {
+        return None;
+    }
+    let solve = |col: usize| {
+        let mut r = m;
+        for (row, value) in r.iter_mut().zip(t) {
+            row[col] = value;
+        }
+        det(&r) / d
+    };
+    Some((solve(0), solve(1), solve(2)))
+}
+
+/// The concurrency at which the median latency reached twice the first
+/// step's, interpolated between the step before and the step it did in
+fn latency_doubling(steps: &[Step]) -> Option<f64> {
+    let measured: Vec<(f64, f64)> = steps
+        .iter()
+        .filter(|s| s.metrics.total > 0)
+        .map(|s| (s.level as f64, s.metrics.percentile(50.0).as_secs_f64()))
+        .collect();
+    let base = measured.first()?.1;
+    if base <= 0.0 {
+        return None;
+    }
+    let target = base * 2.0;
+    let i = measured.iter().position(|&(_, p50)| p50 >= target)?;
+    if i == 0 {
+        return None;
+    }
+    let ((n0, p0), (n1, p1)) = (measured[i - 1], measured[i]);
+    Some(n0 + (n1 - n0) * (target - p0) / (p1 - p0))
+}
+
 /// `ended`: the ramp is over, so what wasn't reached can be said too
 pub fn findings(steps: &[Step], ended: bool) -> Findings {
     let mut out = Findings::default();
@@ -602,6 +754,31 @@ pub fn findings(steps: &[Step], ended: bool) -> Findings {
                     after.p99().as_micros() as f64
                 ),
             ),
+        });
+    }
+    // What the curve adds up to, between and beyond the steps
+    if let Some(estimate) = capacity(steps) {
+        let last = steps[steps.len() - 1].level;
+        let doubles = match estimate.latency_doubles_at {
+            Some(n) => format!("median latency doubles around {n:.0}"),
+            None => format!("median latency within 2× up to {last}"),
+        };
+        out.list.push(if estimate.extrapolated {
+            Finding {
+                level: Level::Healthy,
+                title: "Capacity beyond the ramp".into(),
+                detail: format!(
+                    "the curve points to about {} req/s near {:.0} concurrent, past the ramp's {last} · {doubles}",
+                    format::compact(estimate.rps),
+                    estimate.at
+                ),
+            }
+        } else {
+            Finding {
+                level: Level::Healthy,
+                title: format!("Capacity about {} req/s", format::compact(estimate.rps)),
+                detail: format!("reached around {:.0} concurrent · {doubles}", estimate.at),
+            }
         });
     }
     // What the extra load cost in latency, from the level that held to
@@ -746,6 +923,12 @@ pub fn json(ramp: &Ramp) -> serde_json::Value {
             _ => "completed".to_string(),
         },
         "holds_concurrency": findings.holds,
+        "capacity": capacity(&ramp.steps).map(|c| serde_json::json!({
+            "requests_per_second": c.rps.round(),
+            "concurrency": c.at.round(),
+            "extrapolated": c.extrapolated,
+            "latency_doubles_at_concurrency": c.latency_doubles_at.map(f64::round),
+        })),
         "requests": ramp.total.total,
         "failed_requests": ramp.total.total - ramp.total.success,
         "seconds": ramp.steps.iter().map(|s| s.held).sum::<Duration>().as_secs_f64(),
@@ -965,6 +1148,70 @@ mod tests {
         );
     }
 
+    /// Steps along a Universal Scalability Law curve with the given
+    /// contention and coherency shares, 100 req/s per concurrent at first
+    fn usl(levels: &[u32], sigma: f64, kappa: f64) -> Vec<Step> {
+        levels
+            .iter()
+            .map(|&n| {
+                let x = 100.0 * n as f64
+                    / (1.0 + sigma * (n as f64 - 1.0) + kappa * n as f64 * (n as f64 - 1.0));
+                step(n, x.round() as u64, 10, 0)
+            })
+            .collect()
+    }
+
+    #[test]
+    fn capacity_is_read_off_the_fitted_curve() {
+        // σ 0.05, κ 0.0005: the peak is 1,074 req/s at √((1−σ)/κ) ≈ 43.6
+        // concurrent, and the step at 30 already gets 97% of it
+        let steps = usl(&[10, 20, 30, 40, 50, 60], 0.05, 0.0005);
+        let c = capacity(&steps).unwrap();
+        assert!((1_050.0..=1_100.0).contains(&c.rps), "rps {}", c.rps);
+        assert_eq!(c.at, 30.0, "reached by a measured step");
+        assert!(!c.extrapolated);
+        assert_eq!(c.latency_doubles_at, None, "latency was flat");
+
+        // Stopped well before the peak: the same curve, extrapolated to it
+        let c = capacity(&usl(&[5, 10, 15, 20], 0.05, 0.0005)).unwrap();
+        assert!((42.0..=45.0).contains(&c.at), "at {}", c.at);
+        assert!((1_050.0..=1_100.0).contains(&c.rps), "rps {}", c.rps);
+        assert!(c.extrapolated);
+
+        // No coherency cost: throughput levels off instead of turning down.
+        // Read out to three times the ramp, the 1,000 asymptote is near.
+        let c = capacity(&usl(&[10, 20, 30, 40], 0.1, 0.0)).unwrap();
+        assert!(
+            (880.0..=1_000.0).contains(&c.rps),
+            "most of the 1,000 asymptote: {}",
+            c.rps
+        );
+        assert!((50.0..=90.0).contains(&c.at), "within 5% of it by {}", c.at);
+        assert!(c.extrapolated);
+
+        // Too few clean steps, or steps the curve can't explain: nothing
+        assert_eq!(capacity(&steps[..3]), None, "three points fit anything");
+        let linear: Vec<Step> = (1..=4)
+            .map(|i| step(10 * i, 1000 * i as u64, 10, 0))
+            .collect();
+        assert_eq!(capacity(&linear), None, "still linear: no bend to read");
+        let noisy = [
+            step(10, 1000, 10, 0),
+            step(20, 300, 10, 0),
+            step(30, 2500, 10, 0),
+            step(40, 900, 10, 0),
+        ];
+        assert_eq!(capacity(&noisy), None);
+        let failing = usl(&[10, 20, 30, 40], 0.05, 0.0005)
+            .into_iter()
+            .map(|mut s| {
+                s.crossed = Some("errors > 1%".into());
+                s
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(capacity(&failing), None, "failing steps aren't capacity");
+    }
+
     #[test]
     fn findings_name_where_it_holds_bends_and_breaks() {
         let steps = [
@@ -982,15 +1229,20 @@ mod tests {
             [
                 "Holds 30 concurrent",
                 "Stops scaling between 30 and 40",
+                "Capacity about 3.0k req/s",
                 "p99 ×6.7 by 50 concurrent",
                 "Breaks at 50 concurrent"
             ]
         );
+        assert_eq!(
+            found.list[2].detail,
+            "reached around 30 concurrent · median latency doubles around 34"
+        );
         assert!(found.list[1]
             .detail
             .contains("+33% load gave +3% throughput"));
-        assert_eq!(found.list[2].detail, "12.00ms at 30 → 80.00ms at 50");
-        assert!(found.list[3]
+        assert_eq!(found.list[3].detail, "12.00ms at 30 → 80.00ms at 50");
+        assert!(found.list[4]
             .detail
             .contains("10.0% errors (mostly HTTP 503)"));
 
