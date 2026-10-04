@@ -347,7 +347,7 @@ Two things to read off this, and one caveat.
     platform split.
   What's left is the shape of the reqwest and hyper-util stack; removing
   it means a leaner HTTP/1.1 path of pepe's own, which is a different
-  project (see "Not now" in ROADMAP.md).
+  project (see "Speed on Linux" in ROADMAP.md).
 - **Noise.** Shared runners vary a lot: the same pepe binary cost 25.7 ms
   per 1,000 requests on one `ubuntu-latest` run and 13.4 on another an
   hour later, with oha moving from 19.8 to 10.1 alongside it, so the
