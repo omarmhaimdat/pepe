@@ -91,6 +91,13 @@ Get the results where they're needed.
 - [ ] **Thresholds that fail CI** (S). `--fail-if 'p99 > 300ms'`, reusing
       the ramp's conditions, with a non-zero exit code. The GitHub Action's
       `fail-if` input covers this in CI today.
+- [ ] **A report when there's no terminal** (S). Piped, or run by a
+      script without `--json`, pepe still tries to open the dashboard and
+      fails. With no terminal it should run to completion and print the
+      report, so a forgotten flag costs nothing.
+- [ ] **A versioned report** (S). `"schema_version": 1` in the JSON and a
+      JSON Schema published with each release, so a script or an agent
+      can depend on the field names while sections keep being added.
 - [ ] **Compare two runs** (M). `pepe compare before.json after.json` says
       what moved, in the verdict's language.
 - [ ] **CSV and per-request export** (S). One line per request for
@@ -101,6 +108,54 @@ Get the results where they're needed.
 - [ ] **Webhook summary** (S). Post the verdict when a run ends.
 - [ ] **HTML report** (M). One self-contained file with the charts, for
       people who weren't at the terminal.
+
+## 6. Speed on Linux
+
+On an M4 Pro pepe spends 2.5× less CPU per request than oha. On a 4-vCPU
+Linux runner it spends about 30% more and reaches half the throughput
+(see [bench/README.md](bench/README.md)), and Linux is where CI and most
+agents run.
+
+- [ ] **The reqwest re-parse fix, upstream** (S). The patch in
+      `bench/patches/` skips a `Url::parse` on every response and
+      measured 3.5–4% less CPU on Linux. Sent upstream, pepe gets it
+      without carrying a fork.
+- [ ] **Name the rest of the gap** (M). The profile so far explains about
+      a tenth of pepe's CPU on Linux. Keep at it until the difference
+      with oha is accounted for; that decides whether the last item here
+      is needed.
+- [ ] **Threads on their own** (S). `--threads auto` adds a sending
+      thread when one passes 90% of a core. pepe already says when it is
+      the limit, but a script can't read the footer.
+- [ ] **A fixed machine for the numbers, with wrk and k6** (S). Shared
+      runners move the same binary from 13 to 26 ms per 1,000 requests.
+      A dedicated runner makes the absolutes mean something, and wrk and
+      k6 next to oha and vegeta complete the table.
+- [ ] **A lean HTTP/1.1 path** (L). What is left after the above is the
+      shape of the reqwest and hyper-util stack. A sender of pepe's own
+      for the plain case is a project of its own, and only worth it if
+      the gap is still there.
+
+## 7. Agents
+
+A coding agent that changes a server should be able to load-test it the
+way it runs the tests: one command, a result it can read, an answer it
+can act on. The thresholds and the versioned report above are the base;
+these build on them.
+
+- [ ] **Agent docs** (S). An `AGENTS.md` and an `llms.txt`: the flags to
+      always pass, the report fields to read, what each exit code means.
+      It is what an agent reads first.
+- [ ] **Guardrails** (S). `--allow-host`, caps on the rate and on total
+      requests, and `--dry-run` to print the plan and send nothing, so an
+      agent pointed at the wrong URL does no harm. Replay already leaves
+      writes out unless asked; this is the same idea for every mode.
+- [ ] **MCP server** (M). `pepe mcp` serves a run, a ramp, a flow, a
+      replay and a comparison as typed tools, each returning the JSON
+      report, so an agent calls pepe without composing a shell command.
+- [ ] **The engine as a crate** (M). The load engine and the report as a
+      library, for Rust harnesses and agents that would rather not start
+      a process.
 
 ## Not now
 
