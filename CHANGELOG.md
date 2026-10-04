@@ -6,6 +6,70 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+## [0.13.0](https://github.com/omarmhaimdat/pepe/compare/v0.12.0...v0.13.0) - 2026-10-04
+
+### Added
+
+- pepe flow, a sequence of requests where each step feeds the next ([#70](https://github.com/omarmhaimdat/pepe/pull/70))
+
+  Roadmap item 12 (scenarios and realism): request chaining, a run that is
+  a sequence where a value from one response feeds the next, each step a
+  row on the dashboard.
+
+  ## What
+  - **`pepe flow FILE`** with the usual `-c`, `-n`, `-z`, `-H` (sent with
+  every step), `-t` and friends. Each unit of concurrency is one user: it
+  walks the steps in order with its own variables, then starts a new
+  chain. `-n` counts chains; a chain that has begun finishes when the plan
+  ends (a stop still cuts it).
+  - **The file:** TOML, `[vars]` for starting values and `[[step]]`s with
+  `name`, `method`, `url`, `headers`, `body`, `expect` and `capture`.
+  Captures are `json:$.path.to[0].value` (dotted and bracketed, numbers
+  and booleans as text, null as nothing), `header:Name`, `regex:pattern`
+  (first group, via `regex-lite`) or `body`. `{{name}}` holes in the url,
+  headers and body are filled per chain; a hole that no `[vars]` entry or
+  earlier capture fills is rejected when the file is read: `step "cart"
+  uses {{token}}, which no earlier step captures and [vars] doesn't set`.
+  Unknown keys are rejected too.
+  - **Failing steps.** A step passes on a 2xx or the status `expect`
+  names. Otherwise, or when a capture finds nothing, the chain ends and
+  the step counts as a failed request with the reason as its cause
+  (`nothing for {{token}} in the response`, `HTTP 401 where 200 was
+  expected`), so the verdict's failure clustering says what went wrong.
+  - **Dashboard:** the Endpoints tab becomes **Steps**, one row per step
+  with its throughput, p50, p99, errors and statuses; the title reads
+  `FLOW checkout`. `E` restarts like `r`: there is no setup screen for a
+  flow, the file is the setup.
+  - **JSON:** the usual report plus `flow: { name, chains_started,
+  chains_completed, steps: [{step, requests, failed_requests,
+  requests_per_second, median_ms, p99_ms, status_codes}] }`.
+  - **Engine:** a flow worker beside the target worker;
+  `ResponseStats::with_body` keeps the headers and up to 1 MiB of body
+  only for steps that capture something, everything else streams and
+  counts as before. Clients are built around the first step's URL so the
+  shared headers and settings apply to every step.
+  - Man page `pepe-flow(1)` and completions regenerated; the README has a
+  "Flows" section with a checkout example.
+
+  ## Checked
+  - Unit tests: templates and the names they miss; captures from JSON
+  (nested, indexed, quoted keys, non-strings, null), headers, regexes and
+  bodies, with bad specs named; flow parsing with every check; a step
+  building its request from captured values.
+  - Engine test against an in-process token server: five chains of two
+  steps give ten successes with the token carried in a header and two
+  values in the URL; a capture that finds nothing fails step one and never
+  runs step two; `expect = 200` against a 401 fails with the message
+  above.
+  - End to end: a three-step login → cart → checkout flow against a local
+  server, `-n 40 -c 4 --json`: 40 chains started and completed, 120
+  requests, `login 200 ×40, cart 200 ×40, checkout 201 ×40`. A file with
+  an unfilled hole exits 1 with the step and variable named. The dashboard
+  (recorded in a pty) shows the Steps tab with the three rows and the
+  flow's name in the title.
+  - `cargo test`, `cargo clippy --all-targets`, `cargo fmt --check`.
+
+
 ## [0.12.0](https://github.com/omarmhaimdat/pepe/compare/v0.11.0...v0.12.0) - 2026-10-04
 
 ### Added
