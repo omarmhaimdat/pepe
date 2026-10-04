@@ -48,6 +48,7 @@ complete -c pepe -n "__fish_pepe_needs_command" -a "self-update" -d 'Update pepe
 complete -c pepe -n "__fish_pepe_needs_command" -a "completions" -d 'Tab completion for your shell: print the script, or --install it'
 complete -c pepe -n "__fish_pepe_needs_command" -a "api" -d 'Load-test every endpoint of an OpenAPI spec'
 complete -c pepe -n "__fish_pepe_needs_command" -a "ramp" -d 'Raise the load step by step to find where the target stops keeping up'
+complete -c pepe -n "__fish_pepe_needs_command" -a "replay" -d 'Send the URLs of an access log in their real proportions'
 complete -c pepe -n "__fish_pepe_needs_command" -a "help" -d 'Print this message or the help of the given subcommand(s)'
 complete -c pepe -n "__fish_pepe_using_subcommand self-update" -s n -l number -d 'Number of requests to perform' -r
 complete -c pepe -n "__fish_pepe_using_subcommand self-update" -s z -l duration -d 'Duration of the test, e.g. 10s, 3m, 2h (mutually exclusive with -n)' -r
@@ -138,8 +139,30 @@ complete -c pepe -n "__fish_pepe_using_subcommand ramp" -l disable-keepalive -d 
 complete -c pepe -n "__fish_pepe_using_subcommand ramp" -l disable-redirects -d 'Prevent http redirects'
 complete -c pepe -n "__fish_pepe_using_subcommand ramp" -l json -d 'Output results in JSON format'
 complete -c pepe -n "__fish_pepe_using_subcommand ramp" -s i -l setup -d 'Open the setup screen to review or change the settings before starting (it opens by itself when no URL is given)'
-complete -c pepe -n "__fish_pepe_using_subcommand help; and not __fish_seen_subcommand_from self-update completions api ramp help" -f -a "self-update" -d 'Update pepe to the latest release, or say what\'s new in it'
-complete -c pepe -n "__fish_pepe_using_subcommand help; and not __fish_seen_subcommand_from self-update completions api ramp help" -f -a "completions" -d 'Tab completion for your shell: print the script, or --install it'
-complete -c pepe -n "__fish_pepe_using_subcommand help; and not __fish_seen_subcommand_from self-update completions api ramp help" -f -a "api" -d 'Load-test every endpoint of an OpenAPI spec'
-complete -c pepe -n "__fish_pepe_using_subcommand help; and not __fish_seen_subcommand_from self-update completions api ramp help" -f -a "ramp" -d 'Raise the load step by step to find where the target stops keeping up'
-complete -c pepe -n "__fish_pepe_using_subcommand help; and not __fish_seen_subcommand_from self-update completions api ramp help" -f -a "help" -d 'Print this message or the help of the given subcommand(s)'
+complete -c pepe -n "__fish_pepe_using_subcommand replay" -l base-url -d 'Where to send the requests: put in front of paths, and in place of the host of full URLs, e.g. https://staging.example.com' -r
+complete -c pepe -n "__fish_pepe_using_subcommand replay" -l rows -d 'URLs that get a row of their own on the dashboard, most frequent first; the rest share one' -r
+complete -c pepe -n "__fish_pepe_using_subcommand replay" -s n -l number -d 'Number of requests to perform' -r
+complete -c pepe -n "__fish_pepe_using_subcommand replay" -s z -l duration -d 'Duration of the test, e.g. 10s, 3m, 2h (mutually exclusive with -n)' -r
+complete -c pepe -n "__fish_pepe_using_subcommand replay" -s m -l method -d 'HTTP method, e.g. GET, POST, PUT, DELETE' -r
+complete -c pepe -n "__fish_pepe_using_subcommand replay" -s H -l headers -d 'HTTP headers, e.g. -H \'Accept: application/json\'' -r
+complete -c pepe -n "__fish_pepe_using_subcommand replay" -s t -l timeout -d 'Time in seconds to wait for a response' -r
+complete -c pepe -n "__fish_pepe_using_subcommand replay" -l threads -d 'Threads sending requests (default 1). One sends about 100k requests a second; the dashboard says when it is the limit' -r
+complete -c pepe -n "__fish_pepe_using_subcommand replay" -s d -l body -d 'HTTP request body' -r
+complete -c pepe -n "__fish_pepe_using_subcommand replay" -s p -l proxy -d 'Proxy server URL: http://user:pass@host:port or socks5://host:port' -r
+complete -c pepe -n "__fish_pepe_using_subcommand replay" -l snapshot -d 'Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run\'s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run' -r -F
+complete -c pepe -n "__fish_pepe_using_subcommand replay" -s c -l concurrency -d 'Number of concurrent requests at a time' -r
+complete -c pepe -n "__fish_pepe_using_subcommand replay" -s u -l user-agent -d 'User-Agent string, default is pepe/{version}' -r
+complete -c pepe -n "__fish_pepe_using_subcommand replay" -l include-writes -d 'Replay POST, PUT, PATCH and DELETE too; only GET, HEAD and OPTIONS without it'
+complete -c pepe -n "__fish_pepe_using_subcommand replay" -s h -l help -d 'Print help'
+complete -c pepe -n "__fish_pepe_using_subcommand replay" -s k -l insecure -d 'Accept invalid TLS certificates (self-signed, expired, wrong host)'
+complete -c pepe -n "__fish_pepe_using_subcommand replay" -l disable-compression -d 'Disable HTTP compression, e.g. gzip'
+complete -c pepe -n "__fish_pepe_using_subcommand replay" -l disable-keepalive -d 'Disable HTTP keepalive, e.g. Connection: close'
+complete -c pepe -n "__fish_pepe_using_subcommand replay" -l disable-redirects -d 'Prevent http redirects'
+complete -c pepe -n "__fish_pepe_using_subcommand replay" -l json -d 'Output results in JSON format'
+complete -c pepe -n "__fish_pepe_using_subcommand replay" -s i -l setup -d 'Open the setup screen to review or change the settings before starting (it opens by itself when no URL is given)'
+complete -c pepe -n "__fish_pepe_using_subcommand help; and not __fish_seen_subcommand_from self-update completions api ramp replay help" -f -a "self-update" -d 'Update pepe to the latest release, or say what\'s new in it'
+complete -c pepe -n "__fish_pepe_using_subcommand help; and not __fish_seen_subcommand_from self-update completions api ramp replay help" -f -a "completions" -d 'Tab completion for your shell: print the script, or --install it'
+complete -c pepe -n "__fish_pepe_using_subcommand help; and not __fish_seen_subcommand_from self-update completions api ramp replay help" -f -a "api" -d 'Load-test every endpoint of an OpenAPI spec'
+complete -c pepe -n "__fish_pepe_using_subcommand help; and not __fish_seen_subcommand_from self-update completions api ramp replay help" -f -a "ramp" -d 'Raise the load step by step to find where the target stops keeping up'
+complete -c pepe -n "__fish_pepe_using_subcommand help; and not __fish_seen_subcommand_from self-update completions api ramp replay help" -f -a "replay" -d 'Send the URLs of an access log in their real proportions'
+complete -c pepe -n "__fish_pepe_using_subcommand help; and not __fish_seen_subcommand_from self-update completions api ramp replay help" -f -a "help" -d 'Print this message or the help of the given subcommand(s)'

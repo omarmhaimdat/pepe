@@ -26,6 +26,7 @@ mod load;
 mod metrics;
 mod openapi;
 mod ramp;
+mod replay;
 mod request;
 mod response;
 mod timeline;
@@ -530,6 +531,165 @@ async fn api_session(
 }
 
 /// API mode: read the spec, then the plan screen and the dashboard
+/// `pepe replay LOG`: the log's URLs, weighted as they were seen
+async fn run_replay(args: &Cli, what: &cli::ReplayArgs) -> Result<(), Box<dyn std::error::Error>> {
+    let replay = match replay::load(&what.log, what.base_url.as_deref(), what.include_writes) {
+        Ok(replay) => replay,
+        Err(e) => {
+            eprintln!("error: {e}");
+            std::process::exit(1);
+        }
+    };
+    // The dashboard's title shows the log rather than one URL
+    let mut shown = args.clone();
+    shown.method = "REPLAY".into();
+    shown.url = what
+        .log
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_else(|| what.log.display().to_string());
+    if args.json {
+        return run_replay_json(&shown, &replay, what).await;
+    }
+    let check = update::Check::start();
+    let report = {
+        let _watchdog = CtrlCWatchdog::arm();
+        let _terminal = TerminalGuard::enter()?;
+        replay_session(&mut shown, &replay, what).await?
+    };
+    if let Some(report) = report {
+        print!("{report}");
+    }
+    say_if_newer(check).await;
+    Ok(())
+}
+
+/// One client per shard, built around the most seen URL: the shared
+/// headers and settings are what matter
+fn replay_clients(
+    args: &Cli,
+    replay: &replay::Replay,
+    concurrency: usize,
+) -> Result<Vec<reqwest::Client>, PepeError> {
+    let base = request::Request::new(
+        replay.urls[0].url.clone(),
+        "GET".into(),
+        None,
+        &args.headers,
+        args.settings(),
+    )?;
+    base.build_clients(shards(args, concurrency))
+}
+
+async fn replay_session(
+    shown: &mut Cli,
+    replay: &replay::Replay,
+    what: &cli::ReplayArgs,
+) -> Result<Option<String>, Box<dyn std::error::Error>> {
+    loop {
+        let mut load = load::start_targets(
+            replay_clients(shown, replay, shown.concurrency as usize)?,
+            replay.targets(shown, what.rows)?,
+            shown.concurrency as usize,
+            plan(shown),
+            true,
+        );
+        let mut dashboard = ui::Dashboard::new(shown.clone(), plan(shown))
+            .with_rows(ui::Rows::Urls, replay.views(what.rows));
+        let outcome = dashboard.run(&mut load).await?;
+        shown.concurrency = load.concurrency() as u32;
+        match outcome {
+            // There is no setup screen for a replay: the log is the setup
+            ui::Outcome::Restart | ui::Outcome::Edit => {}
+            ui::Outcome::Quit => return Ok(dashboard.report()),
+        }
+    }
+}
+
+async fn run_replay_json(
+    args: &Cli,
+    replay: &replay::Replay,
+    what: &cli::ReplayArgs,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let views = replay.views(what.rows);
+    let mut load = load::start_targets(
+        replay_clients(args, replay, args.concurrency as usize)?,
+        replay.targets(args, what.rows)?,
+        args.concurrency as usize,
+        plan(args),
+        false,
+    );
+    let started = Instant::now();
+    let mut total = Metrics::default();
+    let mut each = vec![Metrics::default(); views.len()];
+    let mut interrupted = false;
+    let mut pump = tokio::time::interval(PUMP);
+    let mut peak_busy = None;
+    loop {
+        tokio::select! {
+            _ = pump.tick() => {
+                peak_busy = peak_busy.max(load.busy());
+                let over = !load.drain(|stat| {
+                    total.record(&stat);
+                    if let Some(metrics) = each.get_mut(stat.endpoint as usize) {
+                        metrics.record(&stat);
+                    }
+                });
+                if over {
+                    break;
+                }
+            }
+            _ = tokio::signal::ctrl_c(), if !interrupted => {
+                interrupted = true;
+                load.stop();
+            }
+        }
+    }
+    let elapsed = started.elapsed();
+    let report = json_report::JsonReport::generate(&total, elapsed, interrupted)
+        .with_generator(load.threads(), peak_busy);
+    let mut report = serde_json::to_value(&report)?;
+    let ms = |d: std::time::Duration| (d.as_secs_f64() * 1_000_000.0).round() / 1000.0;
+    let kept = replay.kept().max(1) as f64;
+    let urls: Vec<serde_json::Value> = views
+        .iter()
+        .zip(&each)
+        .enumerate()
+        .map(|(rank, (view, m))| {
+            let share = match replay.urls.get(rank).filter(|_| rank < what.rows) {
+                Some(entry) => entry.count as f64 / kept,
+                None => replay.urls[what.rows.min(replay.urls.len())..].iter().map(|e| e.count).sum::<u64>() as f64 / kept,
+            };
+            serde_json::json!({
+                "method": view.method,
+                "url": if view.variants > 1 { format!("{} other URLs", view.variants) } else { view.url.clone() },
+                "share_in_log": (share * 10_000.0).round() / 10_000.0,
+                "requests": m.total,
+                "failed_requests": m.total - m.success,
+                "requests_per_second": m.rps(elapsed),
+                "median_ms": ms(m.percentile(50.0)),
+                "p99_ms": ms(m.percentile(99.0)),
+                "status_codes": m.status_codes.iter().map(|(k, v)| (k.to_string(), *v)).collect::<std::collections::BTreeMap<_, _>>(),
+            })
+        })
+        .collect();
+    report["replay"] = serde_json::json!({
+        "log": what.log.display().to_string(),
+        "requests_in_log": replay.requests,
+        "replayed_from_log": replay.kept(),
+        "distinct_urls": replay.urls.len(),
+        "left_out": {
+            "unparsed_lines": replay.unparsed,
+            "writes": replay.writes,
+            "no_host": replay.no_host,
+            "rare_urls": replay.tail,
+        },
+        "urls": urls,
+    });
+    println!("{}", serde_json::to_string_pretty(&report)?);
+    Ok(())
+}
+
 async fn run_api(args: &Cli, api: &cli::ApiArgs) -> Result<(), Box<dyn std::error::Error>> {
     let mut run = match api::ApiRun::load(api).await {
         Ok(run) => run,
@@ -576,6 +736,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         default_hook(info);
     }));
 
+    if let Some(cli::Command::Replay(what)) = args.command.clone() {
+        if let Err(e) = args.validate() {
+            eprintln!("{}", e);
+            std::process::exit(1);
+        }
+        return run_replay(&args, &what).await;
+    }
     if let Some(cli::Command::Api(api)) = args.command.clone() {
         if let Err(e) = args.validate() {
             eprintln!("{}", e);

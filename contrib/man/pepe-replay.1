@@ -1,0 +1,25 @@
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.TH pepe-replay 1  pepe "User Commands"
+.SH NAME
+pepe\-replay \- Send the URLs of an access log in their real proportions
+.SH SYNOPSIS
+\fBpepe replay\fR [\fB\-\-base\-url\fR] [\fB\-\-include\-writes\fR] [\fB\-\-rows\fR] [\fB\-h\fR|\fB\-\-help\fR] <\fILOG\fR> 
+.SH DESCRIPTION
+Send the URLs of an access log in their real proportions
+.SH OPTIONS
+.TP
+\fB\-\-base\-url\fR \fI<URL>\fR
+Where to send the requests: put in front of paths, and in place of the host of full URLs, e.g. https://staging.example.com
+.TP
+\fB\-\-include\-writes\fR
+Replay POST, PUT, PATCH and DELETE too; only GET, HEAD and OPTIONS without it
+.TP
+\fB\-\-rows\fR \fI<N>\fR [default: 20]
+URLs that get a row of their own on the dashboard, most frequent first; the rest share one
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Print help
+.TP
+<\fILOG\fR>
+The log: nginx or Apache (common or combined), Caddy JSON, AWS ALB, or one URL or path per line

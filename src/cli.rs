@@ -145,6 +145,30 @@ pub enum Command {
     Api(ApiArgs),
     /// Raise the load step by step to find where the target stops keeping up
     Ramp(RampArgs),
+    /// Send the URLs of an access log in their real proportions
+    Replay(ReplayArgs),
+}
+
+#[derive(clap::Args, Debug, Clone, PartialEq)]
+pub struct ReplayArgs {
+    /// The log: nginx or Apache (common or combined), Caddy JSON, AWS ALB,
+    /// or one URL or path per line
+    pub log: std::path::PathBuf,
+
+    /// Where to send the requests: put in front of paths, and in place of
+    /// the host of full URLs, e.g. https://staging.example.com
+    #[arg(long, value_name = "URL")]
+    pub base_url: Option<String>,
+
+    /// Replay POST, PUT, PATCH and DELETE too; only GET, HEAD and OPTIONS
+    /// without it
+    #[arg(long)]
+    pub include_writes: bool,
+
+    /// URLs that get a row of their own on the dashboard, most frequent
+    /// first; the rest share one
+    #[arg(long, default_value_t = 20, value_name = "N")]
+    pub rows: usize,
 }
 
 #[derive(clap::Args, Debug, Clone, PartialEq)]
@@ -393,6 +417,7 @@ impl Cli {
         match &self.command {
             Some(Command::Ramp(_)) => parts.push("ramp".into()),
             Some(Command::Api(_)) => parts.push("api".into()),
+            Some(Command::Replay(_)) => parts.push("replay".into()),
             _ => {}
         }
         let mut flag = |name: &str, value: &str| {
@@ -428,6 +453,15 @@ impl Cli {
                 target = api.spec.clone();
                 if let Some(server) = &api.server {
                     flag("--server", server);
+                }
+            }
+            Some(Command::Replay(replay)) => {
+                target = replay.log.display().to_string();
+                if let Some(base) = &replay.base_url {
+                    flag("--base-url", base);
+                }
+                if replay.rows != 20 {
+                    flag("--rows", &replay.rows.to_string());
                 }
             }
             _ => {}
@@ -466,7 +500,9 @@ impl Cli {
         if let Some(proxy) = &self.proxy {
             flag("-p", proxy);
         }
+        let include_writes = matches!(&self.command, Some(Command::Replay(r)) if r.include_writes);
         for (on, name) in [
+            (include_writes, "--include-writes"),
             (self.insecure, "-k"),
             (self.disable_redirects, "--disable-redirects"),
             (self.disable_keepalive, "--disable-keepalive"),

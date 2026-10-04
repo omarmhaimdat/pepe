@@ -263,6 +263,18 @@ The screen shows each step as a row (throughput, p50, p90, p99, the slowest requ
 
 `--json` runs the ramp without a screen and prints every step and the findings.
 
+### Replaying an access log
+
+Real traffic is not one URL. `pepe replay` reads an access log and sends its URLs in the proportions the log had: a path seen 3,000 times gets 30× the requests of one seen 100 times, mixed evenly rather than in bursts.
+
+```bash
+pepe replay access.log --base-url https://staging.example.com -c 50 -z 2m
+```
+
+nginx and Apache logs (common and combined), Caddy's JSON lines, AWS ALB logs, and plain lists of one URL or path per line are read. `--base-url` goes in front of paths and replaces the host of full URLs, so production's log can be sent at staging; without it, full URLs are sent where they point and paths can't be sent at all. Only GET, HEAD and OPTIONS are replayed unless `--include-writes` is given. Request bodies aren't in access logs, so writes go without one.
+
+The dashboard's first tab lists the most frequent URLs (`--rows`, 20 by default) with each one's share of the log, throughput, latency and statuses, and one row for all the rest. `--json` adds `replay`: what the log had, what was left out and why (unparsed lines, writes, paths with no host, URLs past the 5,000 most frequent), and the same per-URL numbers.
+
 ### API mode: load-testing an OpenAPI spec
 
 ![API mode: the endpoints of a spec picked on screen, then a dashboard with a row per endpoint](assets/api.gif)
