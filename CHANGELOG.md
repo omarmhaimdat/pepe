@@ -6,6 +6,31 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+## [0.15.0](https://github.com/omarmhaimdat/pepe/compare/v0.14.0...v0.15.0) - 2026-10-04
+
+### Added
+
+- rate, warmup and trace-header in pepe.toml ([#78](https://github.com/omarmhaimdat/pepe/pull/78))
+
+  The follow-up noted in #68: `pepe.toml` was written beside `--rate`
+  ([#67](https://github.com/omarmhaimdat/pepe/pull/67)), `--warmup` ([#69](https://github.com/omarmhaimdat/pepe/pull/69)) and `--trace-header` ([#65](https://github.com/omarmhaimdat/pepe/pull/65)), so its schema didn't
+  include them.
+
+  ## What
+  - `rate`, `warmup` and `trace-header` keys, with the same precedence as
+  every other key: a typed flag wins, the file fills in what was left
+  unsaid.
+  - `--write-config` and `ctrl-s` on the setup screen write them when set,
+  and they read back to the same command line.
+  - README's example gains a `rate` line and names the other two.
+
+  ## Checked
+  - The config tests cover the three keys both ways: read from the file
+  into an untyped run, and written from a command line that sets all
+  three, then parsed back and compared.
+  - `cargo test`, `cargo clippy --all-targets`, `cargo fmt --check`.
+
+
 ## [0.14.0](https://github.com/omarmhaimdat/pepe/compare/v0.13.0...v0.14.0) - 2026-10-04
 
 ### Added
