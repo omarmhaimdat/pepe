@@ -3,7 +3,7 @@
 use crate::cli::{ApiArgs, Cli};
 use crate::load::Target;
 use crate::openapi::{self, Credentials, Endpoint, PlanOptions, Spec};
-use crate::request::{parse_header, Request};
+use crate::request::{parse_header, ConnectTimes, Request};
 use crate::ui::EndpointView;
 use crate::PepeError;
 
@@ -74,8 +74,12 @@ impl ApiRun {
         headers
     }
 
-    /// One client per load shard
-    pub fn clients(&self, cli: &Cli, shards: usize) -> Result<Vec<reqwest::Client>, PepeError> {
+    /// One client per load shard, and where their connection times go
+    pub fn clients(
+        &self,
+        cli: &Cli,
+        shards: usize,
+    ) -> Result<(Vec<reqwest::Client>, std::sync::Arc<ConnectTimes>), PepeError> {
         self.shared_request(cli)?.build_clients(shards)
     }
 
