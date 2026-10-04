@@ -770,7 +770,13 @@ mod tests {
     async fn count_plan_sends_exactly_n() {
         let srv = server(Duration::ZERO).await;
         let req = request(&srv.url, "GET", None);
-        let load = start(req.build_clients(2).unwrap(), req, 4, Plan::Count(25), true);
+        let load = start(
+            req.build_clients(2).unwrap().0,
+            req,
+            4,
+            Plan::Count(25),
+            true,
+        );
         let results = drain(load).await;
         assert_eq!(results.len(), 25);
         assert!(results
@@ -798,7 +804,7 @@ mod tests {
         let srv = server(Duration::ZERO).await;
         let req = request(&srv.url, "GET", None);
         let load = start(
-            req.build_clients(1).unwrap(),
+            req.build_clients(1).unwrap().0,
             req,
             2,
             Plan::Count(10),
@@ -819,7 +825,7 @@ mod tests {
         let req = request(&srv.url, "GET", None);
         let begin = Instant::now();
         let load = start(
-            req.build_clients(1).unwrap(),
+            req.build_clients(1).unwrap().0,
             req,
             1,
             Plan::Duration(Duration::from_millis(200)),
@@ -841,7 +847,7 @@ mod tests {
         let req = request(&srv.url, "GET", None);
         let begin = Instant::now();
         let load = start(
-            req.build_clients(2).unwrap(),
+            req.build_clients(2).unwrap().0,
             req,
             2,
             Plan::Duration(Duration::from_millis(300)),
@@ -862,7 +868,7 @@ mod tests {
         let srv = server(Duration::from_secs(30)).await;
         let req = request(&srv.url, "GET", None);
         let load = start(
-            req.build_clients(2).unwrap(),
+            req.build_clients(2).unwrap().0,
             req,
             4,
             Plan::Count(1000),
@@ -885,7 +891,7 @@ mod tests {
         for method in ["POST", "PUT", "PATCH"] {
             let req = request(&srv.url, method, Some("hello"));
             drain(start(
-                req.build_clients(2).unwrap(),
+                req.build_clients(2).unwrap().0,
                 req,
                 1,
                 Plan::Count(1),
@@ -910,7 +916,7 @@ mod tests {
         let srv = server(Duration::ZERO).await;
         let req = request(&srv.url, "GET", None);
         let load = start(
-            req.build_clients(1).unwrap(),
+            req.build_clients(1).unwrap().0,
             req,
             2,
             Plan::Duration(Duration::from_millis(1_300)),
@@ -987,7 +993,7 @@ mod tests {
                 weight,
             }
         };
-        let client = request(&srv.url, "GET", None).build_clients(2).unwrap();
+        let client = request(&srv.url, "GET", None).build_clients(2).unwrap().0;
         let load = start_targets(
             client,
             vec![target("a", 0, 3), target("b", 1, 1)],
@@ -1006,7 +1012,7 @@ mod tests {
         let req = request(&srv.url, "GET", None);
         let begin = Instant::now();
         let load = start(
-            req.build_clients(2).unwrap(),
+            req.build_clients(2).unwrap().0,
             req,
             2,
             Plan::Duration(Duration::from_millis(400)),
@@ -1033,7 +1039,7 @@ mod tests {
         let srv = server(Duration::from_millis(40)).await;
         let req = request(&srv.url, "GET", None);
         let load = start(
-            req.build_clients(2).unwrap(),
+            req.build_clients(2).unwrap().0,
             req,
             2,
             Plan::Count(10_000),
@@ -1063,7 +1069,7 @@ mod tests {
         let srv = server(Duration::from_millis(5)).await;
         let req = request(&srv.url, "GET", None);
         let load = start(
-            req.build_clients(2).unwrap(),
+            req.build_clients(2).unwrap().0,
             req,
             2,
             Plan::Count(10_000),

@@ -1,4 +1,5 @@
 use std::io::{stderr, stdin, stdout, IsTerminal};
+use std::sync::Arc;
 use std::time::Instant;
 
 use clap::{CommandFactory, Parser};
@@ -67,19 +68,22 @@ fn shards(args: &Cli, concurrency: usize) -> usize {
     load::shards(concurrency, args.threads.map(|t| t as usize))
 }
 
-/// One client per load shard
+/// One client per load shard, and where their connection times go
 fn clients_for(
     request: &request::Request,
     args: &Cli,
     concurrency: usize,
-) -> Result<Vec<reqwest::Client>, PepeError> {
+) -> Result<(Vec<reqwest::Client>, Arc<request::ConnectTimes>), PepeError> {
     request.build_clients(shards(args, concurrency))
 }
 
 /// `previews`: keep the start of each body, which only the dashboard shows
-fn start_load(args: &Cli, previews: bool) -> Result<LoadHandle, PepeError> {
+fn start_load(
+    args: &Cli,
+    previews: bool,
+) -> Result<(LoadHandle, Arc<request::ConnectTimes>), PepeError> {
     let request = args.request()?;
-    let clients = clients_for(&request, args, args.concurrency as usize)?;
+    let (clients, connects) = clients_for(&request, args, args.concurrency as usize)?;
     let load = load::start(
         clients,
         request,
@@ -90,7 +94,7 @@ fn start_load(args: &Cli, previews: bool) -> Result<LoadHandle, PepeError> {
     if let Some(warmup) = args.warmup() {
         load.set_warmup(warmup);
     }
-    Ok(load)
+    Ok((load, connects))
 }
 
 fn restore_terminal() {
@@ -206,7 +210,7 @@ pub const SNAPSHOT_EVERY: std::time::Duration = std::time::Duration::from_secs(6
 
 /// `--json`: no dashboard; run to completion (or Ctrl-C), print the report
 async fn run_json(args: &Cli) -> Result<(), Box<dyn std::error::Error>> {
-    let mut load = start_load(args, false)?;
+    let (mut load, connects) = start_load(args, false)?;
     // The clock starts when the warm-up, if any, is over
     let mut started = Instant::now();
     let mut warming = load.warming();
@@ -229,6 +233,7 @@ async fn run_json(args: &Cli) -> Result<(), Box<dyn std::error::Error>> {
             .with_generator(load.threads(), peak_busy)
             .with_warmup(args.warmup(), warmup_requests)
             .with_timeline(timeline)
+            .with_connects(&connects)
     };
 
     loop {
@@ -341,7 +346,7 @@ async fn run_interactive(
                 };
                 let request = args.request()?;
                 let mut load = load::start(
-                    clients_for(&request, &args, plan.peak() as usize)?,
+                    clients_for(&request, &args, plan.peak() as usize)?.0,
                     request,
                     plan.levels[0] as usize,
                     Plan::Duration(UNTIL_STOPPED),
@@ -370,8 +375,9 @@ async fn run_interactive(
                 return Ok(farewell);
             }
             _ => {
-                let mut load = start_load(&args, true)?;
-                let mut dashboard = ui::Dashboard::new(args.clone(), plan(&args));
+                let (mut load, connects) = start_load(&args, true)?;
+                let mut dashboard =
+                    ui::Dashboard::new(args.clone(), plan(&args)).with_connects(connects);
                 let outcome = dashboard.run(&mut load).await?;
                 // Keep any concurrency the user dialed in during the run.
                 // Dropping `load` stops the previous run before the next starts.
@@ -393,7 +399,7 @@ async fn run_interactive(
 async fn run_ramp_json(args: &Cli, plan: RampPlan) -> Result<(), Box<dyn std::error::Error>> {
     let request = args.request()?;
     let mut load = load::start(
-        clients_for(&request, args, plan.peak() as usize)?,
+        clients_for(&request, args, plan.peak() as usize)?.0,
         request,
         plan.levels[0] as usize,
         Plan::Duration(UNTIL_STOPPED),
@@ -460,8 +466,9 @@ async fn run_api_json(args: &Cli, run: &api::ApiRun) -> Result<(), Box<dyn std::
         std::process::exit(1);
     }
     let targets = run.targets(args, &which)?;
+    let (clients, connects) = run.clients(args, shards(args, args.concurrency as usize))?;
     let mut load = load::start_targets(
-        run.clients(args, shards(args, args.concurrency as usize))?,
+        clients,
         targets,
         args.concurrency as usize,
         plan(args),
@@ -509,7 +516,8 @@ async fn run_api_json(args: &Cli, run: &api::ApiRun) -> Result<(), Box<dyn std::
     let elapsed = started.elapsed();
     let report = json_report::JsonReport::generate(&total, elapsed, interrupted)
         .with_generator(load.threads(), peak_busy)
-        .with_warmup(args.warmup(), warmup_requests);
+        .with_warmup(args.warmup(), warmup_requests)
+        .with_connects(&connects);
     let mut report = serde_json::to_value(&report)?;
     let ms = |d: std::time::Duration| (d.as_secs_f64() * 1_000_000.0).round() / 1000.0;
     let endpoints: Vec<serde_json::Value> = which
@@ -554,8 +562,10 @@ async fn api_session(
         }
         let which = run.enabled();
         let targets = run.targets(&shown, &which)?;
+        let (clients, connects) =
+            run.clients(&shown, shards(&shown, shown.concurrency as usize))?;
         let mut load = load::start_targets(
-            run.clients(&shown, shards(&shown, shown.concurrency as usize))?,
+            clients,
             targets,
             shown.concurrency as usize,
             plan(&shown),
@@ -565,7 +575,8 @@ async fn api_session(
             load.set_warmup(warmup);
         }
         let mut dashboard = ui::Dashboard::new(shown.clone(), plan(&shown))
-            .with_endpoints(run.views(&shown, &which));
+            .with_endpoints(run.views(&shown, &which))
+            .with_connects(connects);
         let outcome = dashboard.run(&mut load).await?;
         shown.concurrency = load.concurrency() as u32;
         match outcome {
