@@ -94,6 +94,8 @@ pub struct ResponseStats {
     pub ttfb: Option<Duration>,
     /// Full headers and body, when this request was picked for capture
     pub detail: Option<Arc<Detail>>,
+    /// Sent during `--warmup`: shown as such, counted in nothing
+    pub warmup: bool,
     /// The id the backend gave this request, and the header it came in,
     /// to find it in the server's logs
     pub request_id: Option<(&'static str, Box<str>)>,
@@ -204,6 +206,7 @@ impl ResponseStats {
             cache_status,
             error: None,
             error_message: None,
+            warmup: false,
             request_id,
             server_timing,
         };

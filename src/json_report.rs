@@ -67,6 +67,12 @@ pub struct Generator {
     /// Absent where the platform can't measure it.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub peak_busy_percent: Option<u8>,
+    /// `--warmup`: how long was sent before measuring, and how many
+    /// requests that was; they are in no other number of the report
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub warmup_s: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub warmup_requests: Option<u64>,
     /// `--rate`: the requests per second asked for
     #[serde(skip_serializing_if = "Option::is_none")]
     pub rate_per_second: Option<f64>,
@@ -258,9 +264,20 @@ impl JsonReport {
         self.generator = Some(Generator {
             threads,
             peak_busy_percent,
+            warmup_s: None,
+            warmup_requests: None,
             rate_per_second: rate.map(|(r, _)| r),
             rate_missed: rate.map(|(_, missed)| missed),
         });
+        self
+    }
+
+    /// The warm-up that came before the measured run; after `with_generator`
+    pub fn with_warmup(mut self, warmup: Option<Duration>, requests: u64) -> Self {
+        if let (Some(generator), Some(warmup)) = (&mut self.generator, warmup) {
+            generator.warmup_s = Some(warmup.as_secs_f64());
+            generator.warmup_requests = Some(requests);
+        }
         self
     }
 
