@@ -6,6 +6,7 @@ use bytes::Bytes;
 use reqwest::header::HeaderMap;
 
 use crate::cache::CacheStatus;
+use crate::trace::{self, ServerTiming};
 
 /// Raw body bytes kept for the dashboard's response preview
 const PREVIEW_BYTES: usize = 256;
@@ -95,6 +96,11 @@ pub struct ResponseStats {
     pub detail: Option<Arc<Detail>>,
     /// Sent during `--warmup`: shown as such, counted in nothing
     pub warmup: bool,
+    /// The id the backend gave this request, and the header it came in,
+    /// to find it in the server's logs
+    pub request_id: Option<(&'static str, Box<str>)>,
+    /// The response's `Server-Timing` entries, when it had any
+    pub server_timing: Option<Box<[ServerTiming]>>,
 }
 
 impl ResponseStats {
@@ -114,6 +120,8 @@ impl ResponseStats {
 
         let status_code = resp.status();
         let cache_status = CacheStatus::parse_headers(resp.headers());
+        let request_id = trace::request_id(resp.headers());
+        let server_timing = trace::server_timing(resp.headers());
         let mut detail = capture.then(|| Detail {
             version: resp.version(),
             headers: resp.headers().clone(),
@@ -166,6 +174,8 @@ impl ResponseStats {
             error: None,
             error_message: None,
             warmup: false,
+            request_id,
+            server_timing,
         }
     }
 

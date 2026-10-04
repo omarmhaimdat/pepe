@@ -30,6 +30,7 @@ mod ramp;
 mod request;
 mod response;
 mod timeline;
+mod trace;
 mod ui;
 mod update;
 mod utils;
@@ -217,6 +218,7 @@ async fn run_json(args: &Cli) -> Result<(), Box<dyn std::error::Error>> {
     let mut warmup_requests = 0;
     let mut metrics = Metrics::default();
     let mut timeline = timeline::Timeline::default();
+    let mut slowest = metrics::Slowest::default();
     let mut watch = insights::Watch::default();
     let mut anomalies: Vec<insights::Anomaly> = Vec::new();
     let mut interrupted = false;
@@ -226,6 +228,7 @@ async fn run_json(args: &Cli) -> Result<(), Box<dyn std::error::Error>> {
     let mut peak_busy = None;
     let report = |metrics: &Metrics,
                   timeline: &timeline::Timeline,
+                  slowest: &metrics::Slowest,
                   anomalies: &[insights::Anomaly],
                   load: &LoadHandle,
                   elapsed: std::time::Duration,
@@ -236,6 +239,7 @@ async fn run_json(args: &Cli) -> Result<(), Box<dyn std::error::Error>> {
             .with_generator(load.threads(), peak_busy)
             .with_warmup(args.warmup(), warmup_requests)
             .with_timeline(timeline)
+            .with_slowest(slowest)
             .with_anomalies(anomalies)
             .with_connects(&connects)
     };
@@ -248,6 +252,7 @@ async fn run_json(args: &Cli) -> Result<(), Box<dyn std::error::Error>> {
                     warming = false;
                     started = Instant::now();
                 }
+                let now = started.elapsed();
                 let over = !load.drain(|stat| {
                     if stat.warmup {
                         warmup_requests += 1;
@@ -255,6 +260,7 @@ async fn run_json(args: &Cli) -> Result<(), Box<dyn std::error::Error>> {
                     }
                     metrics.record(&stat);
                     timeline.record(&stat);
+                    slowest.record(&stat, now);
                 });
                 if !warming {
                     timeline.advance(started.elapsed());
@@ -266,7 +272,7 @@ async fn run_json(args: &Cli) -> Result<(), Box<dyn std::error::Error>> {
             }
             _ = snapshots.tick(), if args.snapshot.is_some() => {
                 let path = args.snapshot.as_ref().expect("checked");
-                if let Err(e) = report(&metrics, &timeline, &anomalies, &load, started.elapsed(), warmup_requests, peak_busy, interrupted).with_snapshot(true).write_to(path) {
+                if let Err(e) = report(&metrics, &timeline, &slowest, &anomalies, &load, started.elapsed(), warmup_requests, peak_busy, interrupted).with_snapshot(true).write_to(path) {
                     eprintln!("couldn't write the snapshot to {}: {e}", path.display());
                 }
             }
@@ -281,6 +287,7 @@ async fn run_json(args: &Cli) -> Result<(), Box<dyn std::error::Error>> {
     let report = report(
         &metrics,
         &timeline,
+        &slowest,
         &anomalies,
         &load,
         started.elapsed(),
@@ -624,6 +631,15 @@ async fn run_api(args: &Cli, api: &cli::ApiArgs) -> Result<(), Box<dyn std::erro
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut args = Cli::parse();
+    // Which response header carries the request id; `validate` rejects a
+    // name that isn't one
+    if let Some(name) = args
+        .trace_header
+        .as_deref()
+        .and_then(|n| reqwest::header::HeaderName::from_bytes(n.as_bytes()).ok())
+    {
+        trace::use_id_header(name);
+    }
 
     if let Some(cli::Command::SelfUpdate(what)) = &args.command {
         return update::self_update(what.check, what.verbose).await;
