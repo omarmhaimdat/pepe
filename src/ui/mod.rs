@@ -147,6 +147,10 @@ pub struct Dashboard {
     /// Sending threads, and how busy the busiest is now and was at most
     /// (see `LoadHandle::busy`)
     threads: usize,
+    /// `--rate`, and the starts it called for that the concurrency
+    /// couldn't carry
+    rate: Option<f64>,
+    rate_missed: u64,
     busy: Option<u8>,
     peak_busy: Option<u8>,
     paused: bool,
@@ -205,6 +209,7 @@ impl Dashboard {
         let warmup = args.warmup();
         Self {
             concurrency: args.concurrency as usize,
+            rate: args.rate,
             args,
             plan,
             metrics: Metrics::default(),
@@ -216,6 +221,7 @@ impl Dashboard {
             error_log: VecDeque::with_capacity(ERROR_LOG_CAPACITY),
             sent: 0,
             threads: 1,
+            rate_missed: 0,
             busy: None,
             peak_busy: None,
             paused: false,
@@ -256,7 +262,11 @@ impl Dashboard {
             self.elapsed(),
             self.interrupted,
         )
-        .with_generator(load.threads(), self.peak_busy)
+        .with_generator(
+            load.threads(),
+            self.peak_busy,
+            self.rate.map(|r| (r, self.rate_missed)),
+        )
         .with_warmup(self.args.warmup(), self.warmup_requests)
         .with_timeline(&self.timeline)
         .with_slowest(&self.slowest)
@@ -433,7 +443,10 @@ impl Dashboard {
                             verdict.level = verdict.level.max(note.level);
                             verdict.notes.push(note);
                         }
-                        if let Some(note) = self.saturation_note() {
+                        for note in [self.saturation_note(), self.rate_note()]
+                            .into_iter()
+                            .flatten()
+                        {
                             verdict.level = verdict.level.max(note.level);
                             verdict.notes.push(note);
                         }
@@ -458,6 +471,7 @@ impl Dashboard {
         self.sent = load.sent();
         self.concurrency = load.concurrency();
         self.threads = load.threads();
+        self.rate_missed = load.missed();
         self.busy = load.busy();
         self.peak_busy = self.peak_busy.max(self.busy);
         self.set_paused(load.is_paused());
@@ -487,6 +501,61 @@ impl Dashboard {
             "pepe's sending thread is {busy}% busy: the target can take more, add --threads {}",
             self.threads + 1
         ))
+    }
+
+    /// The concurrency a rate needs against the latency seen so far, with
+    /// a quarter to spare (Little's law: in flight = rate × time each takes)
+    fn concurrency_for_rate(&self, rate: f64) -> usize {
+        let mean = self.metrics.mean().as_secs_f64();
+        ((rate * mean * 1.25).ceil() as usize).max(self.concurrency + 1)
+    }
+
+    /// Footer warning while a `--rate` run is sending slower than asked:
+    /// everything -c allows is in flight, waiting on the target
+    fn rate_warning(&self) -> Option<String> {
+        let rate = self.rate?;
+        if self.finished.is_some() || self.paused || self.active() < Duration::from_secs(3) {
+            return None;
+        }
+        let last = self.timeline.samples().back()?;
+        if last.rps >= rate * 0.9 {
+            return None;
+        }
+        Some(format!(
+            "behind the rate: {} of {} req/s · all {} in flight; try -c {}",
+            format::compact(last.rps),
+            format::compact(rate),
+            self.concurrency,
+            self.concurrency_for_rate(rate)
+        ))
+    }
+
+    /// End-of-run finding when the rate asked for wasn't reached
+    fn rate_note(&self) -> Option<insights::Note> {
+        let rate = self.rate?;
+        let secs = self.active().as_secs_f64();
+        if secs <= 0.0 || self.metrics.total == 0 {
+            return None;
+        }
+        let sent = self.metrics.total as f64 / secs;
+        if sent >= rate * 0.9 {
+            return None;
+        }
+        Some(insights::Note {
+            level: Level::Degraded,
+            text: format!(
+                "Asked for {} req/s and sent {}: with -c {} and {} responses, about {} a \
+                 second fit; -c {} would carry the rate",
+                format::compact(rate),
+                format::compact(sent),
+                self.concurrency,
+                format::latency(self.metrics.mean()),
+                format::compact(
+                    self.concurrency as f64 / self.metrics.mean().as_secs_f64().max(1e-6)
+                ),
+                self.concurrency_for_rate(rate)
+            ),
+        })
     }
 
     /// End-of-run finding when pepe, not the target, set the pace

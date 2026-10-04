@@ -549,7 +549,7 @@ fn render_footer(d: &Dashboard, f: &mut Frame, area: Rect) {
     // that pepe itself is the limit
     let warning = match &d.notice {
         Some((notice, _, _)) => Some(notice.clone()),
-        None => d.saturation_warning(),
+        None => d.saturation_warning().or_else(|| d.rate_warning()),
     };
     if let Some(notice) = warning {
         f.render_widget(
@@ -1729,6 +1729,14 @@ fn test_card(d: &Dashboard, w: usize) -> Card {
             w,
         )
         .row("concurrency", concurrency, Color::Reset, w)
+        .row(
+            "rate",
+            args.rate.map_or("as fast as -c allows".into(), |r| {
+                format!("{} req/s", format::compact(r))
+            }),
+            Color::Reset,
+            w,
+        )
         .row("timeout", format!("{}s", args.timeout), Color::Reset, w)
         .row("headers", args.headers.len().to_string(), Color::Reset, w)
         .row("body", body, Color::Reset, w)

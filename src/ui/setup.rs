@@ -86,6 +86,8 @@ enum Field {
     Threads,
     /// Sent before measuring, e.g. "5s"; empty for none
     Warmup,
+    /// Requests started per second; empty for as many as -c allows
+    Rate,
     /// A file the report is written to every minute; empty for none
     Snapshot,
     RunMode,
@@ -135,6 +137,7 @@ pub struct Setup {
     concurrency: String,
     threads: String,
     warmup: String,
+    rate: String,
     snapshot: String,
     by_duration: bool,
     duration: String,
@@ -200,6 +203,7 @@ impl Setup {
             concurrency: cli.concurrency.to_string(),
             threads: cli.threads.map(|t| t.to_string()).unwrap_or_default(),
             warmup: cli.warmup.clone().unwrap_or_default(),
+            rate: cli.rate.map(|r| r.to_string()).unwrap_or_default(),
             snapshot: cli
                 .snapshot
                 .as_ref()
@@ -261,6 +265,7 @@ impl Setup {
             Field::Timeout,
             Field::Threads,
             Field::Warmup,
+            Field::Rate,
             Field::Snapshot,
             Field::Redirects,
             Field::KeepAlive,
@@ -287,6 +292,7 @@ impl Setup {
             Field::Concurrency => &mut self.concurrency,
             Field::Threads => &mut self.threads,
             Field::Warmup => &mut self.warmup,
+            Field::Rate => &mut self.rate,
             Field::Snapshot => &mut self.snapshot,
             Field::RunValue if self.by_duration => &mut self.duration,
             Field::RunValue => &mut self.requests,
@@ -307,6 +313,7 @@ impl Setup {
         match field {
             Field::Concurrency
             | Field::Threads
+            | Field::Rate
             | Field::Timeout
             | Field::From
             | Field::To
@@ -608,6 +615,9 @@ impl Setup {
                     .map_err(|_| format!("warm-up {text:?} needs a unit: 5s, 1m"))?;
                 Some(text.to_string())
             }
+        cli.rate = match self.rate.trim() {
+            "" => None,
+            text => Some(f64::from(number("rate", text)?.max(1))),
         };
         cli.snapshot = match self.snapshot.trim() {
             "" => None,
@@ -1133,6 +1143,9 @@ impl Setup {
                 "e.g. 5s, sent before counting",
                 room,
             ),
+            Field::Rate,
+            "Rate (req/s)",
+            self.typed(Field::Rate, &self.rate, "as fast as -c allows", room),
             width,
         );
         self.row(

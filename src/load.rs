@@ -32,6 +32,9 @@ const DETAILS_PER_SECOND: u32 = 1_000;
 
 /// How often a shard measures how busy its thread is
 const BUSY_SAMPLE: Duration = Duration::from_secs(1);
+/// A `--rate` schedule more than this far behind is moved up to now; the
+/// slots skipped are counted as missed (see `Control::pace`)
+const RATE_BACKLOG: Duration = Duration::from_secs(1);
 /// `Control::busy` entry of a shard that hasn't measured yet
 const BUSY_UNKNOWN: u8 = u8::MAX;
 
@@ -133,6 +136,8 @@ impl LoadHandle {
         if paused {
             c.paused_at_ns.store(now, Ordering::Relaxed);
         } else {
+            // A paced run resumes on schedule from now, not with a burst
+            c.next_slot_ns.store(now, Ordering::Relaxed);
             let pause = now - c.paused_at_ns.load(Ordering::Relaxed);
             // A warm-up still going gets its full length too
             let _ = c
@@ -181,6 +186,32 @@ impl LoadHandle {
         let now = c.now_ns();
         (end > now).then(|| Duration::from_nanos(end - now))
     }
+
+    /// `--rate`: start this many requests a second, spread evenly, instead
+    /// of as many as the concurrency allows; None lifts it. The schedule
+    /// starts now, so a change doesn't owe a burst.
+    pub fn set_rate(&self, per_second: Option<f64>) {
+        let c = &self.control;
+        let interval = per_second
+            .filter(|r| *r > 0.0 && r.is_finite())
+            .map_or(0, |r| (1e9 / r).max(1.0) as u64);
+        c.next_slot_ns.store(c.now_ns(), Ordering::Relaxed);
+        c.interval_ns.store(interval, Ordering::Relaxed);
+    }
+
+    /// The rate asked for, in requests per second
+    pub fn rate(&self) -> Option<f64> {
+        match self.control.interval_ns.load(Ordering::Relaxed) {
+            0 => None,
+            ns => Some(1e9 / ns as f64),
+        }
+    }
+
+    /// Requests the rate called for that were never started, because the
+    /// concurrency was all in flight for more than a second at a time
+    pub fn missed(&self) -> u64 {
+        self.control.missed.load(Ordering::Relaxed)
+    }
 }
 
 impl Drop for LoadHandle {
@@ -215,6 +246,12 @@ struct Control {
     busy: Vec<AtomicU8>,
     /// Nanoseconds on `clock` when the warm-up ends; 0 when there is none
     warmup_end_ns: AtomicU64,
+    /// `--rate` as nanoseconds between starts; 0 when unpaced
+    interval_ns: AtomicU64,
+    /// Nanoseconds on `clock` of the next start the schedule allows
+    next_slot_ns: AtomicU64,
+    /// Scheduled starts skipped because the run fell too far behind
+    missed: AtomicU64,
 }
 
 impl Control {
@@ -236,12 +273,49 @@ impl Control {
             changed: Notify::new(),
             busy: (0..shards).map(|_| AtomicU8::new(BUSY_UNKNOWN)).collect(),
             warmup_end_ns: AtomicU64::new(0),
+            interval_ns: AtomicU64::new(0),
+            next_slot_ns: AtomicU64::new(0),
+            missed: AtomicU64::new(0),
         }
     }
 
     fn warming(&self) -> bool {
         let end = self.warmup_end_ns.load(Ordering::Relaxed);
         end != 0 && self.now_ns() < end
+    }
+
+    /// `--rate`: take the next start on the schedule and say how long until
+    /// it; None right away when unpaced or the start is already due. One
+    /// atomic add per request, and sleeps that round up to a millisecond
+    /// only add jitter: the schedule itself keeps the long-run rate true.
+    /// A schedule more than `RATE_BACKLOG` behind is moved up to now and
+    /// the starts in between counted as missed: the concurrency couldn't
+    /// carry the rate, and a burst of the backlog would say nothing true.
+    fn pace(&self) -> Option<Duration> {
+        let interval = self.interval_ns.load(Ordering::Relaxed);
+        if interval == 0 {
+            return None;
+        }
+        let now = self.now_ns();
+        let slot = self.next_slot_ns.fetch_add(interval, Ordering::Relaxed);
+        if slot > now {
+            return Some(Duration::from_nanos(slot - now));
+        }
+        let behind = now - slot;
+        if behind > RATE_BACKLOG.as_nanos() as u64
+            && self
+                .next_slot_ns
+                .compare_exchange(
+                    slot + interval,
+                    now + interval,
+                    Ordering::Relaxed,
+                    Ordering::Relaxed,
+                )
+                .is_ok()
+        {
+            self.missed.fetch_add(behind / interval, Ordering::Relaxed);
+        }
+        None
     }
 
     fn now_ns(&self) -> u64 {
@@ -633,6 +707,12 @@ impl BusyMeter {
 /// Sends requests one after another, whenever it has a turn
 async fn worker(shard: Arc<Shard>, slot: usize) {
     while shard.turn(slot).await {
+        if let Some(wait) = shard.control.pace() {
+            tokio::time::sleep(wait).await;
+            if shard.control.over() {
+                break;
+            }
+        }
         if !shard.control.claim() {
             // The last request of the plan is out: tell every shard
             shard.control.drain();
@@ -747,6 +827,7 @@ mod tests {
             disable_redirects: false,
             proxy: None,
             user_agent: "pepe/test".into(),
+            idle_connections: crate::request::IDLE_CONNECTIONS,
         };
         Request::new(
             url.into(),
@@ -823,6 +904,9 @@ mod tests {
 
         // A timed run's clock starts after the warm-up
         let req = request(&srv.url, "GET", None);
+    async fn a_rate_spreads_the_starts_and_counts_what_it_could_not_carry() {
+        let srv = server(Duration::ZERO).await;
+        let req = request(&srv.url, "GET", None);
         let begin = Instant::now();
         let load = start(
             req.build_clients(1).unwrap().0,
@@ -839,6 +923,39 @@ mod tests {
             begin.elapsed()
         );
         assert!(results.iter().any(|r| r.warmup) && results.iter().any(|r| !r.warmup));
+            4,
+            Plan::Count(20),
+            false,
+        );
+        load.set_rate(Some(50.0));
+        assert_eq!(load.rate().map(f64::round), Some(50.0));
+        let results = drain(load).await;
+        let took = begin.elapsed();
+        assert_eq!(results.len(), 20);
+        // 19 gaps of 20ms, give or take timer slack; not the instant an
+        // unpaced run of 20 would be
+        assert!(took >= Duration::from_millis(300), "took {took:?}");
+        assert!(took <= Duration::from_millis(1_500), "took {took:?}");
+
+        // One worker against 30ms answers can carry ~33/s; asked for
+        // 1,000/s, it falls behind within a second and the rest is missed
+        let srv = server(Duration::from_millis(30)).await;
+        let req = request(&srv.url, "GET", None);
+        let load = start(
+            req.build_clients(1).unwrap().0,
+            req,
+            1,
+            Plan::Duration(Duration::from_millis(1_600)),
+            false,
+        );
+        load.set_rate(Some(1_000.0));
+        let mut rx_load = load;
+        let mut n = 0;
+        while rx_load.rx.recv().await.is_some() {
+            n += 1;
+        }
+        assert!(n < 100, "sent {n}");
+        assert!(rx_load.missed() > 100, "missed {}", rx_load.missed());
     }
 
     #[tokio::test]

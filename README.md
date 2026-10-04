@@ -166,6 +166,7 @@ pepe self-update [--check]     update pepe
 | `--disable-redirects` | | Don't follow redirects |
 | `--warmup <TIME>` | | Send for this long before counting anything (see [Warm-up](#warm-up)) |
 | `--threads <N>` | 1 | Threads sending requests (see [Threads](#threads)) |
+| `--rate <PER_SECOND>` | | Start this many requests a second, spread evenly (see [Arrival rate](#arrival-rate)) |
 | `--curl` | | Read the request from a curl command (see below) |
 | `-i`, `--setup` | | Open the setup screen filled in from the flags |
 | `--json` | | No dashboard: run to completion and print a JSON report |
@@ -195,6 +196,16 @@ The first seconds of a run are not like the rest: connections open, caches fill,
 ```bash
 pepe --warmup 5s -z 1m -c 50 https://example.com
 ```
+
+### Arrival rate
+
+Without `--rate`, pepe is a closed loop: each unit of concurrency sends its next request the moment the last one answers, so a slower target gets fewer requests. That finds the most a target can do. Real traffic doesn't wait for the target: users arrive at their own rate, and a target that slows down gets the same arrivals and a growing queue. `--rate` sends like that, an open loop:
+
+```bash
+pepe https://example.com --rate 500 -c 64 -z 2m
+```
+
+Starts are spread evenly over each second, across every sending thread. `-c` is then the most requests in flight at once, and it has to be enough: at 500 a second and 40 ms a response, 20 are in flight on average (Little's law), more when the target has a bad moment. When the concurrency can't carry the rate, the footer says so as it happens ("behind the rate: 410 of 500 req/s · all 8 in flight; try -c 25"), and the verdict says what was asked and what was sent. A schedule that falls more than a second behind is not caught up with a burst; those starts are counted as missed instead (`generator.rate_missed` in the JSON report), because a burst would say nothing true about the target. A paused run resumes on schedule.
 
 ### Soak runs
 

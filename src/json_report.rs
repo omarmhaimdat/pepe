@@ -73,6 +73,13 @@ pub struct Generator {
     pub warmup_s: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub warmup_requests: Option<u64>,
+    /// `--rate`: the requests per second asked for
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub rate_per_second: Option<f64>,
+    /// Starts the rate called for that never happened, because every unit
+    /// of concurrency was in flight for more than a second at a time
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub rate_missed: Option<u64>,
 }
 
 #[derive(Serialize, Clone)]
@@ -247,12 +254,20 @@ fn ms(d: Duration) -> f64 {
 }
 
 impl JsonReport {
-    pub fn with_generator(mut self, threads: usize, peak_busy_percent: Option<u8>) -> Self {
+    /// `rate`: the `--rate` asked for and the starts it missed
+    pub fn with_generator(
+        mut self,
+        threads: usize,
+        peak_busy_percent: Option<u8>,
+        rate: Option<(f64, u64)>,
+    ) -> Self {
         self.generator = Some(Generator {
             threads,
             peak_busy_percent,
             warmup_s: None,
             warmup_requests: None,
+            rate_per_second: rate.map(|(r, _)| r),
+            rate_missed: rate.map(|(_, missed)| missed),
         });
         self
     }

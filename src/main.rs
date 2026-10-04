@@ -95,6 +95,7 @@ fn start_load(
     if let Some(warmup) = args.warmup() {
         load.set_warmup(warmup);
     }
+    load.set_rate(args.rate);
     Ok((load, connects))
 }
 
@@ -236,7 +237,11 @@ async fn run_json(args: &Cli) -> Result<(), Box<dyn std::error::Error>> {
                   peak_busy,
                   interrupted| {
         json_report::JsonReport::generate(metrics, elapsed, interrupted)
-            .with_generator(load.threads(), peak_busy)
+            .with_generator(
+                load.threads(),
+                peak_busy,
+                load.rate().map(|r| (r, load.missed())),
+            )
             .with_warmup(args.warmup(), warmup_requests)
             .with_timeline(timeline)
             .with_slowest(slowest)
@@ -448,6 +453,8 @@ async fn run_ramp_json(args: &Cli, plan: RampPlan) -> Result<(), Box<dyn std::er
         peak_busy_percent: peak_busy,
         warmup_s: None,
         warmup_requests: None,
+        rate_per_second: None,
+        rate_missed: None,
     })?;
     println!("{}", serde_json::to_string_pretty(&report)?);
     Ok(())
@@ -493,6 +500,8 @@ async fn run_api_json(args: &Cli, run: &api::ApiRun) -> Result<(), Box<dyn std::
     let mut started = Instant::now();
     let mut warming = load.warming();
     let mut warmup_requests = 0;
+    load.set_rate(args.rate);
+    let started = Instant::now();
     let mut total = Metrics::default();
     let mut each = vec![Metrics::default(); which.len()];
     let mut interrupted = false;
@@ -528,7 +537,11 @@ async fn run_api_json(args: &Cli, run: &api::ApiRun) -> Result<(), Box<dyn std::
     }
     let elapsed = started.elapsed();
     let report = json_report::JsonReport::generate(&total, elapsed, interrupted)
-        .with_generator(load.threads(), peak_busy)
+        .with_generator(
+            load.threads(),
+            peak_busy,
+            load.rate().map(|r| (r, load.missed())),
+        )
         .with_warmup(args.warmup(), warmup_requests)
         .with_connects(&connects);
     let mut report = serde_json::to_value(&report)?;
@@ -587,6 +600,7 @@ async fn api_session(
         if let Some(warmup) = shown.warmup() {
             load.set_warmup(warmup);
         }
+        load.set_rate(shown.rate);
         let mut dashboard = ui::Dashboard::new(shown.clone(), plan(&shown))
             .with_endpoints(run.views(&shown, &which))
             .with_connects(connects);
