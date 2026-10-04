@@ -93,6 +93,7 @@ fn start_load(
         plan(args),
         previews,
     );
+    load.set_rate(args.rate);
     Ok((load, connects))
 }
 
@@ -229,7 +230,11 @@ async fn run_json(args: &Cli) -> Result<(), Box<dyn std::error::Error>> {
                   peak_busy,
                   interrupted| {
         json_report::JsonReport::generate(metrics, started.elapsed(), interrupted)
-            .with_generator(load.threads(), peak_busy)
+            .with_generator(
+                load.threads(),
+                peak_busy,
+                load.rate().map(|r| (r, load.missed())),
+            )
             .with_timeline(timeline)
             .with_slowest(slowest)
             .with_anomalies(anomalies)
@@ -426,6 +431,8 @@ async fn run_ramp_json(args: &Cli, plan: RampPlan) -> Result<(), Box<dyn std::er
     report["generator"] = serde_json::to_value(json_report::Generator {
         threads: load.threads(),
         peak_busy_percent: peak_busy,
+        rate_per_second: None,
+        rate_missed: None,
     })?;
     println!("{}", serde_json::to_string_pretty(&report)?);
     Ok(())
@@ -465,6 +472,7 @@ async fn run_api_json(args: &Cli, run: &api::ApiRun) -> Result<(), Box<dyn std::
         plan(args),
         false,
     );
+    load.set_rate(args.rate);
     let started = Instant::now();
     let mut total = Metrics::default();
     let mut each = vec![Metrics::default(); which.len()];
@@ -493,7 +501,11 @@ async fn run_api_json(args: &Cli, run: &api::ApiRun) -> Result<(), Box<dyn std::
     }
     let elapsed = started.elapsed();
     let report = json_report::JsonReport::generate(&total, elapsed, interrupted)
-        .with_generator(load.threads(), peak_busy)
+        .with_generator(
+            load.threads(),
+            peak_busy,
+            load.rate().map(|r| (r, load.missed())),
+        )
         .with_connects(&connects);
     let mut report = serde_json::to_value(&report)?;
     let ms = |d: std::time::Duration| (d.as_secs_f64() * 1_000_000.0).round() / 1000.0;
@@ -548,6 +560,7 @@ async fn api_session(
             plan(&shown),
             true,
         );
+        load.set_rate(shown.rate);
         let mut dashboard = ui::Dashboard::new(shown.clone(), plan(&shown))
             .with_endpoints(run.views(&shown, &which))
             .with_connects(connects);
@@ -626,6 +639,7 @@ async fn replay_session(
             plan(shown),
             true,
         );
+        load.set_rate(shown.rate);
         let mut dashboard = ui::Dashboard::new(shown.clone(), plan(shown))
             .with_rows(ui::Rows::Urls, replay.views(what.rows))
             .with_connects(connects);
@@ -653,6 +667,7 @@ async fn run_replay_json(
         plan(args),
         false,
     );
+    load.set_rate(args.rate);
     let started = Instant::now();
     let mut total = Metrics::default();
     let mut each = vec![Metrics::default(); views.len()];
@@ -681,7 +696,11 @@ async fn run_replay_json(
     }
     let elapsed = started.elapsed();
     let report = json_report::JsonReport::generate(&total, elapsed, interrupted)
-        .with_generator(load.threads(), peak_busy)
+        .with_generator(
+            load.threads(),
+            peak_busy,
+            load.rate().map(|r| (r, load.missed())),
+        )
         .with_connects(&connects);
     let mut report = serde_json::to_value(&report)?;
     let ms = |d: std::time::Duration| (d.as_secs_f64() * 1_000_000.0).round() / 1000.0;
