@@ -3,6 +3,7 @@
 //! run is going.
 
 use ratatui::{
+    layout::Rect,
     style::{Color, Style},
     text::{Line, Span},
 };
@@ -171,6 +172,15 @@ fn pixel(mood: Mood, eyes: Eyes, mouth: Mouth, x: usize, y: usize) -> Option<Col
 /// The mascot, `HEIGHT` lines of at most `WIDTH` cells. `frame` drives the
 /// animation.
 pub fn lines(mood: Mood, frame: u64) -> Vec<Line<'static>> {
+    // Pepe is a picture in colour: with colour off he stays home
+    if super::theme::no_color() {
+        return vec![Line::raw(""); HEIGHT as usize];
+    }
+    sprite(mood, frame)
+}
+
+/// The picture itself, whatever the terminal's colour setting
+fn sprite(mood: Mood, frame: u64) -> Vec<Line<'static>> {
     // Blink for one frame every four seconds while awake
     let blink = matches!(mood, Mood::Happy | Mood::Waiting) && frame % 40 == 39;
     let (eyes, mouth) = face(mood, blink);
@@ -215,6 +225,15 @@ pub fn lines(mood: Mood, frame: u64) -> Vec<Line<'static>> {
         .collect()
 }
 
+/// Keep the sprite's colours as drawn when the theme adjusts the frame: they
+/// are the picture, not the palette. `area` is where the lines were drawn.
+pub fn keep(area: Rect) {
+    super::theme::keep(Rect {
+        height: area.height.min(HEIGHT),
+        ..area
+    });
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -241,7 +260,7 @@ mod tests {
         for mood in MOODS {
             assert!(mood.says().chars().count() <= WIDTH as usize);
             for frame in 0..80 {
-                let lines = lines(mood, frame);
+                let lines = sprite(mood, frame);
                 assert_eq!(lines.len(), HEIGHT as usize);
                 for line in lines {
                     assert!(line.width() <= WIDTH as usize, "{mood:?} {line:?}");

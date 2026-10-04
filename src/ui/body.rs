@@ -15,7 +15,7 @@ const NUMBER: Color = Color::Indexed(215);
 const KEYWORD: Color = Color::Indexed(176);
 const TAG: Color = Color::Indexed(81);
 const ATTR: Color = Color::Indexed(180);
-const COMMENT: Color = Color::Indexed(242);
+const COMMENT: Color = Color::Indexed(245);
 /// Deepest indentation used for markup, so broken HTML can't run off screen
 const MAX_DEPTH: usize = 24;
 /// Text an element can hold and still be shown on one line with its tags

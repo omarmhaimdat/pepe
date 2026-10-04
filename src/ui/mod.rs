@@ -7,6 +7,7 @@ pub(crate) mod mascot;
 mod plan;
 mod ramp;
 mod setup;
+pub mod theme;
 mod view;
 
 pub use plan::{PlanOutcome, PlanScreen};
@@ -736,7 +737,7 @@ impl Dashboard {
         let mut drawn_size = None;
         loop {
             if dirty {
-                terminal.draw(|f| view::render(self, f))?;
+                terminal.draw(|f| theme::draw(f, |f| view::render(self, f)))?;
                 drawn_size = crossterm::terminal::size().ok();
                 dirty = false;
             }
@@ -835,7 +836,7 @@ impl Dashboard {
             KeyCode::Esc if self.filter.is_active() => self.filter.clear(),
             KeyCode::Char('q') | KeyCode::Esc => return Some(Outcome::Quit),
             KeyCode::Char('r') => return Some(Outcome::Restart),
-            KeyCode::Char('E') => return Some(Outcome::Edit),
+            KeyCode::Char('e') | KeyCode::Char('E') => return Some(Outcome::Edit),
             KeyCode::Char('s') | KeyCode::Char('i') if running => {
                 // Stop sending; results so far stay on screen
                 load.stop();
@@ -874,7 +875,7 @@ impl Dashboard {
                 self.filter.status = self.filter.status.next();
                 self.refilter();
             }
-            KeyCode::Char('e') => {
+            KeyCode::Char('x') => {
                 self.filter.status = match self.filter.status {
                     filter::Status::Failed => filter::Status::All,
                     _ => filter::Status::Failed,

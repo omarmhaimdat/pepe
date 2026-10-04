@@ -2,10 +2,10 @@
 //! the bar on the selected line
 
 use ratatui::{
-    layout::Rect,
+    layout::{Constraint, Flex, Layout, Rect},
     style::{Color, Style, Stylize},
     text::{Line, Span},
-    widgets::{Block, BorderType, Paragraph},
+    widgets::{Block, BorderType, Clear, Paragraph},
     Frame,
 };
 
@@ -15,8 +15,9 @@ use super::view::{label, ACCENT, LABEL, RULE};
 pub(super) const SELECTED: Color = Color::Indexed(237);
 /// Background of the field being typed in
 pub(super) const FIELD: Color = Color::Indexed(236);
-/// What's off, or not sent
-pub(super) const FAINT: Color = Color::Indexed(242);
+/// What's off, or not sent: quieter than a label, still 4.8:1 on a dark
+/// background
+pub(super) const FAINT: Color = Color::Indexed(245);
 /// A rounded card with its title in the top border, and `right` at the
 /// other end of it
 pub(super) fn panel(
@@ -62,6 +63,97 @@ pub(super) fn chips(pairs: &[(&'static str, &'static str)]) -> Line<'static> {
         spans.push(label(format!(" {action}  ")));
     }
     Line::from(spans)
+}
+
+/// Key chips that fit `width`: the screen's own keys in order while they
+/// fit, and always the last two — `?` keys and the way out — at the end
+pub(super) fn chips_fit(pairs: &[(&'static str, &'static str)], width: u16) -> Line<'static> {
+    let cost = |(key, action): &(&str, &str)| key.chars().count() + action.chars().count() + 5;
+    let width = width as usize;
+    let keep = pairs.len().min(2);
+    let (rest, tail) = pairs.split_at(pairs.len() - keep);
+    let mut used: usize = tail.iter().map(cost).sum();
+    let mut shown: Vec<(&'static str, &'static str)> = Vec::with_capacity(pairs.len());
+    for pair in rest {
+        if used + cost(pair) > width {
+            break;
+        }
+        used += cost(pair);
+        shown.push(*pair);
+    }
+    shown.extend_from_slice(tail);
+    chips(&shown)
+}
+
+/// A row of views or modes, the selected one filled with the accent. Every
+/// screen draws its tabs this way; a number goes in the title only where
+/// the number keys pick the tab.
+pub(super) fn tabs(titles: &[String], selected: usize) -> Line<'static> {
+    let mut spans = Vec::with_capacity(titles.len() * 2);
+    for (i, title) in titles.iter().enumerate() {
+        if i > 0 {
+            spans.push(Span::raw(" "));
+        }
+        spans.push(if i == selected {
+            Span::styled(
+                format!(" {title} "),
+                Style::new().fg(Color::Black).bg(ACCENT).bold(),
+            )
+        } else {
+            Span::styled(format!(" {title} "), Style::new().fg(LABEL))
+        });
+    }
+    Line::from(spans)
+}
+
+/// The `?` overlay: every key on this screen with what it does, then notes
+/// on anything that needs explaining. `?` or esc closes it, on every screen.
+pub(super) fn help(f: &mut Frame, area: Rect, rows: &[(&str, &str)], notes: &[String]) {
+    let mut lines: Vec<Line> = rows
+        .iter()
+        .map(|(key, action)| {
+            Line::from(vec![
+                Span::styled(format!("  {key:<12}"), Style::new().fg(ACCENT).bold()),
+                Span::raw(action.to_string()),
+            ])
+        })
+        .collect();
+    if !notes.is_empty() {
+        lines.push(Line::raw(""));
+        for note in notes {
+            lines.push(Line::from(label(format!("  {note}"))));
+        }
+    }
+    let width = 60.min(area.width);
+    let height = (lines.len() as u16 + 2).min(area.height);
+    let [popup] = Layout::horizontal([Constraint::Length(width)])
+        .flex(Flex::Center)
+        .areas(area);
+    let [popup] = Layout::vertical([Constraint::Length(height)])
+        .flex(Flex::Center)
+        .areas(popup);
+    f.render_widget(Clear, popup);
+    f.render_widget(
+        Paragraph::new(lines).block(
+            Block::bordered()
+                .border_type(BorderType::Rounded)
+                .border_style(Style::new().fg(ACCENT))
+                .title(Span::styled(" keys ", Style::new().fg(ACCENT).bold())),
+        ),
+        popup,
+    );
+}
+
+/// The line under every screen's help: which pepe, where
+pub(super) fn about_line() -> String {
+    format!(
+        "pepe {} · {}/{} · {} cores · {}",
+        env!("CARGO_PKG_VERSION"),
+        std::env::consts::OS,
+        std::env::consts::ARCH,
+        crate::utils::num_of_cores(),
+        gethostname::gethostname().to_string_lossy()
+    )
 }
 
 /// A pane's title and a rule to the edge, lit when the pane has the keys

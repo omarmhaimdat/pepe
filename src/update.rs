@@ -527,8 +527,20 @@ fn plain(s: &str) -> String {
     out
 }
 
+/// A line on stderr, its colour dropped where colour is off
+macro_rules! sayln {
+    ($($arg:tt)*) => {
+        say(&format!("{}\n", format!($($arg)*)))
+    };
+}
+
+/// Colour on stderr: a terminal, and `NO_COLOR` not set
+fn colorful() -> bool {
+    stderr().is_terminal() && !crate::ui::theme::no_color()
+}
+
 fn say(text: &str) {
-    if stderr().is_terminal() {
+    if colorful() {
         eprint!("{text}");
     } else {
         eprint!("{}", plain(text));
@@ -547,7 +559,11 @@ async fn with_spinner<T>(label: &str, work: impl std::future::Future<Output = T>
     let spinner = tokio::spawn(async move {
         const FRAMES: [&str; 10] = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
         for frame in FRAMES.iter().cycle() {
-            eprint!("\r{BLUE}{frame}{NC} {label}…");
+            if colorful() {
+                eprint!("\r{BLUE}{frame}{NC} {label}…");
+            } else {
+                eprint!("\r{frame} {label}…");
+            }
             let _ = stderr().flush();
             tokio::time::sleep(Duration::from_millis(80)).await;
         }
@@ -568,7 +584,7 @@ pub async fn self_update(
 ) -> Result<(), Box<dyn std::error::Error>> {
     let current = Version::parse(version())?;
     let method = InstallMethod::detect();
-    let color = stderr().is_terminal();
+    let color = colorful();
 
     let latest = with_spinner("looking for a newer pepe", look_up(&current)).await;
     let Some(latest) = latest else {
@@ -576,7 +592,7 @@ pub async fn self_update(
         // means the look got through
         let reached = Cache::read().is_some_and(|c| c.current == current.to_string());
         if !reached {
-            eprintln!(
+            sayln!(
                 "{RED}couldn't reach GitHub{NC} to look for a newer pepe; try again in a moment"
             );
             std::process::exit(2);
@@ -635,7 +651,7 @@ pub async fn self_update(
     if !verbose {
         updater.disable_installer_output();
     }
-    eprintln!();
+    say("\n");
     // The installer runs as a child process, which would stall a spinner
     // on this thread, so the update runs on another, with a runtime of its
     // own for the updater's downloads
@@ -687,10 +703,10 @@ pub async fn self_update(
             }
             refresh_completions(std::path::Path::new(result.install_prefix.as_str()));
         }
-        Ok(None) => eprintln!("{GREEN}pepe {current} is already the latest release.{NC}"),
+        Ok(None) => sayln!("{GREEN}pepe {current} is already the latest release.{NC}"),
         Err(e) => {
-            eprintln!("{RED}✖ the update didn't finish:{NC} {e}");
-            eprintln!(
+            sayln!("{RED}✖ the update didn't finish:{NC} {e}");
+            sayln!(
                 "\nrun it again with {BLUE}pepe self-update --verbose{NC} to see the installer, \
                  or install the release directly:\n  {BLUE}{}{NC}",
                 InstallMethod::Unknown.update_command()
@@ -716,9 +732,9 @@ fn refresh_completions(install_prefix: &std::path::Path) {
             .output()
             .is_ok_and(|out| out.status.success());
         if ok {
-            eprintln!("{GREEN}✔{NC} tab completion for {} refreshed", shell.arg());
+            sayln!("{GREEN}✔{NC} tab completion for {} refreshed", shell.arg());
         } else {
-            eprintln!(
+            sayln!(
                 "{DIM}tab completion for {} wasn't refreshed; run{NC} pepe completions --install",
                 shell.arg()
             );

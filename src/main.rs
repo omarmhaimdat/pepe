@@ -310,11 +310,21 @@ async fn run_json(args: &Cli) -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
+/// The report left in the shell, with the verdict in its colours when the
+/// shell shows them
+fn print_report(report: &str) {
+    let color = stdout().is_terminal() && !ui::theme::no_color();
+    print!("{}", ui::theme::color_report(report, color));
+}
+
 /// After the report: Pepe mentions a newer release, if the look that
 /// started with the run found one
 async fn say_if_newer(check: update::Check) {
     if let Some(latest) = check.finish().await {
-        eprint!("{}", update::notice(&latest, stderr().is_terminal()));
+        eprint!(
+            "{}",
+            update::notice(&latest, stderr().is_terminal() && !ui::theme::no_color())
+        );
     }
 }
 
@@ -640,7 +650,7 @@ async fn run_flow(args: &Cli, what: &cli::FlowArgs) -> Result<(), Box<dyn std::e
         flow_session(&mut shown, flow).await?
     };
     if let Some(report) = report {
-        print!("{report}");
+        print_report(&report);
     }
     say_if_newer(check).await;
     Ok(())
@@ -801,7 +811,7 @@ async fn run_replay(args: &Cli, what: &cli::ReplayArgs) -> Result<(), Box<dyn st
         replay_session(&mut shown, &replay, what).await?
     };
     if let Some(report) = report {
-        print!("{report}");
+        print_report(&report);
     }
     say_if_newer(check).await;
     Ok(())
@@ -979,7 +989,7 @@ async fn run_api(args: &Cli, api: &cli::ApiArgs) -> Result<(), Box<dyn std::erro
         api_session(args, &mut run).await?
     };
     if let Some(report) = report {
-        print!("{report}");
+        print_report(&report);
     }
     say_if_newer(check).await;
     Ok(())
@@ -1110,7 +1120,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let check = update::Check::start();
     let farewell = run_interactive(&args, setup).await?;
     if let Some(report) = farewell.report {
-        print!("{report}");
+        print_report(&report);
     }
     if let Some(command) = farewell.command {
         println!("Run this again with:\n  {command}");
