@@ -95,10 +95,21 @@ pub struct JsonSummary {
     pub data_transfer_bytes: u64,
     pub latency: LatencyStats,
     pub status_codes: BTreeMap<u16, u64>,
+    /// What changed during the run, as it was noticed; left out when nothing did
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub anomalies: Vec<AnomalyNote>,
     /// Failed requests by cause, most frequent first, each with the first
     /// response body seen for it; left out when nothing failed
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub failures: Vec<FailureCause>,
+}
+
+#[derive(Serialize, Clone)]
+pub struct AnomalyNote {
+    /// Seconds since the run started
+    pub at_s: f64,
+    pub kind: &'static str,
+    pub text: String,
 }
 
 #[derive(Serialize, Clone)]
@@ -180,6 +191,19 @@ impl JsonReport {
         self
     }
 
+    /// What the watch noticed during the run
+    pub fn with_anomalies(mut self, anomalies: &[crate::insights::Anomaly]) -> Self {
+        self.summary.anomalies = anomalies
+            .iter()
+            .map(|a| AnomalyNote {
+                at_s: (a.at.as_secs_f64() * 1000.0).round() / 1000.0,
+                kind: a.kind.name(),
+                text: a.text.clone(),
+            })
+            .collect();
+        self
+    }
+
     /// How long the run's connections took to open
     pub fn with_connects(mut self, connects: &crate::request::ConnectTimes) -> Self {
         let hist = connects.histogram();
@@ -251,6 +275,7 @@ impl JsonReport {
                 },
                 // Sorted, so output is stable between runs
                 status_codes: metrics.status_codes.iter().map(|(k, v)| (*k, *v)).collect(),
+                anomalies: Vec::new(),
                 failures: metrics
                     .failures()
                     .top()
