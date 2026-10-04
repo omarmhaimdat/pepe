@@ -1405,6 +1405,7 @@ fn render_stats_tab(d: &Dashboard, f: &mut Frame, area: Rect) {
     let cards = [
         requests_card(d, w),
         latency_card(d, w),
+        phases_card(d, w),
         throughput_card(d, w),
         errors_card(d, w),
         status_card(d, w),
@@ -1530,6 +1531,42 @@ fn latency_card(d: &Dashboard, w: usize) -> Card {
             format::latency(m.mean()),
             format::latency(m.std_dev())
         ),
+        Color::Reset,
+        w,
+    )
+}
+
+/// Where a request's time goes: opening the connection (once per
+/// connection), waiting for the headers, reading the body
+fn phases_card(d: &Dashboard, w: usize) -> Card {
+    use crate::metrics::{Histogram, Phase};
+    let m = &d.metrics;
+    let both = |hist: &Histogram| -> String {
+        if hist.count() == 0 {
+            return "—".into();
+        }
+        let at = |q| format::latency(Duration::from_micros(hist.percentile(q)));
+        format!("{} · p99 {}", at(50.0), at(99.0))
+    };
+    let mut card = Card::new("by phase").row("", "p50 · p99".into(), LABEL, w);
+    if let Some(connects) = d.connect_times() {
+        card = card.row(
+            &format!("connect ×{}", format::count(connects.count())),
+            both(&connects),
+            Color::Reset,
+            w,
+        );
+    }
+    card.row(
+        "first byte",
+        both(m.phase(Phase::FirstByte)),
+        Color::Reset,
+        w,
+    )
+    .row("download", both(m.phase(Phase::Download)), Color::Reset, w)
+    .row(
+        "dns lookup",
+        format::latency(m.avg_dns_lookup()),
         Color::Reset,
         w,
     )

@@ -212,6 +212,8 @@ pub struct Dashboard {
     detailed: VecDeque<(u64, usize)>,
     detail_bytes: usize,
     notice: Option<(String, Instant)>,
+    /// How long the run's connections took to open, when measured
+    connects: Option<std::sync::Arc<crate::request::ConnectTimes>>,
     /// `--snapshot`: where the report so far is written every minute
     snapshot: Option<std::path::PathBuf>,
 }
@@ -255,15 +257,24 @@ impl Dashboard {
             detailed: VecDeque::new(),
             detail_bytes: 0,
             notice: None,
+            connects: None,
             snapshot,
         }
     }
 
     /// The JSON report of the run so far, as `--json` would print it
     fn report_json(&self, load: &LoadHandle) -> crate::json_report::JsonReport {
-        crate::json_report::JsonReport::generate(&self.metrics, self.elapsed(), self.interrupted)
-            .with_generator(load.threads(), self.peak_busy)
-            .with_timeline(&self.timeline)
+        let report = crate::json_report::JsonReport::generate(
+            &self.metrics,
+            self.elapsed(),
+            self.interrupted,
+        )
+        .with_generator(load.threads(), self.peak_busy)
+        .with_timeline(&self.timeline);
+        match &self.connects {
+            Some(connects) => report.with_connects(connects),
+            None => report,
+        }
     }
 
     /// Write the snapshot, if one was asked for; a failure is said once
@@ -279,6 +290,17 @@ impl Dashboard {
         {
             self.notify(format!("couldn't write {}: {e}", path.display()));
         }
+    }
+
+    /// Show how long connections took to open, from the clients' timing
+    pub fn with_connects(mut self, connects: std::sync::Arc<crate::request::ConnectTimes>) -> Self {
+        self.connects = Some(connects);
+        self
+    }
+
+    /// Connection times so far, if measured
+    fn connect_times(&self) -> Option<crate::metrics::Histogram> {
+        self.connects.as_ref().map(|c| c.histogram())
     }
 
     /// API mode: show results per endpoint, starting on the Endpoints tab
