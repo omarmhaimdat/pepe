@@ -13,9 +13,12 @@ on:
 jobs:
   publish-docker:
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
+    # No permissions of its own: a called workflow may only ask for what
+    # the caller grants, and release.yml grants publish jobs `packages:
+    # write` and `id-token: write`. Asking for `contents: read` on top made
+    # the whole release workflow invalid at startup (v0.10.0's first run).
+    # Checkout of this public repository doesn't need it, as the Homebrew
+    # and R2 jobs show.
     env:
       PLAN: ${{ inputs.plan }}
       IMAGE: ghcr.io/${{ github.repository_owner }}/pepe
