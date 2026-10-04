@@ -120,6 +120,7 @@ pub struct EndpointView {
 pub enum Rows {
     Endpoints,
     Steps,
+    Urls,
 }
 
 impl Rows {
@@ -127,6 +128,7 @@ impl Rows {
         match self {
             Rows::Endpoints => "Endpoints",
             Rows::Steps => "Steps",
+            Rows::Urls => "URLs",
         }
     }
 
@@ -134,6 +136,7 @@ impl Rows {
         match self {
             Rows::Endpoints => "endpoints",
             Rows::Steps => "steps",
+            Rows::Urls => "urls",
         }
     }
 
@@ -141,6 +144,7 @@ impl Rows {
         match self {
             Rows::Endpoints => "endpoint",
             Rows::Steps => "step",
+            Rows::Urls => "share  url",
         }
     }
 }
@@ -342,6 +346,12 @@ impl Dashboard {
         self.endpoints = endpoints;
         self.tab = Tab::Endpoints;
         self
+    }
+
+    /// Rows of another kind than endpoints, e.g. a replayed log's URLs
+    pub fn with_rows(mut self, rows: Rows, views: Vec<EndpointView>) -> Self {
+        self.rows = rows;
+        self.with_endpoints(views)
     }
 
     /// A flow's steps, one row each, like endpoints
