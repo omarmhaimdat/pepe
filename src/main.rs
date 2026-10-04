@@ -217,6 +217,8 @@ async fn run_json(args: &Cli) -> Result<(), Box<dyn std::error::Error>> {
     let mut warmup_requests = 0;
     let mut metrics = Metrics::default();
     let mut timeline = timeline::Timeline::default();
+    let mut watch = insights::Watch::default();
+    let mut anomalies: Vec<insights::Anomaly> = Vec::new();
     let mut interrupted = false;
     let mut pump = tokio::time::interval(PUMP);
     let mut snapshots = tokio::time::interval(SNAPSHOT_EVERY);
@@ -224,6 +226,7 @@ async fn run_json(args: &Cli) -> Result<(), Box<dyn std::error::Error>> {
     let mut peak_busy = None;
     let report = |metrics: &Metrics,
                   timeline: &timeline::Timeline,
+                  anomalies: &[insights::Anomaly],
                   load: &LoadHandle,
                   elapsed: std::time::Duration,
                   warmup_requests: u64,
@@ -233,6 +236,7 @@ async fn run_json(args: &Cli) -> Result<(), Box<dyn std::error::Error>> {
             .with_generator(load.threads(), peak_busy)
             .with_warmup(args.warmup(), warmup_requests)
             .with_timeline(timeline)
+            .with_anomalies(anomalies)
             .with_connects(&connects)
     };
 
@@ -254,6 +258,7 @@ async fn run_json(args: &Cli) -> Result<(), Box<dyn std::error::Error>> {
                 });
                 if !warming {
                     timeline.advance(started.elapsed());
+                    anomalies.extend(watch.observe(timeline.samples(), false));
                 }
                 if over {
                     break;
@@ -261,7 +266,7 @@ async fn run_json(args: &Cli) -> Result<(), Box<dyn std::error::Error>> {
             }
             _ = snapshots.tick(), if args.snapshot.is_some() => {
                 let path = args.snapshot.as_ref().expect("checked");
-                if let Err(e) = report(&metrics, &timeline, &load, started.elapsed(), warmup_requests, peak_busy, interrupted).with_snapshot(true).write_to(path) {
+                if let Err(e) = report(&metrics, &timeline, &anomalies, &load, started.elapsed(), warmup_requests, peak_busy, interrupted).with_snapshot(true).write_to(path) {
                     eprintln!("couldn't write the snapshot to {}: {e}", path.display());
                 }
             }
@@ -276,6 +281,7 @@ async fn run_json(args: &Cli) -> Result<(), Box<dyn std::error::Error>> {
     let report = report(
         &metrics,
         &timeline,
+        &anomalies,
         &load,
         started.elapsed(),
         warmup_requests,

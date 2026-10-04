@@ -548,7 +548,7 @@ fn render_footer(d: &Dashboard, f: &mut Frame, area: Rect) {
     // A notice has the right-hand end of the footer; otherwise a warning
     // that pepe itself is the limit
     let warning = match &d.notice {
-        Some((notice, _)) => Some(notice.clone()),
+        Some((notice, _, _)) => Some(notice.clone()),
         None => d.saturation_warning(),
     };
     if let Some(notice) = warning {
