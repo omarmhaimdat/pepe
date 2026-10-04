@@ -34,6 +34,8 @@ _pepe() {
 '--proxy=[Proxy server URL\: http\://user\:pass@host\:port or socks5\://host\:port]:PROXY:_default' \
 '--trace-header=[Response header holding the request id to show for the slowest requests and in the inspector, so they can be found in the server'\''s logs; without it, X-Request-Id, traceparent, CF-Ray, X-Amzn-Trace-Id and other common ones are looked for]:NAME:_default' \
 '--snapshot=[Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run'\''s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run]:FILE:_files' \
+'--config=[Read settings from this file instead of ./pepe.toml; flags on the command line win over it]:FILE:_files' \
+'--write-config=[Write the settings as they stand to this file, as a pepe.toml, and exit]:FILE:_files' \
 '-c+[Number of concurrent requests at a time]:CONCURRENCY:_default' \
 '--concurrency=[Number of concurrent requests at a time]:CONCURRENCY:_default' \
 '-u+[User-Agent string, default is pepe/{version}]:USER_AGENT:_default' \
@@ -83,6 +85,8 @@ _arguments "${_arguments_options[@]}" : \
 '--proxy=[Proxy server URL\: http\://user\:pass@host\:port or socks5\://host\:port]:PROXY:_default' \
 '--trace-header=[Response header holding the request id to show for the slowest requests and in the inspector, so they can be found in the server'\''s logs; without it, X-Request-Id, traceparent, CF-Ray, X-Amzn-Trace-Id and other common ones are looked for]:NAME:_default' \
 '--snapshot=[Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run'\''s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run]:FILE:_files' \
+'--config=[Read settings from this file instead of ./pepe.toml; flags on the command line win over it]:FILE:_files' \
+'--write-config=[Write the settings as they stand to this file, as a pepe.toml, and exit]:FILE:_files' \
 '-c+[Number of concurrent requests at a time]:CONCURRENCY:_default' \
 '--concurrency=[Number of concurrent requests at a time]:CONCURRENCY:_default' \
 '-u+[User-Agent string, default is pepe/{version}]:USER_AGENT:_default' \
@@ -122,6 +126,8 @@ _arguments "${_arguments_options[@]}" : \
 '--proxy=[Proxy server URL\: http\://user\:pass@host\:port or socks5\://host\:port]:PROXY:_default' \
 '--trace-header=[Response header holding the request id to show for the slowest requests and in the inspector, so they can be found in the server'\''s logs; without it, X-Request-Id, traceparent, CF-Ray, X-Amzn-Trace-Id and other common ones are looked for]:NAME:_default' \
 '--snapshot=[Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run'\''s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run]:FILE:_files' \
+'--config=[Read settings from this file instead of ./pepe.toml; flags on the command line win over it]:FILE:_files' \
+'--write-config=[Write the settings as they stand to this file, as a pepe.toml, and exit]:FILE:_files' \
 '-c+[Number of concurrent requests at a time]:CONCURRENCY:_default' \
 '--concurrency=[Number of concurrent requests at a time]:CONCURRENCY:_default' \
 '-u+[User-Agent string, default is pepe/{version}]:USER_AGENT:_default' \
@@ -168,6 +174,8 @@ _arguments "${_arguments_options[@]}" : \
 '--proxy=[Proxy server URL\: http\://user\:pass@host\:port or socks5\://host\:port]:PROXY:_default' \
 '--trace-header=[Response header holding the request id to show for the slowest requests and in the inspector, so they can be found in the server'\''s logs; without it, X-Request-Id, traceparent, CF-Ray, X-Amzn-Trace-Id and other common ones are looked for]:NAME:_default' \
 '--snapshot=[Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run'\''s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run]:FILE:_files' \
+'--config=[Read settings from this file instead of ./pepe.toml; flags on the command line win over it]:FILE:_files' \
+'--write-config=[Write the settings as they stand to this file, as a pepe.toml, and exit]:FILE:_files' \
 '-c+[Number of concurrent requests at a time]:CONCURRENCY:_default' \
 '--concurrency=[Number of concurrent requests at a time]:CONCURRENCY:_default' \
 '-u+[User-Agent string, default is pepe/{version}]:USER_AGENT:_default' \
@@ -184,7 +192,7 @@ _arguments "${_arguments_options[@]}" : \
 '--json[Output results in JSON format]' \
 '-i[Open the setup screen to review or change the settings before starting (it opens by itself when no URL is given)]' \
 '--setup[Open the setup screen to review or change the settings before starting (it opens by itself when no URL is given)]' \
-':spec -- The OpenAPI spec\: a file or URL, JSON or YAML:_default' \
+'::spec -- The OpenAPI spec\: a file or URL, JSON or YAML (or `spec` in pepe.toml):_default' \
 && ret=0
 ;;
 (ramp)
@@ -213,6 +221,8 @@ _arguments "${_arguments_options[@]}" : \
 '--proxy=[Proxy server URL\: http\://user\:pass@host\:port or socks5\://host\:port]:PROXY:_default' \
 '--trace-header=[Response header holding the request id to show for the slowest requests and in the inspector, so they can be found in the server'\''s logs; without it, X-Request-Id, traceparent, CF-Ray, X-Amzn-Trace-Id and other common ones are looked for]:NAME:_default' \
 '--snapshot=[Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run'\''s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run]:FILE:_files' \
+'--config=[Read settings from this file instead of ./pepe.toml; flags on the command line win over it]:FILE:_files' \
+'--write-config=[Write the settings as they stand to this file, as a pepe.toml, and exit]:FILE:_files' \
 '-c+[Number of concurrent requests at a time]:CONCURRENCY:_default' \
 '--concurrency=[Number of concurrent requests at a time]:CONCURRENCY:_default' \
 '-u+[User-Agent string, default is pepe/{version}]:USER_AGENT:_default' \

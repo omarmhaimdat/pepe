@@ -116,6 +116,19 @@ pub struct Cli {
     #[arg(short = 'i', long, global = true)]
     pub setup: bool,
 
+    /// Read settings from this file instead of ./pepe.toml; flags on the
+    /// command line win over it
+    #[arg(long, global = true, value_name = "FILE")]
+    pub config: Option<std::path::PathBuf>,
+
+    /// Write the settings as they stand to this file, as a pepe.toml, and exit
+    #[arg(long, global = true, value_name = "FILE")]
+    pub write_config: Option<std::path::PathBuf>,
+
+    /// The config file that was read, if one was
+    #[arg(skip)]
+    pub config_loaded: Option<std::path::PathBuf>,
+
     /// HTTP url to request
     #[arg(default_value_t = String::from(""))]
     pub url: String,
@@ -207,7 +220,8 @@ impl Default for RampArgs {
 
 #[derive(clap::Args, Debug, Clone, Default)]
 pub struct ApiArgs {
-    /// The OpenAPI spec: a file or URL, JSON or YAML
+    /// The OpenAPI spec: a file or URL, JSON or YAML (or `spec` in pepe.toml)
+    #[arg(default_value_t = String::new(), hide_default_value = true)]
     pub spec: String,
 
     /// Credentials: bearer:TOKEN, basic:USER:PASSWORD, apikey:VALUE,
