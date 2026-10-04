@@ -494,14 +494,13 @@ async fn run_api_json(args: &Cli, run: &api::ApiRun) -> Result<(), Box<dyn std::
         plan(args),
         false,
     );
+    load.set_rate(args.rate);
     if let Some(warmup) = args.warmup() {
         load.set_warmup(warmup);
     }
     let mut started = Instant::now();
     let mut warming = load.warming();
     let mut warmup_requests = 0;
-    load.set_rate(args.rate);
-    let started = Instant::now();
     let mut total = Metrics::default();
     let mut each = vec![Metrics::default(); which.len()];
     let mut interrupted = false;

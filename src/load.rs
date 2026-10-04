@@ -881,29 +881,6 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn warmup_requests_are_marked_and_not_the_plans() {
-        let srv = server(Duration::ZERO).await;
-        let req = request(&srv.url, "GET", None);
-        let load = start(
-            req.build_clients(1).unwrap().0,
-            req,
-            2,
-            Plan::Count(10),
-            false,
-        );
-        load.set_warmup(Duration::from_millis(200));
-        assert!(load.warming() && load.warmup_left().is_some());
-        let results = drain(load).await;
-        let warm = results.iter().filter(|r| r.warmup).count();
-        assert_eq!(
-            results.len() - warm,
-            10,
-            "the plan's ten, after the warm-up"
-        );
-        assert!(warm > 0, "warm-up requests were sent");
-
-        // A timed run's clock starts after the warm-up
-        let req = request(&srv.url, "GET", None);
     async fn a_rate_spreads_the_starts_and_counts_what_it_could_not_carry() {
         let srv = server(Duration::ZERO).await;
         let req = request(&srv.url, "GET", None);
@@ -911,18 +888,6 @@ mod tests {
         let load = start(
             req.build_clients(1).unwrap().0,
             req,
-            1,
-            Plan::Duration(Duration::from_millis(200)),
-            false,
-        );
-        load.set_warmup(Duration::from_millis(200));
-        let results = drain(load).await;
-        assert!(
-            begin.elapsed() >= Duration::from_millis(390),
-            "{:?}",
-            begin.elapsed()
-        );
-        assert!(results.iter().any(|r| r.warmup) && results.iter().any(|r| !r.warmup));
             4,
             Plan::Count(20),
             false,
@@ -956,6 +921,48 @@ mod tests {
         }
         assert!(n < 100, "sent {n}");
         assert!(rx_load.missed() > 100, "missed {}", rx_load.missed());
+    }
+
+    #[tokio::test]
+    async fn warmup_requests_are_marked_and_not_the_plans() {
+        let srv = server(Duration::ZERO).await;
+        let req = request(&srv.url, "GET", None);
+        let load = start(
+            req.build_clients(1).unwrap().0,
+            req,
+            2,
+            Plan::Count(10),
+            false,
+        );
+        load.set_warmup(Duration::from_millis(200));
+        assert!(load.warming() && load.warmup_left().is_some());
+        let results = drain(load).await;
+        let warm = results.iter().filter(|r| r.warmup).count();
+        assert_eq!(
+            results.len() - warm,
+            10,
+            "the plan's ten, after the warm-up"
+        );
+        assert!(warm > 0, "warm-up requests were sent");
+
+        // A timed run's clock starts after the warm-up
+        let req = request(&srv.url, "GET", None);
+        let begin = Instant::now();
+        let load = start(
+            req.build_clients(1).unwrap().0,
+            req,
+            1,
+            Plan::Duration(Duration::from_millis(200)),
+            false,
+        );
+        load.set_warmup(Duration::from_millis(200));
+        let results = drain(load).await;
+        assert!(
+            begin.elapsed() >= Duration::from_millis(390),
+            "{:?}",
+            begin.elapsed()
+        );
+        assert!(results.iter().any(|r| r.warmup) && results.iter().any(|r| !r.warmup));
     }
 
     #[tokio::test]

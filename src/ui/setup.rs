@@ -615,6 +615,7 @@ impl Setup {
                     .map_err(|_| format!("warm-up {text:?} needs a unit: 5s, 1m"))?;
                 Some(text.to_string())
             }
+        };
         cli.rate = match self.rate.trim() {
             "" => None,
             text => Some(f64::from(number("rate", text)?.max(1))),
@@ -1143,6 +1144,10 @@ impl Setup {
                 "e.g. 5s, sent before counting",
                 room,
             ),
+            width,
+        );
+        self.row(
+            &mut options,
             Field::Rate,
             "Rate (req/s)",
             self.typed(Field::Rate, &self.rate, "as fast as -c allows", room),
