@@ -281,7 +281,7 @@ pepe -i -c 50 -z 30s https://example.com
 - `↑` `↓` move between fields, `←` `→` change a choice, `enter` starts.
 - Paste a curl command anywhere and the form is filled in from it.
 - `ctrl-t` sends the request once and shows the response, to check it before the run.
-- The command card always shows the flags that reproduce the form. It's printed to your shell when you quit, and `E` in the dashboard brings you back to the form.
+- The command card always shows the flags that reproduce the form. It's printed to your shell when you quit, and `e` in the dashboard brings you back to the form.
 
 ### Ramp mode: finding where the target stops keeping up
 
@@ -313,6 +313,7 @@ Once four clean steps are in, a saturation curve (the Universal Scalability Law)
 | `n` | End this step now and go on to the next |
 | `s` | Stop the ramp here and keep the results |
 | `r` / `e` | Run again / back to the setup screen |
+| `?` | Show all keys |
 | `q` / `Ctrl-C` | Quit; the table and the result are printed to your shell |
 
 `--json` runs the ramp without a screen and prints every step, the findings, and `capacity` (`requests_per_second`, `concurrency`, `extrapolated`, `latency_doubles_at_concurrency`; `null` when the curve hadn't bent).
@@ -387,7 +388,7 @@ It opens on a plan screen. Nothing is sent, and no endpoint is switched on, unti
 - `c`, `n`, `z` change concurrency, requests and duration; `u` the server; `a` the credentials; `g` starts the run.
 - Endpoints that still need a value, and writes (POST, PUT, PATCH, DELETE), are never switched on in bulk: you switch those on one by one.
 
-The run is the usual dashboard, with an **Endpoints** view in front: requests, throughput, p50, p99, errors and status codes for each endpoint. `enter` on one shows its requests, and `E` goes back to the plan.
+The run is the usual dashboard, with an **Endpoints** view in front: requests, throughput, p50, p99, errors and status codes for each endpoint. `enter` on one shows its requests, and `e` goes back to the plan.
 
 Everything on the plan screen has a flag:
 
@@ -480,6 +481,8 @@ pepe -n 1000 -c 10 -p socks5://username:password@proxy:port https://example.com
 | `PEPE_NO_UPDATE_CHECK` | Set to anything to skip the once-a-day look for a newer release |
 | `PEPE_GITHUB_TOKEN` | A GitHub token for `pepe self-update`, for forks or rate-limited CI |
 | `PEPE_CACHE_DIR` | Where the update check keeps its answer (defaults to the OS cache directory) |
+| `NO_COLOR` | Set to anything to draw without colour: selections in reverse video, the heatmap in shades, the verdict uncoloured |
+| `PEPE_THEME` | `light` or `dark`, to match the terminal's background. Unset, pepe reads `COLORFGBG` where the terminal sets it, else assumes dark |
 
 ## The dashboard
 
@@ -497,15 +500,15 @@ Pepe, the chili in the corner, reacts to how the run is going. While it runs, ea
 | `+` / `-` | Raise or lower concurrency by about 10%, live |
 | `s` / `i` | Stop sending and keep the results on screen |
 | `r` | Restart with the same settings (and the current concurrency) |
-| `E` | Back to the setup screen (or, in API mode, the plan), to change the settings and run again |
+| `e` | Back to the setup screen (or, in API mode, the plan), to change the settings and run again |
 | `tab` / `←` `→` / `1` `2` `3` | Switch view |
-| `↑` `↓` / `j` `k`, `PgUp` `PgDn`, `g` `G` | Select a request in the log (newer / older) |
+| `↑` `↓` / `j` `k`, `PgUp` `PgDn`, `home` `end` | Select a request in the log (newer / older) |
 | `f` | Filter requests by status: 2xx, 3xx, 4xx, 5xx, no response, failed |
 | `l` | Filter requests by latency: at or above p50, p90 or p99 |
 | `/` | Search the status and response text |
-| `e` / `c` | Show only failed requests / clear all filters |
+| `x` / `c` | Show only failed requests / clear all filters |
 | `enter` | Inspect the selected request: `↑`/`↓` (or the trackpad), `u`/`d` and `g`/`G` scroll the response, `←`/`→` walk to the newer/older request, `[`/`]` jump to the nearest one kept in full, `v` switches between formatted and raw, `esc` goes back |
-| `?` | Show all keys |
+| `?` | Show all keys, here and on the setup (`F1`), ramp and API screens |
 | `q` / `esc` / `Ctrl-C` | Quit |
 
 ### What pepe measures

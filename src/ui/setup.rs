@@ -15,9 +15,9 @@ use ratatui::{
     Frame, Terminal,
 };
 
-use super::kit::{caption, chips, marker, panel, FAINT, SELECTED};
+use super::kit::{about_line, caption, chips_fit, help, marker, panel, tabs, FAINT, SELECTED};
 use super::view::{label, status_color, truncate, value, ACCENT, BAD, GOOD, LABEL, RULE, WARN};
-use super::{body, format, mascot};
+use super::{body, format, mascot, theme};
 use crate::cli::{ApiArgs, Command, RampArgs};
 use crate::curl;
 use crate::load::Plan;
@@ -172,6 +172,8 @@ pub struct Setup {
     tried: Option<ResponseStats>,
     /// Where ctrl-s writes the form: the config read, or ./pepe.toml
     config_path: std::path::PathBuf,
+    /// The keys overlay is open
+    show_help: bool,
 }
 
 impl Setup {
@@ -240,6 +242,7 @@ impl Setup {
                 .clone()
                 .or_else(|| cli.config_loaded.clone())
                 .unwrap_or_else(|| crate::config::DEFAULT_PATH.into()),
+            show_help: false,
         };
         let first = setup.focused();
         setup.cursor = setup.text(first).map_or(0, |t| t.chars().count());
@@ -446,8 +449,19 @@ impl Setup {
         let field = self.focused();
         let editable =
             self.text(field).is_some() || matches!(field, Field::AddHeader | Field::AddUntil);
+        if self.show_help {
+            // Any key closes it; ctrl-c still quits
+            self.show_help = false;
+            if key.code == KeyCode::Char('c') && ctrl {
+                return Some(Action::Quit);
+            }
+            return None;
+        }
         match key.code {
             KeyCode::Char('c') if ctrl => return Some(Action::Quit),
+            // `?` is typed into a text field (URLs have them): F1 always works
+            KeyCode::F(1) => self.show_help = true,
+            KeyCode::Char('?') if !editable => self.show_help = true,
             KeyCode::Esc => return Some(Action::Quit),
             KeyCode::Enter => return Some(Action::Start),
             KeyCode::Char('t') if ctrl => return Some(Action::Try),
@@ -689,7 +703,7 @@ impl Setup {
         tokio::pin!(ctrl_c);
 
         loop {
-            terminal.draw(|f| self.render(f))?;
+            terminal.draw(|f| theme::draw(f, |f| self.render(f)))?;
             let event = tokio::select! {
                 _ = &mut ctrl_c => return Ok(SetupOutcome::Quit),
                 event = events.next() => event,
@@ -736,7 +750,7 @@ impl Setup {
                 }
                 Some(Action::Try) => {
                     self.message = Some(("sending one request…".into(), false));
-                    terminal.draw(|f| self.render(f))?;
+                    terminal.draw(|f| theme::draw(f, |f| self.render(f)))?;
                     self.try_once().await;
                 }
                 None => {}
@@ -791,25 +805,49 @@ impl Setup {
             ))
         };
         f.render_widget(Paragraph::new(line), status);
+        let start = if self.mode == Mode::Api {
+            "load"
+        } else {
+            "start"
+        };
         f.render_widget(
-            Paragraph::new(chips(&[
-                ("↑↓", "move"),
-                ("←→", "change"),
-                ("tab", "mode"),
-                (
-                    "enter",
-                    if self.mode == Mode::Api {
-                        "load"
-                    } else {
-                        "start"
-                    },
-                ),
-                ("ctrl-t", "try once"),
-                ("ctrl-s", "save pepe.toml"),
-                ("esc", "quit"),
-            ])),
+            Paragraph::new(chips_fit(
+                &[
+                    ("enter", start),
+                    ("ctrl-t", "try once"),
+                    ("↑↓", "move"),
+                    ("←→", "change"),
+                    ("tab", "mode"),
+                    ("ctrl-s", "save pepe.toml"),
+                    ("F1", "keys"),
+                    ("esc", "quit"),
+                ],
+                footer.width,
+            )),
             footer,
         );
+        if self.show_help {
+            help(
+                f,
+                area,
+                &[
+                    ("enter", "start the run (API: load the spec)"),
+                    ("ctrl-t", "send the request once and show the response"),
+                    ("↑ ↓", "move between fields"),
+                    ("← →", "change a choice, or move in the text"),
+                    ("tab", "switch mode: single URL, ramp, API"),
+                    ("ctrl-s", "save the form as pepe.toml"),
+                    ("F1 / ?", "this help (? where you can't type)"),
+                    ("esc", "quit"),
+                ],
+                &[
+                    "Paste a curl command anywhere, from a browser's".into(),
+                    "\"Copy as cURL\", to fill in the whole form.".into(),
+                    String::new(),
+                    about_line(),
+                ],
+            );
+        }
     }
 
     fn render_header(&self, f: &mut Frame, area: Rect, tall: bool) {
@@ -823,6 +861,7 @@ impl Setup {
             let mut lines = mascot::lines(mascot::Mood::Waiting, 0);
             lines.push(Line::styled("set me up", Style::new().fg(ACCENT).italic()));
             f.render_widget(Paragraph::new(lines), pet);
+            mascot::keep(pet);
             // Beside the mascot, in the middle of its height
             Rect {
                 y: main.y + 2,
@@ -832,19 +871,8 @@ impl Setup {
         } else {
             area
         };
-        let mut tabs = Vec::new();
-        for mode in Mode::ALL {
-            tabs.push(if mode == self.mode {
-                Span::styled(
-                    format!(" {} ", mode.name()),
-                    Style::new().bg(ACCENT).fg(Color::Black).bold(),
-                )
-            } else {
-                Span::styled(format!(" {} ", mode.name()), Style::new().fg(LABEL))
-            });
-            tabs.push(Span::raw(" "));
-        }
-        tabs.push(Span::styled("  tab switches", Style::new().fg(FAINT)));
+        let titles: Vec<String> = Mode::ALL.iter().map(|m| m.name().to_string()).collect();
+        let selected = Mode::ALL.iter().position(|&m| m == self.mode).unwrap_or(0);
         let lines = vec![
             Line::from(vec![
                 Span::styled(" pepe ", Style::new().bg(ACCENT).fg(Color::Black).bold()),
@@ -858,7 +886,7 @@ impl Setup {
                     None => Span::raw(""),
                 },
             ]),
-            Line::from(tabs),
+            tabs(&titles, selected),
             Line::from(label(truncate(self.mode.about(), area.width as usize))),
         ];
         // A line of air under the brand when there's the height for it
@@ -1040,7 +1068,7 @@ impl Setup {
                     ),
                 ]
             } else {
-                vec![Span::styled("+ add", Style::new().fg(FAINT))]
+                vec![Span::styled("+ add", Style::new().fg(LABEL))]
             },
             target_width,
         );
@@ -1105,7 +1133,7 @@ impl Setup {
                         ),
                     ]
                 } else {
-                    vec![Span::styled("+ add", Style::new().fg(FAINT))]
+                    vec![Span::styled("+ add", Style::new().fg(LABEL))]
                 },
                 width,
             );

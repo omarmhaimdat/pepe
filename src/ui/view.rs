@@ -8,12 +8,14 @@ use ratatui::{
     layout::{Alignment, Constraint, Flex, Layout, Rect},
     style::{Color, Style, Stylize},
     text::{Line, Span},
-    widgets::{Block, BorderType, Clear, Paragraph, Row, Table, Tabs, Wrap},
+    widgets::{Paragraph, Row, Table, Wrap},
     Frame,
 };
 
-use super::{bigtext, body, filter, format, mascot, progress_percent, Dashboard, LogEntry, Tab};
-use crate::insights::Level;
+use super::{
+    bigtext, body, filter, format, kit, mascot, progress_percent, Dashboard, LogEntry, Tab,
+};
+use crate::insights::{Level, BAD_TAIL};
 use crate::load::Plan;
 use crate::response::ResponseStats;
 use crate::timeline::{bin_floor_us, bin_of, LatencyBins, BINS, BINS_PER_DECADE};
@@ -25,8 +27,9 @@ use crate::utils::num_of_cores;
 
 /// The one accent color: cyan
 pub(super) const ACCENT: Color = Color::Indexed(81);
-/// Labels: readable, but quieter than values
-pub(super) const LABEL: Color = Color::Indexed(246);
+/// Labels: readable, but quieter than values (6.9:1 on a dark background,
+/// 4.8:1 on the selected line)
+pub(super) const LABEL: Color = Color::Indexed(248);
 /// Rules and axes
 pub(super) const RULE: Color = Color::Indexed(239);
 pub(super) const GOOD: Color = Color::Green;
@@ -150,7 +153,8 @@ pub(super) fn status_color(code: u16) -> Color {
     match code {
         100..=199 => Color::Blue,
         200..=299 => GOOD,
-        300..=399 => Color::Cyan,
+        // A redirect is neither good nor bad, and cyan reads as the accent
+        300..=399 => Color::Reset,
         400..=499 => WARN,
         _ => BAD,
     }
@@ -182,13 +186,24 @@ pub(super) fn bar(fraction: f64, width: usize) -> String {
     out
 }
 
-/// Green → yellow → red as `i` goes from 0 to `n - 1`
-fn heat(i: usize, n: usize) -> Color {
-    let t = i as f64 / n.saturating_sub(1).max(1) as f64;
-    match t {
-        t if t < 0.45 => GOOD,
-        t if t < 0.8 => WARN,
-        _ => BAD,
+/// A latency in the terminal's own color unless it is far enough above
+/// the median that the verdict would call it out: color says whether
+/// something is healthy, never where it ranks
+fn latency_color(v: Duration, p50: Duration) -> Color {
+    let p50 = p50.as_micros() as f64;
+    if p50 > 0.0 && v.as_micros() as f64 / p50 >= BAD_TAIL {
+        WARN
+    } else {
+        Color::Reset
+    }
+}
+
+/// Bars beside a latency: quiet unless the value itself is flagged
+fn latency_bar_color(color: Color) -> Color {
+    if color == Color::Reset {
+        LABEL
+    } else {
+        color
     }
 }
 
@@ -252,6 +267,7 @@ fn render_header(d: &Dashboard, f: &mut Frame, area: Rect) {
         let mut lines = mascot::lines(mood, d.frame);
         lines.push(Line::styled(mood.says(), Style::new().fg(ACCENT).italic()));
         f.render_widget(Paragraph::new(lines), pet);
+        mascot::keep(pet);
     }
 
     let [title, progress, _, rest] = Layout::vertical([
@@ -390,8 +406,12 @@ fn render_hero(d: &Dashboard, f: &mut Frame, area: Rect) {
     };
     let heroes = [
         ("req/s", format::compact(current_rps), ACCENT),
-        ("p50", format::latency(m.percentile(50.0)), GOOD),
-        ("p99", format::latency(m.percentile(99.0)), WARN),
+        ("p50", format::latency(m.percentile(50.0)), Color::Reset),
+        (
+            "p99",
+            format::latency(m.percentile(99.0)),
+            latency_color(m.percentile(99.0), m.percentile(50.0)),
+        ),
         ("success", success_text, success_color),
     ];
 
@@ -479,84 +499,96 @@ fn fit_parts(parts: &[String], width: usize) -> String {
 }
 
 fn render_tabs(d: &Dashboard, f: &mut Frame, area: Rect) {
-    let titles = d.tabs().iter().enumerate().map(|(i, t)| {
-        let title = match t {
-            Tab::Endpoints => d.rows.tab(),
-            other => other.title(),
-        };
-        Line::from(format!("{} {}", i + 1, title.to_uppercase()))
-    });
+    let titles: Vec<String> = d
+        .tabs()
+        .iter()
+        .enumerate()
+        .map(|(i, t)| {
+            let title = match t {
+                Tab::Endpoints => d.rows.tab(),
+                other => other.title(),
+            };
+            format!("{} {}", i + 1, title)
+        })
+        .collect();
     f.render_widget(
-        Tabs::new(titles)
-            .select(d.tab.index(d.tabs()))
-            .style(Style::new().fg(LABEL))
-            .highlight_style(Style::new().fg(Color::Black).bg(ACCENT).bold())
-            .divider(" ")
-            .padding(" ", " "),
+        Paragraph::new(kit::tabs(&titles, d.tab.index(d.tabs()))),
         area,
     );
 }
 
-pub(super) fn key_hints(pairs: &[(&'static str, &'static str)]) -> Vec<Span<'static>> {
-    let mut spans = Vec::with_capacity(pairs.len() * 2);
-    for (key, action) in pairs {
-        spans.push(Span::styled(
-            format!(" {key} "),
-            Style::new().fg(ACCENT).bold(),
-        ));
-        spans.push(label(format!("{action} ")));
-    }
-    spans
-}
-
 fn render_footer(d: &Dashboard, f: &mut Frame, area: Rect) {
-    let mut hints: Vec<(&str, &str)> = vec![("q", "quit"), ("r", "restart"), ("E", "edit")];
-    if d.finished.is_none() {
-        hints.push(("space", if d.paused { "resume" } else { "pause" }));
-        hints.push(("+/-", "concurrency"));
-        hints.push(("s", "stop"));
-    }
+    // The view's own keys first, then the run's, then the way around:
+    // help and quit always last, so they're never the ones cut
+    let mut hints: Vec<(&str, &str)> = Vec::new();
+    let running = d.finished.is_none();
     if d.filter.editing {
         hints = vec![("enter", "done"), ("esc", "clear search")];
     } else if d.inspecting && d.tab == Tab::Requests {
         hints = vec![
             ("esc", "back"),
             ("↑↓ u/d", "scroll"),
-            ("g/G", "top / bottom"),
-            ("←→", "newer / older request"),
+            ("←→", "newer / older"),
             ("[ ]", "nearest kept in full"),
             ("v", "raw / formatted"),
+            ("home/end", "top / bottom"),
+            ("?", "keys"),
             ("q", "quit"),
         ];
-    } else if d.tab == Tab::Endpoints {
-        hints.push(("↑↓", "select"));
-        hints.push(("enter", "its requests"));
-        hints.push(("tab", "view"));
-    } else if d.tab == Tab::Requests {
-        hints.push(("↑↓", "select"));
-        hints.push(("enter", "inspect"));
-        hints.push(("f", "status"));
-        hints.push(("l", "latency"));
-        hints.push(("/", "search"));
-        if d.filter.is_active() {
-            hints.push(("c", "clear"));
-        }
     } else {
+        match d.tab {
+            Tab::Endpoints => {
+                hints.push(("↑↓", "select"));
+                hints.push(("enter", "its requests"));
+            }
+            Tab::Requests => {
+                hints.push(("↑↓", "select"));
+                hints.push(("enter", "inspect"));
+                hints.push(("f", "status"));
+                hints.push(("l", "latency"));
+                hints.push(("/", "search"));
+                if d.filter.is_active() {
+                    hints.push(("c", "clear"));
+                }
+            }
+            _ => {}
+        }
+        if running {
+            hints.push(("space", if d.paused { "resume" } else { "pause" }));
+            hints.push(("+/-", "concurrency"));
+            hints.push(("s", "stop"));
+        }
+        hints.push(("r", "restart"));
+        hints.push(("e", "edit"));
         hints.push(("tab", "view"));
+        hints.push(("?", "keys"));
+        hints.push(("q", "quit"));
     }
-    hints.push(("?", "help"));
-    f.render_widget(Paragraph::new(Line::from(key_hints(&hints))), area);
-
     // A notice has the right-hand end of the footer; otherwise a warning
-    // that pepe itself is the limit
+    // that pepe itself is the limit. It shares the line with the keys, and
+    // leaves them at least `?` and `q`
     let warning = match &d.notice {
         Some((notice, _, _)) => Some(notice.clone()),
         None => d.saturation_warning().or_else(|| d.rate_warning()),
     };
-    if let Some(notice) = warning {
+    const KEYS_AT_LEAST: usize = 20;
+    let width = area.width as usize;
+    let notice = warning.map(|notice| {
+        let room = width.saturating_sub(KEYS_AT_LEAST + 3);
+        format!(" {} ", truncate(&notice, room))
+    });
+    let notice_width = notice.as_ref().map_or(0, |n| n.chars().count() + 1);
+    f.render_widget(
+        Paragraph::new(kit::chips_fit(
+            &hints,
+            width.saturating_sub(notice_width) as u16,
+        )),
+        area,
+    );
+    if let Some(notice) = notice {
         f.render_widget(
             Paragraph::new(Span::styled(
-                format!(" {notice} "),
+                notice,
                 Style::new().fg(Color::Black).bg(WARN).bold(),
             ))
             .alignment(Alignment::Right),
@@ -566,12 +598,12 @@ fn render_footer(d: &Dashboard, f: &mut Frame, area: Rect) {
 }
 
 fn render_help(f: &mut Frame, area: Rect) {
-    let rows: [(&str, &str); 19] = [
+    let rows = [
         ("space / p", "pause or resume sending"),
         ("+ / -", "raise or lower concurrency by ~10%"),
-        ("s / i", "stop the run, keep the results"),
+        ("s", "stop the run, keep the results"),
         ("r", "restart with the same settings"),
-        ("E", "edit the settings, then run again"),
+        ("e", "edit the settings, then run again"),
         ("tab / ← →", "switch view"),
         ("1 2 3", "live, stats, requests"),
         ("↑ ↓ / j k", "select a request (newer / older)"),
@@ -579,50 +611,26 @@ fn render_help(f: &mut Frame, area: Rect) {
         ("[ ]", "inspector: nearest request kept in full"),
         ("← →", "inspector: newer / older request"),
         ("f", "filter requests by status"),
+        ("x", "failed requests only"),
         ("l", "filter requests by latency (slow ones)"),
         ("/", "search status and response text"),
+        ("c", "clear filters"),
         ("PgUp PgDn", "scroll faster"),
-        ("g / G", "newest / oldest request"),
-        ("e / c", "failed requests only / clear filters"),
+        ("home / end", "newest / oldest request"),
         ("?", "close this help"),
         ("q / esc", "quit"),
     ];
-    let mut lines: Vec<Line> = rows
-        .iter()
-        .map(|(key, action)| {
-            Line::from(vec![
-                Span::styled(format!("  {key:<12}"), Style::new().fg(ACCENT).bold()),
-                Span::raw(*action),
-            ])
-        })
-        .collect();
-    lines.extend([
-        Line::raw(""),
-        Line::from(label(
-            "  Heatmap: each column is a slice of the run. Brighter",
-        )),
-        Line::from(label("  cells mean more requests took that long.")),
-        Line::raw(""),
-        Line::from(label(format!(
-            "  pepe {} · {}/{} · {} cores · {}",
-            env!("CARGO_PKG_VERSION"),
-            std::env::consts::OS,
-            std::env::consts::ARCH,
-            num_of_cores(),
-            gethostname().to_string_lossy()
-        ))),
-    ]);
-
-    let popup = center(area, 60, lines.len() as u16 + 2);
-    f.render_widget(Clear, popup);
-    f.render_widget(
-        Paragraph::new(lines).block(
-            Block::bordered()
-                .border_type(BorderType::Rounded)
-                .border_style(Style::new().fg(ACCENT))
-                .title(Span::styled(" keys ", Style::new().fg(ACCENT).bold())),
-        ),
-        popup,
+    kit::help(
+        f,
+        area,
+        &rows,
+        &[
+            "Heatmap: each column is a slice of the run. Brighter".into(),
+            "cells mean more requests took that long.".into(),
+            "● in the request log: its full response was kept.".into(),
+            String::new(),
+            kit::about_line(),
+        ],
     );
 }
 
@@ -708,7 +716,10 @@ fn render_live(d: &Dashboard, f: &mut Frame, body: Rect) {
     );
 
     if d.timeline.samples().is_empty() {
+        // Every chart says why it's empty, so none of them looks broken
         placeholder(f, heat, "collecting the first second…");
+        placeholder(f, lines, "percentiles after the first second");
+        placeholder(f, rps, "throughput after the first second");
     } else {
         let columns = Columns::new(d, heat.width.saturating_sub(AXIS + GUTTER));
         render_heatmap(d, &columns, f.buffer_mut(), heat);
@@ -1321,11 +1332,14 @@ fn render_stats_column(d: &Dashboard, f: &mut Frame, area: Rect) {
         heading("latency"),
         kv("min", format::latency(m.min()), Color::Reset, w),
     ];
-    for (i, &(name, q)) in PERCENTILES.iter().enumerate().take(6) {
-        lines.push(kv(name, format::latency(m.percentile(q)), heat(i, 6), w));
+    let p50 = m.percentile(50.0);
+    for &(name, q) in PERCENTILES.iter().take(6) {
+        let v = m.percentile(q);
+        lines.push(kv(name, format::latency(v), latency_color(v, p50), w));
     }
     lines.extend([
-        kv("max", format::latency(m.max()), BAD, w),
+        // The maximum is the tail by definition; colouring it says nothing
+        kv("max", format::latency(m.max()), Color::Reset, w),
         kv(
             "mean ± sd",
             format!(
@@ -1531,15 +1545,17 @@ fn latency_card(d: &Dashboard, w: usize) -> Card {
             label(format!("{name:<8}")),
             value(format!("{:>value_width$}", format::latency(v)), color),
             Span::raw("  "),
-            Span::styled(bar(t, bar_width), Style::new().fg(color)),
+            Span::styled(bar(t, bar_width), Style::new().fg(latency_bar_color(color))),
         ]))
     };
-    card = row(card, "min", m.min(), GOOD);
-    let n = PERCENTILES.len();
-    for (i, &(name, q)) in PERCENTILES.iter().enumerate() {
-        card = row(card, name, m.percentile(q), heat(i, n));
+    let p50 = m.percentile(50.0);
+    card = row(card, "min", m.min(), Color::Reset);
+    for &(name, q) in PERCENTILES.iter() {
+        let v = m.percentile(q);
+        card = row(card, name, v, latency_color(v, p50));
     }
-    card = row(card, "max", m.max(), BAD);
+    // The maximum is the tail by definition; colouring it says nothing
+    card = row(card, "max", m.max(), Color::Reset);
     card.row(
         "mean ± sd",
         format!(
@@ -1867,8 +1883,9 @@ fn slowest_card(d: &Dashboard, w: usize) -> Option<Card> {
         None => "slowest".to_string(),
     };
     let mut card = Card::new(&title);
-    let n = entries.len();
-    for (i, e) in entries.iter().enumerate() {
+    // These are the slowest by construction: the list is the finding, so
+    // the numbers stay in the terminal's own colour
+    for e in entries {
         let lead = format!(
             "{:>8}  {}  {}  ",
             format::latency(e.latency),
@@ -1880,10 +1897,7 @@ fn slowest_card(d: &Dashboard, w: usize) -> Option<Card> {
             .as_ref()
             .map_or_else(|| "—".to_string(), |(_, id)| id.to_string());
         card = card.line(Line::from(vec![
-            value(
-                format!("{:>8}", format::latency(e.latency)),
-                heat(n - 1 - i, n),
-            ),
+            value(format!("{:>8}", format::latency(e.latency)), Color::Reset),
             Span::raw("  "),
             Span::styled(
                 e.status.to_string(),
@@ -2131,7 +2145,12 @@ fn render_requests_tab(d: &Dashboard, f: &mut Frame, area: Rect) {
     .areas(area);
 
     let kept = d.kept();
-    let mut right = vec![if d.filter.is_active() {
+    // What the ● beside some requests means
+    let mut right = vec![
+        Span::styled("● ", Style::new().fg(ACCENT)),
+        label("full response  "),
+    ];
+    right.push(if d.filter.is_active() {
         label(format!(
             "{} of {} match  ",
             format::count(log.len() as u64),
@@ -2139,7 +2158,7 @@ fn render_requests_tab(d: &Dashboard, f: &mut Frame, area: Rect) {
         ))
     } else {
         label(format!("last {} kept  ", format::count(kept as u64)))
-    }];
+    });
     if d.scroll > 0 && !d.inspecting {
         right.push(Span::styled(
             format!(" {} newer · g for live ", d.scroll),
@@ -2704,6 +2723,19 @@ mod tests {
     }
 
     #[test]
+    fn latency_is_colored_by_health_not_rank() {
+        let ms = Duration::from_millis;
+        // A tight run: p99 just above the median says nothing
+        assert_eq!(latency_color(ms(6), ms(5)), Color::Reset);
+        assert_eq!(latency_color(ms(45), ms(5)), Color::Reset);
+        // A tail the verdict calls degraded is flagged
+        assert_eq!(latency_color(ms(50), ms(5)), WARN);
+        // No median yet: nothing to judge against
+        assert_eq!(latency_color(ms(50), ms(0)), Color::Reset);
+        assert_eq!(status_color(301), Color::Reset);
+    }
+
+    #[test]
     fn summary_drops_what_does_not_fit() {
         let parts = [
             "1,000 requests".to_string(),
@@ -2834,7 +2866,7 @@ mod tests {
             .iter()
             .map(|c| c.symbol())
             .collect();
-        assert!(screen.contains("1 ENDPOINTS") && screen.contains("4 REQUESTS"));
+        assert!(screen.contains("1 Endpoints") && screen.contains("4 Requests"));
         assert!(screen.contains("GET /b/{id}") && screen.contains("with failures"));
 
         for (w, h) in [(60, 18), (100, 30), (220, 60)] {

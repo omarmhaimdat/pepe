@@ -16,9 +16,9 @@ use ratatui::{
 };
 use tokio::time::MissedTickBehavior;
 
-use super::kit::{caption, chips, marker, panel, FAINT, SELECTED};
+use super::kit::{about_line, caption, chips_fit, help, marker, panel, FAINT, SELECTED};
 use super::view::{label, status_color, truncate, value, ACCENT, BAD, GOOD, LABEL, RULE, WARN};
-use super::{format, mascot, Outcome};
+use super::{format, mascot, theme, Outcome};
 use crate::insights::Level;
 use crate::load::LoadHandle;
 use crate::ramp::{self, End, Ramp, RampPlan, Second, Step, Tick};
@@ -49,6 +49,8 @@ pub struct RampScreen {
     ramp: Ramp,
     /// The step whose details show; none follows the step in progress
     selected: Option<usize>,
+    /// The keys overlay is open
+    show_help: bool,
 }
 
 fn level_color(level: Level) -> Color {
@@ -93,6 +95,7 @@ impl RampScreen {
             cli,
             ramp: Ramp::new(plan, Instant::now()),
             selected: None,
+            show_help: false,
         }
     }
 
@@ -120,7 +123,15 @@ impl RampScreen {
         }
         let running = self.ramp.end.is_none();
         let last = self.ramp.plan.levels.len() - 1;
+        if self.show_help && matches!(key.code, KeyCode::Char('?') | KeyCode::Esc | KeyCode::F(1)) {
+            self.show_help = false;
+            return Effect::None;
+        }
         match key.code {
+            KeyCode::Char('?') | KeyCode::F(1) => {
+                self.show_help = true;
+                Effect::None
+            }
             KeyCode::Char('q') | KeyCode::Char('Q') => Effect::Leave(Outcome::Quit),
             KeyCode::Char('r') | KeyCode::Char('R') => Effect::Leave(Outcome::Restart),
             KeyCode::Char('e') | KeyCode::Char('E') => Effect::Leave(Outcome::Edit),
@@ -191,7 +202,7 @@ impl RampScreen {
         loop {
             if dirty {
                 let now = Instant::now();
-                terminal.draw(|f| self.render(f, now))?;
+                terminal.draw(|f| theme::draw(f, |f| self.render(f, now)))?;
                 dirty = false;
             }
             tokio::select! {
@@ -322,6 +333,7 @@ impl RampScreen {
             let mut lines = mascot::lines(mood, 0);
             lines.push(Line::styled(says, Style::new().fg(ACCENT).italic()));
             f.render_widget(Paragraph::new(lines), pet);
+            mascot::keep(pet);
             let [title, _, numbers] = Layout::vertical([
                 Constraint::Length(3),
                 Constraint::Length(1),
@@ -385,9 +397,35 @@ impl RampScreen {
         keys.extend([
             ("r", if ended { "run again" } else { "restart" }),
             ("e", "edit"),
+            ("?", "keys"),
             ("q", "quit"),
         ]);
-        f.render_widget(Paragraph::new(chips(&keys)), footer);
+        f.render_widget(Paragraph::new(chips_fit(&keys, footer.width)), footer);
+        if self.show_help {
+            help(
+                f,
+                area,
+                &[
+                    ("space", "pause or resume the ramp"),
+                    ("n", "go to the next step now"),
+                    ("s", "stop here and keep the results"),
+                    ("↑ ↓ / j k", "pick a step to see its details"),
+                    ("home", "the first step"),
+                    ("esc / end", "follow the step in progress again"),
+                    ("r", "restart (once ended: run again)"),
+                    ("e", "edit the settings, then run again"),
+                    ("?", "close this help"),
+                    ("q", "quit"),
+                ],
+                &[
+                    "Each step holds one concurrency for a while. A step".into(),
+                    "holds when throughput keeps following the load and".into(),
+                    "latency and errors stay in bounds.".into(),
+                    String::new(),
+                    about_line(),
+                ],
+            );
+        }
     }
 
     /// What's being ramped, how far along it is, and what it climbs

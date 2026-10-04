@@ -24,7 +24,7 @@ const SHELLS: [(Shell, &str); 4] = [
 ];
 
 /// The dashboard's keys, as in the README
-const DASHBOARD_KEYS: [(&str, &str); 14] = [
+const DASHBOARD_KEYS: [(&str, &str); 15] = [
     (
         "space, p",
         "Pause or resume sending; a timed run's clock stops while paused",
@@ -35,10 +35,10 @@ const DASHBOARD_KEYS: [(&str, &str); 14] = [
         "r",
         "Restart with the same settings (and the current concurrency)",
     ),
-    ("E", "Back to the setup screen (or, in API mode, the plan)"),
+    ("e", "Back to the setup screen (or, in API mode, the plan)"),
     ("tab, left, right, 1-3", "Switch view"),
     (
-        "up, down, j, k, PgUp, PgDn, g, G",
+        "up, down, j, k, PgUp, PgDn, home, end",
         "Select a request in the log",
     ),
     (
@@ -50,13 +50,14 @@ const DASHBOARD_KEYS: [(&str, &str); 14] = [
         "Filter requests by latency: at or above p50, p90 or p99",
     ),
     ("/", "Search the status and response text"),
-    ("e, c", "Show only failed requests; clear all filters"),
+    ("x", "Show only failed requests"),
+    ("c", "Clear all filters"),
     ("enter", "Inspect the selected request; esc goes back"),
     ("?", "Show all keys"),
     ("q, esc, Ctrl-C", "Quit"),
 ];
 
-const SETUP_KEYS: [(&str, &str); 5] = [
+const SETUP_KEYS: [(&str, &str); 7] = [
     ("tab", "Switch mode: Single URL, Ramp or API"),
     (
         "up, down",
@@ -64,10 +65,12 @@ const SETUP_KEYS: [(&str, &str); 5] = [
     ),
     ("enter", "Start the run (or load the spec, in API mode)"),
     ("ctrl-t", "Send the request once and show the response"),
+    ("ctrl-s", "Save the form as pepe.toml"),
+    ("F1", "Show all keys (? too, outside a text field)"),
     ("esc", "Quit"),
 ];
 
-const RAMP_KEYS: [(&str, &str); 5] = [
+const RAMP_KEYS: [(&str, &str); 6] = [
     (
         "up, down",
         "Pick a step and see everything measured about it; esc follows the run again",
@@ -79,9 +82,10 @@ const RAMP_KEYS: [(&str, &str); 5] = [
     ("n", "End this step now and go on to the next"),
     ("s", "Stop the ramp here and keep the results"),
     ("r, e", "Run again; back to the setup screen"),
+    ("?", "Show all keys"),
 ];
 
-const ENVIRONMENT: [(&str, &str); 2] = [
+const ENVIRONMENT: [(&str, &str); 4] = [
     (
         "PEPE_NO_UPDATE_CHECK",
         "Set to anything to skip the look for a newer release",
@@ -89,6 +93,14 @@ const ENVIRONMENT: [(&str, &str); 2] = [
     (
         "PEPE_GITHUB_TOKEN",
         "A GitHub token for pepe self-update, for forks or rate-limited CI",
+    ),
+    (
+        "NO_COLOR",
+        "Set to anything to draw without colour: reverse video and shades instead",
+    ),
+    (
+        "PEPE_THEME",
+        "light or dark, for the terminal's background; otherwise COLORFGBG decides",
     ),
 ];
 

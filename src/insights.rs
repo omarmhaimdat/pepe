@@ -198,8 +198,8 @@ impl Watch {
 const FAILING_ERROR_PCT: f64 = 5.0;
 const DEGRADED_ERROR_PCT: f64 = 0.5;
 /// p99 / p50 at which the tail is worth pointing out, and at which it hurts
-const LONG_TAIL: f64 = 5.0;
-const BAD_TAIL: f64 = 10.0;
+pub const LONG_TAIL: f64 = 5.0;
+pub const BAD_TAIL: f64 = 10.0;
 /// Change between the start and the end of a run worth pointing out
 const TREND: f64 = 0.25;
 

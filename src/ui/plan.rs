@@ -17,9 +17,12 @@ use ratatui::{
     Frame, Terminal,
 };
 
-use super::kit::{caption, chips, marker, pane_title, panel, wrap, FAINT, FIELD, SELECTED};
+use super::kit::{
+    about_line, caption, chips, chips_fit, help, marker, pane_title, panel, wrap, FAINT, FIELD,
+    SELECTED,
+};
 use super::view::{label, status_color, truncate, value, ACCENT, BAD, GOOD, LABEL, RULE, WARN};
-use super::{body, format, mascot};
+use super::{body, format, mascot, theme};
 use crate::api::ApiRun;
 use crate::load::Plan;
 use crate::openapi::{split_values, AuthKind, Credentials, Endpoint, Field, In, MASK};
@@ -27,6 +30,9 @@ use crate::response::ResponseStats;
 use crate::Cli;
 
 /// Two panes side by side from this width; one at a time below it
+/// A method is an identity, not a judgment: the same magenta the dashboard
+/// draws it in, never the colors that say healthy or failing
+const METHOD: Color = Color::Magenta;
 const WIDE: u16 = 100;
 /// Specs with more endpoints than this open with their tags folded
 const FOLD_ABOVE: usize = 40;
@@ -275,6 +281,8 @@ pub struct PlanScreen<'a> {
     list_top: Cell<usize>,
     list_height: Cell<usize>,
     detail_top: Cell<usize>,
+    /// The keys overlay is open
+    show_help: bool,
 }
 
 impl<'a> PlanScreen<'a> {
@@ -302,6 +310,7 @@ impl<'a> PlanScreen<'a> {
             list_top: Cell::new(0),
             list_height: Cell::new(10),
             detail_top: Cell::new(0),
+            show_help: false,
         };
         // The API needs credentials and has none: ask straight away
         if screen.needs_auth() {
@@ -571,8 +580,13 @@ impl<'a> PlanScreen<'a> {
         if self.prompt.is_some() {
             return self.prompt_key(key);
         }
+        if self.show_help && matches!(key.code, KeyCode::Char('?') | KeyCode::Esc | KeyCode::F(1)) {
+            self.show_help = false;
+            return None;
+        }
         self.message = None;
         match key.code {
+            KeyCode::Char('?') | KeyCode::F(1) => self.show_help = true,
             KeyCode::Char('q') => return Some(Action::Quit),
             KeyCode::Char('g') => return self.start(),
             KeyCode::Char('t') => match self.selected() {
@@ -958,7 +972,7 @@ impl<'a> PlanScreen<'a> {
         tokio::pin!(ctrl_c);
 
         loop {
-            terminal.draw(|f| self.render(f))?;
+            terminal.draw(|f| theme::draw(f, |f| self.render(f)))?;
             let event = tokio::select! {
                 _ = &mut ctrl_c => return Ok(PlanOutcome::Quit),
                 event = events.next() => event,
@@ -978,12 +992,12 @@ impl<'a> PlanScreen<'a> {
                 Some(Action::Start) => return Ok(PlanOutcome::Start),
                 Some(Action::Try(index)) => {
                     self.message = Some(("sending one request…".into(), false));
-                    terminal.draw(|f| self.render(f))?;
+                    terminal.draw(|f| theme::draw(f, |f| self.render(f)))?;
                     self.try_once(index).await;
                 }
                 Some(Action::Auth { secret, form }) => {
                     self.message = Some(("checking the credentials…".into(), false));
-                    terminal.draw(|f| self.render(f))?;
+                    terminal.draw(|f| theme::draw(f, |f| self.render(f)))?;
                     self.apply_auth(secret, form).await;
                 }
                 None => {}
@@ -1009,7 +1023,35 @@ impl<'a> PlanScreen<'a> {
         self.render_header(f, header, tall, cards);
         self.render_body(f, body);
         self.render_status(f, status);
-        f.render_widget(Paragraph::new(chips(&self.hints())), footer);
+        f.render_widget(
+            Paragraph::new(chips_fit(&self.hints(), footer.width)),
+            footer,
+        );
+        if self.show_help {
+            help(
+                f,
+                area,
+                &[
+                    ("↑ ↓ / j k", "move through the endpoints"),
+                    ("space", "turn the endpoint (or tag) on or off"),
+                    ("enter / →", "its parameters; on a tag, fold it"),
+                    ("x", "everything shown on, or all off"),
+                    ("/", "filter by path, method or tag"),
+                    ("t", "send the endpoint once and show the response"),
+                    ("u a", "the server, the credentials"),
+                    ("c n z", "concurrency, requests, duration"),
+                    ("g", "start the run"),
+                    ("?", "close this help"),
+                    ("esc / q", "back, then quit"),
+                ],
+                &[
+                    "Only the endpoints that are on (●) are sent: pick".into(),
+                    "them, set their parameters, try one, then g starts.".into(),
+                    String::new(),
+                    about_line(),
+                ],
+            );
+        }
         if let Some(prompt) = &self.prompt {
             if prompt.what != Editing::Filter {
                 self.render_prompt(f, area, prompt);
@@ -1046,6 +1088,7 @@ impl<'a> PlanScreen<'a> {
                 ("/", "filter"),
                 ("t", "try once"),
                 ("g", "start"),
+                ("?", "keys"),
                 ("q", "quit"),
             ],
             (None, Focus::Detail) => vec![
@@ -1054,8 +1097,9 @@ impl<'a> PlanScreen<'a> {
                 ("space", "next value"),
                 ("del", "leave out"),
                 ("t", "try once"),
-                ("esc", "back"),
                 ("g", "start"),
+                ("?", "keys"),
+                ("esc", "back"),
             ],
         }
     }
@@ -1146,6 +1190,7 @@ impl<'a> PlanScreen<'a> {
             let mut lines = mascot::lines(mood, 0);
             lines.push(Line::styled(says, Style::new().fg(ACCENT).italic()));
             f.render_widget(Paragraph::new(lines), pet);
+            mascot::keep(pet);
             // Beside the mascot, in the middle of its height
             Rect {
                 y: main.y + 1,
@@ -1361,7 +1406,7 @@ impl<'a> PlanScreen<'a> {
                 });
                 spans.push(Span::styled(
                     format!("{:<5}", short_method(&endpoint.method)),
-                    Style::new().fg(method_color(&endpoint.method)),
+                    Style::new().fg(METHOD),
                 ));
                 spans.extend(path_spans(&endpoint.path, shared, endpoint.enabled, room));
                 Span::styled(format!("{status} "), Style::new().fg(color))
@@ -1448,7 +1493,7 @@ impl<'a> PlanScreen<'a> {
                 },
                 Span::styled(
                     format!("{:<5}", short_method(&endpoint.method)),
-                    Style::new().fg(method_color(&endpoint.method)),
+                    Style::new().fg(METHOD),
                 ),
             ];
             let path = path_spans(&endpoint.path, shared, endpoint.enabled, paths);
@@ -1498,7 +1543,7 @@ impl<'a> PlanScreen<'a> {
         let title = Line::from(vec![
             Span::styled(
                 format!(" {} ", endpoint.method),
-                Style::new().fg(method_color(&endpoint.method)).bold(),
+                Style::new().fg(METHOD).bold(),
             ),
             Span::styled(
                 format!(
@@ -1809,7 +1854,7 @@ impl<'a> PlanScreen<'a> {
         let mut lines = vec![Line::from(vec![
             Span::styled(
                 format!("{} ", endpoint.method),
-                Style::new().fg(method_color(&endpoint.method)).bold(),
+                Style::new().fg(METHOD).bold(),
             ),
             Span::styled(path, Style::new().bold()),
         ])];
@@ -2252,14 +2297,6 @@ fn about_row(endpoint: &Endpoint, row: DetailRow, width: usize) -> Vec<String> {
             "This endpoint's share of the traffic, next to the others that are on.".into(),
             "2 gets twice the requests of an endpoint with 1".into(),
         ],
-    }
-}
-
-fn method_color(method: &str) -> Color {
-    match method {
-        "GET" | "HEAD" | "OPTIONS" => GOOD,
-        "DELETE" => BAD,
-        _ => WARN,
     }
 }
 

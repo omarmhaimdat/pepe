@@ -137,13 +137,13 @@ Stop sending and keep the results on screen
 \fBr\fR
 Restart with the same settings (and the current concurrency)
 .TP
-\fBE\fR
+\fBe\fR
 Back to the setup screen (or, in API mode, the plan)
 .TP
 \fBtab, left, right, 1\-3\fR
 Switch view
 .TP
-\fBup, down, j, k, PgUp, PgDn, g, G\fR
+\fBup, down, j, k, PgUp, PgDn, home, end\fR
 Select a request in the log
 .TP
 \fBf\fR
@@ -155,8 +155,11 @@ Filter requests by latency: at or above p50, p90 or p99
 \fB/\fR
 Search the status and response text
 .TP
-\fBe, c\fR
-Show only failed requests; clear all filters
+\fBx\fR
+Show only failed requests
+.TP
+\fBc\fR
+Clear all filters
 .TP
 \fBenter\fR
 Inspect the selected request; esc goes back
@@ -180,6 +183,12 @@ Start the run (or load the spec, in API mode)
 \fBctrl\-t\fR
 Send the request once and show the response
 .TP
+\fBctrl\-s\fR
+Save the form as pepe.toml
+.TP
+\fBF1\fR
+Show all keys (? too, outside a text field)
+.TP
 \fBesc\fR
 Quit
 .SH "RAMP KEYS"
@@ -198,6 +207,9 @@ Stop the ramp here and keep the results
 .TP
 \fBr, e\fR
 Run again; back to the setup screen
+.TP
+\fB?\fR
+Show all keys
 .SH EXAMPLES
 .TP
 \fBpepe replay access.log \-\-base\-url https://staging.example.com \-c 50 \-z 2m\fR
@@ -227,5 +239,11 @@ Set to anything to skip the look for a newer release
 .TP
 \fBPEPE_GITHUB_TOKEN\fR
 A GitHub token for pepe self\-update, for forks or rate\-limited CI
+.TP
+\fBNO_COLOR\fR
+Set to anything to draw without colour: reverse video and shades instead
+.TP
+\fBPEPE_THEME\fR
+light or dark, for the terminal\*(Aqs background; otherwise COLORFGBG decides
 .SH "SEE ALSO"
 pepe\-ramp(1), pepe\-api(1), pepe\-self\-update(1), and \fBhttps://github.com/omarmhaimdat/pepe\fR
