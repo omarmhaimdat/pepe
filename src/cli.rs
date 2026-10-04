@@ -54,6 +54,12 @@ pub struct Cli {
     #[arg(long, global = true, value_parser = clap::value_parser!(u32).range(1..))]
     pub threads: Option<u32>,
 
+    /// Start this many requests a second, spread evenly, instead of as
+    /// many as the concurrency allows; -c is then the most in flight at
+    /// once, and pepe says when it holds the rate back
+    #[arg(long, global = true, value_name = "PER_SECOND")]
+    pub rate: Option<f64>,
+
     /// HTTP request body
     #[arg(short = 'd', long, global = true)]
     pub body: Option<String>,
@@ -229,6 +235,14 @@ pub struct ApiArgs {
 
 impl Cli {
     pub fn validate(&mut self) -> Result<(), Error> {
+        if let Some(rate) = self.rate {
+            if !(rate > 0.0 && rate.is_finite()) {
+                return Err(Error::raw(
+                    clap::error::ErrorKind::ValueValidation,
+                    format!("--rate {rate} is not a number of requests per second"),
+                ));
+            }
+        }
         // A ramp sets its own concurrency and runs for as long as its steps
         let ramp = matches!(self.command, Some(Command::Ramp(_)));
         if self.concurrency > self.number && self.duration.is_none() && !ramp {
@@ -445,6 +459,9 @@ impl Cli {
         if let Some(threads) = self.threads {
             flag("--threads", &threads.to_string());
         }
+        if let Some(rate) = self.rate {
+            flag("--rate", &rate.to_string());
+        }
         if let Some(path) = &self.snapshot {
             flag("--snapshot", &path.display().to_string());
         }
@@ -496,6 +513,12 @@ impl Cli {
             disable_compression: self.disable_compression,
             disable_keepalive: self.disable_keepalive,
             disable_redirects: self.disable_redirects,
+            // Paced workers idle between requests; closing their
+            // connections meanwhile would reopen them in waves
+            idle_connections: match self.rate {
+                Some(_) => (self.concurrency as usize).max(crate::request::IDLE_CONNECTIONS),
+                None => crate::request::IDLE_CONNECTIONS,
+            },
         }
     }
 
