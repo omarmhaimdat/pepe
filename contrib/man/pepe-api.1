@@ -4,7 +4,7 @@
 .SH NAME
 pepe\-api \- Load\-test every endpoint of an OpenAPI spec
 .SH SYNOPSIS
-\fBpepe api\fR [\fB\-\-auth\fR] [\fB\-\-server\fR] [\fB\-\-all\fR] [\fB\-\-tag\fR] [\fB\-\-only\fR] [\fB\-\-skip\fR] [\fB\-\-set\fR] [\fB\-\-include\-writes\fR] [\fB\-h\fR|\fB\-\-help\fR] <\fISPEC\fR> 
+\fBpepe api\fR [\fB\-\-auth\fR] [\fB\-\-server\fR] [\fB\-\-all\fR] [\fB\-\-tag\fR] [\fB\-\-only\fR] [\fB\-\-skip\fR] [\fB\-\-set\fR] [\fB\-\-include\-writes\fR] [\fB\-h\fR|\fB\-\-help\fR] [\fISPEC\fR] 
 .SH DESCRIPTION
 Load\-test every endpoint of an OpenAPI spec
 .SH OPTIONS
@@ -36,5 +36,5 @@ Let \-\-all, \-\-tag and \-\-only switch on POST, PUT, PATCH and DELETE too
 \fB\-h\fR, \fB\-\-help\fR
 Print help
 .TP
-<\fISPEC\fR>
-The OpenAPI spec: a file or URL, JSON or YAML
+[\fISPEC\fR]
+The OpenAPI spec: a file or URL, JSON or YAML (or `spec` in pepe.toml)
