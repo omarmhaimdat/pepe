@@ -6,6 +6,127 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+## [0.16.0](https://github.com/omarmhaimdat/pepe/compare/v0.15.0...v0.16.0) - 2026-10-04
+
+### Added
+
+- colour means health ([#84](https://github.com/omarmhaimdat/pepe/pull/84))
+
+  Colour on pepe's screens used to rank: percentiles ran green to red by
+  position, methods had traffic-light colours, redirects were accent cyan,
+  the maximum was always red. None of it said whether anything was wrong.
+  This makes colour mean one thing: whether a number is healthy.
+
+  ## What changes on screen
+  - **Latency** is amber only when it is ten times the median, the
+  threshold at which the verdict calls the tail degraded; otherwise it is
+  in the terminal's own colour. The maximum and the slowest-requests list
+  are the tail by definition, so they stay plain.
+  - **Methods** are magenta everywhere, as the dashboard drew them. A
+  **3xx** is neither good nor bad. **Labels and faint text** move to
+  indexes that read at 4.8:1 or better, on the selected line too.
+  - **Every screen has a `?` overlay** with all its keys (F1 on the setup
+  screen, where `?` is a character you can type), and footer chips that
+  drop from the left and always keep help and quit.
+  - **Keys:** edit is `e` on every screen (`E` still works); the
+  failed-only filter moves from `e` to `x`; `home`/`end` join `g`/`G`.
+  README, man page and the key tables are updated.
+  - Charts say why they are empty during the first second, and the request
+  log says what ● means.
+
+  ## Themes and `NO_COLOR`
+  A theme layer adjusts each drawn frame after rendering, so no drawing
+  code knows about it:
+  - **light** (`PEPE_THEME=light`, or `COLORFGBG` where the terminal sets
+  it): the same roles mapped to a light background; the gray ramp turns
+  around so the heatmap's busiest band is the darkest.
+  - **none** (`NO_COLOR`): no colour at all; what had a background is
+  drawn in reverse video, the heatmap in shades ░▒▓█, and the mascot stays
+  home.
+  - The shell report, the update notice and `pepe self-update` follow the
+  same rule: the verdict comes out coloured when stdout is a terminal and
+  `NO_COLOR` is unset, plain otherwise.
+
+  ## Checked
+  - Theme detection from `NO_COLOR`, `PEPE_THEME` and `COLORFGBG`; the
+  light mapping keeps the heat ramp ordered and leaves the mascot's pixels
+  alone; `NO_COLOR` reverses fills and shades the heatmap; the report
+  colouring puts each glyph in its colour and leaves the rest alone.
+  - Latency colouring: healthy ratios stay plain, a degraded tail is
+  amber, no median means no judgment.
+  - The suite passes plainly and with `NO_COLOR=1 PEPE_THEME=light` set,
+  198 tests each way: the mascot's tests draw the sprite directly, so
+  nothing in the tests depends on the environment.
+  - `cargo clippy --all-targets`, `cargo fmt --check`. No engine code
+  changes, so no benchmark gate.
+
+
+
+### Other
+
+- the roadmap gains speed on Linux and agents ([#83](https://github.com/omarmhaimdat/pepe/pull/83))
+
+  Two themes and two items for what pepe is meant to become: the fastest
+  load generator, and the one an agent reaches for.
+
+  ## What
+  - **Output and integration** gains two items after thresholds: a report
+  when there's no terminal (without `--json`, a piped pepe still tries to
+  open the dashboard), and a versioned report with a published JSON
+  Schema.
+  - **6. Speed on Linux**: the reqwest re-parse fix sent upstream, naming
+  the rest of the CPU gap with oha, `--threads auto`, a fixed machine for
+  the numbers with wrk and k6 in the table, and a lean HTTP/1.1 path if
+  the gap is still there.
+  - **7. Agents**: agent docs, guardrails (`--allow-host`, caps and
+  `--dry-run`), an MCP server, and the engine as a crate.
+  - The README's "Next up" sentence named work that has shipped; it now
+  names what is open, in this order.
+  - `bench/README.md` pointed at "Not now" for the lean HTTP path, which
+  was never listed there; it points at "Speed on Linux".
+
+  ## Notes
+  - Speed comes before agents, since themes are in the order they're worth
+  doing.
+  - The flag names are proposals; none of them exist yet.
+  - Docs only, no code changes.
+
+  🤖 Generated with [Claude Code](https://claude.com/claude-code)
+
+
+- the roadmap says what shipped, and in which release ([#82](https://github.com/omarmhaimdat/pepe/pull/82))
+
+  ROADMAP.md with check boxes: every item that landed is ticked with the
+  release that carried it, from the completions in v0.8.0 to the config
+  keys in v0.15.0. What remains keeps its size and its order within the
+  theme.
+
+  Shipped, by theme:
+
+  - **Project health**: completions and man pages (v0.8.0, out of the box
+  in v0.9.0); installer smoke tests, the benchmark gate with the Linux
+  record, the Linux profile, the recordings, the install page and the
+  Windows checklist (all v0.10.0). The scheduled benchmark run is struck
+  through as set aside.
+  - **Scale and operations**: Docker image and GitHub Action, soak mode
+  (v0.10.0); `--rate` (v0.10.2); `--warmup` (v0.11.0); `pepe.toml`
+  (v0.12.0, with the three newer keys in v0.15.0). Distributed runs stay
+  open.
+  - **Analysis and insights**: all five shipped, error clustering in
+  v0.10.0, latency by phase in v0.10.1, anomaly notes, Server-Timing and
+  the capacity estimate in v0.10.2.
+  - **Scenarios and realism**: flows (v0.13.0) and replay (v0.14.0);
+  data-driven requests stay open, with a note that flows already have the
+  `{{holes}}` it would fill.
+  - **Output and integration**: all seven still open; `--fail-if` notes
+  that the Action's input covers CI today.
+
+  Arrival rate, config file and warm-up were listed under scenarios and
+  are moved to scale and operations, which is the theme they were
+  prioritised and shipped under. A `docs:` commit, so no release is
+  triggered.
+
+
 ## [0.15.0](https://github.com/omarmhaimdat/pepe/compare/v0.14.0...v0.15.0) - 2026-10-04
 
 ### Added
