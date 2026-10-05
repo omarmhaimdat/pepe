@@ -6,6 +6,161 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+## [0.16.1](https://github.com/omarmhaimdat/pepe/compare/v0.16.0...v0.16.1) - 2026-10-05
+
+### Fixed
+
+- *(deps)* bump crossterm from 0.28.1 to 0.29.0 ([#23](https://github.com/omarmhaimdat/pepe/pull/23))
+
+  Bumps [crossterm](https://github.com/crossterm-rs/crossterm) from 0.28.1
+  to 0.29.0.
+  <details>
+  <summary>Release notes</summary>
+  <p><em>Sourced from <a
+  href="https://github.com/crossterm-rs/crossterm/releases">crossterm's
+  releases</a>.</em></p>
+  <blockquote>
+  <h2>0.29</h2>
+  <h1>Version 0.29</h1>
+  <h2>Added ⭐</h2>
+  <ul>
+  <li>Copy to clipboard using OSC52 (<a
+  href="https://redirect.github.com/crossterm-rs/crossterm/issues/974">#974</a>)</li>
+  <li>Derive standard traits for &quot;SetCursorStyle&quot; (<a
+  href="https://redirect.github.com/crossterm-rs/crossterm/issues/909">#909</a>)</li>
+  <li>Add query_keyboard_enhancement_flags to read enabled flags (<a
+  href="https://redirect.github.com/crossterm-rs/crossterm/issues/958">#958</a>)</li>
+  <li>Add is_* and as_* methods to the event enums (<a
+  href="https://redirect.github.com/crossterm-rs/crossterm/issues/949">#949</a>)</li>
+  <li>Add a feature flag for derive_more impls (<a
+  href="https://redirect.github.com/crossterm-rs/crossterm/issues/970">#970</a>)</li>
+  <li>Update rustix to 1.0 (<a
+  href="https://redirect.github.com/crossterm-rs/crossterm/issues/982">#982</a>)</li>
+  <li>Upgrade various dependencies</li>
+  </ul>
+  <h2>Breaking ⚠️</h2>
+  <ul>
+  <li>Correctly fix KeyModifiers Display impl Properly adding + in between
+  modifiers (<a
+  href="https://redirect.github.com/crossterm-rs/crossterm/issues/979">#979</a>)</li>
+  </ul>
+  <p><a href="https://github.com/joshka"><code>@​joshka</code></a> <a
+  href="https://github.com/linrongbin16"><code>@​linrongbin16</code></a>
+  <a href="https://github.com/kmicklas"><code>@​kmicklas</code></a> <a
+  href="https://github.com/maciek50322"><code>@​maciek50322</code></a> <a
+  href="https://github.com/rosew0od"><code>@​rosew0od</code></a> <a
+  href="https://github.com/sxyazi"><code>@​sxyazi</code></a> <a
+  href="https://github.com/the-mikedavis"><code>@​the-mikedavis</code></a>
+  <a href="https://github.com/hthuz"><code>@​hthuz</code></a> <a
+  href="https://github.com/aschey"><code>@​aschey</code></a> <a
+  href="https://github.com/naseschwarz"><code>@​naseschwarz</code></a> <a
+  href="https://github.com/Flokkq"><code>@​Flokkq</code></a> <a
+  href="https://github.com/gaesa"><code>@​gaesa</code></a> <a
+  href="https://github.com/WindSoilder"><code>@​WindSoilder</code></a></p>
+  </blockquote>
+  </details>
+  <details>
+  <summary>Changelog</summary>
+  <p><em>Sourced from <a
+  href="https://github.com/crossterm-rs/crossterm/blob/master/CHANGELOG.md">crossterm's
+  changelog</a>.</em></p>
+  <blockquote>
+  <h1>Unreleased</h1>
+  <h2>Breaking ⚠️</h2>
+  <ul>
+  <li>Raise the minimum supported Rust version from 1.63 to 1.85.</li>
+  <li>Remove <code>IsTty</code> trait.
+  Use the standard library's <a
+  href="https://doc.rust-lang.org/std/io/trait.IsTerminal.html"><code>std::io::IsTerminal</code></a>
+  trait instead,
+  which provides equivalent functionality.</li>
+  </ul>
+  <h2>Changed ⚙️</h2>
+  <ul>
+  <li>Migrate the crate to the Rust 2024 edition. This does not raise the
+  MSRV beyond Rust 1.85.</li>
+  </ul>
+  <h2>Fixed 🐛</h2>
+  <ul>
+  <li>Fix color commands emitting a bare <code>CSI m</code> when colors
+  are disabled via
+  <code>NO_COLOR</code>, which reset every attribute instead of doing
+  nothing.
+  Affects <code>SetForegroundColor</code>,
+  <code>SetBackgroundColor</code>, <code>SetUnderlineColor</code>,
+  and <code>SetColors</code>.</li>
+  <li>Fix integer underflow in mouse / cursor-position parsers when coord
+  bytes encoded the protocol origin (panic in debug, wrap to 65535
+  in release). Affects <code>parse_csi_normal_mouse</code>,
+  <code>parse_csi_rxvt_mouse</code>,
+  <code>parse_csi_sgr_mouse</code>, and
+  <code>parse_csi_cursor_position</code>.</li>
+  <li>Fix <code>Colors::from(Colored::UnderlineColor(_))</code> setting
+  the background
+  color. <code>Colors</code> has no underline field, so the color is now
+  dropped
+  instead of being applied to the background.</li>
+  </ul>
+  <h1>Version 0.29</h1>
+  <h2>Added ⭐</h2>
+  <ul>
+  <li>Copy to clipboard using OSC52 (<a
+  href="https://redirect.github.com/crossterm-rs/crossterm/issues/974">#974</a>)</li>
+  <li>Derive standard traits for &quot;SetCursorStyle&quot; (<a
+  href="https://redirect.github.com/crossterm-rs/crossterm/issues/909">#909</a>)</li>
+  <li>Add query_keyboard_enhancement_flags to read enabled flags (<a
+  href="https://redirect.github.com/crossterm-rs/crossterm/issues/958">#958</a>)</li>
+  <li>Add is_* and as_* methods to the event enums (<a
+  href="https://redirect.github.com/crossterm-rs/crossterm/issues/949">#949</a>)</li>
+  <li>Add a feature flag for derive_more impls (<a
+  href="https://redirect.github.com/crossterm-rs/crossterm/issues/970">#970</a>)</li>
+  <li>Update rustix to 1.0 (<a
+  href="https://redirect.github.com/crossterm-rs/crossterm/issues/982">#982</a>)</li>
+  </ul>
+  <h2>Breaking ⚠️</h2>
+  <ul>
+  <li>Correctly fix KeyModifiers Display impl Properly adding + in between
+  modifiers (<a
+  href="https://redirect.github.com/crossterm-rs/crossterm/issues/979">#979</a>)</li>
+  </ul>
+  </blockquote>
+  </details>
+  <details>
+  <summary>Commits</summary>
+  <ul>
+  <li>See full diff in <a
+  href="https://github.com/crossterm-rs/crossterm/commits/0.29">compare
+  view</a></li>
+  </ul>
+  </details>
+  <br />
+
+
+
+### Other
+
+- *(nix)* update flake.lock ([#86](https://github.com/omarmhaimdat/pepe/pull/86))
+
+  Automated changes by the
+  [update-flake-lock](https://github.com/DeterminateSystems/update-flake-lock)
+  GitHub Action.
+
+  ```
+  Flake lock file updates:
+
+  • Added input 'nixpkgs':
+      'github:NixOS/nixpkgs/a7868a727837f3c09cee2ce0ca671c76b1589fed?narHash=sha256-KgItSKML8Xvte0B7/uGnBDsYzSnnKHcOaiUbgWBXLXw%3D' (2026-10-03)
+  ```
+
+  ### Running GitHub Actions on this PR
+
+  GitHub Actions will not run workflows on pull requests which are opened
+  by a GitHub Action.
+
+  **To run GitHub Actions workflows on this PR, close and re-open this
+  pull request.**
+
+
 ## [0.16.0](https://github.com/omarmhaimdat/pepe/compare/v0.15.0...v0.16.0) - 2026-10-04
 
 ### Added
