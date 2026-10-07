@@ -6,6 +6,100 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+## [0.17.0](https://github.com/omarmhaimdat/pepe/compare/v0.16.1...v0.17.0) - 2026-10-07
+
+### Added
+
+- pepe's own HTTP/1.1 sender, --threads auto, a Rust bench server ([#91](https://github.com/omarmhaimdat/pepe/pull/91))
+
+  Roadmap section 6, Speed on Linux. Through v0.16 pepe spent as much CPU
+  per request as oha on Linux, twice wrk's, and reached half oha's
+  throughput. This measures why and removes it.
+
+  ## What
+
+  - **pepe reads and writes its connections itself** (`src/direct.rs`,
+  `src/wire.rs`). Each worker keeps one HTTP/1.1 connection per origin.
+  The request is bytes made before the run and sent with one write; the
+  response is parsed where it was read (httparse for the head, a chunked
+  decoder of pepe's own); nothing is allocated for a request, and a
+  thread's connections share one 128 KB read buffer. reqwest is left what
+  only it does: proxies, redirects (the first redirect a target answers
+  with hands that target to reqwest), URLs with credentials, and flows.
+  - **Less per result and per connection**: results cross to the counting
+  thread in 32 bytes instead of 184; reqwest and the TLS configuration are
+  built when first needed; one timer per worker instead of one per
+  request; the response's headers are read in one pass instead of twenty
+  lookups; a worker keeps the body of four failures per status, not of
+  every one.
+  - **`--threads auto`** (also `threads = "auto"` in `pepe.toml`): adds a
+  sending thread when those sending are all past 90% of a core, and takes
+  it back if it brought less than a third of what a thread is worth. The
+  default stays one thread.
+  - **Benchmarks**: the target server is Rust (`bench/server`, its own
+  crate; `bench/server.go` is gone). `bench/run.sh` measures wrk and k6
+  when installed, has a `million-c64` workload and `MILLIONS=N`. The CI
+  Linux record builds pepe for musl, as the releases are.
+
+  ## Numbers
+
+  Linux (4-vCPU arm64 VM, musl build), one thread each, CPU ms per 1,000
+  requests / peak MB / req/s, better of two runs:
+
+  | Workload | v0.16.0 | this | wrk `-t1` | oha |
+  |---|---|---|---|---|
+  | GET, 64 connections | 7.8 / 7.8 / 127k | **2.4 / 4.0 / 398k** | 3.5 /
+  4.5 / 282k | 6.8 / 67 / 305k |
+  | GET, 1,000 connections | 13.3 / 51.8 / 73k | **3.2 / 5.8 / 296k** |
+  4.4 / 7.7 / 228k | 5.6 / 73 / 183k |
+  | 16 KB bodies | 9.2 / 9.8 / 99k | **4.2 / 3.9 / 198k** | 5.8 / 4.5 /
+  172k | 9.6 / 25 / 196k |
+  | HTTPS | 7.6 / 9.3 / 129k | **3.3 / 6.0 / 284k** | 4.5 / 10.8 / 218k |
+  8.1 / 42 / 250k |
+  | 10M requests, 256 connections | — | **2.9 / 4.5 / 343k** | 3.3 / 4.6 /
+  304k | 6.5 / 2,404 / 316k |
+
+  macOS (M4 Pro): 9.8 / 14.0 / 102k → 6.2 / 8.8 / 160k for plain GETs; oha
+  23.0 / 77.5 / 161k.
+
+  Every workload, each step's own measurement, the profiles and the CSVs
+  are in `bench/README.md` under "The direct path".
+
+  ## Where pepe is not first
+
+  - A slow target at 1,000 connections, and 16 KB bodies over TLS: level
+  with wrk on CPU, inside each other's run-to-run range.
+  - Throughput against all-core tools: one pepe thread trails oha's four
+  on three rows; `--threads 2` leads or is level.
+  - Memory on a glibc build: 6.0 MB against wrk's 4.5 at 64 connections
+  (the binary's code pages and libc). On the musl build pepe holds less.
+
+  ## For the reviewer
+
+  - **Behaviour change**: a header given twice with `-H` now goes out
+  twice. Through reqwest's default headers only the last was sent.
+  - A request on a kept connection that turns out closed is sent again
+  once on a new one, only for GET, HEAD, OPTIONS and TRACE.
+  - The Linux numbers are from an arm64 VM on a laptop that was in use;
+  single rows moved by about 20% between runs. The x86 numbers come from
+  the Benchmarks workflow on this PR ("bench" in the title runs it).
+  - Not run on Windows beyond what CI does; the direct path has no
+  platform-specific code.
+  - `site/index.html` still quotes the old figures.
+  - clippy on Rust 1.99 reports `fetch_update` as deprecated (four uses
+  already on master, one added here); CI pins 1.98.
+
+  ## Checked
+
+  - 226 tests on macOS, Linux glibc and Linux musl; `cargo check` on 1.85;
+  `cargo fmt --check`, `cargo clippy --all-targets -- -D warnings`.
+  - 10M and 50M request runs on Linux and four concurrent 5M runs on macOS
+  held against the server's own count: exact, none failed.
+  - Same outcomes and messages as v0.16.0 on refused connections,
+  timeouts, bad certificates, DNS failures, 503s, redirects,
+  `--disable-keepalive`, and real HTTPS sites with chunked bodies.
+
+
 ## [0.16.1](https://github.com/omarmhaimdat/pepe/compare/v0.16.0...v0.16.1) - 2026-10-05
 
 ### Fixed
