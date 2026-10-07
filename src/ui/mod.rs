@@ -58,8 +58,7 @@ const NOTICE_TTL: Duration = Duration::from_secs(2);
 const ANOMALY_TTL: Duration = Duration::from_secs(6);
 /// Anomalies the verdict repeats; the rest are in the report
 const MAX_VERDICT_ANOMALIES: usize = 3;
-/// A sending thread this busy (percent of a core) is the run's bottleneck
-const SATURATED: u8 = 90;
+use crate::load::SATURATED;
 
 /// What the user asked for when leaving the dashboard
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -190,6 +189,10 @@ pub struct Dashboard {
     rate_missed: u64,
     busy: Option<u8>,
     peak_busy: Option<u8>,
+    /// Why `--threads auto` stopped adding threads, once it has
+    thread_limit: Option<crate::load::ThreadLimit>,
+    /// ... or is about to add one, the sending ones being busy
+    threads_growing: bool,
     paused: bool,
     /// Time spent paused, which the run's clock leaves out
     paused_total: Duration,
@@ -262,6 +265,8 @@ impl Dashboard {
             rate_missed: 0,
             busy: None,
             peak_busy: None,
+            thread_limit: None,
+            threads_growing: false,
             paused: false,
             paused_total: Duration::ZERO,
             paused_since: None,
@@ -476,7 +481,7 @@ impl Dashboard {
     /// Pull everything the load generator produced since the last frame
     fn drain(&mut self, load: &mut LoadHandle) {
         loop {
-            match load.rx.try_recv() {
+            match load.try_recv() {
                 Ok(stat) => self.record(stat),
                 Err(TryRecvError::Empty) => break,
                 Err(TryRecvError::Disconnected) => {
@@ -523,7 +528,9 @@ impl Dashboard {
         self.threads = load.threads();
         self.rate_missed = load.missed();
         self.busy = load.busy();
-        self.peak_busy = self.peak_busy.max(self.busy);
+        self.peak_busy = load.peak_busy();
+        self.threads_growing = load.can_grow();
+        self.thread_limit = load.thread_limit();
         self.set_paused(load.is_paused());
         self.warmup_left = load.warmup_left();
         if self.warming && !load.warming() {
@@ -547,6 +554,21 @@ impl Dashboard {
         let busy = self
             .busy
             .filter(|&b| b >= SATURATED && self.finished.is_none())?;
+        if self.threads_growing {
+            // Another thread is on its way: nothing for the reader to do
+            return None;
+        }
+        match self.thread_limit {
+            Some(crate::load::ThreadLimit::Cores) => {
+                return Some(format!(
+                    "pepe's {} sending threads are {busy}% busy: this machine is the limit, not the target",
+                    self.threads
+                ))
+            }
+            // Said once, in the verdict: there is nothing to do about it now
+            Some(crate::load::ThreadLimit::NoGain) => return None,
+            None => {}
+        }
         Some(format!(
             "pepe's sending thread is {busy}% busy: the target can take more, add --threads {}",
             self.threads + 1
@@ -616,6 +638,23 @@ impl Dashboard {
         } else {
             format!("busiest of {} sending threads", self.threads)
         };
+        let found = match self.thread_limit {
+            Some(crate::load::ThreadLimit::Cores) => {
+                "with a thread on every core this machine has, so these numbers are this \
+                 machine's limit as much as the target's"
+            }
+            Some(crate::load::ThreadLimit::NoGain) => {
+                "and one more thread sent no more requests, so these numbers are this \
+                 machine's limit as much as the target's"
+            }
+            None => "",
+        };
+        if !found.is_empty() {
+            return Some(insights::Note {
+                level: Level::Degraded,
+                text: format!("pepe's {thread} reached {peak}% of a core, {found}"),
+            });
+        }
         Some(insights::Note {
             level: Level::Degraded,
             text: format!(
@@ -1098,7 +1137,7 @@ mod tests {
             .request()
             .unwrap();
         let client = request.build_client().unwrap();
-        crate::load::start(vec![client], request, 1, Plan::Count(0), false)
+        crate::load::start(client, request, 1, Plan::Count(0), false)
     }
 
     fn stat(status: u16) -> ResponseStats {

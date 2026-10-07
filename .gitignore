@@ -4,3 +4,4 @@ linux_build.sh
 homebrew
 .vscode
 .DS_Store
+/bench/server/target

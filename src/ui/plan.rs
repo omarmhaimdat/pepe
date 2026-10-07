@@ -943,12 +943,9 @@ impl<'a> PlanScreen<'a> {
             }
         };
         targets.truncate(1);
-        let mut load = crate::load::start_targets(vec![client], targets, 1, Plan::Count(1), true);
+        let mut load = crate::load::start_targets(client, targets, 1, Plan::Count(1), true);
         let wait = Duration::from_secs(self.cli.timeout as u64 + 2);
-        tokio::time::timeout(wait, load.rx.recv())
-            .await
-            .ok()
-            .flatten()
+        tokio::time::timeout(wait, load.recv()).await.ok().flatten()
     }
 
     async fn try_once(&mut self, index: usize) {

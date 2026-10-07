@@ -30,7 +30,7 @@ complete -c pepe -n "__fish_pepe_needs_command" -s m -l method -d 'HTTP method, 
 complete -c pepe -n "__fish_pepe_needs_command" -s H -l headers -d 'HTTP headers, e.g. -H \'Accept: application/json\'' -r
 complete -c pepe -n "__fish_pepe_needs_command" -s t -l timeout -d 'Time in seconds to wait for a response' -r
 complete -c pepe -n "__fish_pepe_needs_command" -l warmup -d 'Send for this long before measuring, e.g. 5s: connections open, caches fill and JITs settle without counting against the run' -r
-complete -c pepe -n "__fish_pepe_needs_command" -l threads -d 'Threads sending requests (default 1). One sends about 100k requests a second; the dashboard says when it is the limit' -r
+complete -c pepe -n "__fish_pepe_needs_command" -l threads -d 'Threads sending requests (default 1), or "auto" to add one whenever those sending are all busy. One sends 100k requests a second or more; the dashboard says when it is the limit' -r
 complete -c pepe -n "__fish_pepe_needs_command" -l rate -d 'Start this many requests a second, spread evenly, instead of as many as the concurrency allows; -c is then the most in flight at once, and pepe says when it holds the rate back' -r
 complete -c pepe -n "__fish_pepe_needs_command" -s d -l body -d 'HTTP request body' -r
 complete -c pepe -n "__fish_pepe_needs_command" -s p -l proxy -d 'Proxy server URL: http://user:pass@host:port or socks5://host:port' -r
@@ -62,7 +62,7 @@ complete -c pepe -n "__fish_pepe_using_subcommand self-update" -s m -l method -d
 complete -c pepe -n "__fish_pepe_using_subcommand self-update" -s H -l headers -d 'HTTP headers, e.g. -H \'Accept: application/json\'' -r
 complete -c pepe -n "__fish_pepe_using_subcommand self-update" -s t -l timeout -d 'Time in seconds to wait for a response' -r
 complete -c pepe -n "__fish_pepe_using_subcommand self-update" -l warmup -d 'Send for this long before measuring, e.g. 5s: connections open, caches fill and JITs settle without counting against the run' -r
-complete -c pepe -n "__fish_pepe_using_subcommand self-update" -l threads -d 'Threads sending requests (default 1). One sends about 100k requests a second; the dashboard says when it is the limit' -r
+complete -c pepe -n "__fish_pepe_using_subcommand self-update" -l threads -d 'Threads sending requests (default 1), or "auto" to add one whenever those sending are all busy. One sends 100k requests a second or more; the dashboard says when it is the limit' -r
 complete -c pepe -n "__fish_pepe_using_subcommand self-update" -l rate -d 'Start this many requests a second, spread evenly, instead of as many as the concurrency allows; -c is then the most in flight at once, and pepe says when it holds the rate back' -r
 complete -c pepe -n "__fish_pepe_using_subcommand self-update" -s d -l body -d 'HTTP request body' -r
 complete -c pepe -n "__fish_pepe_using_subcommand self-update" -s p -l proxy -d 'Proxy server URL: http://user:pass@host:port or socks5://host:port' -r
@@ -87,7 +87,7 @@ complete -c pepe -n "__fish_pepe_using_subcommand completions" -s m -l method -d
 complete -c pepe -n "__fish_pepe_using_subcommand completions" -s H -l headers -d 'HTTP headers, e.g. -H \'Accept: application/json\'' -r
 complete -c pepe -n "__fish_pepe_using_subcommand completions" -s t -l timeout -d 'Time in seconds to wait for a response' -r
 complete -c pepe -n "__fish_pepe_using_subcommand completions" -l warmup -d 'Send for this long before measuring, e.g. 5s: connections open, caches fill and JITs settle without counting against the run' -r
-complete -c pepe -n "__fish_pepe_using_subcommand completions" -l threads -d 'Threads sending requests (default 1). One sends about 100k requests a second; the dashboard says when it is the limit' -r
+complete -c pepe -n "__fish_pepe_using_subcommand completions" -l threads -d 'Threads sending requests (default 1), or "auto" to add one whenever those sending are all busy. One sends 100k requests a second or more; the dashboard says when it is the limit' -r
 complete -c pepe -n "__fish_pepe_using_subcommand completions" -l rate -d 'Start this many requests a second, spread evenly, instead of as many as the concurrency allows; -c is then the most in flight at once, and pepe says when it holds the rate back' -r
 complete -c pepe -n "__fish_pepe_using_subcommand completions" -s d -l body -d 'HTTP request body' -r
 complete -c pepe -n "__fish_pepe_using_subcommand completions" -s p -l proxy -d 'Proxy server URL: http://user:pass@host:port or socks5://host:port' -r
@@ -118,7 +118,7 @@ complete -c pepe -n "__fish_pepe_using_subcommand api" -s m -l method -d 'HTTP m
 complete -c pepe -n "__fish_pepe_using_subcommand api" -s H -l headers -d 'HTTP headers, e.g. -H \'Accept: application/json\'' -r
 complete -c pepe -n "__fish_pepe_using_subcommand api" -s t -l timeout -d 'Time in seconds to wait for a response' -r
 complete -c pepe -n "__fish_pepe_using_subcommand api" -l warmup -d 'Send for this long before measuring, e.g. 5s: connections open, caches fill and JITs settle without counting against the run' -r
-complete -c pepe -n "__fish_pepe_using_subcommand api" -l threads -d 'Threads sending requests (default 1). One sends about 100k requests a second; the dashboard says when it is the limit' -r
+complete -c pepe -n "__fish_pepe_using_subcommand api" -l threads -d 'Threads sending requests (default 1), or "auto" to add one whenever those sending are all busy. One sends 100k requests a second or more; the dashboard says when it is the limit' -r
 complete -c pepe -n "__fish_pepe_using_subcommand api" -l rate -d 'Start this many requests a second, spread evenly, instead of as many as the concurrency allows; -c is then the most in flight at once, and pepe says when it holds the rate back' -r
 complete -c pepe -n "__fish_pepe_using_subcommand api" -s d -l body -d 'HTTP request body' -r
 complete -c pepe -n "__fish_pepe_using_subcommand api" -s p -l proxy -d 'Proxy server URL: http://user:pass@host:port or socks5://host:port' -r
@@ -148,7 +148,7 @@ complete -c pepe -n "__fish_pepe_using_subcommand ramp" -s m -l method -d 'HTTP 
 complete -c pepe -n "__fish_pepe_using_subcommand ramp" -s H -l headers -d 'HTTP headers, e.g. -H \'Accept: application/json\'' -r
 complete -c pepe -n "__fish_pepe_using_subcommand ramp" -s t -l timeout -d 'Time in seconds to wait for a response' -r
 complete -c pepe -n "__fish_pepe_using_subcommand ramp" -l warmup -d 'Send for this long before measuring, e.g. 5s: connections open, caches fill and JITs settle without counting against the run' -r
-complete -c pepe -n "__fish_pepe_using_subcommand ramp" -l threads -d 'Threads sending requests (default 1). One sends about 100k requests a second; the dashboard says when it is the limit' -r
+complete -c pepe -n "__fish_pepe_using_subcommand ramp" -l threads -d 'Threads sending requests (default 1), or "auto" to add one whenever those sending are all busy. One sends 100k requests a second or more; the dashboard says when it is the limit' -r
 complete -c pepe -n "__fish_pepe_using_subcommand ramp" -l rate -d 'Start this many requests a second, spread evenly, instead of as many as the concurrency allows; -c is then the most in flight at once, and pepe says when it holds the rate back' -r
 complete -c pepe -n "__fish_pepe_using_subcommand ramp" -s d -l body -d 'HTTP request body' -r
 complete -c pepe -n "__fish_pepe_using_subcommand ramp" -s p -l proxy -d 'Proxy server URL: http://user:pass@host:port or socks5://host:port' -r
@@ -173,7 +173,7 @@ complete -c pepe -n "__fish_pepe_using_subcommand replay" -s m -l method -d 'HTT
 complete -c pepe -n "__fish_pepe_using_subcommand replay" -s H -l headers -d 'HTTP headers, e.g. -H \'Accept: application/json\'' -r
 complete -c pepe -n "__fish_pepe_using_subcommand replay" -s t -l timeout -d 'Time in seconds to wait for a response' -r
 complete -c pepe -n "__fish_pepe_using_subcommand replay" -l warmup -d 'Send for this long before measuring, e.g. 5s: connections open, caches fill and JITs settle without counting against the run' -r
-complete -c pepe -n "__fish_pepe_using_subcommand replay" -l threads -d 'Threads sending requests (default 1). One sends about 100k requests a second; the dashboard says when it is the limit' -r
+complete -c pepe -n "__fish_pepe_using_subcommand replay" -l threads -d 'Threads sending requests (default 1), or "auto" to add one whenever those sending are all busy. One sends 100k requests a second or more; the dashboard says when it is the limit' -r
 complete -c pepe -n "__fish_pepe_using_subcommand replay" -l rate -d 'Start this many requests a second, spread evenly, instead of as many as the concurrency allows; -c is then the most in flight at once, and pepe says when it holds the rate back' -r
 complete -c pepe -n "__fish_pepe_using_subcommand replay" -s d -l body -d 'HTTP request body' -r
 complete -c pepe -n "__fish_pepe_using_subcommand replay" -s p -l proxy -d 'Proxy server URL: http://user:pass@host:port or socks5://host:port' -r
@@ -197,7 +197,7 @@ complete -c pepe -n "__fish_pepe_using_subcommand flow" -s m -l method -d 'HTTP 
 complete -c pepe -n "__fish_pepe_using_subcommand flow" -s H -l headers -d 'HTTP headers, e.g. -H \'Accept: application/json\'' -r
 complete -c pepe -n "__fish_pepe_using_subcommand flow" -s t -l timeout -d 'Time in seconds to wait for a response' -r
 complete -c pepe -n "__fish_pepe_using_subcommand flow" -l warmup -d 'Send for this long before measuring, e.g. 5s: connections open, caches fill and JITs settle without counting against the run' -r
-complete -c pepe -n "__fish_pepe_using_subcommand flow" -l threads -d 'Threads sending requests (default 1). One sends about 100k requests a second; the dashboard says when it is the limit' -r
+complete -c pepe -n "__fish_pepe_using_subcommand flow" -l threads -d 'Threads sending requests (default 1), or "auto" to add one whenever those sending are all busy. One sends 100k requests a second or more; the dashboard says when it is the limit' -r
 complete -c pepe -n "__fish_pepe_using_subcommand flow" -l rate -d 'Start this many requests a second, spread evenly, instead of as many as the concurrency allows; -c is then the most in flight at once, and pepe says when it holds the rate back' -r
 complete -c pepe -n "__fish_pepe_using_subcommand flow" -s d -l body -d 'HTTP request body' -r
 complete -c pepe -n "__fish_pepe_using_subcommand flow" -s p -l proxy -d 'Proxy server URL: http://user:pass@host:port or socks5://host:port' -r

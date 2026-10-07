@@ -1,4 +1,4 @@
-# A small OpenAPI spec for the bench server (bench/server.go), used by the
+# A small OpenAPI spec for the bench server (bench/server), used by the
 # API-mode recording: `pepe api assets/demo/openapi.yaml`.
 openapi: 3.0.3
 info:

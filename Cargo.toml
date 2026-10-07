@@ -21,6 +21,13 @@ reqwest = { version = "0.12.12", default-features = false, features = [
     "rustls-tls",
     "socks",
 ] }
+# The direct path (src/direct.rs): a connection per worker, read and
+# written by pepe itself over the same rustls reqwest uses, with httparse
+# for the response's head. All of these are in reqwest's own dependency
+# tree already.
+httparse = "1"
+tokio-rustls = { version = "0.26", default-features = false, features = ["ring", "tls12"] }
+webpki-roots = "1"
 futures = "0.3.17"
 bytes = "1"
 # A layer around reqwest's connector, to time how long connections take

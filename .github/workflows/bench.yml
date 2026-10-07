@@ -6,8 +6,9 @@
 # fails if CPU per request or peak memory grew past the limits in that
 # script, so a regression can't ship unnoticed.
 #
-# linux-record: the full suite for pepe and oha on this runner, kept as an
-# artifact; bench/README.md's Linux column comes from here.
+# linux-record: the full suite for pepe (the musl build, as released), oha
+# and wrk on this runner, kept as an artifact; bench/README.md's Linux
+# column comes from here.
 name: Benchmarks
 
 on:
@@ -42,10 +43,11 @@ jobs:
           fetch-depth: 0
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
-      - uses: actions/setup-go@v7
         with:
-          go-version: stable
-          cache: false
+          # pepe, and the benchmark's target server
+          workspaces: |
+            .
+            bench/server
 
       - name: Build the candidate
         run: cargo build --release --locked && cp target/release/pepe /tmp/pepe-candidate
@@ -65,10 +67,10 @@ jobs:
 
       - name: Start the target server
         run: |
-          # Built first: on a cold runner `go run` compiles for longer than
-          # a short wait, and a start that fails should say why
-          go build -o /tmp/bench-server bench/server.go
-          /tmp/bench-server > /tmp/server.log 2>&1 &
+          # Built first: on a cold runner it compiles for longer than a
+          # short wait, and a start that fails should say why
+          cargo build --release --locked --manifest-path bench/server/Cargo.toml
+          bench/server/target/release/bench-server > /tmp/server.log 2>&1 &
           for i in $(seq 1 150); do curl -sf http://127.0.0.1:8089/ >/dev/null && break; sleep 0.2; done
           curl -sf http://127.0.0.1:8089/ >/dev/null || { cat /tmp/server.log; exit 1; }
 
@@ -76,7 +78,7 @@ jobs:
         run: bench/compare.sh /tmp/pepe-baseline /tmp/pepe-candidate 3
 
   linux-record:
-    name: Linux record (pepe and oha)
+    name: Linux record (pepe, oha and wrk)
     if: >-
       github.event_name == 'workflow_dispatch' ||
       contains(github.event.pull_request.labels.*.name, 'release') ||
@@ -89,24 +91,31 @@ jobs:
         with:
           persist-credentials: false
       - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
-      - uses: actions/setup-go@v7
         with:
-          go-version: stable
-          cache: false
+          # What the releases are built for
+          targets: x86_64-unknown-linux-musl
+      - uses: Swatinem/rust-cache@v2
+        with:
+          # pepe, and the benchmark's target server
+          workspaces: |
+            .
+            bench/server
       - uses: taiki-e/install-action@v2
         with:
           tool: oha
 
-      - name: Build pepe
-        run: cargo build --release --locked
+      - name: Build pepe as the releases are, against musl
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq musl-tools wrk
+          cargo build --release --locked --target x86_64-unknown-linux-musl
 
       - name: Start the target server
         run: |
-          # Built first: on a cold runner `go run` compiles for longer than
-          # a short wait, and a start that fails should say why
-          go build -o /tmp/bench-server bench/server.go
-          /tmp/bench-server > /tmp/server.log 2>&1 &
+          # Built first: on a cold runner it compiles for longer than a
+          # short wait, and a start that fails should say why
+          cargo build --release --locked --manifest-path bench/server/Cargo.toml
+          bench/server/target/release/bench-server > /tmp/server.log 2>&1 &
           for i in $(seq 1 150); do curl -sf http://127.0.0.1:8089/ >/dev/null && break; sleep 0.2; done
           curl -sf http://127.0.0.1:8089/ >/dev/null || { cat /tmp/server.log; exit 1; }
 
@@ -117,7 +126,7 @@ jobs:
           oha --version
           # Many connections at once
           ulimit -n 65536 || true
-          NO_VEGETA=1 bench/run.sh | tee linux.csv
+          NO_VEGETA=1 bench/run.sh target/x86_64-unknown-linux-musl/release/pepe | tee linux.csv
           {
             echo "## Linux record"
             echo

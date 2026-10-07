@@ -44,8 +44,8 @@ Time in seconds to wait for a response
 \fB\-\-warmup\fR \fI<TIME>\fR
 Send for this long before measuring, e.g. 5s: connections open, caches fill and JITs settle without counting against the run
 .TP
-\fB\-\-threads\fR \fI<THREADS>\fR
-Threads sending requests (default 1). One sends about 100k requests a second; the dashboard says when it is the limit
+\fB\-\-threads\fR \fI<N|auto>\fR
+Threads sending requests (default 1), or "auto" to add one whenever those sending are all busy. One sends 100k requests a second or more; the dashboard says when it is the limit
 .TP
 \fB\-\-rate\fR \fI<PER_SECOND>\fR
 Start this many requests a second, spread evenly, instead of as many as the concurrency allows; \-c is then the most in flight at once, and pepe says when it holds the rate back

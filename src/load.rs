@@ -14,9 +14,11 @@ use std::time::{Duration, Instant};
 use tokio::sync::{mpsc, Notify};
 use tokio::task::JoinSet;
 
+use crate::direct;
 use crate::flow::Flow;
-use crate::request::Request;
+use crate::request::{Request, Sender};
 use crate::response::ResponseStats;
+use crate::response::{Answer, Failure, Preview};
 use crate::utils::{resolve_dns, thread_cpu_time};
 
 /// Upper bound for live concurrency changes from the dashboard
@@ -48,22 +50,146 @@ pub enum Plan {
     Duration(Duration),
 }
 
+/// A thread this busy (percent of a core) is holding the run back:
+/// `--threads auto` adds another, and without it the dashboard says so
+pub const SATURATED: u8 = 90;
+
+/// What a thread `--threads auto` adds has to raise the rate by, to stay:
+/// a third of what one more thread on `threads` is worth at best. Less,
+/// and what holds the run back is the machine (a target on the same
+/// cores, say), which another thread only crowds. A third, not a few
+/// percent: the rate over one second moves by more than that on its own.
+fn worth_a_thread(threads: usize) -> f64 {
+    1.0 / (3.0 * threads.max(1) as f64)
+}
+
+/// Why `--threads auto` stopped adding threads
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ThreadLimit {
+    /// There is one on every core
+    Cores,
+    /// The last one added sent no more requests, and was taken back
+    NoGain,
+}
+
+/// What `--threads` asks for
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ThreadCount {
+    /// Start with one, and add one whenever every sending thread is
+    /// `SATURATED`, up to the machine's cores
+    Auto,
+    Fixed(u32),
+}
+
+impl std::str::FromStr for ThreadCount {
+    type Err = String;
+
+    fn from_str(text: &str) -> Result<Self, String> {
+        match text.trim() {
+            "auto" => Ok(Self::Auto),
+            number => match number.parse::<u32>() {
+                Ok(n) if n >= 1 => Ok(Self::Fixed(n)),
+                _ => Err(format!(
+                    "{text:?} is neither a number of threads nor \"auto\""
+                )),
+            },
+        }
+    }
+}
+
+impl std::fmt::Display for ThreadCount {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Auto => f.write_str("auto"),
+            Self::Fixed(n) => write!(f, "{n}"),
+        }
+    }
+}
+
+impl serde::Serialize for ThreadCount {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        match self {
+            Self::Auto => serializer.serialize_str("auto"),
+            Self::Fixed(n) => serializer.serialize_u32(*n),
+        }
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for ThreadCount {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        /// `threads = 2` or `threads = "auto"`
+        #[derive(serde::Deserialize)]
+        #[serde(untagged)]
+        enum Written {
+            Number(u32),
+            Word(String),
+        }
+        match Written::deserialize(deserializer)? {
+            Written::Number(n) => n.to_string().parse(),
+            Written::Word(word) => word.parse(),
+        }
+        .map_err(serde::de::Error::custom)
+    }
+}
+
+/// The shard threads of a run: how many send from the start, and how many
+/// there may come to be
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Threads {
+    pub start: usize,
+    pub most: usize,
+}
+
+impl From<usize> for Threads {
+    fn from(fixed: usize) -> Self {
+        Self {
+            start: fixed.max(1),
+            most: fixed.max(1),
+        }
+    }
+}
+
 /// Shard threads for a run: what `--threads` asked for, otherwise one. One
-/// thread sends about a hundred thousand plain requests a second, or ten
+/// thread sends a hundred thousand plain requests a second or more, or ten
 /// thousand TLS handshakes, at the lowest CPU per request; more raise the
-/// peak against a target that can take it, and the dashboard says when
-/// that's the case (see `LoadHandle::busy`). Never more than the
-/// concurrency: a shard with no worker would have nothing to do.
-pub fn shards(concurrency: usize, requested: Option<usize>) -> usize {
-    requested
-        .unwrap_or(1)
-        .clamp(1, concurrency.clamp(1, MAX_CONCURRENCY))
+/// peak against a target that can take it. The dashboard says when that's
+/// the case (see `LoadHandle::busy`), and `--threads auto` acts on it.
+/// Never more than the concurrency: a shard with no worker would have
+/// nothing to do.
+pub fn shards(concurrency: usize, requested: Option<ThreadCount>) -> Threads {
+    let workers = concurrency.clamp(1, MAX_CONCURRENCY);
+    match requested {
+        None => 1.into(),
+        Some(ThreadCount::Fixed(n)) => (n as usize).clamp(1, workers).into(),
+        Some(ThreadCount::Auto) => Threads {
+            start: 1,
+            most: std::thread::available_parallelism()
+                .map_or(1, |cores| cores.get())
+                .min(workers),
+        },
+    }
+}
+
+/// What a run sends with: a sender for every shard thread it may come to
+/// have, and how many of them send from the start
+pub struct Senders {
+    pub list: Vec<Sender>,
+    pub start: usize,
+}
+
+impl From<Sender> for Senders {
+    fn from(one: Sender) -> Self {
+        Self {
+            list: vec![one],
+            start: 1,
+        }
+    }
 }
 
 /// A running load test. Results arrive on `rx`; the channel closes once every
 /// request has finished (or the run was stopped). Dropping the handle stops it.
 pub struct LoadHandle {
-    pub rx: mpsc::UnboundedReceiver<ResponseStats>,
+    rx: mpsc::UnboundedReceiver<Report>,
     control: Arc<Control>,
 }
 
@@ -76,11 +202,22 @@ impl LoadHandle {
     pub fn drain(&mut self, mut each: impl FnMut(ResponseStats)) -> bool {
         loop {
             match self.rx.try_recv() {
-                Ok(stat) => each(stat),
+                Ok(report) => each(report.into()),
                 Err(mpsc::error::TryRecvError::Empty) => return true,
                 Err(mpsc::error::TryRecvError::Disconnected) => return false,
             }
         }
+    }
+
+    /// The next result, when it comes; None once the run is over and the
+    /// last result was taken
+    pub async fn recv(&mut self) -> Option<ResponseStats> {
+        self.rx.recv().await.map(ResponseStats::from)
+    }
+
+    /// The next result if one is waiting
+    pub fn try_recv(&mut self) -> Result<ResponseStats, mpsc::error::TryRecvError> {
+        self.rx.try_recv().map(ResponseStats::from)
     }
 
     /// Stop sending and cancel in-flight requests
@@ -100,7 +237,32 @@ impl LoadHandle {
 
     /// Shard threads sending
     pub fn threads(&self) -> usize {
-        self.control.busy.len()
+        self.control.active.load(Ordering::Relaxed)
+    }
+
+    /// Whether another thread is added when these are all busy: `--threads
+    /// auto`, until it finds its limit
+    pub fn can_grow(&self) -> bool {
+        self.control.auto && self.thread_limit().is_none()
+    }
+
+    /// Why `--threads auto` adds no more threads, once it doesn't
+    pub fn thread_limit(&self) -> Option<ThreadLimit> {
+        match self.control.thread_limit.load(Ordering::Relaxed) {
+            LIMIT_CORES => Some(ThreadLimit::Cores),
+            LIMIT_NO_GAIN => Some(ThreadLimit::NoGain),
+            _ => None,
+        }
+    }
+
+    /// The busiest second of the busiest sending thread, in percent of a
+    /// core, since the run last gained a thread: what limits the numbers
+    /// is the threads the run ended with, not the fewer it began with
+    pub fn peak_busy(&self) -> Option<u8> {
+        match self.control.peak_busy.load(Ordering::Relaxed) {
+            BUSY_UNKNOWN => None,
+            peak => Some(peak),
+        }
     }
 
     /// How busy the busiest sending thread was over its last second, in
@@ -223,6 +385,92 @@ impl Drop for LoadHandle {
 
 const NO_DEADLINE: u64 = u64::MAX;
 
+/// `Control::thread_limit`: `--threads auto` may still add a shard, or why not
+const LIMIT_NONE: u8 = 0;
+const LIMIT_CORES: u8 = 1;
+const LIMIT_NO_GAIN: u8 = 2;
+
+/// What `--threads auto` keeps between one second and the next
+#[derive(Default)]
+struct Growth {
+    /// Shards not started yet
+    dormant: Vec<Arc<Shard>>,
+    /// When requests were last counted, and how many had started by then
+    counted: Option<(Instant, u64)>,
+    /// The rate before the shard added last, until that shard has had a
+    /// second to show what it is worth
+    before: Option<f64>,
+}
+
+/// A result on its way from a shard to whoever counts them. Results wait
+/// in a queue between two collections (see `LoadHandle::drain`), a few
+/// thousand of them at a time when a run is fast, and nearly all of them
+/// are a status, two times and a size: those travel as that, a sixth of
+/// the size of the whole record.
+enum Report {
+    Plain {
+        /// Nanoseconds
+        duration: u64,
+        ttfb: u64,
+        body_bytes: u64,
+        status: u16,
+        endpoint: u16,
+        warmup: bool,
+        cache: Option<crate::cache::CacheStatus>,
+    },
+    Full(Box<ResponseStats>),
+}
+
+impl From<ResponseStats> for Report {
+    fn from(stats: ResponseStats) -> Self {
+        let plain = stats.preview.is_none()
+            && stats.dns_times.is_none()
+            && stats.error.is_none()
+            && stats.error_message.is_none()
+            && stats.detail.is_none()
+            && stats.request_id.is_none()
+            && stats.server_timing.is_none();
+        match (plain, stats.status_code, stats.ttfb) {
+            (true, Some(status), Some(ttfb)) => Self::Plain {
+                duration: stats.duration.as_nanos() as u64,
+                ttfb: ttfb.as_nanos() as u64,
+                body_bytes: stats.body_bytes,
+                status: status.as_u16(),
+                endpoint: stats.endpoint,
+                warmup: stats.warmup,
+                cache: stats.cache_status,
+            },
+            _ => Self::Full(Box::new(stats)),
+        }
+    }
+}
+
+impl From<Report> for ResponseStats {
+    fn from(report: Report) -> Self {
+        match report {
+            Report::Full(stats) => *stats,
+            Report::Plain {
+                duration,
+                ttfb,
+                body_bytes,
+                status,
+                endpoint,
+                warmup,
+                cache,
+            } => ResponseStats {
+                duration: Duration::from_nanos(duration),
+                ttfb: Some(Duration::from_nanos(ttfb)),
+                body_bytes,
+                status_code: reqwest::StatusCode::from_u16(status).ok(),
+                endpoint,
+                warmup,
+                cache_status: cache,
+                ..Default::default()
+            },
+        }
+    }
+}
+
 /// What the dashboard can change while a run is going, and how far along
 /// the plan is. Workers read it before every request; every change is
 /// announced on `changed`.
@@ -243,8 +491,21 @@ struct Control {
     paused_at_ns: AtomicU64,
     clock: Instant,
     changed: Notify,
-    /// Each shard's latest busy percentage (see `LoadHandle::busy`)
+    /// Each shard's latest busy percentage (see `LoadHandle::busy`); one
+    /// for every shard there may come to be
     busy: Vec<AtomicU8>,
+    /// The highest of them since the last shard was added
+    peak_busy: AtomicU8,
+    /// Shards sending now; the concurrency is shared out between them
+    active: AtomicUsize,
+    /// `--threads auto`: shards may be added while the run goes
+    auto: bool,
+    /// Why no more are (`LIMIT_*`)
+    thread_limit: AtomicU8,
+    growth: std::sync::Mutex<Growth>,
+    /// Requests started during the warm-up, which `sent` leaves out: the
+    /// two together are what `--threads auto` reads the rate from
+    warmed: AtomicU64,
     /// Nanoseconds on `clock` when the warm-up ends; 0 when there is none
     warmup_end_ns: AtomicU64,
     /// `--rate` as nanoseconds between starts; 0 when unpaced
@@ -256,7 +517,7 @@ struct Control {
 }
 
 impl Control {
-    fn new(concurrency: usize, plan: Plan, shards: usize) -> Self {
+    fn new(concurrency: usize, plan: Plan, threads: Threads) -> Self {
         let (limit, deadline_ns) = match plan {
             Plan::Count(n) => (n, NO_DEADLINE),
             Plan::Duration(d) => (u64::MAX, d.as_nanos() as u64),
@@ -272,11 +533,118 @@ impl Control {
             paused_at_ns: AtomicU64::new(0),
             clock: Instant::now(),
             changed: Notify::new(),
-            busy: (0..shards).map(|_| AtomicU8::new(BUSY_UNKNOWN)).collect(),
+            busy: (0..threads.most)
+                .map(|_| AtomicU8::new(BUSY_UNKNOWN))
+                .collect(),
+            peak_busy: AtomicU8::new(BUSY_UNKNOWN),
+            active: AtomicUsize::new(threads.start),
+            auto: threads.most > threads.start,
+            thread_limit: AtomicU8::new(LIMIT_NONE),
+            growth: std::sync::Mutex::new(Growth {
+                // Counting from the start, so the first second already
+                // has a rate to hold a new thread against
+                counted: Some((Instant::now(), 0)),
+                ..Default::default()
+            }),
+            warmed: AtomicU64::new(0),
             warmup_end_ns: AtomicU64::new(0),
             interval_ns: AtomicU64::new(0),
             next_slot_ns: AtomicU64::new(0),
             missed: AtomicU64::new(0),
+        }
+    }
+
+    /// A shard measured how busy its thread was over the last second
+    fn measured(&self, shard: usize, busy: u8) {
+        self.busy[shard].store(busy, Ordering::Relaxed);
+        // BUSY_UNKNOWN is the highest value there is, so it can't be a max
+        let _ = self
+            .peak_busy
+            .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |peak| {
+                (peak == BUSY_UNKNOWN || busy > peak).then_some(busy)
+            });
+        self.grow_if_saturated();
+    }
+
+    /// `--threads auto`, once a second: when every sending thread is busy
+    /// the target can take more than they send, so start another, and a
+    /// second later see what it was worth
+    fn grow_if_saturated(&self) {
+        let Ok(mut growth) = self.growth.lock() else {
+            return;
+        };
+        if !self.auto || self.thread_limit.load(Ordering::Relaxed) != LIMIT_NONE || self.over() {
+            return;
+        }
+        // A pause says nothing about what a thread is worth
+        if self.paused.load(Ordering::Relaxed) {
+            growth.counted = None;
+            return;
+        }
+        let now = Instant::now();
+        let started = self.sent.load(Ordering::Relaxed) + self.warmed.load(Ordering::Relaxed);
+        let rate = match growth.counted {
+            // Every shard asks once a second; one answer a second is enough
+            Some((at, _)) if now.duration_since(at) < BUSY_SAMPLE.mul_f32(0.9) => return,
+            Some((at, before)) => {
+                started.saturating_sub(before) as f64 / now.duration_since(at).as_secs_f64()
+            }
+            None => {
+                growth.counted = Some((now, started));
+                return;
+            }
+        };
+        growth.counted = Some((now, started));
+        self.consider(&mut growth, rate);
+    }
+
+    /// One step of `--threads auto`, given the rate over the last second
+    fn consider(&self, growth: &mut Growth, rate: f64) {
+        let active = self.active.load(Ordering::Relaxed);
+        if let Some(before) = growth.before.take() {
+            if rate < before * (1.0 + worth_a_thread(active - 1)) {
+                // Back to what it was. The shard added last keeps its
+                // thread and gets no share (see `Shard::share`).
+                self.active.store(active - 1, Ordering::Relaxed);
+                self.settle(growth, LIMIT_NO_GAIN);
+                return;
+            }
+            if growth.dormant.is_empty() {
+                self.settle(growth, LIMIT_CORES);
+                return;
+            }
+        }
+        // A shard just added has no measurement yet, and holds the next
+        // one back until it has
+        let all_busy = self.busy[..active].iter().all(|busy| {
+            let busy = busy.load(Ordering::Relaxed);
+            busy != BUSY_UNKNOWN && busy >= SATURATED
+        });
+        if !all_busy || growth.dormant.is_empty() {
+            return;
+        }
+        let shard = growth.dormant.remove(0);
+        growth.before = Some(rate);
+        self.active.store(active + 1, Ordering::Relaxed);
+        self.peak_busy.store(BUSY_UNKNOWN, Ordering::Relaxed);
+        shard.spawn();
+        // Every shard's share just changed
+        self.changed.notify_waiters();
+    }
+
+    /// `--threads auto` has its answer: no shard is added from here on
+    fn settle(&self, growth: &mut Growth, limit: u8) {
+        growth.dormant.clear();
+        self.thread_limit.store(limit, Ordering::Relaxed);
+        self.peak_busy.store(BUSY_UNKNOWN, Ordering::Relaxed);
+        self.changed.notify_waiters();
+    }
+
+    /// The run is over: shards that never started hold a sender on the
+    /// results channel, which closes only when they are gone
+    fn retire_dormant(&self) {
+        if let Ok(mut growth) = self.growth.lock() {
+            growth.dormant.clear();
         }
     }
 
@@ -335,6 +703,7 @@ impl Control {
     /// Warm-up requests aren't the plan's: they're always allowed.
     fn claim(&self) -> bool {
         if self.warming() {
+            self.warmed.fetch_add(1, Ordering::Relaxed);
             return true;
         }
         self.sent
@@ -501,6 +870,29 @@ fn schedule(targets: &[Target]) -> Vec<u16> {
     order
 }
 
+/// Bodies of failed responses a worker keeps for each status it meets
+const FAILURE_BODIES: u8 = 4;
+
+/// Which failed responses a worker has kept the body of, by status
+#[derive(Default)]
+struct FailureBodies(Vec<(reqwest::StatusCode, u8)>);
+
+impl FailureBodies {
+    /// Whether to keep the body of one more response with this status
+    fn wants(&mut self, status: reqwest::StatusCode) -> bool {
+        let at = match self.0.iter().position(|(seen, _)| *seen == status) {
+            Some(at) => at,
+            None => {
+                self.0.push((status, 0));
+                self.0.len() - 1
+            }
+        };
+        let kept = &mut self.0[at].1;
+        *kept = kept.saturating_add(1);
+        *kept <= FAILURE_BODIES
+    }
+}
+
 /// What every shard shares: the targets and the run-wide samplers
 struct Shared {
     targets: Vec<Target>,
@@ -514,11 +906,13 @@ struct Shared {
     details: DetailBudget,
     /// A flow instead of targets: workers walk its steps in order
     flow: Option<Flow>,
+    /// The targets the direct path sends, made ready for it
+    routes: direct::Routes,
 }
 
 /// Load one request
 pub fn start(
-    clients: Vec<reqwest::Client>,
+    clients: impl Into<Senders>,
     request: Request,
     concurrency: usize,
     plan: Plan,
@@ -536,7 +930,7 @@ pub fn start(
 /// Load a mix of requests, each in proportion to its weight. One shard
 /// thread is started per client; `shards` says how many to build.
 pub fn start_targets(
-    clients: Vec<reqwest::Client>,
+    clients: impl Into<Senders>,
     targets: Vec<Target>,
     concurrency: usize,
     plan: Plan,
@@ -550,7 +944,7 @@ pub fn start_targets(
 /// values, and starts over when the chain ends or a step fails. A Count
 /// plan counts chains, not requests.
 pub fn start_flow(
-    clients: Vec<reqwest::Client>,
+    clients: impl Into<Senders>,
     flow: Flow,
     concurrency: usize,
     plan: Plan,
@@ -561,18 +955,32 @@ pub fn start_flow(
 }
 
 fn start_shared(
-    clients: Vec<reqwest::Client>,
+    clients: impl Into<Senders>,
     targets: Vec<Target>,
     flow: Option<Flow>,
     concurrency: usize,
     plan: Plan,
     previews: bool,
 ) -> LoadHandle {
+    let Senders {
+        list: clients,
+        start,
+    } = clients.into();
     assert!(!clients.is_empty(), "a run needs at least one client");
     let (tx, rx) = mpsc::unbounded_channel();
     let concurrency = concurrency.clamp(1, MAX_CONCURRENCY);
-    let control = Arc::new(Control::new(concurrency, plan, clients.len()));
+    let threads = Threads {
+        start: start.clamp(1, clients.len()),
+        most: clients.len(),
+    };
+    let control = Arc::new(Control::new(concurrency, plan, threads));
+    // The same for every shard: they were built from one request
+    let routes = match &clients[0].direct {
+        Some(setup) => direct::Routes::new(setup, targets.iter().map(|t| (&t.request, &t.headers))),
+        None => direct::Routes::none(targets.len()),
+    };
     let shared = Arc::new(Shared {
+        routes,
         schedule: schedule(&targets),
         targets,
         next: AtomicUsize::new(0),
@@ -581,21 +989,24 @@ fn start_shared(
         details: DetailBudget::new(),
         flow,
     });
-    let count = clients.len();
-    for (index, client) in clients.into_iter().enumerate() {
+    let mut dormant = Vec::new();
+    for (index, sender) in clients.into_iter().enumerate() {
         let shard = Arc::new(Shard {
             index,
-            count,
-            client,
+            sender,
             shared: shared.clone(),
             control: control.clone(),
             tx: tx.clone(),
             wake: Notify::new(),
         });
-        std::thread::Builder::new()
-            .name(format!("pepe-load-{index}"))
-            .spawn(move || run_shard(shard))
-            .expect("spawn a load thread");
+        if index < threads.start {
+            shard.spawn();
+        } else {
+            dormant.push(shard);
+        }
+    }
+    if let Ok(mut growth) = control.growth.lock() {
+        growth.dormant = dormant;
     }
     // Only the shards hold senders now, so the channel closes when they end
     drop(tx);
@@ -605,12 +1016,12 @@ fn start_shared(
 /// One load thread: its client and its share of the workers
 struct Shard {
     index: usize,
-    /// How many shards the run has
-    count: usize,
-    client: reqwest::Client,
+    /// The direct path's setup when the run can use it, and reqwest for
+    /// what the direct path leaves to it
+    sender: Sender,
     shared: Arc<Shared>,
     control: Arc<Control>,
-    tx: mpsc::UnboundedSender<ResponseStats>,
+    tx: mpsc::UnboundedSender<Report>,
     /// Woken whenever `control` changed, so parked workers look again
     wake: Notify,
 }
@@ -622,12 +1033,25 @@ fn share_of(total: usize, index: usize, count: usize) -> usize {
 }
 
 impl Shard {
-    /// This shard's part of the concurrency right now
+    /// Start this shard's thread
+    fn spawn(self: Arc<Self>) {
+        std::thread::Builder::new()
+            .name(format!("pepe-load-{}", self.index))
+            .spawn(move || run_shard(self))
+            .expect("spawn a load thread");
+    }
+
+    /// This shard's part of the concurrency right now; none for a shard
+    /// that `--threads auto` added and took back
     fn share(&self) -> usize {
+        let active = self.control.active.load(Ordering::Relaxed);
+        if self.index >= active {
+            return 0;
+        }
         share_of(
             self.control.concurrency.load(Ordering::Relaxed),
             self.index,
-            self.count,
+            active,
         )
     }
 
@@ -646,16 +1070,23 @@ impl Shard {
         }
     }
 
-    /// Wait until worker `slot` may send; false once the run is over
-    async fn turn(&self, slot: usize) -> bool {
+    /// Wait until worker `slot` may send; false once the run is over.
+    /// `surplus` is called when the worker is one more than this shard's
+    /// share (the concurrency was lowered, or a shard was added): it has
+    /// nothing to send until that changes.
+    async fn turn(&self, slot: usize, mut surplus: impl FnMut()) -> bool {
         loop {
             // Registered before the checks, so a change in between isn't missed
             let wake = self.wake.notified();
             if self.control.over() {
                 return false;
             }
-            if !self.control.paused.load(Ordering::Relaxed) && slot < self.share() {
+            let mine = slot < self.share();
+            if mine && !self.control.paused.load(Ordering::Relaxed) {
                 return true;
+            }
+            if !mine {
+                surplus();
             }
             wake.await;
         }
@@ -675,6 +1106,7 @@ fn run_shard(shard: Arc<Shard>) {
             _ = shard.control.stopped() => {}
         }
     });
+    shard.control.retire_dormant();
 }
 
 /// Keeps the shard's workers matching its share of the concurrency, ends
@@ -684,7 +1116,10 @@ async fn supervise(shard: &Arc<Shard>) {
     let control = &shard.control;
     let mut workers = JoinSet::new();
     let mut meter = BusyMeter::start();
-    let mut sample = tokio::time::interval(BUSY_SAMPLE);
+    // The first sample after a full interval: an interval's first tick is
+    // immediate, and a reading over no time at all says nothing
+    let mut sample =
+        tokio::time::interval_at(tokio::time::Instant::now() + BUSY_SAMPLE, BUSY_SAMPLE);
     sample.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
     loop {
         let changed = control.changed.notified();
@@ -710,7 +1145,7 @@ async fn supervise(shard: &Arc<Shard>) {
             _ = deadline => control.drain(),
             _ = sample.tick() => {
                 if let Some(busy) = meter.sample() {
-                    control.busy[shard.index].store(busy, Ordering::Relaxed);
+                    control.measured(shard.index, busy);
                 }
             }
         }
@@ -751,9 +1186,12 @@ impl BusyMeter {
 /// Sends requests one after another, whenever it has a turn
 async fn worker(shard: Arc<Shard>, slot: usize) {
     if shard.shared.flow.is_some() {
-        return flow_worker(shard, slot).await;
+        return Box::pin(flow_worker(shard, slot)).await;
     }
-    while shard.turn(slot).await {
+    let mut lines = shard.shared.routes.lines();
+    let mut failure_bodies = FailureBodies::default();
+    // A worker with no turn coming holds no connection open
+    while shard.turn(slot, || lines.close()).await {
         if let Some(wait) = shard.control.pace() {
             tokio::time::sleep(wait).await;
             if shard.control.over() {
@@ -766,9 +1204,9 @@ async fn worker(shard: Arc<Shard>, slot: usize) {
             break;
         }
         let warmup = shard.control.warming();
-        let mut stats = send_one(&shard).await;
+        let mut stats = send_one(&shard, &mut lines, &mut failure_bodies).await;
         stats.warmup = warmup;
-        if shard.tx.send(stats).is_err() {
+        if shard.tx.send(stats.into()).is_err() {
             break;
         }
     }
@@ -784,7 +1222,7 @@ async fn flow_worker(shard: Arc<Shard>, slot: usize) {
         .as_ref()
         .expect("a flow worker has a flow");
     let mut vars = std::collections::HashMap::new();
-    'chains: while shard.turn(slot).await {
+    'chains: while shard.turn(slot, || {}).await {
         if !shard.control.claim() {
             shard.control.drain();
             break;
@@ -802,7 +1240,7 @@ async fn flow_worker(shard: Arc<Shard>, slot: usize) {
                 tokio::time::sleep(wait).await;
             }
             let (stats, ok) = send_step(&shard, step, index as u16, &mut vars).await;
-            if shard.tx.send(stats).is_err() {
+            if shard.tx.send(stats.into()).is_err() {
                 break 'chains;
             }
             if !ok {
@@ -832,17 +1270,21 @@ async fn send_step(
         }
     };
     let start = Instant::now();
-    let response = shard.client.execute(request).await;
+    let response = match shard.sender.client() {
+        Ok(client) => client.execute(request).await.map_err(|e| Failure::from(&e)),
+        Err(failure) => Err(failure),
+    };
     let ttfb = start.elapsed();
     let capture = shared.previews
         && matches!(&response, Ok(r) if shared.details.claim(!r.status().is_success()));
+    let response = response.map(Answer::from);
     let body_cap = if step.captures.is_empty() {
         0
     } else {
         crate::flow::BODY_CAP
     };
     let (mut stats, kept) =
-        ResponseStats::with_body(response, start, ttfb, shared.previews, capture, body_cap).await;
+        ResponseStats::with_body(response, start, ttfb, shared.preview(), capture, body_cap).await;
     stats.endpoint = index;
     let Some(status) = stats.status_code else {
         return (stats, false);
@@ -869,25 +1311,98 @@ async fn send_step(
     (stats, true)
 }
 
-async fn send_one(shard: &Shard) -> ResponseStats {
+async fn send_one(
+    shard: &Shard,
+    lines: &mut direct::Lines,
+    failure_bodies: &mut FailureBodies,
+) -> ResponseStats {
     let shared = &shard.shared;
     let turn = shared.next.fetch_add(1, Ordering::Relaxed);
-    let target = &shared.targets[shared.schedule[turn % shared.schedule.len()] as usize];
+    let index = shared.schedule[turn % shared.schedule.len()] as usize;
+    let target = &shared.targets[index];
     let dns_times = match target.request.url.host_str() {
-        Some(host) if shared.dns.claim() => resolve_dns(host).await.ok(),
+        // Boxed, as are the other paths a request rarely takes: a worker's
+        // future is as large as everything it might be waiting on at once,
+        // and there is one for every connection
+        Some(host) if shared.dns.claim() => Box::pin(resolve_dns(host)).await.ok(),
         _ => None,
     };
 
+    if let (Some(setup), Some(route)) = (&shard.sender.direct, shared.routes.get(index)) {
+        let start = Instant::now();
+        let sent = lines.send(setup, route, start).await;
+        let ttfb = start.elapsed();
+        let response = match sent {
+            Ok(direct::Sent::Answered(response)) => Ok(response),
+            Err(failure) => Err(failure),
+            // Sent again below, the way that follows redirects
+            Ok(direct::Sent::Redirected) => {
+                return Box::pin(pooled(shard, target, dns_times)).await
+            }
+        };
+        let capture = shared.previews
+            && matches!(&response, Ok(r) if shared.details.claim(!r.status.is_success()));
+        // The verdict shows a body for each kind of failure, and takes it
+        // from the first of its kind: a worker keeps a few, not the body
+        // of every 503 of a target that is down
+        let preview = match &response {
+            Ok(r)
+                if !shared.previews
+                    && !r.status.is_success()
+                    && !failure_bodies.wants(r.status) =>
+            {
+                Preview::Never
+            }
+            _ => shared.preview(),
+        };
+        let response = response.map(|r| Answer::Direct(r, &target.request.url));
+        let mut stats =
+            ResponseStats::from_response(response, start, ttfb, dns_times, preview, capture)
+                .await
+                .0;
+        lines.done(setup, route, stats.error.is_some());
+        stats.endpoint = target.endpoint;
+        return stats;
+    }
+    Box::pin(pooled(shard, target, dns_times)).await
+}
+
+/// One request through reqwest and its connection pool: what the direct
+/// path doesn't do (see `direct`)
+async fn pooled(
+    shard: &Shard,
+    target: &Target,
+    dns_times: Option<(Duration, Duration)>,
+) -> ResponseStats {
+    let shared = &shard.shared;
     let start = Instant::now();
-    let response = shard.client.execute(target.build()).await;
+    let response = match shard.sender.client() {
+        Ok(client) => client
+            .execute(target.build())
+            .await
+            .map_err(|e| Failure::from(&e)),
+        Err(failure) => Err(failure),
+    };
     let ttfb = start.elapsed();
     let capture = shared.previews
         && matches!(&response, Ok(r) if shared.details.claim(!r.status().is_success()));
+    let response = response.map(Answer::from);
     let mut stats =
-        ResponseStats::from_response(response, start, ttfb, dns_times, shared.previews, capture)
-            .await;
+        ResponseStats::from_response(response, start, ttfb, dns_times, shared.preview(), capture)
+            .await
+            .0;
     stats.endpoint = target.endpoint;
     stats
+}
+
+impl Shared {
+    /// Which responses to keep the start of
+    fn preview(&self) -> Preview {
+        match self.previews {
+            true => Preview::Always,
+            false => Preview::OfFailures,
+        }
+    }
 }
 
 impl Target {
@@ -983,7 +1498,7 @@ mod tests {
 
     async fn drain(mut load: LoadHandle) -> Vec<ResponseStats> {
         let mut out = Vec::new();
-        while let Some(stat) = load.rx.recv().await {
+        while let Some(stat) = load.recv().await {
             out.push(stat);
         }
         out
@@ -1189,7 +1704,7 @@ mod tests {
         load.set_rate(Some(1_000.0));
         let mut rx_load = load;
         let mut n = 0;
-        while rx_load.rx.recv().await.is_some() {
+        while rx_load.recv().await.is_some() {
             n += 1;
         }
         assert!(n < 100, "sent {n}");
@@ -1301,11 +1816,134 @@ mod tests {
 
     #[test]
     fn one_shard_unless_asked_and_never_more_than_workers() {
-        assert_eq!(shards(1, None), 1);
-        assert_eq!(shards(100_000, None), 1);
-        assert_eq!(shards(100_000, Some(16)), 16, "--threads wins");
-        assert_eq!(shards(3, Some(16)), 3, "never more shards than workers");
-        assert_eq!(shards(10, Some(0)), 1);
+        let fixed = |n| Some(ThreadCount::Fixed(n));
+        assert_eq!(shards(1, None), 1.into());
+        assert_eq!(shards(100_000, None), 1.into());
+        assert_eq!(shards(100_000, fixed(16)), 16.into(), "--threads wins");
+        assert_eq!(
+            shards(3, fixed(16)),
+            3.into(),
+            "never more shards than workers"
+        );
+        assert_eq!(shards(10, fixed(0)), 1.into());
+        // auto starts with one and may reach the cores, or the workers
+        let cores = std::thread::available_parallelism().unwrap().get();
+        let auto = shards(100_000, Some(ThreadCount::Auto));
+        assert_eq!((auto.start, auto.most), (1, cores));
+        assert_eq!(shards(1, Some(ThreadCount::Auto)), 1.into());
+    }
+
+    #[test]
+    fn threads_are_a_number_or_auto() {
+        assert_eq!("auto".parse(), Ok(ThreadCount::Auto));
+        assert_eq!(" 4 ".parse(), Ok(ThreadCount::Fixed(4)));
+        assert!("0".parse::<ThreadCount>().is_err());
+        assert!("many".parse::<ThreadCount>().is_err());
+        assert_eq!(ThreadCount::Auto.to_string(), "auto");
+        assert_eq!(ThreadCount::Fixed(3).to_string(), "3");
+    }
+
+    /// A paused run with `most` shards, one of them sending, for stepping
+    /// `--threads auto` by hand
+    async fn growing(most: usize) -> (Server, LoadHandle) {
+        let srv = server(Duration::from_millis(20)).await;
+        let req = request(&srv.url, "GET", None);
+        let senders = Senders {
+            list: req.build_clients(most).unwrap().0.list,
+            start: 1,
+        };
+        let plan = Plan::Duration(Duration::from_secs(30));
+        let load = start(senders, req, 6, plan, false);
+        assert_eq!(load.threads(), 1);
+        assert!(load.can_grow());
+        (srv, load)
+    }
+
+    /// Shard `shard` measured `busy`, and the run sent `rate` a second
+    fn step(load: &LoadHandle, shard: usize, busy: u8, rate: f64) {
+        let c = &load.control;
+        c.busy[shard].store(busy, Ordering::Relaxed);
+        c.consider(&mut c.growth.lock().unwrap(), rate);
+    }
+
+    #[tokio::test]
+    async fn a_shard_is_added_while_they_are_all_busy_and_it_pays() {
+        let (srv, load) = growing(3).await;
+        // Not busy, not grown
+        step(&load, 0, 40, 100.0);
+        assert_eq!(load.threads(), 1);
+        // Busy: a second shard
+        step(&load, 0, 97, 100.0);
+        assert_eq!(load.threads(), 2);
+        // It nearly doubled the rate, so it stays; it hasn't measured
+        // yet, so nothing more is added
+        step(&load, 0, 99, 190.0);
+        assert_eq!(load.threads(), 2);
+        // Both busy: the third and last, which pays too
+        step(&load, 1, 95, 190.0);
+        assert_eq!(load.threads(), 3);
+        assert!(load.can_grow(), "until the third has shown its worth");
+        step(&load, 2, 99, 270.0);
+        assert_eq!(load.threads(), 3);
+        assert_eq!(load.thread_limit(), Some(ThreadLimit::Cores));
+        assert!(!load.can_grow());
+        // Every shard takes its share of the six workers
+        tokio::time::sleep(Duration::from_millis(300)).await;
+        assert_eq!(srv.peak.load(Ordering::SeqCst), 6);
+        load.stop();
+        drain(load).await;
+    }
+
+    #[tokio::test]
+    async fn a_shard_that_sends_no_more_is_taken_back() {
+        let (srv, load) = growing(4).await;
+        step(&load, 0, 97, 100.0);
+        assert_eq!(load.threads(), 2);
+        // A fifth more for a whole thread: the machine is the limit
+        step(&load, 0, 97, 120.0);
+        assert_eq!(load.threads(), 1);
+        assert_eq!(load.thread_limit(), Some(ThreadLimit::NoGain));
+        // ... and that was the last attempt
+        step(&load, 0, 99, 120.0);
+        assert_eq!(load.threads(), 1);
+        assert!(!load.can_grow());
+        // The six workers are the first shard's again. Watched for a
+        // while: at any one instant a worker may be between requests.
+        tokio::time::sleep(Duration::from_millis(200)).await;
+        let mut most = 0;
+        for _ in 0..30 {
+            most = most.max(srv.inflight.load(Ordering::SeqCst));
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+        assert_eq!(most, 6);
+        load.stop();
+        drain(load).await;
+    }
+
+    #[tokio::test]
+    async fn a_fixed_number_of_threads_never_grows() {
+        let srv = server(Duration::ZERO).await;
+        let req = request(&srv.url, "GET", None);
+        let clients = req.build_clients(2).unwrap().0;
+        let load = start(clients, req, 4, Plan::Count(4), false);
+        assert_eq!((load.threads(), load.can_grow()), (2, false));
+        step(&load, 0, 99, 100.0);
+        step(&load, 1, 99, 100.0);
+        assert_eq!((load.threads(), load.thread_limit()), (2, None));
+        drain(load).await;
+    }
+
+    #[tokio::test]
+    async fn a_run_ends_with_shards_that_never_started() {
+        let srv = server(Duration::ZERO).await;
+        let req = request(&srv.url, "GET", None);
+        let senders = Senders {
+            list: req.build_clients(4).unwrap().0.list,
+            start: 1,
+        };
+        let load = start(senders, req, 4, Plan::Count(10), false);
+        // The channel closes although three shards still held a sender
+        assert_eq!(drain(load).await.len(), 10);
     }
 
     #[tokio::test]

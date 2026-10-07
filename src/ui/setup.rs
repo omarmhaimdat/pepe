@@ -630,7 +630,7 @@ impl Setup {
         cli.timeout = number("timeout", &self.timeout)?;
         cli.threads = match self.threads.trim() {
             "" => None,
-            text => Some(number("threads", text)?.max(1)),
+            text => Some(text.parse().map_err(|e: String| e)?),
         };
         cli.warmup = match self.warmup.trim() {
             "" => None,
@@ -684,9 +684,9 @@ impl Setup {
             Ok(built) => built,
             Err(e) => return self.message = Some((e.to_string(), true)),
         };
-        let mut load = crate::load::start(vec![client], request, 1, Plan::Count(1), true);
+        let mut load = crate::load::start(client, request, 1, Plan::Count(1), true);
         let wait = Duration::from_secs(cli.timeout as u64 + 2);
-        match tokio::time::timeout(wait, load.rx.recv()).await {
+        match tokio::time::timeout(wait, load.recv()).await {
             Ok(Some(stat)) => {
                 self.tried = Some(stat);
                 self.message = None;
@@ -1192,7 +1192,7 @@ impl Setup {
             &mut options,
             Field::Threads,
             "Threads",
-            self.typed(Field::Threads, &self.threads, "auto", room),
+            self.typed(Field::Threads, &self.threads, "1, or auto", room),
             width,
         );
         self.row(
