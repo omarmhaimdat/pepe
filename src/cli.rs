@@ -54,10 +54,11 @@ pub struct Cli {
     #[arg(long, global = true, value_name = "TIME")]
     pub warmup: Option<String>,
 
-    /// Threads sending requests (default 1). One sends about 100k requests
-    /// a second; the dashboard says when it is the limit
-    #[arg(long, global = true, value_parser = clap::value_parser!(u32).range(1..))]
-    pub threads: Option<u32>,
+    /// Threads sending requests (default 1), or "auto" to add one whenever
+    /// those sending are all busy. One sends 100k requests a second or
+    /// more; the dashboard says when it is the limit
+    #[arg(long, global = true, value_name = "N|auto")]
+    pub threads: Option<crate::load::ThreadCount>,
 
     /// Start this many requests a second, spread evenly, instead of as
     /// many as the concurrency allows; -c is then the most in flight at
@@ -761,9 +762,8 @@ mod tests {
         cli.validate().unwrap();
         let request = cli.request().unwrap();
         let client = request.build_client().unwrap();
-        let mut load =
-            crate::load::start(vec![client], request, 1, crate::load::Plan::Count(1), false);
-        while load.rx.recv().await.is_some() {}
+        let mut load = crate::load::start(client, request, 1, crate::load::Plan::Count(1), false);
+        while load.recv().await.is_some() {}
         String::from_utf8_lossy(&server.await.unwrap()).into_owned()
     }
 

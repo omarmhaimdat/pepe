@@ -1278,6 +1278,7 @@ dependencies = [
  "crossterm 0.29.0",
  "futures",
  "gethostname",
+ "httparse",
  "libc",
  "ratatui",
  "regex-lite",
@@ -1288,9 +1289,11 @@ dependencies = [
  "serde_json",
  "serde_norway",
  "tokio",
+ "tokio-rustls",
  "toml",
  "tower-layer",
  "tower-service",
+ "webpki-roots",
 ]
 
 [[package]]

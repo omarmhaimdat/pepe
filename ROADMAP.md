@@ -111,30 +111,57 @@ Get the results where they're needed.
 
 ## 6. Speed on Linux
 
-On an M4 Pro pepe spends 2.5× less CPU per request than oha. On a 4-vCPU
-Linux runner it spends about 30% more and reaches half the throughput
-(see [bench/README.md](bench/README.md)), and Linux is where CI and most
-agents run.
+Linux is where CI and most agents run. Through v0.16 pepe spent 2.5×
+less CPU per request than oha on an M4 Pro, but as much as oha or more
+on Linux, twice wrk's, and reached half oha's throughput. The profile
+said why, and the ticked items here are what it led to (the numbers are
+in [bench/README.md](bench/README.md)).
 
+- [x] **Name the gap** (M): on Linux a third of pepe's CPU was reqwest's
+      per-request plumbing (the pool, the connector, the timer, the
+      URL parsed again for every response), and a twentieth was pepe
+      looking up twenty header names in every response — next release
+- [x] **A lean HTTP/1.1 path** (L): each worker keeps its own connection
+      and reads and writes it itself. The request is bytes made before
+      the run; the response is parsed where it was read; nothing is
+      allocated for a request, and a thread's connections share one read
+      buffer. reqwest is left the proxies, the redirects and the flows.
+      On Linux 37 to 76% less CPU per request and 35 to 89% less memory
+      than v0.16.0: ahead of wrk on both, on one thread, with ten
+      million requests in 4.5 MB — next release
+- [x] **Threads on their own** (S): `--threads auto` adds a sending
+      thread whenever those sending are all past 90% of a core, and
+      takes it back if it didn't pay, so a script gets the throughput
+      without reading the footer — next release
+- [x] **wrk and k6 in the table** (S): `bench/run.sh` measures them next
+      to oha and vegeta when they are installed, and the suite has a
+      million-request workload; its target server is Rust now, at half
+      the CPU of the Go one it replaces, and the Linux record is taken
+      with the musl build that is released — next release
+- [ ] **A fixed machine for the numbers** (S). Shared runners move the
+      same binary from 13 to 26 ms per 1,000 requests, and the Linux
+      tables so far are from a VM on a laptop that was in use. A
+      dedicated runner makes the absolutes mean something.
+- [ ] **Flows on the direct path** (M). A flow builds a new request at
+      every step, so it still goes through reqwest and pays what plain
+      runs no longer do.
+- [ ] **TLS without the copies** (M). With 16 KB bodies over TLS pepe is
+      level with wrk rather than ahead: rustls decrypts into a buffer of
+      its own and copies out. Its unbuffered API takes a record from the
+      socket to the count in place.
+- [ ] **Less of the binary in memory** (M). Of pepe's 4 MB, 3.2 are its
+      own code, mapped 64 KB at a time around whatever a run touches. A
+      profile-guided link puts what a run uses together; on a glibc
+      build, where libc is mapped too and wrk holds 1.5 MB less than
+      pepe, it is the only way under.
+- [ ] **Fewer trips to the kernel** (L). Four fifths of the cost is now
+      one `send` and one `recv` per request and the kernel's side of
+      them. Doing better means several requests per system call
+      (io_uring), which is a project of its own and only for Linux.
 - [ ] **The reqwest re-parse fix, upstream** (S). The patch in
-      `bench/patches/` skips a `Url::parse` on every response and
-      measured 3.5–4% less CPU on Linux. Sent upstream, pepe gets it
-      without carrying a fork.
-- [ ] **Name the rest of the gap** (M). The profile so far explains about
-      a tenth of pepe's CPU on Linux. Keep at it until the difference
-      with oha is accounted for; that decides whether the last item here
-      is needed.
-- [ ] **Threads on their own** (S). `--threads auto` adds a sending
-      thread when one passes 90% of a core. pepe already says when it is
-      the limit, but a script can't read the footer.
-- [ ] **A fixed machine for the numbers, with wrk and k6** (S). Shared
-      runners move the same binary from 13 to 26 ms per 1,000 requests.
-      A dedicated runner makes the absolutes mean something, and wrk and
-      k6 next to oha and vegeta complete the table.
-- [ ] **A lean HTTP/1.1 path** (L). What is left after the above is the
-      shape of the reqwest and hyper-util stack. A sender of pepe's own
-      for the plain case is a project of its own, and only worth it if
-      the gap is still there.
+      `bench/patches/` skips a `Url::parse` on every response. pepe's
+      plain runs no longer pass through it; flows and proxied runs do,
+      and so does everyone else who uses reqwest.
 
 ## 7. Agents
 

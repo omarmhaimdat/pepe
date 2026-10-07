@@ -1,0 +1,25 @@
+# The target server for the benchmarks in bench/README.md. A crate of its
+# own, outside pepe's, so its dependencies never reach pepe's lockfile.
+[package]
+name = "bench-server"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[workspace]
+
+[dependencies]
+tokio = { version = "1", features = ["rt-multi-thread", "net", "time", "macros"] }
+hyper = { version = "1", features = ["http1", "server"] }
+hyper-util = { version = "0.1", features = ["tokio"] }
+http-body-util = "0.1"
+bytes = "1"
+# The HTTPS listener: a certificate made at startup, served with rustls
+tokio-rustls = { version = "0.26", default-features = false, features = ["ring"] }
+rcgen = "0.13"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+panic = "abort"

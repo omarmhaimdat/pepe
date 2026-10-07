@@ -78,12 +78,12 @@ impl ApiRun {
     pub fn clients(
         &self,
         cli: &Cli,
-        shards: usize,
-    ) -> Result<(Vec<reqwest::Client>, std::sync::Arc<ConnectTimes>), PepeError> {
+        shards: crate::load::Threads,
+    ) -> Result<(crate::load::Senders, std::sync::Arc<ConnectTimes>), PepeError> {
         self.shared_request(cli)?.build_clients(shards)
     }
 
-    pub fn client(&self, cli: &Cli) -> Result<reqwest::Client, PepeError> {
+    pub fn client(&self, cli: &Cli) -> Result<crate::request::Sender, PepeError> {
         self.shared_request(cli)?.build_client()
     }
 

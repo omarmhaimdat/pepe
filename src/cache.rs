@@ -1,5 +1,3 @@
-use reqwest::header::HeaderMap;
-
 const CACHE_HEADERS: [&str; 7] = [
     "x-cache",
     "x-cache-status",
@@ -51,17 +49,20 @@ impl CacheCategory {
 impl CacheStatus {
     // Parse a cache status value string into the CacheStatus enum
     pub fn from_str(status: &str) -> CacheStatus {
-        match status.to_lowercase().as_str() {
-            "hit" => CacheStatus::Hit,
-            "miss" => CacheStatus::Miss,
-            "stale" => CacheStatus::Stale,
-            "expired" => CacheStatus::Expired,
-            "revalidated" => CacheStatus::Revalidated,
-            "bypass" => CacheStatus::Bypass,
-            "dynamic" => CacheStatus::Dynamic,
-            "error" => CacheStatus::Error,
-            _ => CacheStatus::Unknown,
-        }
+        const NAMES: [(&str, CacheStatus); 8] = [
+            ("hit", CacheStatus::Hit),
+            ("miss", CacheStatus::Miss),
+            ("stale", CacheStatus::Stale),
+            ("expired", CacheStatus::Expired),
+            ("revalidated", CacheStatus::Revalidated),
+            ("bypass", CacheStatus::Bypass),
+            ("dynamic", CacheStatus::Dynamic),
+            ("error", CacheStatus::Error),
+        ];
+        NAMES
+            .iter()
+            .find(|(name, _)| status.eq_ignore_ascii_case(name))
+            .map_or(CacheStatus::Unknown, |(_, found)| found.clone())
     }
 
     pub fn _to_category(&self) -> CacheCategory {
@@ -70,23 +71,39 @@ impl CacheStatus {
 
     /// Parse cache headers into a CacheStatus enum
     /// This function is not exhaustive and only supports a few cache headers
-    pub fn parse_headers(headers: &HeaderMap) -> Option<CacheStatus> {
-        for header in CACHE_HEADERS.iter() {
-            if let Some(value) = headers.get(*header) {
-                if let Ok(value_str) = value.to_str() {
-                    return Some(CacheStatus::from_str(value_str));
-                }
+    pub fn parse_headers<'h>(
+        headers: impl Iterator<Item = (&'h [u8], &'h [u8])>,
+    ) -> Option<CacheStatus> {
+        // One pass over the response's few headers, instead of a lookup
+        // for each name on the list: this runs for every response. Most
+        // headers are ruled out by their length alone.
+        const LENGTHS: u64 = crate::utils::lengths(&CACHE_HEADERS);
+        let mut best: Option<(usize, &str)> = None;
+        for (name, value) in headers {
+            if LENGTHS & (1 << name.len().min(63)) == 0 {
+                continue;
+            }
+            let Some(rank) = CACHE_HEADERS
+                .iter()
+                .position(|h| h.as_bytes().eq_ignore_ascii_case(name))
+            else {
+                continue;
+            };
+            if best.is_some_and(|(found, _)| found <= rank) {
+                continue;
+            }
+            if let Ok(value) = std::str::from_utf8(value) {
+                best = Some((rank, value.trim()));
             }
         }
-
-        None
+        best.map(|(_, value)| CacheStatus::from_str(value))
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use reqwest::header::HeaderValue;
+    use reqwest::header::{HeaderMap, HeaderValue};
 
     fn headers(name: &'static str, value: &'static str) -> HeaderMap {
         let mut h = HeaderMap::new();
@@ -97,18 +114,21 @@ mod tests {
     #[test]
     fn parses_known_cache_headers() {
         assert_eq!(
-            CacheStatus::parse_headers(&headers("cf-cache-status", "HIT")),
+            CacheStatus::parse_headers(crate::response::fields(&headers("cf-cache-status", "HIT"))),
             Some(CacheStatus::Hit)
         );
         assert_eq!(
-            CacheStatus::parse_headers(&headers("x-vercel-cache", "stale")),
+            CacheStatus::parse_headers(crate::response::fields(&headers(
+                "x-vercel-cache",
+                "stale"
+            ))),
             Some(CacheStatus::Stale)
         );
         assert_eq!(
-            CacheStatus::parse_headers(&headers("x-cache", "weird")),
+            CacheStatus::parse_headers(crate::response::fields(&headers("x-cache", "weird"))),
             Some(CacheStatus::Unknown)
         );
-        assert_eq!(CacheStatus::parse_headers(&HeaderMap::new()), None);
+        assert_eq!(CacheStatus::parse_headers(std::iter::empty()), None);
     }
 
     #[test]

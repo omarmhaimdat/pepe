@@ -58,3 +58,17 @@ pub async fn resolve_dns(
 
     Ok((dns_lookup_time, dns_resolution_time))
 }
+
+/// Which lengths the names in `names` have, as a bit each (63 and longer
+/// share the last): a name of another length is none of them, which is
+/// the cheapest way to find that out
+pub const fn lengths(names: &[&str]) -> u64 {
+    let mut bits = 0;
+    let mut i = 0;
+    while i < names.len() {
+        let len = names[i].len();
+        bits |= 1 << (if len < 63 { len } else { 63 });
+        i += 1;
+    }
+    bits
+}

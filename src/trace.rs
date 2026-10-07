@@ -3,7 +3,7 @@
 
 use std::sync::OnceLock;
 
-use reqwest::header::{HeaderMap, HeaderName, HeaderValue};
+use reqwest::header::HeaderName;
 
 /// Response headers that carry a request or trace id, most specific first.
 /// The value is taken whole, except where noted in `id_in`.
@@ -33,20 +33,43 @@ pub fn use_id_header(name: HeaderName) {
 }
 
 /// The request's id, as the backend knows it, and the header it came from
-pub fn request_id(headers: &HeaderMap) -> Option<(&'static str, Box<str>)> {
-    if let Some((name, label)) = CUSTOM_ID_HEADER.get() {
-        if let Some(value) = headers.get(name).and_then(|v| v.to_str().ok()) {
-            let value = value.trim();
+pub fn request_id<'h>(
+    headers: impl Iterator<Item = (&'h [u8], &'h [u8])>,
+) -> Option<(&'static str, Box<str>)> {
+    // One pass over the response's few headers, instead of a lookup for
+    // each of the twelve names: this runs for every response. Most
+    // headers are ruled out by their length alone.
+    const LENGTHS: u64 = crate::utils::lengths(&ID_HEADERS);
+    let custom = CUSTOM_ID_HEADER.get();
+    let mut best: Option<(usize, &str)> = None;
+    for (name, value) in headers {
+        if let Some((_, label)) =
+            custom.filter(|(_, label)| label.as_bytes().eq_ignore_ascii_case(name))
+        {
+            // The header named on the command line wins over the list
+            let value = std::str::from_utf8(value).unwrap_or("").trim();
             if !value.is_empty() {
                 return Some((label, value.into()));
             }
         }
+        if LENGTHS & (1 << name.len().min(63)) == 0 {
+            continue;
+        }
+        let Some(rank) = ID_HEADERS
+            .iter()
+            .position(|h| h.as_bytes().eq_ignore_ascii_case(name))
+        else {
+            continue;
+        };
+        if best.is_some_and(|(found, _)| found <= rank) {
+            continue;
+        }
+        let value = std::str::from_utf8(value).ok();
+        if let Some(id) = value.and_then(|v| id_in(ID_HEADERS[rank], v)) {
+            best = Some((rank, id));
+        }
     }
-    ID_HEADERS.iter().find_map(|&name| {
-        let value = headers.get(name)?.to_str().ok()?;
-        let id = id_in(name, value)?;
-        Some((name, id.into()))
-    })
+    best.map(|(rank, id)| (ID_HEADERS[rank], id.into()))
 }
 
 /// The id part of a header's value: most carry the id alone, a few wrap it
@@ -78,16 +101,23 @@ pub struct ServerTiming {
 
 /// Every entry of every `Server-Timing` header, in order; None when the
 /// response has none
-pub fn server_timing(headers: &HeaderMap) -> Option<Box<[ServerTiming]>> {
+pub fn server_timing<'h>(
+    headers: impl Iterator<Item = (&'h [u8], &'h [u8])>,
+) -> Option<Box<[ServerTiming]>> {
+    // Most responses have none, and an empty Vec costs nothing
     let mut entries = Vec::new();
-    for value in headers.get_all("server-timing") {
-        parse_server_timing(value, &mut entries);
+    for (name, value) in headers {
+        if name.len() == "server-timing".len() && name.eq_ignore_ascii_case(b"server-timing") {
+            parse_server_timing(value, &mut entries);
+        }
     }
     (!entries.is_empty()).then(|| entries.into_boxed_slice())
 }
 
-fn parse_server_timing(value: &HeaderValue, entries: &mut Vec<ServerTiming>) {
-    let Ok(value) = value.to_str() else { return };
+fn parse_server_timing(value: &[u8], entries: &mut Vec<ServerTiming>) {
+    let Ok(value) = std::str::from_utf8(value) else {
+        return;
+    };
     for entry in split_unquoted(value, ',') {
         let mut parts = split_unquoted(entry, ';');
         let Some(name) = parts.next().map(str::trim).filter(|n| !n.is_empty()) else {
@@ -129,6 +159,8 @@ fn split_unquoted(s: &str, sep: char) -> impl Iterator<Item = &str> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::response::fields;
+    use reqwest::header::{HeaderMap, HeaderValue};
 
     fn headers(pairs: &[(&str, &str)]) -> HeaderMap {
         let mut h = HeaderMap::new();
@@ -150,13 +182,16 @@ mod tests {
             ),
             ("x-request-id", " req-42 "),
         ]);
-        assert_eq!(request_id(&h), Some(("x-request-id", "req-42".into())));
+        assert_eq!(
+            request_id(fields(&h)),
+            Some(("x-request-id", "req-42".into()))
+        );
         let h = headers(&[(
             "traceparent",
             "00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01",
         )]);
         assert_eq!(
-            request_id(&h),
+            request_id(fields(&h)),
             Some(("traceparent", "0af7651916cd43dd8448eb211c80319c".into()))
         );
         let h = headers(&[(
@@ -164,7 +199,7 @@ mod tests {
             "Root=1-67891233-abcdef012345678912345678;Sampled=1",
         )]);
         assert_eq!(
-            request_id(&h).unwrap().1.as_ref(),
+            request_id(fields(&h)).unwrap().1.as_ref(),
             "1-67891233-abcdef012345678912345678"
         );
         let h = headers(&[(
@@ -172,12 +207,15 @@ mod tests {
             "105445aa7843bc8bf206b12000100000/1;o=1",
         )]);
         assert_eq!(
-            request_id(&h).unwrap().1.as_ref(),
+            request_id(fields(&h)).unwrap().1.as_ref(),
             "105445aa7843bc8bf206b12000100000"
         );
-        assert_eq!(request_id(&headers(&[("x-request-id", "  ")])), None);
         assert_eq!(
-            request_id(&headers(&[("content-type", "text/plain")])),
+            request_id(fields(&headers(&[("x-request-id", "  ")]))),
+            None
+        );
+        assert_eq!(
+            request_id(fields(&headers(&[("content-type", "text/plain")]))),
             None
         );
     }
@@ -191,7 +229,7 @@ mod tests {
             ),
             ("server-timing", "cache;desc=HIT, miss"),
         ]);
-        let entries = server_timing(&h).unwrap();
+        let entries = server_timing(fields(&h)).unwrap();
         let names: Vec<&str> = entries.iter().map(|e| e.name.as_ref()).collect();
         assert_eq!(names, ["db", "app", "cache", "miss"]);
         assert_eq!(entries[0].dur_ms, Some(53.2));
@@ -208,7 +246,7 @@ mod tests {
                 desc: None
             }
         );
-        assert!(server_timing(&headers(&[("server-timing", " , ")])).is_none());
-        assert!(server_timing(&headers(&[])).is_none());
+        assert!(server_timing(fields(&headers(&[("server-timing", " , ")]))).is_none());
+        assert!(server_timing(fields(&headers(&[]))).is_none());
     }
 }

@@ -39,8 +39,9 @@ pub struct Config {
     /// Seconds
     #[serde(skip_serializing_if = "Option::is_none")]
     pub timeout: Option<u32>,
+    /// A number, or "auto"
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub threads: Option<u32>,
+    pub threads: Option<crate::load::ThreadCount>,
     /// `--rate`: requests started per second
     #[serde(skip_serializing_if = "Option::is_none")]
     pub rate: Option<f64>,
@@ -514,6 +515,27 @@ mod tests {
             cli
         };
         assert_eq!(lifted(fresh).command_line(), lifted(cli).command_line());
+    }
+
+    #[test]
+    fn threads_are_a_number_or_auto_in_the_file_too() {
+        use crate::load::ThreadCount;
+        assert_eq!(
+            parse("threads = 3\n").unwrap().threads,
+            Some(ThreadCount::Fixed(3))
+        );
+        assert_eq!(
+            parse("threads = \"auto\"\n").unwrap().threads,
+            Some(ThreadCount::Auto)
+        );
+        assert!(parse("threads = 0\n").is_err());
+        assert!(parse("threads = \"plenty\"\n").is_err());
+        // `--threads auto` is written as it was typed, and reads back
+        let (cli, _) = parse_argv(&["pepe", "https://example.com/", "--threads", "auto"]);
+        let text = Config::from_cli(&cli).to_toml();
+        assert!(text.contains("threads = \"auto\""), "{text}");
+        assert_eq!(parse(&text).unwrap().threads, Some(ThreadCount::Auto));
+        assert!(cli.command_line().contains("--threads auto"));
     }
 
     #[test]

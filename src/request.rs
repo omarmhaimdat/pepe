@@ -8,7 +8,10 @@ use bytes::Bytes;
 use reqwest::header::{HeaderMap, HeaderName, HeaderValue, USER_AGENT};
 use reqwest::{Method, Proxy, Url};
 
+use crate::direct;
+use crate::load::{Senders, Threads};
 use crate::metrics::Histogram;
+use crate::response::Failure;
 use crate::PepeError;
 
 /// How long the connections of a run took to open: TCP and TLS together,
@@ -21,7 +24,7 @@ pub struct ConnectTimes {
 }
 
 impl ConnectTimes {
-    fn record(&self, took: Duration) {
+    pub fn record(&self, took: Duration) {
         if let Ok(mut hist) = self.hist.lock() {
             hist.record(took.as_micros() as u64);
         }
@@ -112,6 +115,52 @@ pub struct RequestSettings {
     pub idle_connections: usize,
 }
 
+/// What a load shard sends with: the direct path's setup when the run can
+/// use it (see `direct`), and a reqwest client for what that leaves out
+pub struct Sender {
+    pub direct: Option<Arc<direct::Setup>>,
+    /// Built when it is first needed. A run that goes direct and meets no
+    /// redirect never needs it, and is spared its connection pool, its
+    /// TLS setup and its resolver.
+    client: std::sync::OnceLock<reqwest::Client>,
+    request: Arc<Request>,
+    times: Option<Arc<ConnectTimes>>,
+}
+
+impl Sender {
+    fn new(request: &Arc<Request>, times: Option<&Arc<ConnectTimes>>) -> Result<Self, PepeError> {
+        let direct = direct::Setup::new(request, times).map(Arc::new);
+        let sender = Self {
+            client: Default::default(),
+            request: request.clone(),
+            times: times.cloned(),
+            direct,
+        };
+        // With no direct path every request is reqwest's, so what is wrong
+        // with the client is better said before the run than during it
+        if sender.direct.is_none() {
+            sender.build()?;
+        }
+        Ok(sender)
+    }
+
+    fn build(&self) -> Result<&reqwest::Client, PepeError> {
+        if self.client.get().is_none() {
+            let client = self.request.build_client_with(self.times.as_ref())?;
+            let _ = self.client.set(client);
+        }
+        Ok(self.client.get().expect("set above"))
+    }
+
+    /// The reqwest client, built now if this is the first request for it
+    pub fn client(&self) -> Result<&reqwest::Client, Failure> {
+        self.build().map_err(|e| Failure {
+            kind: crate::response::ErrorKind::Other,
+            message: e.to_string(),
+        })
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct Request {
     /// Parsed once here, as is the method, instead of on every request
@@ -161,23 +210,28 @@ impl Request {
         })
     }
 
-    /// One client per load shard (see `load::shards`), each with its own
-    /// connection pool, all timing their connections into the returned
-    /// `ConnectTimes`
+    /// One sender per load shard (see `load::shards`), each with its own
+    /// connections, all timing them into the returned `ConnectTimes`
     pub fn build_clients(
         &self,
-        shards: usize,
-    ) -> Result<(Vec<reqwest::Client>, Arc<ConnectTimes>), PepeError> {
+        threads: impl Into<Threads>,
+    ) -> Result<(Senders, Arc<ConnectTimes>), PepeError> {
+        let threads = threads.into();
         let times = Arc::new(ConnectTimes::default());
-        let clients = (0..shards.max(1))
-            .map(|_| self.build_client_with(Some(&times)))
-            .collect::<Result<_, _>>()?;
-        Ok((clients, times))
+        let request = Arc::new(self.clone());
+        let list = (0..threads.most.max(1))
+            .map(|_| Sender::new(&request, Some(&times)))
+            .collect::<Result<_, PepeError>>()?;
+        let senders = Senders {
+            list,
+            start: threads.start,
+        };
+        Ok((senders, times))
     }
 
-    /// A client for a single send, timing nothing
-    pub fn build_client(&self) -> Result<reqwest::Client, PepeError> {
-        self.build_client_with(None)
+    /// A sender for a single request, timing nothing
+    pub fn build_client(&self) -> Result<Sender, PepeError> {
+        Sender::new(&Arc::new(self.clone()), None)
     }
 
     fn build_client_with(

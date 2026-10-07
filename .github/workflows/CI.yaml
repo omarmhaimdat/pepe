@@ -32,8 +32,16 @@ jobs:
           toolchain: "1.98"
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
+        with:
+          # pepe, and the benchmark's target server
+          workspaces: |
+            .
+            bench/server
       - run: cargo fmt --check
       - run: cargo clippy --locked --all-targets -- -D warnings
+      # The benchmarks' target server is a crate of its own (bench/server)
+      - run: cargo fmt --check --manifest-path bench/server/Cargo.toml
+      - run: cargo clippy --locked --manifest-path bench/server/Cargo.toml -- -D warnings
 
   check:
     name: Check (${{ matrix.os }})

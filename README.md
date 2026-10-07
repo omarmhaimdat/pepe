@@ -16,7 +16,7 @@
 
 pepe sends requests to a URL, as many at once as you ask, and shows what came back as it happens: throughput, latency percentiles and a heatmap, status codes, failures by cause, and a log you can open any request from. When the run ends it gives a verdict in plain words. It takes a curl command as input, ramps load to find where a target stops keeping up, and load-tests every endpoint of an OpenAPI spec.
 
-It is also light. One thread sends about 100k requests a second on an Apple M4 Pro, using 2.5× less CPU than comparable tools there and a fraction of their memory everywhere, and pepe tells you when it, rather than the target, is the limit.
+It is also light. One thread sends 160k requests a second on an Apple M4 Pro and 400k on Linux, for less CPU and less memory per request than [wrk](https://github.com/wg/wrk), a quarter to a half of [oha](https://github.com/hatoo/oha)'s CPU and a tenth of its memory or less, and pepe tells you when it, rather than the target, is the limit.
 
 ## Highlights
 
@@ -165,7 +165,7 @@ pepe self-update [--check]     update pepe
 | `--disable-keepalive` | | Open a new connection for every request |
 | `--disable-redirects` | | Don't follow redirects |
 | `--warmup <TIME>` | | Send for this long before counting anything (see [Warm-up](#warm-up)) |
-| `--threads <N>` | 1 | Threads sending requests (see [Threads](#threads)) |
+| `--threads <N\|auto>` | 1 | Threads sending requests; `auto` adds them as they're needed (see [Threads](#threads)) |
 | `--rate <PER_SECOND>` | | Start this many requests a second, spread evenly (see [Arrival rate](#arrival-rate)) |
 | `--curl` | | Read the request from a curl command (see below) |
 | `-i`, `--setup` | | Open the setup screen filled in from the flags |
@@ -406,11 +406,14 @@ With `--json` there is no screen, so name what to run with `--all`, `--tag` or `
 
 ### Threads
 
-pepe sends from one thread, whatever the concurrency. One thread sends about 100k plain requests a second, or 10k TLS handshakes a second, at the lowest CPU per request, and that is more than most targets can take. When it isn't, pepe says so: the dashboard's footer shows how busy the sending thread is once it passes 90% of a core, the end-of-run verdict notes it, and the JSON report has it under `generator`. Then `--threads` adds more:
+pepe sends from one thread, whatever the concurrency. One thread sends 150k to 400k plain requests a second, depending on the machine, or 10k TLS handshakes a second, at the lowest CPU per request, and that is more than most targets can take. When it isn't, pepe says so: the dashboard's footer shows how busy the sending thread is once it passes 90% of a core, the end-of-run verdict notes it, and the JSON report has it under `generator`. Then `--threads` adds more:
 
 ```bash
 pepe -c 500 --threads 4 -z 30s http://localhost:8080/
+pepe -c 500 --threads auto -z 30s http://localhost:8080/
 ```
+
+`--threads auto` starts with one and adds another whenever those sending are all past 90% of a core, a second apart, up to one a core. A thread that doesn't pay for itself (a third of what a thread is worth at best) is taken back and no other is tried: then the limit is the machine, as when the target runs on the same cores. It is the setting for a script or an agent, which can't read the footer: the run finds the threads the target needs, and `generator.threads` in the report says how many that was. In `pepe.toml` it is `threads = "auto"`.
 
 ### JSON output
 
@@ -517,15 +520,24 @@ Min, max, mean, median, p90, p95, p99 and standard deviation of latency, and whe
 
 ## How pepe compares
 
-Measured with the suite in [`bench/`](bench/) against a local server that answers from memory, so the client is the cost being measured. CPU milliseconds per 1,000 requests, peak memory, and the requests per second each tool reported (the server tops out near 130k):
+Measured with the suite in [`bench/`](bench/) against a local server that answers from memory, so the client is the cost being measured. CPU milliseconds per 1,000 requests, peak memory, and the requests per second each tool reported:
 
 | Workload | pepe | oha | vegeta |
 | --- | --- | --- | --- |
-| GET, 64 connections | **9.6 ms · 14 MB** · 100k req/s | 23.4 ms · 79 MB · 107k req/s | 88.5 ms · 26 MB · 67k req/s |
-| GET, 1,000 connections | **12.3 ms · 68 MB** · 80k req/s | 24.3 ms · 111 MB · 102k req/s | 48.8 ms · 94 MB · 125k req/s |
-| HTTPS, 64 connections | **9.9 ms · 15 MB** · 97k req/s | 24.9 ms · 58 MB · 107k req/s | 72.7 ms · 31 MB · 80k req/s |
+| GET, 64 connections | **6.2 ms · 9 MB** · 160k req/s | 23.0 ms · 78 MB · 161k req/s | 90.4 ms · 26 MB · 76k req/s |
+| GET, 1,000 connections | **6.0 ms · 12 MB** · 163k req/s | 21.6 ms · 101 MB · 147k req/s | 52.7 ms · 92 MB · 131k req/s |
+| HTTPS, 64 connections | **6.8 ms · 12 MB** · 142k req/s | 24.8 ms · 60 MB · 156k req/s | 69.8 ms · 30 MB · 90k req/s |
 
-Those are single-thread numbers for pepe on an Apple M4 Pro. On a 4-vCPU Linux runner the memory advantage holds but the CPU per request does not yet (about 30% more than oha); the Linux table and what is known about why are in [bench/README.md](bench/README.md), with the method, every workload and the profiles. Where a target can take more than one thread sends, pepe says so and `--threads` raises the ceiling.
+Those are single-thread numbers for pepe on an Apple M4 Pro, where the loopback tops out near 175k requests a second. On Linux (a 4-vCPU arm64 VM, the musl build that is released), with wrk on one thread beside it:
+
+| Workload | pepe | wrk | oha |
+| --- | --- | --- | --- |
+| GET, 64 connections | **2.4 ms · 4.0 MB** · 398k req/s | 3.5 ms · 4.5 MB · 282k req/s | 6.8 ms · 67 MB · 305k req/s |
+| GET, 1,000 connections | **3.2 ms · 5.8 MB** · 296k req/s | 4.4 ms · 7.7 MB · 228k req/s | 5.6 ms · 73 MB · 183k req/s |
+| HTTPS, 64 connections | **3.3 ms · 6.0 MB** · 284k req/s | 4.5 ms · 10.8 MB · 218k req/s | 8.1 ms · 42 MB · 250k req/s |
+| 10 million requests, 256 connections | **2.9 ms · 4.5 MB** · 343k req/s | 3.3 ms · 4.6 MB · 304k req/s | 6.5 ms · 2,404 MB · 316k req/s |
+
+Every workload, where pepe is level rather than ahead (a slow target at 1,000 connections, 16 KB bodies over TLS), what a glibc build changes, k6, the profiles and the method are in [bench/README.md](bench/README.md). Where a target can take more than one thread sends, pepe says so, and `--threads auto` adds them.
 
 ## Contributing
 
@@ -535,7 +547,7 @@ Issues and pull requests are welcome.
 cargo build --release          # the binary, in target/release/pepe
 cargo test                     # 160+ tests, including the dashboard at many terminal sizes
 cargo clippy --all-targets && cargo fmt --check
-go run bench/server.go &       # then bench/run.sh, to measure a change (see bench/README.md)
+cargo run --release --manifest-path bench/server/Cargo.toml &   # then bench/run.sh, to measure a change (see bench/README.md)
 assets/record.sh               # re-record the GIFs above with vhs (assets/tapes/)
 ```
 
@@ -553,4 +565,4 @@ MIT. See [LICENSE](LICENSE).
 
 ## Acknowledgements
 
-[reqwest](https://github.com/seanmonstar/reqwest) and [tokio](https://github.com/tokio-rs/tokio) for the requests, [ratatui](https://github.com/ratatui/ratatui) and [crossterm](https://github.com/crossterm-rs/crossterm) for the dashboard, [clap](https://github.com/clap-rs/clap) for the command line, and [oha](https://github.com/hatoo/oha) and [vegeta](https://github.com/tsenart/vegeta) for being good company on the benchmark table.
+[tokio](https://github.com/tokio-rs/tokio), [rustls](https://github.com/rustls/rustls), [httparse](https://github.com/seanmonstar/httparse) and [reqwest](https://github.com/seanmonstar/reqwest) for the requests, [ratatui](https://github.com/ratatui/ratatui) and [crossterm](https://github.com/crossterm-rs/crossterm) for the dashboard, [clap](https://github.com/clap-rs/clap) for the command line, and [oha](https://github.com/hatoo/oha), [vegeta](https://github.com/tsenart/vegeta), [wrk](https://github.com/wg/wrk) and [k6](https://github.com/grafana/k6) for being good company on the benchmark table.

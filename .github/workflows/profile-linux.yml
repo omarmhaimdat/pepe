@@ -1,7 +1,9 @@
 # Where pepe's CPU goes on Linux. Run by hand (workflow_dispatch), or on a
 # PR that changes this file. Builds pepe with symbols, records it under perf
 # on the plain-GET workload, counts syscalls per request for pepe and oha
-# with strace, and keeps the reports as an artifact.
+# with strace, and keeps the reports as an artifact. To try a variant (a
+# patched dependency, another allocator), build it next to out/pepe and
+# hand the two to bench/compare.sh.
 name: Profile on Linux
 
 on:
@@ -23,10 +25,11 @@ jobs:
           persist-credentials: false
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
-      - uses: actions/setup-go@v5
         with:
-          go-version: stable
-          cache: false
+          # pepe, and the benchmark's target server
+          workspaces: |
+            .
+            bench/server
       - uses: taiki-e/install-action@v2
         with:
           tool: oha
@@ -46,44 +49,23 @@ jobs:
       - name: Build pepe with symbols
         run: cargo build --profile profiling --locked && target/profiling/pepe --version
 
-      - name: Build the variant under test
-        # reqwest patched to skip its per-response URL re-parse (see
-        # bench/patches and bench/README.md). mimalloc was tried here too:
-        # 1-4% less CPU for 50-90% more memory on Linux, so it isn't kept.
-        run: |
-          set -euo pipefail
-          mkdir -p out
-          cp target/profiling/pepe out/pepe-base
-          mkdir -p /tmp/vendor && cd /tmp/vendor
-          curl -sSL https://crates.io/api/v1/crates/reqwest/0.12.28/download | tar xz
-          (cd reqwest-0.12.28 && patch -p1 < "$GITHUB_WORKSPACE/bench/patches/reqwest-0.12.28-skip-url-reparse.patch")
-          cd "$GITHUB_WORKSPACE"
-          cp Cargo.toml /tmp/Cargo.toml.keep && cp Cargo.lock /tmp/Cargo.lock.keep
-          printf '\n[patch.crates-io]\nreqwest = { path = "/tmp/vendor/reqwest-0.12.28" }\n' >> Cargo.toml
-          cargo build --profile profiling
-          cp target/profiling/pepe out/pepe-reqwest-patched
-          cp /tmp/Cargo.toml.keep Cargo.toml && cp /tmp/Cargo.lock.keep Cargo.lock
-          # perf below records the unpatched build
-          cargo build --profile profiling --locked
+      - name: Keep the build to measure
+        run: mkdir -p out && cp target/profiling/pepe out/pepe
 
       - name: Start the target server
         run: |
-          go build -o /tmp/bench-server bench/server.go
-          /tmp/bench-server > /tmp/server.log 2>&1 &
+          cargo build --release --locked --manifest-path bench/server/Cargo.toml
+          bench/server/target/release/bench-server > /tmp/server.log 2>&1 &
           for i in $(seq 1 150); do curl -sf http://127.0.0.1:8089/ >/dev/null && break; sleep 0.2; done
           curl -sf http://127.0.0.1:8089/ >/dev/null || { cat /tmp/server.log; exit 1; }
 
-      - name: "CPU per request: pepe, the variant and oha, taking turns"
+      - name: "CPU per request: pepe and oha, taking turns"
         run: |
           nproc | tee out/nproc.txt
           for i in 1 2 3; do
-            for v in base reqwest-patched; do
-              REQUESTS=200000 bench/measure.sh "pepe-$v" out/pepe-$v --json -n 200000 -c 64 http://127.0.0.1:8089/
-            done
+            REQUESTS=200000 bench/measure.sh pepe out/pepe --json -n 200000 -c 64 http://127.0.0.1:8089/
             REQUESTS=200000 bench/measure.sh oha oha --no-tui --output-format json -n 200000 -c 64 http://127.0.0.1:8089/
           done | tee out/reference.csv
-          echo "--- gate: base vs reqwest-patched ---"
-          bench/compare.sh out/pepe-base out/pepe-reqwest-patched 2 | tee out/gate.md
 
       - name: perf record pepe
         run: |

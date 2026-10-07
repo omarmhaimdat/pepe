@@ -178,7 +178,7 @@ impl RampScreen {
     /// this one has been held long enough
     fn pump(&mut self, load: &mut LoadHandle) {
         let now = Instant::now();
-        while let Ok(stat) = load.rx.try_recv() {
+        while let Ok(stat) = load.try_recv() {
             self.ramp.record(&stat, now);
         }
         let tick = self.ramp.tick(now);

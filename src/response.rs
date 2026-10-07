@@ -6,6 +6,7 @@ use bytes::Bytes;
 use reqwest::header::HeaderMap;
 
 use crate::cache::CacheStatus;
+use crate::direct;
 use crate::trace::{self, ServerTiming};
 
 /// Raw body bytes kept for the dashboard's response preview
@@ -51,21 +52,169 @@ pub enum ErrorKind {
 }
 
 impl ErrorKind {
-    fn from_reqwest(e: &reqwest::Error) -> Self {
-        if e.is_timeout() {
-            Self::Timeout
-        } else if e.is_connect() {
-            Self::Connect
-        } else {
-            Self::Other
-        }
-    }
-
     pub fn label(&self) -> &'static str {
         match self {
             Self::Timeout => "TIMEOUT",
             Self::Connect => "CONNECT ERROR",
             Self::Other => "ERROR",
+        }
+    }
+}
+
+/// A request that got no complete response, and why
+#[derive(Debug)]
+pub struct Failure {
+    pub kind: ErrorKind,
+    /// The innermost error's words (see `root_cause`)
+    pub message: String,
+}
+
+impl From<&reqwest::Error> for Failure {
+    fn from(e: &reqwest::Error) -> Self {
+        let kind = if e.is_timeout() {
+            ErrorKind::Timeout
+        } else if e.is_connect() {
+            ErrorKind::Connect
+        } else {
+            ErrorKind::Other
+        };
+        Self {
+            kind,
+            message: root_cause(e),
+        }
+    }
+}
+
+/// A response's headers as plain names and values, which is what both
+/// ways of receiving one can give without copying
+pub fn fields(headers: &HeaderMap) -> impl Iterator<Item = (&[u8], &[u8])> {
+    headers
+        .iter()
+        .map(|(name, value)| (name.as_str().as_bytes(), value.as_bytes()))
+}
+
+/// A response whose body is still to be read, from either of the two ways
+/// a request goes out (see `direct`)
+pub enum Answer<'a> {
+    /// With the piece of the body read last
+    Reqwest(Box<reqwest::Response>, Bytes),
+    Direct(direct::Response<'a>, &'a reqwest::Url),
+}
+
+impl From<reqwest::Response> for Answer<'_> {
+    fn from(response: reqwest::Response) -> Self {
+        Self::Reqwest(Box::new(response), Bytes::new())
+    }
+}
+
+impl Answer<'_> {
+    fn status(&self) -> reqwest::StatusCode {
+        match self {
+            Self::Reqwest(r, _) => r.status(),
+            Self::Direct(r, _) => r.status,
+        }
+    }
+
+    /// What the response says about itself: whether a cache answered, the
+    /// id the backend gave the request, its `Server-Timing`
+    #[allow(clippy::type_complexity)]
+    fn told(
+        &self,
+    ) -> (
+        Option<CacheStatus>,
+        Option<(&'static str, Box<str>)>,
+        Option<Box<[ServerTiming]>>,
+    ) {
+        match self {
+            Self::Reqwest(r, _) => (
+                CacheStatus::parse_headers(fields(r.headers())),
+                trace::request_id(fields(r.headers())),
+                trace::server_timing(fields(r.headers())),
+            ),
+            Self::Direct(r, _) => (
+                CacheStatus::parse_headers(r.headers()),
+                trace::request_id(r.headers()),
+                trace::server_timing(r.headers()),
+            ),
+        }
+    }
+
+    fn header_map(&self) -> HeaderMap {
+        match self {
+            Self::Reqwest(r, _) => r.headers().clone(),
+            Self::Direct(r, _) => r.header_map(),
+        }
+    }
+
+    fn detail(&self) -> Detail {
+        let (version, remote_addr, final_url) = match self {
+            Self::Reqwest(r, _) => (r.version(), r.remote_addr(), r.url().to_string()),
+            Self::Direct(r, url) => (r.version, r.remote_addr, url.to_string()),
+        };
+        Detail {
+            version,
+            headers: self.header_map(),
+            body: Bytes::new(),
+            truncated: false,
+            remote_addr,
+            final_url,
+        }
+    }
+
+    async fn chunk(&mut self) -> Result<Option<&[u8]>, Failure> {
+        match self {
+            Self::Reqwest(r, held) => match r.chunk().await {
+                Ok(Some(chunk)) => {
+                    *held = chunk;
+                    Ok(Some(&held[..]))
+                }
+                Ok(None) => Ok(None),
+                Err(e) => Err(Failure::from(&e)),
+            },
+            Self::Direct(r, _) => r.chunk().await,
+        }
+    }
+}
+
+/// Which responses to keep the first bytes of
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Preview {
+    /// All of them: the dashboard shows them
+    Always,
+    /// Those that failed: the verdict shows the first body of each kind
+    /// of failure
+    OfFailures,
+    Never,
+}
+
+/// What is kept of a response beyond its numbers, for the ones something
+/// is kept of
+struct Kept {
+    /// The start of the body, for the dashboard and the verdict
+    preview: Option<Vec<u8>>,
+    /// The whole response, for the inspector, and its body so far
+    detail: Option<Detail>,
+    captured: Vec<u8>,
+    /// Headers and body for a flow step's captures
+    headers: Option<HeaderMap>,
+    body: Vec<u8>,
+}
+
+impl Kept {
+    /// Keep what is wanted of the next piece of the body
+    fn take(&mut self, chunk: &[u8], body_cap: usize) {
+        if let Some(buf) = self.preview.as_mut() {
+            let want = PREVIEW_BYTES.saturating_sub(buf.len());
+            buf.extend_from_slice(&chunk[..want.min(chunk.len())]);
+        }
+        if self.detail.is_some() {
+            let want = BODY_CAPTURE.saturating_sub(self.captured.len());
+            self.captured
+                .extend_from_slice(&chunk[..want.min(chunk.len())]);
+        }
+        if body_cap > 0 {
+            let want = body_cap.saturating_sub(self.body.len());
+            self.body.extend_from_slice(&chunk[..want.min(chunk.len())]);
         }
     }
 }
@@ -105,26 +254,26 @@ pub struct ResponseStats {
 
 impl ResponseStats {
     /// `ttfb`: when `send` returned. `capture`: keep the full response.
-    pub async fn from_response(
-        resp: Result<reqwest::Response, reqwest::Error>,
+    /// Not an `async fn` of its own around `read`: each layer of those
+    /// holds its arguments once more, in every worker's future.
+    pub fn from_response(
+        resp: Result<Answer<'_>, Failure>,
         start: Instant,
         ttfb: Duration,
         dns_times: Option<(Duration, Duration)>,
-        keep_preview: bool,
+        keep_preview: Preview,
         capture: bool,
-    ) -> Self {
+    ) -> impl std::future::Future<Output = (Self, Option<(HeaderMap, Bytes)>)> + '_ {
         Self::read(resp, start, ttfb, dns_times, keep_preview, capture, 0)
-            .await
-            .0
     }
 
     /// Like `from_response`, and also the response's headers and up to
     /// `body_cap` bytes of its body, for a flow step's captures
     pub async fn with_body(
-        resp: Result<reqwest::Response, reqwest::Error>,
+        resp: Result<Answer<'_>, Failure>,
         start: Instant,
         ttfb: Duration,
-        keep_preview: bool,
+        keep_preview: Preview,
         capture: bool,
         body_cap: usize,
     ) -> (Self, Option<(HeaderMap, Bytes)>) {
@@ -132,85 +281,83 @@ impl ResponseStats {
     }
 
     async fn read(
-        resp: Result<reqwest::Response, reqwest::Error>,
+        resp: Result<Answer<'_>, Failure>,
         start: Instant,
         ttfb: Duration,
         dns_times: Option<(Duration, Duration)>,
-        keep_preview: bool,
+        keep_preview: Preview,
         capture: bool,
         body_cap: usize,
     ) -> (Self, Option<(HeaderMap, Bytes)>) {
         let mut resp = match resp {
             Ok(resp) => resp,
-            Err(e) => return (Self::failed(&e, start, dns_times), None),
+            Err(e) => return (Self::failed(e, start, dns_times), None),
         };
-        let kept_headers = (body_cap > 0).then(|| resp.headers().clone());
-        let mut kept_body = Vec::new();
-
         let status_code = resp.status();
-        let cache_status = CacheStatus::parse_headers(resp.headers());
-        let request_id = trace::request_id(resp.headers());
-        let server_timing = trace::server_timing(resp.headers());
-        let mut detail = capture.then(|| Detail {
-            version: resp.version(),
-            headers: resp.headers().clone(),
-            body: Bytes::new(),
-            truncated: false,
-            remote_addr: resp.remote_addr(),
-            final_url: resp.url().to_string(),
+        let (cache_status, request_id, server_timing) = resp.told();
+        // A failed response keeps its start whatever the caller wants: the
+        // verdict shows the first body of each kind of failure
+        let preview = match keep_preview {
+            Preview::Always => true,
+            Preview::OfFailures => !status_code.is_success(),
+            Preview::Never => false,
+        };
+        // Most responses of a fast run are only counted, and for those
+        // nothing below is set up: what waits on the body is a few numbers
+        let mut kept = (preview || capture || body_cap > 0).then(|| {
+            Box::new(Kept {
+                preview: preview.then(Vec::new),
+                detail: capture.then(|| resp.detail()),
+                captured: Vec::new(),
+                headers: (body_cap > 0).then(|| resp.header_map()),
+                body: Vec::new(),
+            })
         });
-        let mut captured = Vec::new();
         // Stream the body and count it instead of buffering it whole, so
         // large responses cost no memory beyond one chunk
         let mut body_bytes = 0u64;
-        // A failed response keeps its start whatever the caller wants: the
-        // verdict shows the first body of each kind of failure
-        let mut preview = (keep_preview || !status_code.is_success()).then(Vec::new);
         loop {
             match resp.chunk().await {
                 Ok(Some(chunk)) => {
                     body_bytes += chunk.len() as u64;
-                    if let Some(buf) = preview.as_mut() {
-                        let want = PREVIEW_BYTES.saturating_sub(buf.len());
-                        buf.extend_from_slice(&chunk[..want.min(chunk.len())]);
-                    }
-                    if detail.is_some() {
-                        let want = BODY_CAPTURE.saturating_sub(captured.len());
-                        captured.extend_from_slice(&chunk[..want.min(chunk.len())]);
-                    }
-                    if body_cap > 0 {
-                        let want = body_cap.saturating_sub(kept_body.len());
-                        kept_body.extend_from_slice(&chunk[..want.min(chunk.len())]);
+                    if let Some(kept) = kept.as_mut() {
+                        kept.take(chunk, body_cap);
                     }
                 }
                 Ok(None) => break,
                 // The status arrived but the body did not (e.g. timed out mid-body)
-                Err(e) => return (Self::failed(&e, start, dns_times), None),
+                Err(e) => return (Self::failed(e, start, dns_times), None),
             }
         }
         let duration = start.elapsed();
-        if let Some(detail) = detail.as_mut() {
-            detail.truncated = body_bytes as usize > captured.len();
-            detail.body = Bytes::from(captured);
-        }
-
-        let stats = ResponseStats {
+        let mut stats = ResponseStats {
             duration,
-            endpoint: 0,
             ttfb: Some(ttfb),
-            detail: detail.map(Arc::new),
             status_code: Some(status_code),
             body_bytes,
-            preview: preview.map(Bytes::from),
             dns_times,
             cache_status,
-            error: None,
-            error_message: None,
-            warmup: false,
             request_id,
             server_timing,
+            ..Default::default()
         };
-        (stats, kept_headers.map(|h| (h, Bytes::from(kept_body))))
+        let Some(kept) = kept else {
+            return (stats, None);
+        };
+        let Kept {
+            preview,
+            detail,
+            captured,
+            headers,
+            body,
+        } = *kept;
+        stats.preview = preview.map(Bytes::from);
+        stats.detail = detail.map(|mut detail| {
+            detail.truncated = body_bytes as usize > captured.len();
+            detail.body = Bytes::from(captured);
+            Arc::new(detail)
+        });
+        (stats, headers.map(|h| (h, Bytes::from(body))))
     }
 
     /// Turn a response into a failed step: the request got an answer, but
@@ -223,12 +370,12 @@ impl ResponseStats {
         self.preview = None;
     }
 
-    fn failed(e: &reqwest::Error, start: Instant, dns_times: Option<(Duration, Duration)>) -> Self {
+    fn failed(e: Failure, start: Instant, dns_times: Option<(Duration, Duration)>) -> Self {
         ResponseStats {
             duration: start.elapsed(),
             dns_times,
-            error: Some(ErrorKind::from_reqwest(e)),
-            error_message: Some(root_cause(e).into()),
+            error: Some(e.kind),
+            error_message: Some(e.message.into()),
             ..Default::default()
         }
     }
@@ -255,7 +402,7 @@ impl ResponseStats {
 
 /// The innermost error's message: reqwest's own is generic ("error sending
 /// request for url ..."), the cause is what's useful
-fn root_cause(e: &(dyn std::error::Error + 'static)) -> String {
+pub fn root_cause(e: &(dyn std::error::Error + 'static)) -> String {
     let mut cause = e;
     while let Some(source) = cause.source() {
         cause = source;

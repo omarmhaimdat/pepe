@@ -22,6 +22,7 @@ mod completions;
 mod config;
 mod contrib;
 mod curl;
+mod direct;
 mod flow;
 mod insights;
 mod json_report;
@@ -37,6 +38,7 @@ mod trace;
 mod ui;
 mod update;
 mod utils;
+mod wire;
 
 #[derive(Debug)]
 #[allow(clippy::enum_variant_names)]
@@ -68,8 +70,8 @@ fn plan(args: &Cli) -> Plan {
 }
 
 /// Shard threads for a run: what `--threads` asked for, or one
-fn shards(args: &Cli, concurrency: usize) -> usize {
-    load::shards(concurrency, args.threads.map(|t| t as usize))
+fn shards(args: &Cli, concurrency: usize) -> load::Threads {
+    load::shards(concurrency, args.threads)
 }
 
 /// One client per load shard, and where their connection times go
@@ -77,7 +79,7 @@ fn clients_for(
     request: &request::Request,
     args: &Cli,
     concurrency: usize,
-) -> Result<(Vec<reqwest::Client>, Arc<request::ConnectTimes>), PepeError> {
+) -> Result<(load::Senders, Arc<request::ConnectTimes>), PepeError> {
     request.build_clients(shards(args, concurrency))
 }
 
@@ -229,7 +231,6 @@ async fn run_json(args: &Cli) -> Result<(), Box<dyn std::error::Error>> {
     let mut pump = tokio::time::interval(PUMP);
     let mut snapshots = tokio::time::interval(SNAPSHOT_EVERY);
     snapshots.tick().await; // the first tick is now; the first snapshot is in a minute
-    let mut peak_busy = None;
     let report = |metrics: &Metrics,
                   timeline: &timeline::Timeline,
                   slowest: &metrics::Slowest,
@@ -237,12 +238,11 @@ async fn run_json(args: &Cli) -> Result<(), Box<dyn std::error::Error>> {
                   load: &LoadHandle,
                   elapsed: std::time::Duration,
                   warmup_requests: u64,
-                  peak_busy,
                   interrupted| {
         json_report::JsonReport::generate(metrics, elapsed, interrupted)
             .with_generator(
                 load.threads(),
-                peak_busy,
+                load.peak_busy(),
                 load.rate().map(|r| (r, load.missed())),
             )
             .with_warmup(args.warmup(), warmup_requests)
@@ -255,7 +255,6 @@ async fn run_json(args: &Cli) -> Result<(), Box<dyn std::error::Error>> {
     loop {
         tokio::select! {
             _ = pump.tick() => {
-                peak_busy = peak_busy.max(load.busy());
                 if warming && !load.warming() {
                     warming = false;
                     started = Instant::now();
@@ -280,7 +279,7 @@ async fn run_json(args: &Cli) -> Result<(), Box<dyn std::error::Error>> {
             }
             _ = snapshots.tick(), if args.snapshot.is_some() => {
                 let path = args.snapshot.as_ref().expect("checked");
-                if let Err(e) = report(&metrics, &timeline, &slowest, &anomalies, &load, started.elapsed(), warmup_requests, peak_busy, interrupted).with_snapshot(true).write_to(path) {
+                if let Err(e) = report(&metrics, &timeline, &slowest, &anomalies, &load, started.elapsed(), warmup_requests, interrupted).with_snapshot(true).write_to(path) {
                     eprintln!("couldn't write the snapshot to {}: {e}", path.display());
                 }
             }
@@ -300,7 +299,6 @@ async fn run_json(args: &Cli) -> Result<(), Box<dyn std::error::Error>> {
         &load,
         started.elapsed(),
         warmup_requests,
-        peak_busy,
         interrupted,
     );
     if let Some(path) = &args.snapshot {
@@ -439,11 +437,9 @@ async fn run_ramp_json(args: &Cli, plan: RampPlan) -> Result<(), Box<dyn std::er
     let mut ramp = Ramp::new(plan, Instant::now());
     let mut clock = tokio::time::interval(std::time::Duration::from_millis(50));
     let mut pump = tokio::time::interval(PUMP);
-    let mut peak_busy = None;
     while ramp.end.is_none() {
         tokio::select! {
             _ = pump.tick() => {
-                peak_busy = peak_busy.max(load.busy());
                 let now = Instant::now();
                 if !load.drain(|stat| ramp.record(&stat, now)) {
                     break;
@@ -463,7 +459,7 @@ async fn run_ramp_json(args: &Cli, plan: RampPlan) -> Result<(), Box<dyn std::er
     let mut report = ramp::json(&ramp);
     report["generator"] = serde_json::to_value(json_report::Generator {
         threads: load.threads(),
-        peak_busy_percent: peak_busy,
+        peak_busy_percent: load.peak_busy(),
         warmup_s: None,
         warmup_requests: None,
         rate_per_second: None,
@@ -518,11 +514,9 @@ async fn run_api_json(args: &Cli, run: &api::ApiRun) -> Result<(), Box<dyn std::
     let mut each = vec![Metrics::default(); which.len()];
     let mut interrupted = false;
     let mut pump = tokio::time::interval(PUMP);
-    let mut peak_busy = None;
     loop {
         tokio::select! {
             _ = pump.tick() => {
-                peak_busy = peak_busy.max(load.busy());
                 if warming && !load.warming() {
                     warming = false;
                     started = Instant::now();
@@ -551,7 +545,7 @@ async fn run_api_json(args: &Cli, run: &api::ApiRun) -> Result<(), Box<dyn std::
     let report = json_report::JsonReport::generate(&total, elapsed, interrupted)
         .with_generator(
             load.threads(),
-            peak_busy,
+            load.peak_busy(),
             load.rate().map(|r| (r, load.missed())),
         )
         .with_warmup(args.warmup(), warmup_requests)
@@ -662,7 +656,7 @@ fn flow_clients(
     args: &Cli,
     flow: &flow::Flow,
     concurrency: usize,
-) -> Result<(Vec<reqwest::Client>, std::sync::Arc<request::ConnectTimes>), PepeError> {
+) -> Result<(load::Senders, std::sync::Arc<request::ConnectTimes>), PepeError> {
     let base = request::Request::new(
         flow.base_url(),
         "GET".into(),
@@ -718,11 +712,9 @@ async fn run_flow_json(args: &Cli, flow: flow::Flow) -> Result<(), Box<dyn std::
     let mut each = vec![Metrics::default(); views.len()];
     let mut interrupted = false;
     let mut pump = tokio::time::interval(PUMP);
-    let mut peak_busy = None;
     loop {
         tokio::select! {
             _ = pump.tick() => {
-                peak_busy = peak_busy.max(load.busy());
                 if warming && !load.warming() {
                     warming = false;
                     started = Instant::now();
@@ -751,7 +743,7 @@ async fn run_flow_json(args: &Cli, flow: flow::Flow) -> Result<(), Box<dyn std::
     let report = json_report::JsonReport::generate(&total, elapsed, interrupted)
         .with_generator(
             load.threads(),
-            peak_busy,
+            load.peak_busy(),
             load.rate().map(|r| (r, load.missed())),
         )
         .with_warmup(args.warmup(), warmup_requests)
@@ -823,7 +815,7 @@ fn replay_clients(
     args: &Cli,
     replay: &replay::Replay,
     concurrency: usize,
-) -> Result<(Vec<reqwest::Client>, std::sync::Arc<request::ConnectTimes>), PepeError> {
+) -> Result<(load::Senders, std::sync::Arc<request::ConnectTimes>), PepeError> {
     let base = request::Request::new(
         replay.urls[0].url.clone(),
         "GET".into(),
@@ -890,11 +882,9 @@ async fn run_replay_json(
     let mut each = vec![Metrics::default(); views.len()];
     let mut interrupted = false;
     let mut pump = tokio::time::interval(PUMP);
-    let mut peak_busy = None;
     loop {
         tokio::select! {
             _ = pump.tick() => {
-                peak_busy = peak_busy.max(load.busy());
                 if warming && !load.warming() {
                     warming = false;
                     started = Instant::now();
@@ -923,7 +913,7 @@ async fn run_replay_json(
     let report = json_report::JsonReport::generate(&total, elapsed, interrupted)
         .with_generator(
             load.threads(),
-            peak_busy,
+            load.peak_busy(),
             load.rate().map(|r| (r, load.missed())),
         )
         .with_warmup(args.warmup(), warmup_requests)

@@ -1,13 +1,16 @@
 #!/bin/bash
 # The benchmark suite behind bench/README.md.
 #
-#   go run bench/server.go &          # the target, in another shell
+#   cargo run --release --manifest-path bench/server/Cargo.toml &   # the target
 #   bench/run.sh [PEPE_BINARY]        # defaults to target/release/pepe
+#   MILLIONS=10 bench/run.sh          # and a ten-million-request run at the end
+#   NO_OHA=1 NO_VEGETA=1 NO_WRK=1 NO_K6=1 bench/run.sh   # pepe alone
 #
 # Every workload is run with pepe (--json, no screen), and where a comparable
-# invocation exists, with oha and vegeta too. Each line of the CSV on stdout
-# is: tool, workload, requests, wall s, user s, sys s, cpu s, cpu ms per
-# 1,000 requests, peak RSS MB, requests per second as the tool reported it.
+# invocation exists, with oha, vegeta, wrk and k6 too, whichever of them are
+# installed. Each line of the CSV on stdout is: tool, workload, requests,
+# wall s, user s, sys s, cpu s, cpu ms per 1,000 requests, peak RSS MB,
+# requests per second as the tool reported it.
 set -u
 cd "$(dirname "$0")/.."
 PEPE=${1:-target/release/pepe}
@@ -69,7 +72,7 @@ workload() {
   complain pepe "$got"
   row pepe "$name" "$got" "$rps"
 
-  if command -v oha >/dev/null; then
+  if command -v oha >/dev/null && [[ -z "${NO_OHA:-}" ]]; then
     measure oha --no-tui $OHA_JSON -n "$n" -c "$c" $oha_tls "$url"
     got=$(jq -r '[.statusCodeDistribution[]] | add' "$tmp/stdout" 2>/dev/null)
     rps=$(jq -r '.summary.requestsPerSec | floor' "$tmp/stdout" 2>/dev/null)
@@ -85,6 +88,27 @@ workload() {
     rps=$(jq -r '.rate | floor' "$tmp/stdout" 2>/dev/null)
     complain vegeta "$got"
     row vegeta "$name" "$got" "$rps"
+  fi
+
+  # wrk runs for a time too, on one thread to be read against pepe's one
+  if command -v wrk >/dev/null && [[ -z "${NO_WRK:-}" ]]; then
+    local secs=${WRK_SECS:-5}
+    measure wrk -t1 -c "$c" -d "${secs}s" --timeout 30s "$url"
+    got=$(awk '/requests in/ {print $1}' "$tmp/stdout")
+    rps=$(awk '/Requests\/sec/ {printf "%d", $2}' "$tmp/stdout")
+    complain wrk "$got"
+    row wrk "$name" "$got" "$rps"
+  fi
+
+  # k6 runs a script: one that does nothing but the request
+  if command -v k6 >/dev/null && [[ -z "${NO_K6:-}" ]]; then
+    echo "import http from 'k6/http'; export default function () { http.get(__ENV.URL, { responseType: 'none' }); }" > "$tmp/k6.js"
+    measure k6 run --quiet --no-usage-report --insecure-skip-tls-verify --vus "$c" --iterations "$n" \
+      --summary-export "$tmp/k6.json" -e URL="$url" "$tmp/k6.js"
+    got=$(jq -r '.metrics.http_reqs.count' "$tmp/k6.json" 2>/dev/null)
+    rps=$(jq -r '.metrics.http_reqs.rate | floor' "$tmp/k6.json" 2>/dev/null)
+    complain k6 "$got"
+    row k6 "$name" "$got" "$rps"
   fi
 }
 
@@ -105,4 +129,9 @@ workload slow20ms-c1000 50000  1000 '/slow?ms=20'
 workload status503-c64 100000  64   /status/503
 workload tls-c64       100000  64   tls/
 workload tls16k-c64    30000   64   tls/16k
-NO_VEGETA=1 workload post-c64 200000 64 / -m POST -d '{"key":"value"}' -H 'Content-Type: application/json'
+NO_VEGETA=1 NO_WRK=1 NO_K6=1 workload post-c64 200000 64 / -m POST -d '{"key":"value"}' -H 'Content-Type: application/json'
+# Long enough that anything growing with the number of requests shows
+workload million-c64   1000000 64   /
+if [[ -n "${MILLIONS:-}" ]]; then
+  workload "${MILLIONS}m-c256" $((MILLIONS * 1000000)) 256 /
+fi
