@@ -1887,8 +1887,11 @@ mod tests {
         assert_eq!(load.threads(), 3);
         assert_eq!(load.thread_limit(), Some(ThreadLimit::Cores));
         assert!(!load.can_grow());
-        // Every shard takes its share of the six workers
-        tokio::time::sleep(Duration::from_millis(300)).await;
+        // Every shard takes its share of the six workers, once the requests
+        // the first shard sent while it still had more of them are answered
+        tokio::time::sleep(Duration::from_millis(200)).await;
+        srv.peak.store(0, Ordering::SeqCst);
+        tokio::time::sleep(Duration::from_millis(200)).await;
         assert_eq!(srv.peak.load(Ordering::SeqCst), 6);
         load.stop();
         drain(load).await;

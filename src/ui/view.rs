@@ -81,8 +81,9 @@ pub fn render(d: &Dashboard, f: &mut Frame) {
         return;
     }
 
+    let big = area.height >= BIG_MASCOT_MIN_HEIGHT && area.width >= BIG_MASCOT_MIN_WIDTH;
     let [header, _, tabs, _, body, footer] = Layout::vertical([
-        Constraint::Length(header_height(d)),
+        Constraint::Length(header_height(d, big)),
         Constraint::Length(1),
         Constraint::Length(1),
         Constraint::Length(1),
@@ -91,7 +92,7 @@ pub fn render(d: &Dashboard, f: &mut Frame) {
     ])
     .areas(area);
 
-    render_header(d, f, header);
+    render_header(d, f, header, big);
     render_tabs(d, f, tabs);
     match d.tab {
         Tab::Endpoints => render_endpoints(d, f, body),
@@ -117,6 +118,9 @@ pub(super) fn value(text: impl Into<String>, color: Color) -> Span<'static> {
 }
 
 pub(super) fn heading(text: &str) -> Line<'static> {
+    if super::theme::current() == super::theme::Theme::Pepe {
+        return Line::raw(text.to_string());
+    }
     Line::from(Span::styled(
         text.to_uppercase(),
         Style::new().fg(LABEL).bold(),
@@ -125,6 +129,14 @@ pub(super) fn heading(text: &str) -> Line<'static> {
 
 /// Section title followed by a rule to the edge: "LATENCY ────────"
 pub(super) fn section(f: &mut Frame, area: Rect, title: &str, right: Option<Line<'static>>) {
+    // On pepe's panels a title is a word, not a rule: the panel is the edge
+    if super::theme::current() == super::theme::Theme::Pepe {
+        f.render_widget(Paragraph::new(Line::raw(title.to_string())), area);
+        if let Some(right) = right {
+            f.render_widget(Paragraph::new(right).alignment(Alignment::Right), area);
+        }
+        return;
+    }
     let title = format!("{} ", title.to_uppercase());
     let right_width = right.as_ref().map_or(0, |r| r.width() + 1);
     let rule = (area.width as usize).saturating_sub(title.chars().count() + right_width);
@@ -241,8 +253,16 @@ fn placeholder(f: &mut Frame, area: Rect, message: &str) {
 
 /// Findings shown in the header once the run is over
 const MAX_HEADER_NOTES: usize = 4;
+/// A terminal this big gets the big mascot in the header. The width leaves
+/// the run panel 40 cells beside the mascot and the cards.
+const BIG_MASCOT_MIN_HEIGHT: u16 = 46;
+const BIG_MASCOT_MIN_WIDTH: u16 = 146;
 
-fn header_height(d: &Dashboard) -> u16 {
+fn header_height(d: &Dashboard, big: bool) -> u16 {
+    if big {
+        // title, gap, then the mascot and the panels beside him
+        return 2 + BIG_BODY;
+    }
     let content = match &d.verdict {
         // title, progress, gap, headline, gap, notes
         Some(v) => 5 + v.notes.len().min(MAX_HEADER_NOTES) as u16,
@@ -253,7 +273,10 @@ fn header_height(d: &Dashboard) -> u16 {
     content.max(mascot::HEIGHT + 1)
 }
 
-fn render_header(d: &Dashboard, f: &mut Frame, area: Rect) {
+fn render_header(d: &Dashboard, f: &mut Frame, area: Rect, big: bool) {
+    if big {
+        return render_big_header(d, f, area);
+    }
     let show_mascot = area.width >= 80;
     let [pet, _, main] = Layout::horizontal([
         Constraint::Length(if show_mascot { mascot::WIDTH } else { 0 }),
@@ -322,7 +345,8 @@ fn render_title(d: &Dashboard, f: &mut Frame, area: Rect) {
     f.render_widget(Paragraph::new(right).alignment(Alignment::Right), area);
 }
 
-fn render_progress(d: &Dashboard, f: &mut Frame, area: Rect) {
+/// How far the run is: percent, what that means in words, and its colour
+fn progress(d: &Dashboard) -> (u16, String, Color) {
     let m = &d.metrics;
     let elapsed = d.elapsed();
     let finished = d.finished.is_some();
@@ -370,7 +394,11 @@ fn render_progress(d: &Dashboard, f: &mut Frame, area: Rect) {
     } else {
         ACCENT
     };
+    (percent, detail, color)
+}
 
+fn render_progress(d: &Dashboard, f: &mut Frame, area: Rect) {
+    let (percent, detail, color) = progress(d);
     let tail = format!("  {percent}%  {detail}");
     let bar_width = (area.width as usize).saturating_sub(tail.chars().count());
     let filled = bar_width * percent as usize / 100;
@@ -450,6 +478,314 @@ fn render_hero(d: &Dashboard, f: &mut Frame, area: Rect) {
         }
         f.render_widget(Paragraph::new(lines), *column);
     }
+}
+
+// ─── The big header: mascot, four number cards, the run panel ───────────────
+
+/// Rows under the title: the mascot's 13 and his speech line
+const BIG_BODY: u16 = mascot::BIG_HEIGHT + 1;
+const CARD_W: u16 = 34;
+const CARD_H: u16 = 6;
+/// Where p99 sits: names for how hot the tail runs, and where each ends
+const HEAT_SCALE: [(&str, f64); 4] = [
+    ("bell", 200.0),
+    ("jalapeño", 800.0),
+    ("habanero", 3_000.0),
+    ("ghost", f64::INFINITY),
+];
+
+/// A panel: the area filled with the panel surface
+fn panel(f: &mut Frame, area: Rect) {
+    f.render_widget(
+        Paragraph::new("").style(Style::new().bg(super::theme::PANEL)),
+        area,
+    );
+}
+
+/// Inside a panel, `x` cells in from the sides and `y` rows from the edges
+fn inset(area: Rect, x: u16, y: u16) -> Rect {
+    Rect {
+        x: area.x + x,
+        y: area.y + y,
+        width: area.width.saturating_sub(2 * x),
+        height: area.height.saturating_sub(2 * y),
+    }
+}
+
+/// The p99's place on the heat scale: its name, and how far along (0–1)
+fn heat_of(p99_ms: f64) -> (&'static str, f64) {
+    let mut lower = 50.0_f64;
+    for (i, (name, upper)) in HEAT_SCALE.iter().enumerate() {
+        if p99_ms < *upper {
+            let upper = if upper.is_finite() { *upper } else { 10_000.0 };
+            let t = ((p99_ms.max(lower) / lower).ln() / (upper / lower).ln()).clamp(0.0, 1.0);
+            return (name, (i as f64 + t) / HEAT_SCALE.len() as f64);
+        }
+        lower = *upper;
+    }
+    ("ghost", 1.0)
+}
+
+fn render_big_header(d: &Dashboard, f: &mut Frame, area: Rect) {
+    let [title, _, body] = Layout::vertical([
+        Constraint::Length(1),
+        Constraint::Length(1),
+        Constraint::Length(BIG_BODY),
+    ])
+    .areas(area);
+    render_title(d, f, title);
+
+    let [pet, _, cards, _, run] = Layout::horizontal([
+        Constraint::Length(mascot::BIG_WIDTH),
+        Constraint::Length(2),
+        Constraint::Length(CARD_W * 2 + 2),
+        Constraint::Length(2),
+        Constraint::Min(0),
+    ])
+    .areas(body);
+
+    let mood = d.mood();
+    let mut lines = mascot::big_lines(mood, d.frame);
+    lines.push(Line::styled(mood.says(), Style::new().fg(ACCENT).italic()));
+    f.render_widget(Paragraph::new(lines), pet);
+    mascot::keep_rows(pet, mascot::BIG_HEIGHT);
+
+    render_cards(d, f, cards);
+    let run = Rect {
+        height: CARD_H * 2 + 1,
+        ..run
+    };
+    panel(f, run);
+    let inner = inset(run, 3, 1);
+    match &d.verdict {
+        Some(_) => render_verdict(d, f, inner),
+        None => render_run(d, f, inner),
+    }
+}
+
+/// The four numbers that matter, each on its own card in big digits
+fn render_cards(d: &Dashboard, f: &mut Frame, area: Rect) {
+    let m = &d.metrics;
+    let samples = d.timeline.samples();
+    let now = samples.back().map_or_else(|| m.rps(d.elapsed()), |s| s.rps);
+    let peak = samples.iter().map(|s| s.rps).fold(0.0, f64::max);
+    let success = 100.0 - m.error_rate();
+    let failed = m.failed + m.errors + m.timeouts;
+    let (success_text, success_color) = match m.total {
+        0 => ("—".to_string(), LABEL),
+        _ => (
+            format!("{success:.1}%"),
+            match success {
+                s if s >= 99.0 => GOOD,
+                s if s >= 95.0 => WARN,
+                _ => BAD,
+            },
+        ),
+    };
+    let p99 = m.percentile(99.0);
+    let cards = [
+        (
+            "requests / s",
+            format!(
+                "avg {} · peak {}",
+                format::compact(m.rps(d.elapsed())),
+                format::compact(peak)
+            ),
+            format::compact(now),
+            ACCENT,
+        ),
+        (
+            "median",
+            format!("p90 {}", format::latency(m.percentile(90.0))),
+            format::latency(m.percentile(50.0)),
+            Color::Reset,
+        ),
+        (
+            "p99",
+            format!("max {}", format::latency(m.max())),
+            format::latency(p99),
+            latency_color(p99, m.percentile(50.0)),
+        ),
+        (
+            "success",
+            match failed {
+                0 => "none failed".to_string(),
+                n => format!("{} failed", format::count(n)),
+            },
+            success_text,
+            success_color,
+        ),
+    ];
+    for (i, (name, sub, text, color)) in cards.into_iter().enumerate() {
+        let card = Rect {
+            x: area.x + (i as u16 % 2) * (CARD_W + 2),
+            y: area.y + (i as u16 / 2) * (CARD_H + 1),
+            width: CARD_W.min(area.width),
+            height: CARD_H,
+        };
+        panel(f, card);
+        // A row of padding, the name, then four rows of digits
+        let inner = Rect {
+            y: card.y + 1,
+            height: card.height.saturating_sub(1),
+            ..inset(card, 2, 0)
+        };
+        f.render_widget(Paragraph::new(label(name)), inner);
+        f.render_widget(
+            Paragraph::new(Span::styled(sub, Style::new().fg(super::kit::FAINT)))
+                .alignment(Alignment::Right),
+            inner,
+        );
+        let digits = Rect {
+            y: inner.y + 1,
+            height: inner.height.saturating_sub(1),
+            ..inner
+        };
+        let (num, unit) = bigtext::split_unit(&text);
+        let unit = if num.is_empty() { text.as_str() } else { unit };
+        let style = Style::new().fg(color);
+        let unit_style = Style::new().fg(LABEL);
+        let lines: Vec<Line> =
+            if bigtext::large_width(num) + unit.chars().count() < digits.width as usize {
+                bigtext::large_lines(num, unit, style, unit_style).into()
+            } else {
+                let mut small = vec![Line::raw("")];
+                small.extend(bigtext::lines(num, unit, style, unit_style));
+                small
+            };
+        f.render_widget(Paragraph::new(lines), digits);
+    }
+}
+
+/// Progress, where the tail sits on the heat scale, and what to know so far
+fn render_run(d: &Dashboard, f: &mut Frame, area: Rect) {
+    let m = &d.metrics;
+    let w = area.width as usize;
+    let (percent, detail, color) = progress(d);
+    let mut lines = Vec::new();
+
+    // A thin bar, then the words for it
+    let tail = format!("  {percent}%");
+    let bar = w.saturating_sub(tail.chars().count());
+    let filled = bar * percent as usize / 100;
+    lines.push(Line::from(vec![
+        Span::styled("━".repeat(filled), Style::new().fg(color)),
+        Span::styled("━".repeat(bar - filled), Style::new().fg(RULE)),
+        value(tail, color),
+    ]));
+    lines.push(Line::from(label(truncate(&detail, w))));
+    lines.push(Line::raw(""));
+
+    // The heat scale, with a mark where p99 is
+    let p99_ms = m.percentile(99.0).as_secs_f64() * 1000.0;
+    let (name, at) = heat_of(p99_ms);
+    let known = m.total > 0;
+    let right = if known {
+        format!("{name} · {}", format::latency(m.percentile(99.0)))
+    } else {
+        "after the first requests".into()
+    };
+    // Colour means health: mild is good, and only the hot end warns
+    let heat_color = match name {
+        _ if !known => LABEL,
+        "bell" => GOOD,
+        "jalapeño" => Color::Reset,
+        "habanero" => WARN,
+        _ => BAD,
+    };
+    lines.push(Line::from(vec![
+        label("p99 heat"),
+        Span::raw(" ".repeat(w.saturating_sub(8 + right.chars().count()))),
+        Span::styled(right, Style::new().fg(heat_color).bold()),
+    ]));
+    let mark = ((at * w as f64) as usize).min(w.saturating_sub(1));
+    let mut marker = " ".repeat(w);
+    if known {
+        marker.replace_range(
+            marker.char_indices().nth(mark).map_or(0, |(i, _)| i)..,
+            &format!("▼{}", " ".repeat(w - mark - 1)),
+        );
+    }
+    lines.push(Line::styled(marker, Style::new().bold()));
+    lines.push(Line::from(
+        (0..w)
+            .map(|x| {
+                let level = 1 + x * (HEAT.len() - 1) / w.max(1);
+                Span::styled("▀", Style::new().fg(HEAT[level.min(HEAT.len() - 1)]))
+            })
+            .collect::<Vec<_>>(),
+    ));
+    let quarter = w / HEAT_SCALE.len();
+    let mut names = Vec::new();
+    for (i, (n, _)) in HEAT_SCALE.iter().enumerate() {
+        let current = known && *n == name;
+        let text = if i + 1 == HEAT_SCALE.len() {
+            format!("{n:>width$}", width = w - quarter * i)
+        } else {
+            format!("{n:<quarter$}")
+        };
+        names.push(Span::styled(
+            text,
+            if current {
+                Style::new().bold()
+            } else {
+                Style::new().fg(super::kit::FAINT)
+            },
+        ));
+    }
+    lines.push(Line::from(names));
+    lines.push(Line::raw(""));
+
+    for (level, text) in findings(d).into_iter().take(3) {
+        lines.push(Line::from(vec![
+            Span::styled(
+                format!("{}  ", level.symbol()),
+                Style::new().fg(level_color(level)),
+            ),
+            Span::raw(truncate(&text, w.saturating_sub(3))),
+        ]));
+    }
+    f.render_widget(Paragraph::new(lines), area);
+}
+
+/// What the run says so far, the way the verdict will: success, the shape
+/// of the tail, and the latest thing that went wrong
+fn findings(d: &Dashboard) -> Vec<(Level, String)> {
+    use crate::insights::LONG_TAIL;
+    let m = &d.metrics;
+    if m.total == 0 {
+        return vec![(Level::Healthy, "nothing back yet".into())];
+    }
+    let mut out = Vec::new();
+    let success = 100.0 - m.error_rate();
+    let level = match success {
+        s if s >= 99.0 => Level::Healthy,
+        s if s >= 95.0 => Level::Degraded,
+        _ => Level::Failing,
+    };
+    out.push((level, format!("{success:.1}% of requests succeeded")));
+    let (p50, p99) = (
+        m.percentile(50.0).as_secs_f64(),
+        m.percentile(99.0).as_secs_f64(),
+    );
+    if p50 > 0.0 {
+        let ratio = p99 / p50;
+        let (level, words) = match ratio {
+            r if r >= BAD_TAIL => (Level::Degraded, "wide tail"),
+            r if r >= LONG_TAIL => (Level::Healthy, "long tail"),
+            _ => (Level::Healthy, "tight latency"),
+        };
+        out.push((level, format!("{words} · p99 is {ratio:.1}× the median")));
+    }
+    if let Some(anomaly) = d.anomalies.last() {
+        out.push((Level::Degraded, anomaly.text.clone()));
+    } else if let Some((cause, c)) = m.failures().top().first() {
+        out.push((
+            Level::Failing,
+            format!("{} × {}", format::count(c.count), cause),
+        ));
+    }
+    out
 }
 
 /// End-of-run report card
@@ -654,30 +990,36 @@ fn render_live(d: &Dashboard, f: &mut Frame, body: Rect) {
     let with_stats = body.width >= STATS_COLUMN_MIN_WIDTH;
     let [left, _, stats] = Layout::horizontal([
         Constraint::Min(0),
-        Constraint::Length(if with_stats { 3 } else { 0 }),
-        Constraint::Length(if with_stats { STATS_COLUMN } else { 0 }),
+        Constraint::Length(if with_stats { 2 } else { 0 }),
+        Constraint::Length(if with_stats { STATS_COLUMN + 4 } else { 0 }),
     ])
     .areas(body);
 
     // The charts share one time axis and take a fixed share of the height,
-    // leaving the rest to the latest requests and errors
+    // leaving the rest to the latest requests and errors. Each group sits
+    // on a panel, padded a row and two cells inside it.
     let h = left.height;
     let heat_rows = (h / 5).clamp(3, 8);
     let line_rows = (h / 7).clamp(3, 6);
     let rps_rows = if h >= 30 { 4 } else { 3 };
-    let [heat_title, heat, line_title, lines, rps_title, rps, axis, _, bottom] =
-        Layout::vertical([
-            Constraint::Length(1),
-            Constraint::Length(heat_rows),
-            Constraint::Length(1),
-            Constraint::Length(line_rows),
-            Constraint::Length(1),
-            Constraint::Length(rps_rows),
-            Constraint::Length(1),
-            Constraint::Length(1),
-            Constraint::Min(0),
-        ])
-        .areas(left);
+    let charts_height = 4 + heat_rows + line_rows + rps_rows + 2;
+    let [charts_panel, _, bottom] = Layout::vertical([
+        Constraint::Length(charts_height),
+        Constraint::Length(1),
+        Constraint::Min(0),
+    ])
+    .areas(left);
+    panel(f, charts_panel);
+    let [heat_title, heat, line_title, lines, rps_title, rps, axis] = Layout::vertical([
+        Constraint::Length(1),
+        Constraint::Length(heat_rows),
+        Constraint::Length(1),
+        Constraint::Length(line_rows),
+        Constraint::Length(1),
+        Constraint::Length(rps_rows),
+        Constraint::Length(1),
+    ])
+    .areas(inset(charts_panel, 2, 1));
 
     // Heatmap legend: the ramp itself, one cell per shade
     let ramp: Vec<Span> = HEAT
@@ -728,19 +1070,22 @@ fn render_live(d: &Dashboard, f: &mut Frame, body: Rect) {
         render_time_axis(&columns, f, axis);
     }
 
-    if bottom.height >= 4 {
+    if bottom.height >= 5 {
         let [latest, _, errors] = Layout::horizontal([
             Constraint::Fill(3),
-            Constraint::Length(3),
+            Constraint::Length(2),
             Constraint::Fill(2),
         ])
         .areas(bottom);
-        render_latest(d, f, latest);
-        render_errors(d, f, errors);
+        panel(f, latest);
+        panel(f, errors);
+        render_latest(d, f, inset(latest, 2, 1));
+        render_errors(d, f, inset(errors, 2, 1));
     }
 
     if with_stats {
-        render_stats_column(d, f, stats);
+        panel(f, stats);
+        render_stats_column(d, f, inset(stats, 2, 1));
     }
 }
 
@@ -1401,7 +1746,7 @@ fn status_rows(d: &Dashboard, width: usize) -> Vec<Line<'static>> {
 
 /// Cards are laid out in as many columns of about this width as fit
 const CARD_WIDTH: u16 = 48;
-const CARD_GAP: u16 = 4;
+const CARD_GAP: u16 = 2;
 
 /// A titled block of rows, built for a given width
 struct Card {
@@ -1429,7 +1774,8 @@ impl Card {
 fn render_stats_tab(d: &Dashboard, f: &mut Frame, area: Rect) {
     let columns = ((area.width + CARD_GAP) / (CARD_WIDTH + CARD_GAP)).clamp(1, 4);
     let width = (area.width + CARD_GAP) / columns - CARD_GAP;
-    let w = width as usize;
+    // Each card is a panel, its lines two cells in from the sides
+    let w = width.saturating_sub(4) as usize;
     let mut cards = vec![
         requests_card(d, w),
         latency_card(d, w),
@@ -1460,14 +1806,17 @@ fn render_stats_tab(d: &Dashboard, f: &mut Frame, area: Rect) {
             continue;
         }
         let rect = Rect::new(x, area.y + y, width, height);
-        f.render_widget(Paragraph::new(card.lines), rect);
+        panel(f, rect);
+        f.render_widget(Paragraph::new(card.lines), inset(rect, 2, 1));
     }
 
     // The distribution takes whatever height is left
     let rest = area.height.saturating_sub(grid_height);
-    if rest >= 8 {
-        let [title, chart] = Layout::vertical([Constraint::Length(1), Constraint::Min(0)])
-            .areas(Rect::new(area.x, area.y + grid_height, area.width, rest));
+    if rest >= 10 {
+        let outer = Rect::new(area.x, area.y + grid_height, area.width, rest);
+        panel(f, outer);
+        let [title, chart] =
+            Layout::vertical([Constraint::Length(1), Constraint::Min(0)]).areas(inset(outer, 2, 1));
         section(
             f,
             title,
@@ -1479,7 +1828,7 @@ fn render_stats_tab(d: &Dashboard, f: &mut Frame, area: Rect) {
 }
 
 fn card_height(card: &Card) -> u16 {
-    card.lines.len() as u16
+    card.lines.len() as u16 + 2
 }
 
 fn requests_card(d: &Dashboard, w: usize) -> Card {
@@ -2764,7 +3113,8 @@ mod tests {
             .map(|c| c.symbol())
             .collect();
         assert!(screen.contains("list paused while inspecting"));
-        assert!(screen.contains("REQUEST #5"));
+        // Titles are upper case outside pepe's own theme
+        assert!(screen.to_lowercase().contains("request #5"));
         assert!(screen.contains("first byte"));
     }
 
@@ -2912,6 +3262,8 @@ mod tests {
                 (80, 24),
                 (109, 30),
                 (120, 40),
+                (120, 46),
+                (146, 46),
                 (250, 70),
             ] {
                 let mut terminal = Terminal::new(TestBackend::new(w, h)).unwrap();
@@ -2934,6 +3286,180 @@ mod tests {
                 d.inspecting = false;
                 d.scroll = 0;
             }
+        }
+    }
+
+    /// A run of `secs` seconds at about 40 requests a second, with a long
+    /// tail and a few connections closed early, for screenshots
+    pub(in crate::ui) fn demo_run(d: &mut Dashboard, secs: u64) {
+        let mut seed = 7u64;
+        let mut next = move || {
+            seed = seed
+                .wrapping_mul(6364136223846793005)
+                .wrapping_add(1442695040888963407);
+            (seed >> 11) as f64 / (1u64 << 53) as f64
+        };
+        d.started =
+            std::time::Instant::now() - Duration::from_secs(secs) - Duration::from_millis(100);
+        for s in 0..secs {
+            let n = if s < 3 {
+                10 + s * 12
+            } else {
+                28 + (next() * 30.0) as u64
+            };
+            let slow = s % 13 == 5;
+            for i in 0..n {
+                // Log-normal around 200ms, wider when the second is slow
+                let z: f64 = (0..6).map(|_| next()).sum::<f64>() - 3.0;
+                let sigma = if slow { 0.9 } else { 0.45 };
+                let mut ms = 200.0 * (z * sigma).exp();
+                if next() < 0.012 {
+                    ms *= 6.0 + next() * 8.0;
+                }
+                let failed = (s == 5 || s == 26) && i < 3;
+                d.record(ResponseStats {
+                    duration: Duration::from_micros((ms * 1000.0) as u64),
+                    status_code: (!failed).then_some(StatusCode::OK),
+                    error: failed.then_some(crate::response::ErrorKind::Other),
+                    error_message: failed
+                        .then(|| "connection closed before message completed".into()),
+                    body_bytes: 34,
+                    preview: Some(bytes::Bytes::from_static(
+                        b"{\n  \"user-agent\": \"pepe/0.16.0\"\n}",
+                    )),
+                    ttfb: Some(Duration::from_micros((ms * 990.0) as u64)),
+                    ..Default::default()
+                });
+            }
+            d.timeline.advance(Duration::from_secs(s + 1));
+        }
+    }
+
+    /// The screen as HTML, colours and all, to look at in a browser
+    fn html(buf: &ratatui::buffer::Buffer) -> String {
+        fn css(c: Color, bg: bool) -> String {
+            const ANSI: [&str; 16] = [
+                "#45475a", "#f38ba8", "#a6e3a1", "#f9e2af", "#89b4fa", "#f5c2e7", "#94e2d5",
+                "#bac2de", "#585b70", "#f38ba8", "#a6e3a1", "#f9e2af", "#89b4fa", "#f5c2e7",
+                "#94e2d5", "#a6adc8",
+            ];
+            let idx = |n: u8| -> String {
+                match n {
+                    0..=15 => ANSI[n as usize].to_string(),
+                    16..=231 => {
+                        let n = n - 16;
+                        let v = |k: u8| if k == 0 { 0 } else { 55 + k * 40 };
+                        format!("#{:02x}{:02x}{:02x}", v(n / 36), v(n / 6 % 6), v(n % 6))
+                    }
+                    _ => {
+                        let g = 8 + (n - 232) * 10;
+                        format!("#{g:02x}{g:02x}{g:02x}")
+                    }
+                }
+            };
+            match c {
+                Color::Reset => {
+                    if bg {
+                        "#1e1e2e".into()
+                    } else {
+                        "#cdd6f4".into()
+                    }
+                }
+                Color::Rgb(r, g, b) => format!("#{r:02x}{g:02x}{b:02x}"),
+                Color::Indexed(n) => idx(n),
+                Color::Black => idx(0),
+                Color::Red => idx(1),
+                Color::Green => idx(2),
+                Color::Yellow => idx(3),
+                Color::Blue => idx(4),
+                Color::Magenta => idx(5),
+                Color::Cyan => idx(6),
+                Color::Gray => idx(7),
+                Color::DarkGray => idx(8),
+                Color::White => "#ffffff".into(),
+                _ => {
+                    if bg {
+                        "#1e1e2e".into()
+                    } else {
+                        "#cdd6f4".into()
+                    }
+                }
+            }
+        }
+        let mut out = String::from("<html><head><meta charset=utf-8><style>body{margin:0;background:#111}pre{margin:0;padding:12px;font:13px/16px 'JetBrains Mono','DejaVu Sans Mono',monospace;display:inline-block}span{display:inline-block;width:1ch;height:16px;overflow:hidden;vertical-align:top}</style></head><body><pre>");
+        let area = buf.area;
+        for y in 0..area.height {
+            for x in 0..area.width {
+                let cell = &buf[(x, y)];
+                let (mut fg, mut bg) = (css(cell.fg, false), css(cell.bg, true));
+                if cell.modifier.contains(ratatui::style::Modifier::REVERSED) {
+                    std::mem::swap(&mut fg, &mut bg);
+                }
+                let bold = cell.modifier.contains(ratatui::style::Modifier::BOLD);
+                let italic = cell.modifier.contains(ratatui::style::Modifier::ITALIC);
+                let sym = match cell.symbol() {
+                    "<" => "&lt;",
+                    ">" => "&gt;",
+                    "&" => "&amp;",
+                    "" => " ",
+                    s => s,
+                };
+                let (fg, bg) = (fg, bg);
+                let style = format!(
+                    "color:{fg};background:{bg};{}{}",
+                    if bold { "font-weight:700;" } else { "" },
+                    if italic { "font-style:italic;" } else { "" }
+                );
+                // Half blocks drawn as boxes, so they meet without font gaps
+                match sym {
+                    "▀" => out.push_str(&format!(
+                        "<span style=\"background:linear-gradient({fg} 50%,{bg} 50%)\"></span>"
+                    )),
+                    "▄" => out.push_str(&format!(
+                        "<span style=\"background:linear-gradient({bg} 50%,{fg} 50%)\"></span>"
+                    )),
+                    "█" => out.push_str(&format!("<span style=\"background:{fg}\"></span>")),
+                    _ => out.push_str(&format!("<span style=\"{style}\">{sym}</span>")),
+                }
+            }
+            out.push('\n');
+        }
+        out.push_str("</pre></body></html>");
+        out
+    }
+
+    /// `PEPE_PREVIEW=dir cargo test preview -- --ignored` writes each tab
+    /// as HTML, in the theme `PEPE_THEME` names
+    #[test]
+    #[ignore]
+    fn preview() {
+        let dir = std::env::var("PEPE_PREVIEW").unwrap_or_else(|_| "target/preview".into());
+        std::fs::create_dir_all(&dir).unwrap();
+        let (w, h) = std::env::var("PEPE_PREVIEW_SIZE")
+            .ok()
+            .and_then(|s| {
+                s.split_once('x')
+                    .map(|(a, b)| (a.parse().unwrap(), b.parse().unwrap()))
+            })
+            .unwrap_or((180u16, 50u16));
+        let args = Cli::parse_from([
+            "pepe",
+            "-n",
+            "10000",
+            "-c",
+            "10",
+            "https://httpbin.io/user-agent",
+        ]);
+        let mut d = Dashboard::new(args, Plan::Count(10_000));
+        demo_run(&mut d, 40);
+        for tab in [Tab::Live, Tab::Stats, Tab::Requests] {
+            d.tab = tab;
+            let mut terminal = Terminal::new(TestBackend::new(w, h)).unwrap();
+            terminal
+                .draw(|f| super::super::theme::draw(f, |f| render(&d, f)))
+                .unwrap();
+            let name = format!("{dir}/{}.html", tab.title().to_lowercase());
+            std::fs::write(name, html(terminal.backend().buffer())).unwrap();
         }
     }
 }
