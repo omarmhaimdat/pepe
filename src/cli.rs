@@ -1,4 +1,4 @@
-use clap::{ArgAction::HelpLong, Args, Error, Parser, Subcommand};
+use clap::{ArgAction::HelpLong, Args, CommandFactory, Error, Parser, Subcommand};
 use reqwest::Proxy;
 
 use crate::curl;
@@ -423,11 +423,38 @@ impl Cli {
             if let Err(e) = reqwest::Url::parse(&self.url) {
                 return Err(Error::raw(
                     clap::error::ErrorKind::ValueValidation,
-                    format!("Invalid URL {:?}: {e}", self.url),
+                    Self::url_trouble(&self.url, e),
                 ));
             }
         }
         Ok(())
+    }
+
+    /// What's wrong with a URL that didn't parse, and what to do: a host
+    /// without its scheme is given one, and a bare word is told apart from
+    /// the commands, which a pepe older than the word may not have
+    fn url_trouble(url: &str, e: impl std::fmt::Display) -> String {
+        let bare = !url.is_empty()
+            && url
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_'));
+        if url.contains("://") {
+            format!("Invalid URL {url:?}: {e}")
+        } else if bare {
+            let commands: Vec<String> = Cli::command()
+                .get_subcommands()
+                .map(|c| c.get_name().to_string())
+                .collect();
+            format!(
+                "{url:?} isn't a URL, nor a command this pepe ({}) has.\n\
+                 A URL starts with http:// or https://, as in pepe https://example.com\n\
+                 The commands are {}; `pepe self-update` gets the newest ones",
+                version(),
+                commands.join(", ")
+            )
+        } else {
+            format!("{url:?} has no scheme: a URL starts with http:// or https://, as in pepe https://{url}")
+        }
     }
 
     /// Parse duration string like "10s", "5m", "2h" into milliseconds
@@ -917,6 +944,32 @@ mod tests {
     fn the_cli_definition_is_consistent() {
         use clap::CommandFactory;
         Cli::command().debug_assert();
+    }
+
+    #[test]
+    fn a_url_that_isnt_one_is_told_what_it_needs() {
+        let trouble = |word: &str| {
+            let mut args = Cli::parse_from(["pepe", word]);
+            args.validate().unwrap_err().to_string()
+        };
+        let bare = trouble("foo");
+        assert!(
+            bare.contains("\"foo\" isn't a URL, nor a command"),
+            "{bare}"
+        );
+        assert!(bare.contains("api, ramp, replay, flow, logs"), "{bare}");
+        assert!(bare.contains("pepe self-update"), "{bare}");
+        let host = trouble("example.com/x");
+        assert!(host.contains("has no scheme"), "{host}");
+        assert!(host.contains("pepe https://example.com/x"), "{host}");
+        let odd = trouble("http://exa mple.com");
+        assert!(
+            odd.starts_with("error: Invalid URL \"http://exa mple.com\""),
+            "{odd}"
+        );
+        assert!(Cli::parse_from(["pepe", "https://example.com"])
+            .validate()
+            .is_ok());
     }
 
     #[test]

@@ -495,7 +495,7 @@ const HEAT_SCALE: [(&str, f64); 4] = [
 ];
 
 /// A panel: the area filled with the panel surface
-fn panel(f: &mut Frame, area: Rect) {
+pub(super) fn panel(f: &mut Frame, area: Rect) {
     f.render_widget(
         Paragraph::new("").style(Style::new().bg(super::theme::PANEL)),
         area,
@@ -503,7 +503,7 @@ fn panel(f: &mut Frame, area: Rect) {
 }
 
 /// Inside a panel, `x` cells in from the sides and `y` rows from the edges
-fn inset(area: Rect, x: u16, y: u16) -> Rect {
+pub(super) fn inset(area: Rect, x: u16, y: u16) -> Rect {
     Rect {
         x: area.x + x,
         y: area.y + y,

@@ -1664,6 +1664,44 @@ fn cut(line: &str) -> String {
     }
 }
 
+/// The line without the colour codes `docker compose logs` writes into a
+/// pipe, and without the control characters that would move the cursor
+/// when the line is drawn: a tab is a space, the rest are left out
+pub fn clean(text: &str) -> Cow<'_, str> {
+    if !text.bytes().any(|b| b < 0x20 || b == 0x7f) {
+        return Cow::Borrowed(text);
+    }
+    let mut out = String::with_capacity(text.len());
+    let mut chars = text.chars().peekable();
+    while let Some(c) = chars.next() {
+        match c {
+            '\x1b' => match chars.next() {
+                // ESC [ parameters, then one final byte: a colour, most often
+                Some('[') => {
+                    for n in chars.by_ref() {
+                        if ('@'..='~').contains(&n) {
+                            break;
+                        }
+                    }
+                }
+                // ESC ] text, to a BEL or an ESC \: a title, a link
+                Some(']') => {
+                    while let Some(n) = chars.next() {
+                        if n == '\x07' || (n == '\x1b' && chars.next().is_some()) {
+                            break;
+                        }
+                    }
+                }
+                _ => {}
+            },
+            '\t' => out.push(' '),
+            c if c.is_control() => {}
+            c => out.push(c),
+        }
+    }
+    Cow::Owned(out)
+}
+
 impl Stats {
     /// Count one line. `wall` is the clock's second, for telling a log
     /// that is being written from one that was.
@@ -2296,6 +2334,7 @@ fn fold_lines(chunk: &[u8], job: &Job, stats: &mut Stats, wall: i64) {
         } else {
             String::from_utf8_lossy(line)
         };
+        let text = clean(text.trim());
         let text = text.trim();
         if text.is_empty() {
             continue;
@@ -2534,6 +2573,11 @@ impl Tail {
                 let wall = wall();
                 stats.read_bytes += whole as u64;
                 fold_lines(&self.pending[..whole], job, &mut stats, wall);
+                // A pipe has no end to be short of: once read from, it is
+                // caught up with, and the screen is live from its first line
+                if self.path.is_none() {
+                    stats.caught_up = true;
+                }
                 drop(stats);
                 self.pending.drain(..whole);
             }
@@ -3134,6 +3178,18 @@ mod tests {
             })
         ));
         assert_eq!(unprefixed("GET /a | b"), "GET /a | b");
+        // Into a pipe, compose colours the name; a tab in a line is a space
+        // and the other control characters are left out, so no line read
+        // can move the cursor when it is drawn
+        let coloured = "\x1b[36mnginx_twitter  |\x1b[0m 172.18.0.1 - - [08/Oct/2026:13:55:36 +0200] \"GET /\tHTTP/1.1\" 200 5 \"-\" \"curl/8\"\r\x07";
+        let cleaned = clean(coloured);
+        assert_eq!(
+            &*cleaned,
+            "nginx_twitter  | 172.18.0.1 - - [08/Oct/2026:13:55:36 +0200] \"GET / HTTP/1.1\" 200 5 \"-\" \"curl/8\""
+        );
+        assert_eq!(&*request(&parser, &cleaned).client, "172.18.0.1");
+        assert!(matches!(clean("plain"), Cow::Borrowed("plain")));
+        assert_eq!(&*clean("\x1b]8;;http://x\x1b\\link\x1b]8;;\x07"), "link");
         for not in [
             "",
             "hello world",
@@ -3544,6 +3600,23 @@ mod tests {
             exact_paths: false,
         };
         assert_eq!(job.name(), "access.log +1");
+        // Piped in, a log is caught up with from its first chunk: there is
+        // no end to be short of, and its colour is left out
+        let piped = dir.join("piped");
+        std::fs::write(
+            &piped,
+            format!("\x1b[36mweb-1  |\x1b[0m {}\n", hit(200, "/piped", 200)),
+        )
+        .unwrap();
+        let shared = Shared::default();
+        let mut tail = Tail::stdin(Some(&std::fs::File::open(&piped).unwrap()));
+        tail.drain(&job, &shared, false);
+        {
+            let stats = shared.lock();
+            assert!(stats.caught_up);
+            assert_eq!(stats.requests, 1);
+            assert_eq!(stats.paths.top(1, |p| p.requests)[0].0, "/piped");
+        }
         let shared = Shared::default();
         read(&job, &shared);
         {
