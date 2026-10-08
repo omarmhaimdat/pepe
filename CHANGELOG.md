@@ -6,6 +6,55 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+## [0.18.0](https://github.com/omarmhaimdat/pepe/compare/v0.17.1...v0.18.0) - 2026-10-08
+
+### Added
+
+- *(ui)* pepe's own theme, a new Pepe, and the dashboard on panels ([#96](https://github.com/omarmhaimdat/pepe/pull/96))
+
+  ## What
+
+  - **pepe's own palette**, the default in true-colour terminals: warm
+  darks on a painted ground, one ember accent, a heatmap that glows from
+  embers to flame. `PEPE_THEME=pepe|terminal|light|none` picks a theme;
+  otherwise `COLORTERM` (`truecolor`, `24bit`) chooses pepe's palette and
+  `COLORFGBG` still picks light. `NO_COLOR` wins over all.
+  - **A new Pepe**, with arms that pose with his mood, in two sizes: 16×16
+  everywhere, 26×26 in the big header. The update notice prints
+  true-colour cells too.
+  - **The dashboard on panels.** On terminals 146×46 and up the header has
+  the big Pepe, the four numbers on cards in a new 5×7 face, and a run
+  panel: progress, where p99 sits on a heat scale from bell to ghost, and
+  what the run says so far. The Live charts, latest requests, errors,
+  stats column and each Stats card sit on panels; outside pepe's palette
+  panels keep only their spacing.
+  - An ignored test, `preview`, writes each tab as HTML for screenshots.
+
+  ## Review fixes
+
+  - The big header started at 120 columns, where the run panel had 14
+  cells and its text collided; it now starts at 146, and the size sweep
+  renders 120×46 and 146×46.
+  - The p99 heat is coloured by where it sits rather than always yellow.
+  - `inspector_says_the_list_is_paused_while_live` failed with
+  `COLORTERM=truecolor`; it no longer depends on the theme.
+  - Unreachable big-mascot branches in the small header are removed.
+  - `load`: the shard-peak test reads the peak once the first shard's
+  early requests are answered.
+
+  ## Testing
+
+  - `cargo fmt --check`, `cargo clippy --locked --all-targets -- -D
+  warnings`
+  - `cargo test` (230 pass) with `COLORTERM=truecolor`, `COLORTERM` unset,
+  `PEPE_THEME=light` and `NO_COLOR=1`
+  - `preview` rendered at 146×46 in pepe's theme and the run panel checked
+
+  🤖 Generated with [Claude Code](https://claude.com/claude-code)
+
+  ---------
+
+
 ## [0.17.1](https://github.com/omarmhaimdat/pepe/compare/v0.17.0...v0.17.1) - 2026-10-08
 
 ### Fixed
