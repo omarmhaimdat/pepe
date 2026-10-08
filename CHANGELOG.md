@@ -6,6 +6,100 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+## [0.19.1](https://github.com/omarmhaimdat/pepe/compare/v0.19.0...v0.19.1) - 2026-10-08
+
+### Fixed
+
+- *(logs)* a log is read by every core, ten times as fast ([#100](https://github.com/omarmhaimdat/pepe/pull/100))
+
+  ## What
+
+  `pepe logs` read a file on one thread. What a file already has is now
+  read by every core, and the per-line work is cheaper for every way of
+  reading. No flag, no change to what is shown: the `--json` report is the
+  same to the byte as before.
+
+  | 862 MB, 5.86M lines, M4 Pro (10P + 4E) | time | lines/s | MB/s |
+  memory |
+  | --- | ---: | ---: | ---: | ---: |
+  | master, a file | 1.99 s | 2.9M | 433 | 16 MB |
+  | this PR, a file | 0.20 s | 29M | 4,300 | 119 MB |
+  | master, piped in | 2.00 s | 2.9M | 431 | 16 MB |
+  | this PR, piped in (one thread) | 1.54 s | 3.8M | 560 | 16 MB |
+  | `wc -l`, for scale | 0.65 s | | 1,330 | |
+
+  Best of five, file in the page cache. A 3.45 GB file takes 0.84 s.
+  Details and the list of what was found are in `bench/README.md`.
+
+  **This is ten times, not a hundred.** A hundred times the starting point
+  would be 43 GB/s, which is more than this machine can copy out of the
+  page cache, let alone parse. What is left is spread evenly over reading
+  from the kernel, finding the fields and looking up three names a line.
+
+  ## How
+
+  - **Every core** (`sprint` in `src/logs.rs`): threads take the file a
+  megabyte at a time with `pread`, count the lines that start in their
+  megabyte into counts of their own, and add those to the shared ones once
+  a second, so the screen fills in while a long log is read. The file's
+  last partial megabyte, and everything appended after, goes to the one
+  thread that follows the file, as before.
+  - **Same result in any order** (`Stats::merge`): sums, minima and
+  maxima. The one thing a cut can split is the count of the second it
+  falls in, which the "busiest second" figures need whole; each stretch's
+  first and last runs of one second are kept and put together again when
+  merged. The first unread line and each error message's example are
+  chosen by place in the file, and the last 2,000 lines by time and then
+  place.
+  - **A keyed hash in place of SipHash** for the maps of paths, clients,
+  user agents and parameter names: eight bytes at a time through a folded
+  multiply, under a key drawn from `RandomState` when pepe starts. The
+  names come from whoever sends requests, which is why it is keyed.
+  - **Less per line**: a request in the same second as the one before it
+  counts into the slots already held, with no lookup; a timestamp written
+  as the last one was isn't worked out again; a path with an id in it is
+  rewritten into a kept buffer; lines are copied for the log view only
+  within 32 MB of a file's end.
+
+  ## For the reviewer
+
+  - **Memory while a file is read goes from 16 MB to about 120 MB** with
+  14 threads on this log (each thread's megabyte, and its own counts of up
+  to 50,000 client addresses between merges). It doesn't grow with the
+  file. Piped input is unchanged at 16 MB.
+  - Files under 16 MB, stdin and followed appends take the single-threaded
+  path.
+  - Once a log has more distinct names than a cap (20,000 paths, 50,000
+  clients), which names are kept past the cap can differ from run to run,
+  since threads merge in no fixed order. Totals don't change.
+  - A log whose lines aren't in time order can report a different busiest
+  second per slot than one thread would: both are approximations there.
+  - The hash is not SipHash. It is keyed per process, but it has had no
+  cryptanalysis; if that trade isn't wanted, `Keyed` is one type to swap
+  back.
+  - `seek_read` is used on Windows in place of `pread`. That path is
+  compiled and tested only by CI.
+  - The title says `fix` so release-plz makes this a patch release; by the
+  changelog's own groups it is `perf`.
+
+  ## Tested
+
+  - New: `every_core_reading_counts_what_one_would` reads one log (seconds
+  of 0 to 40 requests, error log lines, unreadable lines, a line longer
+  than a stretch, bytes that aren't UTF-8, an unfinished last line,
+  `--since`) on one thread and then with stretches of 1 KB, 3 KB, 64 KB
+  and 1 MB on 2 to 8 threads, and compares the JSON report, the kept
+  lines, the busiest second and the first unread line.
+  `names_are_found_by_a_keyed_hash` covers the hash and merging at a cap.
+  - 245 tests pass; `cargo clippy --all-targets -- -D warnings` on 1.98
+  and `cargo fmt --check` are clean.
+  - The release binary's `--json` for the 862 MB access log plus its error
+  log is identical (`cmp`) to master's.
+  - The live screen was driven in a pseudo-terminal on the same files,
+  with lines appended while it ran.
+  - Not measured on Linux or Windows, and not against another log reader.
+
+
 ## [0.19.0](https://github.com/omarmhaimdat/pepe/compare/v0.18.0...v0.19.0) - 2026-10-08
 
 ### Added
