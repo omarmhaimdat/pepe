@@ -693,20 +693,29 @@ the same two calls. What is still there to take:
 
 ## Reading logs
 
-`pepe logs` reads on one thread. Measured on an M4 Pro, macOS, on a
-generated log (`bench/gen-logs.py`, three days of it three times over:
-865 MB, 5.88M `combined` lines with `rt=` and `urt=` after them), read
-to the end with the report printed; the best of five runs each.
+What a file has when `pepe logs` opens it is read by every core; what is
+piped in, and what is appended to a followed file, by one thread.
+Measured on an M4 Pro (10 performance cores, 4 efficiency), macOS, on a
+generated log (`bench/gen-logs.py access.log error.log 9`: nine days,
+862 MB, 5.86M `combined` lines with `rt=` and `urt=` after them), read
+to the end with the report printed; the best of five runs each, the
+file in the page cache.
 
-| | time | lines/s | MB/s |
-| --- | ---: | ---: | ---: |
-| `pepe logs`, as first written | 4.09 s | 1.44M | 211 |
-| `pepe logs`, now | 2.09 s | 2.81M | 414 |
-| `wc -l` (reads, parses nothing) | 0.69 s | | 1,250 |
-| `awk '{c[$9]++}'` (counts one field) | 13.28 s | 0.44M | 65 |
+| | time | lines/s | MB/s | memory |
+| --- | ---: | ---: | ---: | ---: |
+| `pepe logs`, as first written | 4.09 s | 1.4M | 211 | 16 MB |
+| as merged (#98), one thread | 1.99 s | 2.9M | 433 | 16 MB |
+| now, the file | 0.20 s | 29M | 4,300 | 119 MB |
+| now, the same piped in (one thread) | 1.54 s | 3.8M | 560 | 16 MB |
+| `wc -l` (reads, parses nothing) | 0.65 s | | 1,330 | |
+| `awk '{c[$9]++}'` (counts one field) | 13.28 s | 0.44M | 65 | |
 
-Memory is 16 MB whatever the size. What the profile showed, and what was
-done about each:
+The first row and awk's were measured on an earlier log of the same
+shape and size (865 MB). Four copies of the file end to end (3.45 GB)
+take 0.84 s. The report is the same to the byte whichever way the file
+is read; a test reads one log both ways and compares.
+
+What made the difference, in the order it was found:
 
 - `str::find` with a string to find builds a searcher every call, and
   the format's walk made eight calls a line: the text between two
@@ -714,19 +723,32 @@ done about each:
 - Every line was checked for UTF-8 and split off by a byte-at-a-time
   loop: a chunk is now validated once and cut at newlines by `memchr`.
 - Each count was looked up twice, once to see if it was there. A name
-  seen before is now hashed once; the minute, hour, day and second being
-  counted into are held outside their maps, so a log in time order
-  finds them without a search.
+  seen before is now hashed once, and a request in the same second as
+  the one before it counts into the second, minute, hour and day held
+  from that one, with nothing looked up.
 - A `String` was allocated for every line, to keep the last 2,000: the
-  line that leaves now gives its buffer to the one that comes.
-- `$request_time` went through `f64`'s full parser: `0.004` is now read
-  as digits.
+  line that leaves now gives its buffer to the one that comes, and a
+  path with an id in it is rewritten into a buffer that is kept.
+- `$request_time` went through `f64`'s full parser, and every line's
+  timestamp through the calendar: `0.004` is now read as digits, and a
+  timestamp written as the line before wrote it is the same time.
+- Names were hashed with SipHash. They are now hashed eight bytes at a
+  time through a folded multiply, under a key drawn when pepe starts,
+  since the names come from whoever sends the requests.
+- **Every core.** Threads take the file a megabyte at a time, count the
+  lines that start in their megabyte, and add their counts to the
+  shared ones once a second. Adding counts gives the same sum in any
+  order; the one thing a cut can split, the count of the second it
+  falls in, is put together again from the runs at each megabyte's
+  edges. Only the end of the file can hold its last 2,000 lines, so
+  only there are lines kept.
 
-What is left is spread evenly: hashing the path, the client and the user
-agent (SipHash, kept because the names come from whoever sends
-requests), reading the fields, and the counting. The next step that
-would be larger than a few percent is reading on several threads. No
-other log reader has been measured against it yet.
+Memory while the file is read is each thread's megabyte and its own
+counts of names, which is what the 119 MB is with 14 threads and 41,000
+client addresses; it doesn't grow with the file. Past this, the cost is spread evenly over
+reading the file from the kernel, finding the fields, and looking up
+the path, the client and the user agent. No other log reader has been
+measured against it yet.
 
 ## Reproducing
 
