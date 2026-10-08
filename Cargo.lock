@@ -1280,6 +1280,7 @@ dependencies = [
  "gethostname",
  "httparse",
  "libc",
+ "memchr",
  "ratatui",
  "regex-lite",
  "reqwest 0.12.28",

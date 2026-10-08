@@ -368,6 +368,36 @@ nginx and Apache logs (common and combined), Caddy's JSON lines, AWS ALB logs, a
 
 The dashboard's first tab lists the most frequent URLs (`--rows`, 20 by default) with each one's share of the log, throughput, latency and statuses, and one row for all the rest. `--json` adds `replay`: what the log had, what was left out and why (unparsed lines, writes, paths with no host, URLs past the 5,000 most frequent), and the same per-URL numbers.
 
+### Reading nginx logs
+
+What the server already knows about its traffic: `pepe logs` reads nginx's access and error logs and says how busy the server is now against how busy it has been.
+
+```bash
+pepe logs /var/log/nginx/access.log /var/log/nginx/error.log
+zcat access.log.*.gz | pepe logs -
+docker compose logs -f -n 1000 nginx | pepe logs
+pepe logs access.log --since 24h --json > traffic.json
+```
+
+At a terminal the files are followed as they are written, through rotation; piped, or with `--json`, they are read to the end and a report is printed. Lines are counted as a stream, so a log of any size takes the same few megabytes: every second of the last hour, a day of minutes, ninety days of hours and ten years of days. Rotated files can be given in any order. What is piped in is followed too, until its writer ends, and the `nginx-1  | ` that `docker compose logs` puts in front of each line is left out.
+
+**Now** is the request rate over the last minute (`--window`) of the log's own timestamps. A log whose last line is older than five minutes isn't being written, and is held at its last line instead of the clock. Each minute, hour and day has its requests, its rate, its busiest second, its 4xx and 5xx shares, its mean request time and its error log lines, and how now compares: `+12%`, `×3.4`, `÷2.5`. The cards on top say what a usual slot sees (the median), which was the busiest, and what the same minute an hour ago, the same hour a day ago or the same day a week ago saw.
+
+| View | Shows |
+| --- | --- |
+| **Traffic** | A bar per slot with the rate now drawn across them, and the table of slots; `m`, `h`, `d` switch between minutes, hours and days |
+| **Paths** | The paths by requests, 5xx, 4xx or mean time (`s`), with status codes, clients, user agents, methods and query parameter names beside them |
+| **Errors** | The error log's messages grouped by cause, most frequent first, each with the first line that said it; the paths answering 5xx and 4xx |
+| **Log** | The last 2,000 lines of all the files in time order; `x` keeps failures, `/` searches, `enter` shows everything read from a line, query parameters one by one |
+
+Access logs are read as nginx's `combined` format (Apache's too), with `rt=` and `urt=` timings after it if they are there, or as JSON lines under nginx's variable names or Caddy's. A log with a `log_format` of its own needs it said, as nginx.conf has it, on one line:
+
+```bash
+pepe logs access.log --format '$remote_addr [$time_local] "$request" $status $body_bytes_sent $request_time $upstream_response_time'
+```
+
+`$time_local`, `$time_iso8601`, `$msec`, `$request` (or `$request_method` and `$request_uri`), `$status`, `$body_bytes_sent`, `$remote_addr`, `$host`, `$http_user_agent`, `$request_time` and `$upstream_response_time` are used; the rest are shown when a line is opened. Lines that couldn't be read are counted and the first is shown. Numbers and ids in a path count as one (`/items/*`) unless `--exact-paths` is given. The error log names no time zone, so its times are taken to be this machine's.
+
 ### API mode: load-testing an OpenAPI spec
 
 ![API mode: the endpoints of a spec picked on screen, then a dashboard with a row per endpoint](assets/api.gif)

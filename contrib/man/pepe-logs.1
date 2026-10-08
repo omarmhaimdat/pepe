@@ -1,0 +1,31 @@
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.TH pepe-logs 1  pepe "User Commands"
+.SH NAME
+pepe\-logs \- Read nginx logs: requests per second now, against each minute, hour and day
+.SH SYNOPSIS
+\fBpepe logs\fR [\fB\-\-format\fR] [\fB\-\-window\fR] [\fB\-\-since\fR] [\fB\-\-exact\-paths\fR] [\fB\-\-rows\fR] [\fB\-h\fR|\fB\-\-help\fR] [\fIFILES\fR] 
+.SH DESCRIPTION
+Read nginx logs: requests per second now, against each minute, hour and day
+.SH OPTIONS
+.TP
+\fB\-\-format\fR \fI<LOG_FORMAT>\fR
+The access log\*(Aqs log_format as nginx.conf has it, on one line, when it isn\*(Aqt `combined`: \*(Aq$remote_addr [$time_local] "$request" $status $request_time\*(Aq
+.TP
+\fB\-\-window\fR \fI<TIME>\fR [default: 60s]
+What "now" is measured over, e.g. 10s, 1m, 5m
+.TP
+\fB\-\-since\fR \fI<TIME>\fR
+Leave out what is older than this, e.g. 90m, 24h, 7d
+.TP
+\fB\-\-exact\-paths\fR
+Count /items/1 and /items/2 apart. Without it the numbers and ids in a path count as one, /items/*
+.TP
+\fB\-\-rows\fR \fI<N>\fR [default: 10]
+Rows in each table of the report
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Print help
+.TP
+[\fIFILES\fR]
+Access and error logs, rotated ones too; `\-` or nothing reads what is piped in, and with nothing at all nginx\*(Aqs own in /var/log/nginx

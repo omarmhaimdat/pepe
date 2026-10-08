@@ -27,6 +27,7 @@ mod flow;
 mod insights;
 mod json_report;
 mod load;
+mod logs;
 mod metrics;
 mod openapi;
 mod ramp;
@@ -960,6 +961,99 @@ async fn run_replay_json(
     Ok(())
 }
 
+/// `pepe logs`: what nginx's logs say of its traffic, now and before
+async fn run_logs(args: &Cli, what: &cli::LogsArgs) -> Result<(), Box<dyn std::error::Error>> {
+    let fail = |message: String| -> ! {
+        eprintln!("error: {message}");
+        std::process::exit(2);
+    };
+    let parser = logs::Parser::new(what.format.as_deref())
+        .unwrap_or_else(|e| fail(format!("--format: {e}")));
+    let window = logs::span(&what.window).unwrap_or_else(|e| fail(format!("--window: {e}")));
+    let since = what
+        .since
+        .as_deref()
+        .map(|since| logs::span(since).unwrap_or_else(|e| fail(format!("--since: {e}"))))
+        .map(|since| logs::wall() - since);
+    let piped = !stdin().is_terminal();
+    let mut files = what.files.clone();
+    let dash = files.iter().any(|f| f.as_os_str() == "-");
+    if dash && files.len() > 1 {
+        fail("- reads what is piped in, and can't be mixed with files".into());
+    }
+    if dash {
+        files.clear();
+    } else if files.is_empty() && !piped {
+        files = logs::default_files();
+        if files.is_empty() {
+            fail(
+                "no log to read: name one, as in `pepe logs /var/log/nginx/access.log`, \
+                 or pipe one in"
+                    .into(),
+            );
+        }
+    }
+    if let Some(missing) = files.iter().find(|f| !f.is_file()) {
+        fail(format!("{} isn't a file", missing.display()));
+    }
+    // A log that is piped in has stdin; the screen needs it for its keys,
+    // so the pipe is put aside and the terminal takes its place
+    let mut screen = !args.json && stdout().is_terminal();
+    let mut aside = None;
+    if screen && files.is_empty() {
+        aside = logs::piped_aside();
+        screen = aside.is_some();
+    }
+    let mut job = logs::Job {
+        files,
+        piped: aside,
+        parser,
+        since,
+        follow: screen,
+        exact_paths: what.exact_paths,
+    };
+    let name = job.name();
+    if !screen {
+        job.follow = false;
+        let shared = logs::Shared::default();
+        logs::read(&job, &shared);
+        let stats = shared.lock();
+        if let Some(trouble) = &stats.trouble {
+            eprintln!("error: {trouble}");
+        }
+        if args.json {
+            let report = logs::json_report(&stats, &job, logs::wall(), window, what.rows);
+            println!("{}", serde_json::to_string_pretty(&report)?);
+        } else {
+            print!(
+                "{}",
+                logs::report(&stats, &name, logs::wall(), window, what.rows)
+            );
+        }
+        return Ok(());
+    }
+    let check = update::Check::start();
+    let shared = logs::start(job.clone());
+    let outcome = {
+        let _watchdog = CtrlCWatchdog::arm();
+        let _terminal = TerminalGuard::enter()?;
+        ui::LogsScreen::new(shared.clone(), job.parser.clone(), name.clone(), window)
+            .run()
+            .await
+    };
+    shared.stop();
+    outcome?;
+    print_report(&logs::report(
+        &shared.lock(),
+        &name,
+        logs::wall(),
+        window,
+        what.rows,
+    ));
+    say_if_newer(check).await;
+    Ok(())
+}
+
 async fn run_api(args: &Cli, api: &cli::ApiArgs) -> Result<(), Box<dyn std::error::Error>> {
     let mut run = match api::ApiRun::load(api).await {
         Ok(run) => run,
@@ -1046,6 +1140,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             std::process::exit(1);
         }
         return run_replay(&args, &what).await;
+    }
+    if let Some(cli::Command::Logs(what)) = args.command.clone() {
+        return run_logs(&args, &what).await;
     }
     if let Some(cli::Command::Flow(what)) = args.command.clone() {
         if let Err(e) = args.validate() {

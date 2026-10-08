@@ -181,6 +181,37 @@ pub enum Command {
     Replay(ReplayArgs),
     /// Run a sequence of requests from a flow file, each step fed by the last
     Flow(FlowArgs),
+    /// Read nginx logs: requests per second now, against each minute, hour and day
+    Logs(LogsArgs),
+}
+
+#[derive(clap::Args, Debug, Clone, PartialEq)]
+pub struct LogsArgs {
+    /// Access and error logs, rotated ones too; `-` or nothing reads what
+    /// is piped in, and with nothing at all nginx's own in /var/log/nginx
+    pub files: Vec<std::path::PathBuf>,
+
+    /// The access log's log_format as nginx.conf has it, on one line, when
+    /// it isn't `combined`: '$remote_addr [$time_local] "$request" $status $request_time'
+    #[arg(long, value_name = "LOG_FORMAT")]
+    pub format: Option<String>,
+
+    /// What "now" is measured over, e.g. 10s, 1m, 5m
+    #[arg(long, default_value = "60s", value_name = "TIME")]
+    pub window: String,
+
+    /// Leave out what is older than this, e.g. 90m, 24h, 7d
+    #[arg(long, value_name = "TIME")]
+    pub since: Option<String>,
+
+    /// Count /items/1 and /items/2 apart. Without it the numbers and ids
+    /// in a path count as one, /items/*
+    #[arg(long)]
+    pub exact_paths: bool,
+
+    /// Rows in each table of the report
+    #[arg(long, default_value_t = 10, value_name = "N")]
+    pub rows: usize,
 }
 
 #[derive(clap::Args, Debug, Clone, PartialEq)]

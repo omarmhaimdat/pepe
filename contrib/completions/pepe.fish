@@ -55,6 +55,7 @@ complete -c pepe -n "__fish_pepe_needs_command" -a "api" -d 'Load-test every end
 complete -c pepe -n "__fish_pepe_needs_command" -a "ramp" -d 'Raise the load step by step to find where the target stops keeping up'
 complete -c pepe -n "__fish_pepe_needs_command" -a "replay" -d 'Send the URLs of an access log in their real proportions'
 complete -c pepe -n "__fish_pepe_needs_command" -a "flow" -d 'Run a sequence of requests from a flow file, each step fed by the last'
+complete -c pepe -n "__fish_pepe_needs_command" -a "logs" -d 'Read nginx logs: requests per second now, against each minute, hour and day'
 complete -c pepe -n "__fish_pepe_needs_command" -a "help" -d 'Print this message or the help of the given subcommand(s)'
 complete -c pepe -n "__fish_pepe_using_subcommand self-update" -s n -l number -d 'Number of requests to perform' -r
 complete -c pepe -n "__fish_pepe_using_subcommand self-update" -s z -l duration -d 'Duration of the test, e.g. 10s, 3m, 2h (mutually exclusive with -n)' -r
@@ -214,10 +215,39 @@ complete -c pepe -n "__fish_pepe_using_subcommand flow" -l disable-keepalive -d 
 complete -c pepe -n "__fish_pepe_using_subcommand flow" -l disable-redirects -d 'Prevent http redirects'
 complete -c pepe -n "__fish_pepe_using_subcommand flow" -l json -d 'Output results in JSON format'
 complete -c pepe -n "__fish_pepe_using_subcommand flow" -s i -l setup -d 'Open the setup screen to review or change the settings before starting (it opens by itself when no URL is given)'
-complete -c pepe -n "__fish_pepe_using_subcommand help; and not __fish_seen_subcommand_from self-update completions api ramp replay flow help" -f -a "self-update" -d 'Update pepe to the latest release, or say what\'s new in it'
-complete -c pepe -n "__fish_pepe_using_subcommand help; and not __fish_seen_subcommand_from self-update completions api ramp replay flow help" -f -a "completions" -d 'Tab completion for your shell: print the script, or --install it'
-complete -c pepe -n "__fish_pepe_using_subcommand help; and not __fish_seen_subcommand_from self-update completions api ramp replay flow help" -f -a "api" -d 'Load-test every endpoint of an OpenAPI spec'
-complete -c pepe -n "__fish_pepe_using_subcommand help; and not __fish_seen_subcommand_from self-update completions api ramp replay flow help" -f -a "ramp" -d 'Raise the load step by step to find where the target stops keeping up'
-complete -c pepe -n "__fish_pepe_using_subcommand help; and not __fish_seen_subcommand_from self-update completions api ramp replay flow help" -f -a "replay" -d 'Send the URLs of an access log in their real proportions'
-complete -c pepe -n "__fish_pepe_using_subcommand help; and not __fish_seen_subcommand_from self-update completions api ramp replay flow help" -f -a "flow" -d 'Run a sequence of requests from a flow file, each step fed by the last'
-complete -c pepe -n "__fish_pepe_using_subcommand help; and not __fish_seen_subcommand_from self-update completions api ramp replay flow help" -f -a "help" -d 'Print this message or the help of the given subcommand(s)'
+complete -c pepe -n "__fish_pepe_using_subcommand logs" -l format -d 'The access log\'s log_format as nginx.conf has it, on one line, when it isn\'t `combined`: \'$remote_addr [$time_local] "$request" $status $request_time\'' -r
+complete -c pepe -n "__fish_pepe_using_subcommand logs" -l window -d 'What "now" is measured over, e.g. 10s, 1m, 5m' -r
+complete -c pepe -n "__fish_pepe_using_subcommand logs" -l since -d 'Leave out what is older than this, e.g. 90m, 24h, 7d' -r
+complete -c pepe -n "__fish_pepe_using_subcommand logs" -l rows -d 'Rows in each table of the report' -r
+complete -c pepe -n "__fish_pepe_using_subcommand logs" -s n -l number -d 'Number of requests to perform' -r
+complete -c pepe -n "__fish_pepe_using_subcommand logs" -s z -l duration -d 'Duration of the test, e.g. 10s, 3m, 2h (mutually exclusive with -n)' -r
+complete -c pepe -n "__fish_pepe_using_subcommand logs" -s m -l method -d 'HTTP method, e.g. GET, POST, PUT, DELETE' -r
+complete -c pepe -n "__fish_pepe_using_subcommand logs" -s H -l headers -d 'HTTP headers, e.g. -H \'Accept: application/json\'' -r
+complete -c pepe -n "__fish_pepe_using_subcommand logs" -s t -l timeout -d 'Time in seconds to wait for a response' -r
+complete -c pepe -n "__fish_pepe_using_subcommand logs" -l warmup -d 'Send for this long before measuring, e.g. 5s: connections open, caches fill and JITs settle without counting against the run' -r
+complete -c pepe -n "__fish_pepe_using_subcommand logs" -l threads -d 'Threads sending requests (default 1), or "auto" to add one whenever those sending are all busy. One sends 100k requests a second or more; the dashboard says when it is the limit' -r
+complete -c pepe -n "__fish_pepe_using_subcommand logs" -l rate -d 'Start this many requests a second, spread evenly, instead of as many as the concurrency allows; -c is then the most in flight at once, and pepe says when it holds the rate back' -r
+complete -c pepe -n "__fish_pepe_using_subcommand logs" -s d -l body -d 'HTTP request body' -r
+complete -c pepe -n "__fish_pepe_using_subcommand logs" -s p -l proxy -d 'Proxy server URL: http://user:pass@host:port or socks5://host:port' -r
+complete -c pepe -n "__fish_pepe_using_subcommand logs" -l trace-header -d 'Response header holding the request id to show for the slowest requests and in the inspector, so they can be found in the server\'s logs; without it, X-Request-Id, traceparent, CF-Ray, X-Amzn-Trace-Id and other common ones are looked for' -r
+complete -c pepe -n "__fish_pepe_using_subcommand logs" -l snapshot -d 'Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run\'s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run' -r -F
+complete -c pepe -n "__fish_pepe_using_subcommand logs" -l config -d 'Read settings from this file instead of ./pepe.toml; flags on the command line win over it' -r -F
+complete -c pepe -n "__fish_pepe_using_subcommand logs" -l write-config -d 'Write the settings as they stand to this file, as a pepe.toml, and exit' -r -F
+complete -c pepe -n "__fish_pepe_using_subcommand logs" -s c -l concurrency -d 'Number of concurrent requests at a time' -r
+complete -c pepe -n "__fish_pepe_using_subcommand logs" -s u -l user-agent -d 'User-Agent string, default is pepe/{version}' -r
+complete -c pepe -n "__fish_pepe_using_subcommand logs" -l exact-paths -d 'Count /items/1 and /items/2 apart. Without it the numbers and ids in a path count as one, /items/*'
+complete -c pepe -n "__fish_pepe_using_subcommand logs" -s h -l help -d 'Print help'
+complete -c pepe -n "__fish_pepe_using_subcommand logs" -s k -l insecure -d 'Accept invalid TLS certificates (self-signed, expired, wrong host)'
+complete -c pepe -n "__fish_pepe_using_subcommand logs" -l disable-compression -d 'Disable HTTP compression, e.g. gzip'
+complete -c pepe -n "__fish_pepe_using_subcommand logs" -l disable-keepalive -d 'Disable HTTP keepalive, e.g. Connection: close'
+complete -c pepe -n "__fish_pepe_using_subcommand logs" -l disable-redirects -d 'Prevent http redirects'
+complete -c pepe -n "__fish_pepe_using_subcommand logs" -l json -d 'Output results in JSON format'
+complete -c pepe -n "__fish_pepe_using_subcommand logs" -s i -l setup -d 'Open the setup screen to review or change the settings before starting (it opens by itself when no URL is given)'
+complete -c pepe -n "__fish_pepe_using_subcommand help; and not __fish_seen_subcommand_from self-update completions api ramp replay flow logs help" -f -a "self-update" -d 'Update pepe to the latest release, or say what\'s new in it'
+complete -c pepe -n "__fish_pepe_using_subcommand help; and not __fish_seen_subcommand_from self-update completions api ramp replay flow logs help" -f -a "completions" -d 'Tab completion for your shell: print the script, or --install it'
+complete -c pepe -n "__fish_pepe_using_subcommand help; and not __fish_seen_subcommand_from self-update completions api ramp replay flow logs help" -f -a "api" -d 'Load-test every endpoint of an OpenAPI spec'
+complete -c pepe -n "__fish_pepe_using_subcommand help; and not __fish_seen_subcommand_from self-update completions api ramp replay flow logs help" -f -a "ramp" -d 'Raise the load step by step to find where the target stops keeping up'
+complete -c pepe -n "__fish_pepe_using_subcommand help; and not __fish_seen_subcommand_from self-update completions api ramp replay flow logs help" -f -a "replay" -d 'Send the URLs of an access log in their real proportions'
+complete -c pepe -n "__fish_pepe_using_subcommand help; and not __fish_seen_subcommand_from self-update completions api ramp replay flow logs help" -f -a "flow" -d 'Run a sequence of requests from a flow file, each step fed by the last'
+complete -c pepe -n "__fish_pepe_using_subcommand help; and not __fish_seen_subcommand_from self-update completions api ramp replay flow logs help" -f -a "logs" -d 'Read nginx logs: requests per second now, against each minute, hour and day'
+complete -c pepe -n "__fish_pepe_using_subcommand help; and not __fish_seen_subcommand_from self-update completions api ramp replay flow logs help" -f -a "help" -d 'Print this message or the help of the given subcommand(s)'

@@ -3,6 +3,7 @@ mod body;
 mod filter;
 pub mod format;
 mod kit;
+mod logs;
 pub(crate) mod mascot;
 mod plan;
 mod ramp;
@@ -10,6 +11,7 @@ mod setup;
 pub mod theme;
 mod view;
 
+pub use logs::LogsScreen;
 pub use plan::{PlanOutcome, PlanScreen};
 pub use ramp::RampScreen;
 pub use setup::{Setup, SetupOutcome};

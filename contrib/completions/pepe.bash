@@ -28,6 +28,9 @@ _pepe() {
             pepe,help)
                 cmd="pepe__subcmd__help"
                 ;;
+            pepe,logs)
+                cmd="pepe__subcmd__logs"
+                ;;
             pepe,ramp)
                 cmd="pepe__subcmd__ramp"
                 ;;
@@ -49,6 +52,9 @@ _pepe() {
             pepe__subcmd__help,help)
                 cmd="pepe__subcmd__help__subcmd__help"
                 ;;
+            pepe__subcmd__help,logs)
+                cmd="pepe__subcmd__help__subcmd__logs"
+                ;;
             pepe__subcmd__help,ramp)
                 cmd="pepe__subcmd__help__subcmd__ramp"
                 ;;
@@ -65,7 +71,7 @@ _pepe() {
 
     case "${cmd}" in
         pepe)
-            opts="-h -n -z -m -H -t -d -p -k -i -c -u -V --help --number --duration --curl --method --headers --timeout --warmup --threads --rate --body --proxy --insecure --disable-compression --disable-keepalive --disable-redirects --json --trace-header --snapshot --setup --config --write-config --concurrency --user-agent --version self-update completions api ramp replay flow help"
+            opts="-h -n -z -m -H -t -d -p -k -i -c -u -V --help --number --duration --curl --method --headers --timeout --warmup --threads --rate --body --proxy --insecure --disable-compression --disable-keepalive --disable-redirects --json --trace-header --snapshot --setup --config --write-config --concurrency --user-agent --version self-update completions api ramp replay flow logs help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 1 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -545,7 +551,7 @@ _pepe() {
             return 0
             ;;
         pepe__subcmd__help)
-            opts="self-update completions api ramp replay flow help"
+            opts="self-update completions api ramp replay flow logs help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -614,6 +620,20 @@ _pepe() {
             COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
             return 0
             ;;
+        pepe__subcmd__help__subcmd__logs)
+            opts=""
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
         pepe__subcmd__help__subcmd__ramp)
             opts=""
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 3 ]] ; then
@@ -649,6 +669,136 @@ _pepe() {
                 return 0
             fi
             case "${prev}" in
+                *)
+                    COMPREPLY=()
+                    ;;
+            esac
+            COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+            return 0
+            ;;
+        pepe__subcmd__logs)
+            opts="-h -n -z -m -H -t -d -p -k -i -c -u --format --window --since --exact-paths --rows --help --number --duration --method --headers --timeout --warmup --threads --rate --body --proxy --insecure --disable-compression --disable-keepalive --disable-redirects --json --trace-header --snapshot --setup --config --write-config --concurrency --user-agent"
+            if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
+                COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
+                return 0
+            fi
+            case "${prev}" in
+                --format)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --window)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --since)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --rows)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --number)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                -n)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --duration)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                -z)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --method)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                -m)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --headers)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                -H)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --timeout)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                -t)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --warmup)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --threads)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --rate)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --body)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                -d)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --proxy)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                -p)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --trace-header)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --snapshot)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --config)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --write-config)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --concurrency)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                -c)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --user-agent)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                -u)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
                 *)
                     COMPREPLY=()
                     ;;

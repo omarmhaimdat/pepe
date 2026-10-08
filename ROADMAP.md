@@ -70,6 +70,11 @@ Say more about what the numbers mean.
       the ramp, read out as "Capacity about 3.0k req/s · reached around
       30 concurrent · median latency doubles around 34" — v0.10.2
 
+- [x] **Reading nginx logs** (M): `pepe logs access.log error.log` follows
+      the logs and holds the request rate now against each minute, hour
+      and day they go back, with the paths, the clients, the error log's
+      messages by cause and the lines themselves — next release
+
 ## 4. Scenarios and realism
 
 Load that looks like production.
