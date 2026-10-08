@@ -253,9 +253,10 @@ fn placeholder(f: &mut Frame, area: Rect, message: &str) {
 
 /// Findings shown in the header once the run is over
 const MAX_HEADER_NOTES: usize = 4;
-/// A terminal this big gets the big mascot in the header
+/// A terminal this big gets the big mascot in the header. The width leaves
+/// the run panel 40 cells beside the mascot and the cards.
 const BIG_MASCOT_MIN_HEIGHT: u16 = 46;
-const BIG_MASCOT_MIN_WIDTH: u16 = 120;
+const BIG_MASCOT_MIN_WIDTH: u16 = 146;
 
 fn header_height(d: &Dashboard, big: bool) -> u16 {
     if big {
@@ -269,12 +270,7 @@ fn header_height(d: &Dashboard, big: bool) -> u16 {
         None => 7,
     };
     // The mascot plus its speech line
-    let pet = if big {
-        mascot::BIG_HEIGHT
-    } else {
-        mascot::HEIGHT
-    };
-    content.max(pet + 1)
+    content.max(mascot::HEIGHT + 1)
 }
 
 fn render_header(d: &Dashboard, f: &mut Frame, area: Rect, big: bool) {
@@ -282,13 +278,8 @@ fn render_header(d: &Dashboard, f: &mut Frame, area: Rect, big: bool) {
         return render_big_header(d, f, area);
     }
     let show_mascot = area.width >= 80;
-    let pet_width = if big {
-        mascot::BIG_WIDTH
-    } else {
-        mascot::WIDTH
-    };
     let [pet, _, main] = Layout::horizontal([
-        Constraint::Length(if show_mascot { pet_width } else { 0 }),
+        Constraint::Length(if show_mascot { mascot::WIDTH } else { 0 }),
         Constraint::Length(if show_mascot { 2 } else { 0 }),
         Constraint::Min(0),
     ])
@@ -296,14 +287,10 @@ fn render_header(d: &Dashboard, f: &mut Frame, area: Rect, big: bool) {
 
     if show_mascot {
         let mood = d.mood();
-        let (mut lines, rows) = if big {
-            (mascot::big_lines(mood, d.frame), mascot::BIG_HEIGHT)
-        } else {
-            (mascot::lines(mood, d.frame), mascot::HEIGHT)
-        };
+        let mut lines = mascot::lines(mood, d.frame);
         lines.push(Line::styled(mood.says(), Style::new().fg(ACCENT).italic()));
         f.render_widget(Paragraph::new(lines), pet);
-        mascot::keep_rows(pet, rows);
+        mascot::keep(pet);
     }
 
     let [title, progress, _, rest] = Layout::vertical([
@@ -698,13 +685,18 @@ fn render_run(d: &Dashboard, f: &mut Frame, area: Rect) {
     } else {
         "after the first requests".into()
     };
+    // Colour means health: mild is good, and only the hot end warns
+    let heat_color = match name {
+        _ if !known => LABEL,
+        "bell" => GOOD,
+        "jalapeño" => Color::Reset,
+        "habanero" => WARN,
+        _ => BAD,
+    };
     lines.push(Line::from(vec![
         label("p99 heat"),
         Span::raw(" ".repeat(w.saturating_sub(8 + right.chars().count()))),
-        Span::styled(
-            right,
-            Style::new().fg(if known { WARN } else { LABEL }).bold(),
-        ),
+        Span::styled(right, Style::new().fg(heat_color).bold()),
     ]));
     let mark = ((at * w as f64) as usize).min(w.saturating_sub(1));
     let mut marker = " ".repeat(w);
@@ -3121,7 +3113,8 @@ mod tests {
             .map(|c| c.symbol())
             .collect();
         assert!(screen.contains("list paused while inspecting"));
-        assert!(screen.contains("REQUEST #5"));
+        // Titles are upper case outside pepe's own theme
+        assert!(screen.to_lowercase().contains("request #5"));
         assert!(screen.contains("first byte"));
     }
 
@@ -3269,6 +3262,8 @@ mod tests {
                 (80, 24),
                 (109, 30),
                 (120, 40),
+                (120, 46),
+                (146, 46),
                 (250, 70),
             ] {
                 let mut terminal = Terminal::new(TestBackend::new(w, h)).unwrap();
