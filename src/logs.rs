@@ -509,7 +509,7 @@ impl Format {
                 },
                 Part::Var(field, name) => {
                     let end = match self.parts.get(i + 1) {
-                        Some(Part::Text(text)) => rest.find(text.as_str()),
+                        Some(Part::Text(text)) => find(rest, text),
                         _ => None,
                     };
                     // A line that ends early gives the variable what is left
@@ -559,12 +559,37 @@ impl Format {
     }
 }
 
+/// Where `needle` starts in `hay`. The text between a format's variables
+/// is a character or three, which is found sooner by looking for its first
+/// byte than `str::find` has made itself a searcher.
+fn find(hay: &str, needle: &str) -> Option<usize> {
+    let (hay, needle) = (hay.as_bytes(), needle.as_bytes());
+    let (first, rest) = needle.split_first()?;
+    let mut from = 0;
+    loop {
+        let at = from + memchr::memchr(*first, hay.get(from..)?)?;
+        let after = hay.get(at + 1..at + 1 + rest.len())?;
+        if after.iter().zip(rest).all(|(a, b)| a == b) {
+            return Some(at);
+        }
+        from = at + 1;
+    }
+}
+
+/// `text` before and after the first `byte`, which is ASCII
+fn split_at_byte(text: &str, byte: u8) -> Option<(&str, &str)> {
+    let at = memchr::memchr(byte, text.as_bytes())?;
+    Some((&text[..at], &text[at + 1..]))
+}
+
 /// The method and target of `GET /path HTTP/1.1`; a request nginx couldn't
 /// read (a TLS handshake sent to port 80, say) is all target
 fn request_line(request: &str) -> (&str, &str) {
-    let mut words = request.splitn(3, ' ');
-    match (words.next(), words.next()) {
-        (Some(method), Some(target)) if is_method(method) => (method, target),
+    match split_at_byte(request, b' ') {
+        Some((method, rest)) if is_method(method) => {
+            let target = split_at_byte(rest, b' ').map_or(rest, |(target, _)| target);
+            (method, target)
+        }
         _ => ("", request),
     }
 }
@@ -576,6 +601,10 @@ fn is_method(word: &str) -> bool {
 /// A time in seconds; nginx writes several, `0.004, 0.010 : 0.002`, when a
 /// request went to more than one upstream, and they add up
 fn seconds(value: &str) -> Option<f64> {
+    // One time, as nginx writes it: `0.004`
+    if let Some(one) = decimal(value) {
+        return Some(one);
+    }
     let mut sum = 0.0;
     let mut any = false;
     for part in value.split([',', ':']) {
@@ -587,6 +616,29 @@ fn seconds(value: &str) -> Option<f64> {
         any = true;
     }
     any.then_some(sum)
+}
+
+/// `12.345` without the care `f64`'s own reading takes over digits a log
+/// doesn't have
+fn decimal(text: &str) -> Option<f64> {
+    let b = text.as_bytes();
+    if b.is_empty() || b.len() > 15 {
+        return None;
+    }
+    let (mut n, mut scale, mut point) = (0u64, 1u64, false);
+    for &c in b {
+        match c {
+            b'0'..=b'9' => {
+                n = n * 10 + u64::from(c - b'0');
+                if point {
+                    scale *= 10;
+                }
+            }
+            b'.' if !point => point = true,
+            _ => return None,
+        }
+    }
+    Some(n as f64 / scale as f64)
 }
 
 /// How access log lines are read
@@ -700,17 +752,16 @@ impl Parser {
 /// The line without the `nginx-1  | ` that `docker compose logs` puts in
 /// front of each one
 fn unprefixed(line: &str) -> &str {
-    let Some((name, rest)) = line.split_once(" | ") else {
-        return line;
-    };
-    let name = name.trim_end();
-    let named = !name.is_empty()
-        && name.len() <= 64
-        && name
-            .bytes()
-            .all(|c| c.is_ascii_alphanumeric() || matches!(c, b'-' | b'_' | b'.'));
-    if named {
-        rest.trim_start()
+    let b = line.as_bytes();
+    let name = b
+        .iter()
+        .take(64)
+        .take_while(|c| c.is_ascii_alphanumeric() || matches!(c, b'-' | b'_' | b'.'))
+        .count();
+    let spaces = b[name..].iter().take_while(|c| **c == b' ').count();
+    let bar = name + spaces;
+    if name > 0 && spaces > 0 && b.get(bar) == Some(&b'|') && b.get(bar + 1) == Some(&b' ') {
+        line[bar + 2..].trim_start()
     } else {
         line
     }
@@ -982,34 +1033,94 @@ pub struct Slot {
     pub faults: u64,
 }
 
+/// Counts by time, the newest `cap` of them. The one being counted into
+/// is held outside the map: a log is written in order, so nearly every
+/// line lands where the line before it did, and finds it without a search.
+#[derive(Debug, Clone)]
+struct Rolling<V> {
+    map: BTreeMap<i64, V>,
+    open: Option<(i64, V)>,
+    cap: usize,
+}
+
+impl<V: Default + Copy> Rolling<V> {
+    fn new(cap: usize) -> Self {
+        Rolling {
+            map: BTreeMap::new(),
+            open: None,
+            cap,
+        }
+    }
+
+    /// The count at `key`; none when it is older than all those kept
+    fn at(&mut self, key: i64) -> Option<&mut V> {
+        if self.open.as_ref().is_some_and(|(open, _)| *open == key) {
+            return self.open.as_mut().map(|(_, v)| v);
+        }
+        if let Some((open, v)) = self.open.take() {
+            self.map.insert(open, v);
+        }
+        let v = match self.map.remove(&key) {
+            Some(v) => v,
+            None => {
+                if self.map.len() >= self.cap {
+                    if self.map.keys().next().is_some_and(|oldest| key < *oldest) {
+                        return None;
+                    }
+                    self.map.pop_first();
+                }
+                V::default()
+            }
+        };
+        self.open = Some((key, v));
+        self.open.as_mut().map(|(_, v)| v)
+    }
+
+    #[cfg(test)]
+    fn len(&self) -> usize {
+        self.map.len() + usize::from(self.open.is_some())
+    }
+
+    /// The counts from `from` to `to`, both included, in no order
+    fn range(&self, from: i64, to: i64) -> impl Iterator<Item = (i64, &V)> {
+        let open = self
+            .open
+            .as_ref()
+            .filter(|(key, _)| (from..=to).contains(key));
+        self.map
+            .range(from..=to)
+            .map(|(key, v)| (*key, v))
+            .chain(open.map(|(key, v)| (*key, v)))
+    }
+
+    /// Every count, oldest first
+    fn all(&self) -> Vec<(i64, V)> {
+        let mut all: Vec<(i64, V)> = self.map.iter().map(|(key, v)| (*key, *v)).collect();
+        if let Some((key, v)) = self.open {
+            all.insert(all.partition_point(|(k, _)| *k < key), (key, v));
+        }
+        all
+    }
+}
+
 /// A grain's slots, by their place on the log's own clock
 #[derive(Debug, Clone)]
 pub struct Slots {
     grain: Grain,
-    map: BTreeMap<i64, Slot>,
+    slots: Rolling<Slot>,
 }
 
 impl Slots {
     fn new(grain: Grain) -> Self {
         Slots {
             grain,
-            map: BTreeMap::new(),
+            slots: Rolling::new(grain.kept()),
         }
     }
 
     /// The slot `local` falls in; none when it is older than all those kept
     fn at(&mut self, local: i64) -> Option<&mut Slot> {
-        let key = local.div_euclid(self.grain.seconds());
-        if !self.map.contains_key(&key) {
-            if self.map.len() >= self.grain.kept() {
-                if self.map.keys().next().is_some_and(|oldest| key < *oldest) {
-                    return None;
-                }
-                self.map.pop_first();
-            }
-            self.map.insert(key, Slot::default());
-        }
-        self.map.get_mut(&key)
+        self.slots.at(local.div_euclid(self.grain.seconds()))
     }
 }
 
@@ -1029,7 +1140,10 @@ pub struct Row {
 /// after are counted in `other`
 #[derive(Debug, Clone)]
 pub struct Top<V> {
-    map: HashMap<String, V>,
+    /// Where each name's count is in `counts`: a name already seen is
+    /// hashed once to find it
+    places: HashMap<String, u32>,
+    counts: Vec<V>,
     cap: usize,
     pub other: u64,
 }
@@ -1037,33 +1151,37 @@ pub struct Top<V> {
 impl<V: Default> Top<V> {
     fn new(cap: usize) -> Self {
         Top {
-            map: HashMap::new(),
+            places: HashMap::new(),
+            counts: Vec::new(),
             cap,
             other: 0,
         }
     }
 
     fn get(&mut self, name: &str) -> Option<&mut V> {
-        if !self.map.contains_key(name) {
-            if self.map.len() >= self.cap {
-                self.other += 1;
-                return None;
-            }
-            self.map.insert(name.to_string(), V::default());
+        if let Some(&place) = self.places.get(name) {
+            return self.counts.get_mut(place as usize);
         }
-        self.map.get_mut(name)
+        if self.counts.len() >= self.cap {
+            self.other += 1;
+            return None;
+        }
+        self.places
+            .insert(name.to_string(), self.counts.len() as u32);
+        self.counts.push(V::default());
+        self.counts.last_mut()
     }
 
     pub fn len(&self) -> usize {
-        self.map.len()
+        self.counts.len()
     }
 
     /// The `n` names with the most of `by`, most first
     pub fn top(&self, n: usize, by: impl Fn(&V) -> u64) -> Vec<(&str, &V)> {
         let mut all: Vec<(&str, &V)> = self
-            .map
+            .places
             .iter()
-            .map(|(name, v)| (name.as_str(), v))
+            .map(|(name, place)| (name.as_str(), &self.counts[*place as usize]))
             .filter(|(_, v)| by(v) > 0)
             .collect();
         let order = |a: &(&str, &V), b: &(&str, &V)| by(b.1).cmp(&by(a.1)).then(a.0.cmp(b.0));
@@ -1188,7 +1306,7 @@ pub struct Stats {
     pub time: Histogram,
     pub upstream: Histogram,
     /// (requests, 4xx, 5xx) of each of the last seconds
-    seconds: BTreeMap<i64, [u32; 3]>,
+    seconds: Rolling<[u32; 3]>,
     /// The busiest second, and its requests
     pub peak: Option<(Stamp, u32)>,
     slots: [Slots; 3],
@@ -1233,7 +1351,7 @@ impl Default for Stats {
             params: Top::new(PARAMS),
             time: Histogram::default(),
             upstream: Histogram::default(),
-            seconds: BTreeMap::new(),
+            seconds: Rolling::new(SECONDS_KEPT),
             peak: None,
             slots: Grain::ALL.map(Slots::new),
             faults: 0,
@@ -1292,7 +1410,8 @@ pub fn grouped(path: &str) -> Cow<'_, str> {
         let hex = part.len() >= 16 && part.bytes().all(|c| c.is_ascii_hexdigit() || c == b'-');
         !part.is_empty() && (hex || part.bytes().all(|c| c.is_ascii_digit()))
     };
-    if !path.split('/').any(is_id) {
+    // An id has a digit in it, and most paths have none
+    if !path.bytes().any(|c| c.is_ascii_digit()) || !path.split('/').any(is_id) {
         return Cow::Borrowed(path);
     }
     let parts: Vec<&str> = path
@@ -1302,15 +1421,20 @@ pub fn grouped(path: &str) -> Cow<'_, str> {
     Cow::Owned(parts.join("/"))
 }
 
-fn cut(line: &str) -> String {
-    if line.len() <= LINE_KEPT {
-        return line.to_string();
-    }
-    let mut end = LINE_KEPT;
+/// Where a line kept for the log view ends
+fn cut_at(line: &str) -> usize {
+    let mut end = line.len().min(LINE_KEPT);
     while !line.is_char_boundary(end) {
         end -= 1;
     }
-    format!("{}…", &line[..end])
+    end
+}
+
+fn cut(line: &str) -> String {
+    match cut_at(line) {
+        end if end == line.len() => line.to_string(),
+        end => format!("{}…", &line[..end]),
+    }
 }
 
 impl Stats {
@@ -1342,36 +1466,42 @@ impl Stats {
                 Kind::Unread
             }
         };
-        self.keep(Recent {
-            text: cut(raw),
-            kind,
-            at: at.map_or_else(|| self.recent.back().map_or(0, |last| last.at), |at| at.at),
-        });
+        let at = at.map_or_else(|| self.recent.back().map_or(0, |last| last.at), |at| at.at);
+        self.keep(raw, kind, at);
     }
 
     /// Keep a line for the log view, in its place by time: an error log
     /// read after the access log has its lines among the requests they
     /// were written between
-    fn keep(&mut self, line: Recent) {
+    fn keep(&mut self, raw: &str, kind: Kind, at: i64) {
         let full = self.recent.len() == RECENT;
-        if self.recent.back().is_none_or(|last| last.at <= line.at) {
-            if full {
-                self.recent.pop_front();
-                self.recent_base += 1;
-            }
-            self.recent.push_back(line);
-            return;
-        }
-        let place = self.recent.partition_point(|kept| kept.at <= line.at);
+        let in_order = self.recent.back().is_none_or(|last| last.at <= at);
+        let place = if in_order {
+            self.recent.len()
+        } else {
+            self.recent.partition_point(|kept| kept.at <= at)
+        };
         if full {
             self.recent_base += 1;
             // Older than everything kept: it would be the first to go
             if place == 0 {
                 return;
             }
-            self.recent.pop_front();
         }
-        self.recent.insert(place - usize::from(full), line);
+        // The line that goes makes room for the one that comes: while a
+        // long log is read, nothing is allocated for the lines passing by
+        let mut text = match full.then(|| self.recent.pop_front()).flatten() {
+            Some(gone) => gone.text,
+            None => String::new(),
+        };
+        text.clear();
+        let cut = cut_at(raw);
+        text.push_str(&raw[..cut]);
+        if cut < raw.len() {
+            text.push('…');
+        }
+        self.recent
+            .insert(place - usize::from(full), Recent { text, kind, at });
     }
 
     fn seen(&mut self, at: Stamp, wall: i64) {
@@ -1393,7 +1523,7 @@ impl Stats {
             u64::from(r.status >= 500),
         );
         let time_us = r.time.map(|t| (t * 1e6) as u64);
-        let (path, query) = r.target.split_once('?').unwrap_or((&r.target, ""));
+        let (path, query) = split_at_byte(&r.target, b'?').unwrap_or((&r.target, ""));
         let path = if self.exact_paths {
             Cow::Borrowed(path)
         } else {
@@ -1408,7 +1538,7 @@ impl Stats {
                 stat.timed += 1;
             }
         }
-        for pair in query.split('&') {
+        for pair in query.split('&').filter(|_| !query.is_empty()) {
             let name = pair.split('=').next().unwrap_or("");
             if !name.is_empty() && name.len() <= 64 {
                 if let Some(count) = self.params.get(name) {
@@ -1441,17 +1571,7 @@ impl Stats {
 
         // This second's count, which is also how a slot knows its busiest
         let mut this_second = 0;
-        if !self.seconds.contains_key(&at.at) {
-            let full = self.seconds.len() >= SECONDS_KEPT;
-            let too_old = full && self.seconds.keys().next().is_some_and(|old| at.at < *old);
-            if !too_old {
-                if full {
-                    self.seconds.pop_first();
-                }
-                self.seconds.insert(at.at, [0; 3]);
-            }
-        }
-        if let Some(second) = self.seconds.get_mut(&at.at) {
+        if let Some(second) = self.seconds.at(at.at) {
             second[0] += 1;
             second[1] += c4xx as u32;
             second[2] += c5xx as u32;
@@ -1537,11 +1657,7 @@ impl Stats {
     /// The `window` seconds up to now
     pub fn now(&self, clock: Clock, window: i64) -> Now {
         let mut now = Now::default();
-        for second in self
-            .seconds
-            .range(clock.now - window + 1..=clock.now)
-            .map(|(_, second)| second)
-        {
+        for (_, second) in self.seconds.range(clock.now - window + 1, clock.now) {
             now.requests += u64::from(second[0]);
             now.c4xx += u64::from(second[1]);
             now.c5xx += u64::from(second[2]);
@@ -1554,7 +1670,7 @@ impl Stats {
     pub fn last_seconds(&self, clock: Clock, n: usize) -> Vec<u32> {
         let from = clock.now - n as i64 + 1;
         let mut out = vec![0; n];
-        for (at, second) in self.seconds.range(from..=clock.now) {
+        for (at, second) in self.seconds.range(from, clock.now) {
             out[(at - from) as usize] = second[0];
         }
         out
@@ -1568,7 +1684,8 @@ impl Stats {
         // Now on the log's clock; the second in progress counts
         let now = clock.now + i64::from(clock.offset) + 1;
         self.slots[grain as usize]
-            .map
+            .slots
+            .all()
             .iter()
             .map(|(key, slot)| {
                 let start = key * size;
@@ -1825,22 +1942,33 @@ impl Tail {
             self.position += read as u64;
             let whole = match (read, last) {
                 (0, true) => self.pending.len(),
-                _ => self
-                    .pending
-                    .iter()
-                    .rposition(|&c| c == b'\n')
-                    .map_or(0, |i| i + 1),
+                _ => memchr::memrchr(b'\n', &self.pending).map_or(0, |i| i + 1),
             };
             if whole > 0 {
                 let mut stats = shared.lock();
                 let wall = wall();
                 stats.read_bytes += whole as u64;
-                for line in self.pending[..whole].split(|&c| c == b'\n') {
-                    if line.iter().all(u8::is_ascii_whitespace) {
+                let chunk = &self.pending[..whole];
+                // Nearly every chunk is UTF-8 as it stands, and is found
+                // to be all at once; one that isn't is looked at by line
+                let valid = std::str::from_utf8(chunk).is_ok();
+                let mut from = 0;
+                while from < chunk.len() {
+                    let end =
+                        memchr::memchr(b'\n', &chunk[from..]).map_or(chunk.len(), |i| from + i);
+                    let line = &chunk[from..end];
+                    from = end + 1;
+                    let text = if valid {
+                        // SAFETY: the chunk is UTF-8, and a line of it,
+                        // cut at the ASCII newlines, is too
+                        Cow::Borrowed(unsafe { std::str::from_utf8_unchecked(line) })
+                    } else {
+                        String::from_utf8_lossy(line)
+                    };
+                    let text = text.trim();
+                    if text.is_empty() {
                         continue;
                     }
-                    let text = String::from_utf8_lossy(line);
-                    let text = text.trim_end_matches('\r');
                     let line = job.parser.read(text);
                     let at = match &line {
                         Line::Request(r) => r.at,
@@ -2781,6 +2909,7 @@ mod tests {
         assert_eq!(stats.rows(Grain::Hour, clock).len(), 73);
         assert_eq!(stats.rows(Grain::Day, clock).len(), 4);
         assert!(stats.seconds.len() <= SECONDS_KEPT);
+        assert_eq!(stats.seconds.all().len(), stats.seconds.len());
         assert_eq!(stats.recent.len(), RECENT);
         assert_eq!(stats.recent_base + RECENT as u64, stats.lines);
         assert_eq!(stats.paths.len(), 1, "/item/*");

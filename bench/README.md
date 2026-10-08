@@ -691,6 +691,43 @@ the same two calls. What is still there to take:
   (io_uring) is the only thing left that is larger than a few percent,
   and it is Linux only.
 
+## Reading logs
+
+`pepe logs` reads on one thread. Measured on an M4 Pro, macOS, on a
+generated log (`bench/gen-logs.py`, three days of it three times over:
+865 MB, 5.88M `combined` lines with `rt=` and `urt=` after them), read
+to the end with the report printed; the best of five runs each.
+
+| | time | lines/s | MB/s |
+| --- | ---: | ---: | ---: |
+| `pepe logs`, as first written | 4.09 s | 1.44M | 211 |
+| `pepe logs`, now | 2.09 s | 2.81M | 414 |
+| `wc -l` (reads, parses nothing) | 0.69 s | | 1,250 |
+| `awk '{c[$9]++}'` (counts one field) | 13.28 s | 0.44M | 65 |
+
+Memory is 16 MB whatever the size. What the profile showed, and what was
+done about each:
+
+- `str::find` with a string to find builds a searcher every call, and
+  the format's walk made eight calls a line: the text between two
+  variables is now found by its first byte (`memchr`).
+- Every line was checked for UTF-8 and split off by a byte-at-a-time
+  loop: a chunk is now validated once and cut at newlines by `memchr`.
+- Each count was looked up twice, once to see if it was there. A name
+  seen before is now hashed once; the minute, hour, day and second being
+  counted into are held outside their maps, so a log in time order
+  finds them without a search.
+- A `String` was allocated for every line, to keep the last 2,000: the
+  line that leaves now gives its buffer to the one that comes.
+- `$request_time` went through `f64`'s full parser: `0.004` is now read
+  as digits.
+
+What is left is spread evenly: hashing the path, the client and the user
+agent (SipHash, kept because the names come from whoever sends
+requests), reading the fields, and the counting. The next step that
+would be larger than a few percent is reading on several threads. No
+other log reader has been measured against it yet.
+
 ## Reproducing
 
 ```bash
