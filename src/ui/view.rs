@@ -81,8 +81,9 @@ pub fn render(d: &Dashboard, f: &mut Frame) {
         return;
     }
 
+    let big = area.height >= BIG_MASCOT_MIN_HEIGHT && area.width >= BIG_MASCOT_MIN_WIDTH;
     let [header, _, tabs, _, body, footer] = Layout::vertical([
-        Constraint::Length(header_height(d)),
+        Constraint::Length(header_height(d, big)),
         Constraint::Length(1),
         Constraint::Length(1),
         Constraint::Length(1),
@@ -91,7 +92,7 @@ pub fn render(d: &Dashboard, f: &mut Frame) {
     ])
     .areas(area);
 
-    render_header(d, f, header);
+    render_header(d, f, header, big);
     render_tabs(d, f, tabs);
     match d.tab {
         Tab::Endpoints => render_endpoints(d, f, body),
@@ -241,8 +242,11 @@ fn placeholder(f: &mut Frame, area: Rect, message: &str) {
 
 /// Findings shown in the header once the run is over
 const MAX_HEADER_NOTES: usize = 4;
+/// A terminal this big gets the big mascot in the header
+const BIG_MASCOT_MIN_HEIGHT: u16 = 46;
+const BIG_MASCOT_MIN_WIDTH: u16 = 120;
 
-fn header_height(d: &Dashboard) -> u16 {
+fn header_height(d: &Dashboard, big: bool) -> u16 {
     let content = match &d.verdict {
         // title, progress, gap, headline, gap, notes
         Some(v) => 5 + v.notes.len().min(MAX_HEADER_NOTES) as u16,
@@ -250,13 +254,15 @@ fn header_height(d: &Dashboard) -> u16 {
         None => 7,
     };
     // The mascot plus its speech line
-    content.max(mascot::HEIGHT + 1)
+    let pet = if big { mascot::BIG_HEIGHT } else { mascot::HEIGHT };
+    content.max(pet + 1)
 }
 
-fn render_header(d: &Dashboard, f: &mut Frame, area: Rect) {
+fn render_header(d: &Dashboard, f: &mut Frame, area: Rect, big: bool) {
     let show_mascot = area.width >= 80;
+    let pet_width = if big { mascot::BIG_WIDTH } else { mascot::WIDTH };
     let [pet, _, main] = Layout::horizontal([
-        Constraint::Length(if show_mascot { mascot::WIDTH } else { 0 }),
+        Constraint::Length(if show_mascot { pet_width } else { 0 }),
         Constraint::Length(if show_mascot { 2 } else { 0 }),
         Constraint::Min(0),
     ])
@@ -264,10 +270,14 @@ fn render_header(d: &Dashboard, f: &mut Frame, area: Rect) {
 
     if show_mascot {
         let mood = d.mood();
-        let mut lines = mascot::lines(mood, d.frame);
+        let (mut lines, rows) = if big {
+            (mascot::big_lines(mood, d.frame), mascot::BIG_HEIGHT)
+        } else {
+            (mascot::lines(mood, d.frame), mascot::HEIGHT)
+        };
         lines.push(Line::styled(mood.says(), Style::new().fg(ACCENT).italic()));
         f.render_widget(Paragraph::new(lines), pet);
-        mascot::keep(pet);
+        mascot::keep_rows(pet, rows);
     }
 
     let [title, progress, _, rest] = Layout::vertical([
@@ -2934,6 +2944,180 @@ mod tests {
                 d.inspecting = false;
                 d.scroll = 0;
             }
+        }
+    }
+
+    /// A run of `secs` seconds at about 40 requests a second, with a long
+    /// tail and a few connections closed early, for screenshots
+    pub(in crate::ui) fn demo_run(d: &mut Dashboard, secs: u64) {
+        let mut seed = 7u64;
+        let mut next = move || {
+            seed = seed
+                .wrapping_mul(6364136223846793005)
+                .wrapping_add(1442695040888963407);
+            (seed >> 11) as f64 / (1u64 << 53) as f64
+        };
+        d.started =
+            std::time::Instant::now() - Duration::from_secs(secs) - Duration::from_millis(100);
+        for s in 0..secs {
+            let n = if s < 3 {
+                10 + s * 12
+            } else {
+                28 + (next() * 30.0) as u64
+            };
+            let slow = s % 13 == 5;
+            for i in 0..n {
+                // Log-normal around 200ms, wider when the second is slow
+                let z: f64 = (0..6).map(|_| next()).sum::<f64>() - 3.0;
+                let sigma = if slow { 0.9 } else { 0.45 };
+                let mut ms = 200.0 * (z * sigma).exp();
+                if next() < 0.012 {
+                    ms *= 6.0 + next() * 8.0;
+                }
+                let failed = (s == 5 || s == 26) && i < 3;
+                d.record(ResponseStats {
+                    duration: Duration::from_micros((ms * 1000.0) as u64),
+                    status_code: (!failed).then_some(StatusCode::OK),
+                    error: failed.then_some(crate::response::ErrorKind::Other),
+                    error_message: failed
+                        .then(|| "connection closed before message completed".into()),
+                    body_bytes: 34,
+                    preview: Some(bytes::Bytes::from_static(
+                        b"{\n  \"user-agent\": \"pepe/0.16.0\"\n}",
+                    )),
+                    ttfb: Some(Duration::from_micros((ms * 990.0) as u64)),
+                    ..Default::default()
+                });
+            }
+            d.timeline.advance(Duration::from_secs(s + 1));
+        }
+    }
+
+    /// The screen as HTML, colours and all, to look at in a browser
+    fn html(buf: &ratatui::buffer::Buffer) -> String {
+        fn css(c: Color, bg: bool) -> String {
+            const ANSI: [&str; 16] = [
+                "#45475a", "#f38ba8", "#a6e3a1", "#f9e2af", "#89b4fa", "#f5c2e7", "#94e2d5",
+                "#bac2de", "#585b70", "#f38ba8", "#a6e3a1", "#f9e2af", "#89b4fa", "#f5c2e7",
+                "#94e2d5", "#a6adc8",
+            ];
+            let idx = |n: u8| -> String {
+                match n {
+                    0..=15 => ANSI[n as usize].to_string(),
+                    16..=231 => {
+                        let n = n - 16;
+                        let v = |k: u8| if k == 0 { 0 } else { 55 + k * 40 };
+                        format!("#{:02x}{:02x}{:02x}", v(n / 36), v(n / 6 % 6), v(n % 6))
+                    }
+                    _ => {
+                        let g = 8 + (n - 232) * 10;
+                        format!("#{g:02x}{g:02x}{g:02x}")
+                    }
+                }
+            };
+            match c {
+                Color::Reset => {
+                    if bg {
+                        "#1e1e2e".into()
+                    } else {
+                        "#cdd6f4".into()
+                    }
+                }
+                Color::Rgb(r, g, b) => format!("#{r:02x}{g:02x}{b:02x}"),
+                Color::Indexed(n) => idx(n),
+                Color::Black => idx(0),
+                Color::Red => idx(1),
+                Color::Green => idx(2),
+                Color::Yellow => idx(3),
+                Color::Blue => idx(4),
+                Color::Magenta => idx(5),
+                Color::Cyan => idx(6),
+                Color::Gray => idx(7),
+                Color::DarkGray => idx(8),
+                Color::White => "#ffffff".into(),
+                _ => {
+                    if bg {
+                        "#1e1e2e".into()
+                    } else {
+                        "#cdd6f4".into()
+                    }
+                }
+            }
+        }
+        let mut out = String::from("<html><head><meta charset=utf-8><style>body{margin:0;background:#111}pre{margin:0;padding:12px;font:13px/16px 'JetBrains Mono','DejaVu Sans Mono',monospace;display:inline-block}span{display:inline-block;width:1ch;height:16px;overflow:hidden;vertical-align:top}</style></head><body><pre>");
+        let area = buf.area;
+        for y in 0..area.height {
+            for x in 0..area.width {
+                let cell = &buf[(x, y)];
+                let (mut fg, mut bg) = (css(cell.fg, false), css(cell.bg, true));
+                if cell.modifier.contains(ratatui::style::Modifier::REVERSED) {
+                    std::mem::swap(&mut fg, &mut bg);
+                }
+                let bold = cell.modifier.contains(ratatui::style::Modifier::BOLD);
+                let italic = cell.modifier.contains(ratatui::style::Modifier::ITALIC);
+                let sym = match cell.symbol() {
+                    "<" => "&lt;",
+                    ">" => "&gt;",
+                    "&" => "&amp;",
+                    "" => " ",
+                    s => s,
+                };
+                let (fg, bg) = (fg, bg);
+                let style = format!(
+                    "color:{fg};background:{bg};{}{}",
+                    if bold { "font-weight:700;" } else { "" },
+                    if italic { "font-style:italic;" } else { "" }
+                );
+                // Half blocks drawn as boxes, so they meet without font gaps
+                match sym {
+                    "▀" => out.push_str(&format!(
+                        "<span style=\"background:linear-gradient({fg} 50%,{bg} 50%)\"></span>"
+                    )),
+                    "▄" => out.push_str(&format!(
+                        "<span style=\"background:linear-gradient({bg} 50%,{fg} 50%)\"></span>"
+                    )),
+                    "█" => out.push_str(&format!("<span style=\"background:{fg}\"></span>")),
+                    _ => out.push_str(&format!("<span style=\"{style}\">{sym}</span>")),
+                }
+            }
+            out.push('\n');
+        }
+        out.push_str("</pre></body></html>");
+        out
+    }
+
+    /// `PEPE_PREVIEW=dir cargo test preview -- --ignored` writes each tab
+    /// as HTML, in the theme `PEPE_THEME` names
+    #[test]
+    #[ignore]
+    fn preview() {
+        let dir = std::env::var("PEPE_PREVIEW").unwrap_or_else(|_| "target/preview".into());
+        std::fs::create_dir_all(&dir).unwrap();
+        let (w, h) = std::env::var("PEPE_PREVIEW_SIZE")
+            .ok()
+            .and_then(|s| {
+                s.split_once('x')
+                    .map(|(a, b)| (a.parse().unwrap(), b.parse().unwrap()))
+            })
+            .unwrap_or((180u16, 50u16));
+        let args = Cli::parse_from([
+            "pepe",
+            "-n",
+            "10000",
+            "-c",
+            "10",
+            "https://httpbin.io/user-agent",
+        ]);
+        let mut d = Dashboard::new(args, Plan::Count(10_000));
+        demo_run(&mut d, 40);
+        for tab in [Tab::Live, Tab::Stats, Tab::Requests] {
+            d.tab = tab;
+            let mut terminal = Terminal::new(TestBackend::new(w, h)).unwrap();
+            terminal
+                .draw(|f| super::super::theme::draw(f, |f| render(&d, f)))
+                .unwrap();
+            let name = format!("{dir}/{}.html", tab.title().to_lowercase());
+            std::fs::write(name, html(terminal.backend().buffer())).unwrap();
         }
     }
 }

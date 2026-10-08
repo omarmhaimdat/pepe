@@ -1,6 +1,7 @@
-//! Pepe the chili pepper: a small pixel-art sprite drawn with half blocks
-//! (two pixels per cell). Its face and the effects next to it follow how the
-//! run is going.
+//! Pepe the chili pepper: pixel art drawn with half blocks (two pixels per
+//! cell). He comes in two sizes: a 16×16 sprite for every screen, and a
+//! 26×26 one for the dashboard header when the terminal is tall enough. His
+//! face, arms and the effects around him follow how the run is going.
 
 use ratatui::{
     layout::Rect,
@@ -8,31 +9,17 @@ use ratatui::{
     text::{Line, Span},
 };
 
-/// Sprite is 16×14 pixels, so 16×7 cells; effects use 4 more columns
-const SPRITE_WIDTH: usize = 16;
-const EFFECTS_WIDTH: usize = 4;
-pub const WIDTH: u16 = (SPRITE_WIDTH + EFFECTS_WIDTH) as u16;
-/// Seven rows of sprite; the header adds the speech line under it
-pub const HEIGHT: u16 = 7;
+use super::theme::{self, Theme};
 
-/// K outline, R body, r shade, H highlight, G leaf, g leaf shade. The face is
-/// painted over the body by `face_pixel`.
-const SPRITE: [&str; 14] = [
-    "..........gg....",
-    ".........gg.....",
-    ".....KgGGGGgK...",
-    "....KRgGGGGgRK..",
-    "...KRHRRRRRRRRK.",
-    "...KRRRRRRRRRRrK",
-    "..KRRRRRRRRRRRrK",
-    "..KRRRRRRRRRRRrK",
-    "..KRRRRRRRRRRrK.",
-    "...KRRRRRRRRrK..",
-    "...KRRRRRRRrK...",
-    "..KRRRRRRrrK....",
-    ".KRRRrrrKK......",
-    "KrrKKK..........",
-];
+/// The small sprite is 16×16 pixels, so 16×8 cells; the box keeps 4 more
+/// columns so the speech line under him fits
+const SMALL_WIDTH: usize = 16;
+pub const WIDTH: u16 = SMALL_WIDTH as u16 + 4;
+/// Eight rows of sprite; screens add the speech line under it
+pub const HEIGHT: u16 = 8;
+/// The big sprite: 26×26 pixels, 26×13 cells
+pub const BIG_WIDTH: u16 = 26;
+pub const BIG_HEIGHT: u16 = 13;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Mood {
@@ -66,150 +53,588 @@ impl Mood {
             Mood::Dizzy => "stopped",
         }
     }
+
+    /// Index of this mood's picture in `SMALL` and `BIG`
+    fn index(self, blink: bool) -> usize {
+        match self {
+            Mood::Waiting if blink => 9,
+            Mood::Happy if blink => 8,
+            Mood::Waiting => 0,
+            Mood::Happy => 1,
+            Mood::Sweating => 2,
+            Mood::OnFire => 3,
+            Mood::Sleeping => 4,
+            Mood::Proud => 5,
+            Mood::Worried => 6,
+            Mood::Dizzy => 7,
+        }
+    }
 }
 
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum Eyes {
-    Open,
-    /// Happy squint: ^ ^
-    Smiling,
-    Closed,
-    Wide,
+// Pixels: K outline, R body, r shade, H highlight, G leaf, g leaf shade,
+// S stem, W white, P pupil, M mouth and lids, B blush, T tongue; Y and O
+// flame and spark, C sweat and sleep. Generated from the design canvas.
+const SMALL: [[&str; 16]; 10] = [
+    // waiting
+    [
+        "...........KKK..",
+        "..........KSSK..",
+        ".........KSKK...",
+        "......KKKSKKKK..",
+        ".....KGGgGGgGGK.",
+        "....KRgGGgGGgRK.",
+        "...KRHRRRRRRRrK.",
+        "...KRPWRRRPWRrK.",
+        "..KRHPPRRRPPRrK.",
+        "..KRRRRMMRRRrrK.",
+        "KKKRRRRRRRRRrKKK",
+        "KRRKRRRRRRRrK.RR",
+        ".KKKRRRRRrrK..KK",
+        "..KRRRRrrKK.....",
+        ".KRrrrrKK.......",
+        ".KrKKKK.........",
+    ],
+    // happy
+    [
+        "...........KKK..",
+        "..........KSSK..",
+        ".........KSKK...",
+        "......KKKSKKKK..",
+        ".....KGGgGGgGGK.",
+        "....KRgGGgGGgRK.",
+        "...KRHRRRRRRRrK.",
+        "...KRPWRRRPWRrK.",
+        "..KRHPPRRRPPRrK.",
+        "..KRBRMRRMRRBrK.",
+        "KKKRRRRMMRRRrKKK",
+        "KRRKRRRRRRRrK.RR",
+        ".KKKRRRRRrrK..KK",
+        "..KRRRRrrKK.....",
+        ".KRrrrrKK.......",
+        ".KrKKKK.........",
+    ],
+    // sweating
+    [
+        "...........KKK..",
+        "..........KSSK..",
+        ".........KSKK...",
+        "......KKKSKKKK..",
+        ".....KGGgGGgGGK.",
+        "....KRgGGgGGgRK.",
+        "...KRHRRRRRRRrKC",
+        "...KRWWRRRWWRrKC",
+        "..KRHWPRRRWPRrK.",
+        ".KRRRRMRMRRRrrRK",
+        ".KRRRRRMRMRRrKRK",
+        "...KRRRRRRRrK...",
+        "...KRRRRRrrK....",
+        "..KRRRRrrKK.....",
+        ".KRrrrrKK.......",
+        ".KrKKKK.........",
+    ],
+    // on_fire
+    [
+        "...........KKY..",
+        "....Y.....KSSOY.",
+        "...YO....KSKK...",
+        "...OO.KKKSKKKK..",
+        ".....KGGgGGgGGK.",
+        "....KRgGGgGGgRKY",
+        "...KRHRRRRRRRrKK",
+        "...KRWWRRRWWRrKK",
+        "..KRHWPRRRWPRrK.",
+        "..KRRRRMMRRRrrK.",
+        "KKKRRRRTTRRRrK..",
+        "KRRKRRRRRRRrK...",
+        ".KKKRRRRRrrK....",
+        "..KRRRRrrKK.....",
+        ".KRrrrrKK.......",
+        ".KrKKKK.........",
+    ],
+    // sleeping
+    [
+        "...........KKCCC",
+        "..........KSSKC.",
+        ".........KSKK...",
+        "......KKKSKKKK..",
+        ".....KGGgGGgGGK.",
+        "....KRgGGgGGgRK.",
+        "...KRHRRRRRRRrK.",
+        "...KRHRRRRRRRrK.",
+        "..KRHMMRRRMMRrK.",
+        "..KRBRRRRRRRBrK.",
+        "KKKRRRMMMMRRrKKK",
+        "KRRKRRRRRRRrK.RR",
+        ".KKKRRRRRrrK..KK",
+        "..KRRRRrrKK.....",
+        ".KRrrrrKK.......",
+        ".KrKKKK.........",
+    ],
+    // proud
+    [
+        "...........KKK..",
+        "..........KSSKY.",
+        ".........KSKKYY.",
+        "..Y...KKKSKKKK..",
+        ".....KGGgGGgGGK.",
+        "....KRgGGgGGgRK.",
+        "K..KRHRRRRRRRrKK",
+        "KK.KRMMRRRMMRrKK",
+        ".KRRMRRMRMRRMrRK",
+        "..KRBRMMMMRRBrK.",
+        "..KRRRRTTRRRrK..",
+        "...KRRRRRRRrK...",
+        "...KRRRRRrrK....",
+        "..KRRRRrrKK.....",
+        ".KRrrrrKK.......",
+        ".KrKKKK.........",
+    ],
+    // worried
+    [
+        "...........KKK..",
+        "..........KSSK..",
+        ".........KSKK...",
+        "......KKKSKKKK..",
+        ".....KGGgGGgGGK.",
+        "....KRgGGgGGgRK.",
+        "...KRHRRRRRRRrK.",
+        "...KRPWRRRPWRrK.",
+        "..KRHPPRRRPPRrK.",
+        ".KRRRRRMMRRRrrRK",
+        ".KRRRRMRRMRRrKRK",
+        "...KRRRRRRRrK...",
+        "...KRRRRRrrK....",
+        "..KRRRRrrKK.....",
+        ".KRrrrrKK.......",
+        ".KrKKKK.........",
+    ],
+    // dizzy
+    [
+        "...........KKK..",
+        "..........KSSK..",
+        "...Y.....KSKK.Y.",
+        "......KKKSKKKK..",
+        ".....KGGgGGgGGK.",
+        "....KRgGGgGGgRK.",
+        "...KRHRRRRRRRrK.",
+        "...KRMRRRRMRRrK.",
+        "..KRHRMRRRRMRrK.",
+        "..KRRRMRMRRRrrK.",
+        "KKKRRRRMRMRRrKKK",
+        "KRRKRRRRRRRrK.RR",
+        ".KKKRRRRRrrK..KK",
+        "..KRRRRrrKK.....",
+        ".KRrrrrKK.......",
+        ".KrKKKK.........",
+    ],
+    // happy_blink
+    [
+        "...........KKK..",
+        "..........KSSK..",
+        ".........KSKK...",
+        "......KKKSKKKK..",
+        ".....KGGgGGgGGK.",
+        "....KRgGGgGGgRK.",
+        "...KRHRRRRRRRrK.",
+        "...KRHRRRRRRRrK.",
+        "..KRHMMRRRMMRrK.",
+        "..KRBRMRRMRRBrK.",
+        "KKKRRRRMMRRRrKKK",
+        "KRRKRRRRRRRrK.RR",
+        ".KKKRRRRRrrK..KK",
+        "..KRRRRrrKK.....",
+        ".KRrrrrKK.......",
+        ".KrKKKK.........",
+    ],
+    // waiting_blink
+    [
+        "...........KKK..",
+        "..........KSSK..",
+        ".........KSKK...",
+        "......KKKSKKKK..",
+        ".....KGGgGGgGGK.",
+        "....KRgGGgGGgRK.",
+        "...KRHRRRRRRRrK.",
+        "...KRHRRRRRRRrK.",
+        "..KRHMMRRRMMRrK.",
+        "..KRRRRMMRRRrrK.",
+        "KKKRRRRRRRRRrKKK",
+        "KRRKRRRRRRRrK.RR",
+        ".KKKRRRRRrrK..KK",
+        "..KRRRRrrKK.....",
+        ".KRrrrrKK.......",
+        ".KrKKKK.........",
+    ],
+];
+
+const BIG: [[&str; 26]; 10] = [
+    // waiting
+    [
+        "...............KKK........",
+        "..............KSSSK.......",
+        ".............KSSKK........",
+        "............KSSK..........",
+        "........KKKKKSGKKKK.......",
+        ".......KGGGgGGGGgGGKK.....",
+        "......KGgGGGGgGGGGGgGK....",
+        ".....KRGgRRRGGRRRRgGRRK...",
+        "....KRHRgRRRRgRRRRRgRrK...",
+        "....KRHRRRRRRRRRRRRRRrK...",
+        "...KRHRRPWRRRRRPWRRRRrK...",
+        "...KRHRRPPRRRRRPPRRRrrK...",
+        "...KRRRRPPRRRRRPPRRRrK....",
+        "...KRRRRRRRRRRRRRRRRrK....",
+        "..KKRRRRRRRMMRRRRRRrrKK...",
+        ".KRRRRRRRRRMMRRRRRRrKrRK..",
+        "..KKKRRRRRRRRRRRRRrrKKK...",
+        "....KRRRRRRRRRRRRrrK......",
+        ".....KRRRRRRRRRRrrK.......",
+        ".....KRRRRRRRRRrrK........",
+        "....KRRRRRRRRRrrK.........",
+        "...KRRRRRRRRrrK...........",
+        "..KRRRRRRrrKK.............",
+        ".KRrrrrrKK................",
+        ".KrrKKKK..................",
+        "..KK......................",
+    ],
+    // happy
+    [
+        "...............KKK........",
+        "..............KSSSK.......",
+        ".............KSSKK........",
+        "............KSSK..........",
+        "........KKKKKSGKKKK.......",
+        ".......KGGGgGGGGgGGKK.....",
+        "......KGgGGGGgGGGGGgGK....",
+        ".....KRGgRRRGGRRRRgGRRK...",
+        "....KRHRgRRRRgRRRRRgRrK...",
+        "....KRHRRRRRRRRRRRRRRrK...",
+        "...KRHRRPWRRRRRPWRRRRrK...",
+        "...KRHRRPPRRRRRPPRRRrrK...",
+        "...KRRRRPPRRRRRPPRRRrK....",
+        "...KRRBBRRRRRRRRRBBRrK....",
+        "..KKRRRRRRMRRMRRRRRrrKK...",
+        ".KRRRRRRRRRMMRRRRRRrKrRK..",
+        "..KKKRRRRRRRRRRRRRrrKKK...",
+        "....KRRRRRRRRRRRRrrK......",
+        ".....KRRRRRRRRRRrrK.......",
+        ".....KRRRRRRRRRrrK........",
+        "....KRRRRRRRRRrrK.........",
+        "...KRRRRRRRRrrK...........",
+        "..KRRRRRRrrKK.............",
+        ".KRrrrrrKK................",
+        ".KrrKKKK..................",
+        "..KK......................",
+    ],
+    // sweating
+    [
+        "...............KKK........",
+        "..............KSSSK.......",
+        ".............KSSKK........",
+        "............KSSK..........",
+        "........KKKKKSGKKKK.......",
+        ".......KGGGgGGGGgGGKK.....",
+        "......KGgGGGGgGGGGGgGK....",
+        ".....KRGgRRRGGRRRRgGRRK...",
+        "....KRHRgRRRRgRRRRRgRrK.C.",
+        "....KRHRRRRRRRRRRRRRRrKCC.",
+        "...KRHRRWWRRRRRWWRRRRrKCC.",
+        "...KRHRRWPRRRRRWPRRRrrK...",
+        "..KKRRRRWWRRRRRWWRRRrKK...",
+        ".KRRRRRRRRRRRRRRRRRRrRRK..",
+        ".KRRRRRRRRMRMRRRRRRrrrRK..",
+        "..KKRRRRRRRMRMRRRRRrKKK...",
+        "....KRRRRRRRRRRRRRrrK.....",
+        "....KRRRRRRRRRRRRrrK......",
+        ".....KRRRRRRRRRRrrK.......",
+        ".....KRRRRRRRRRrrK........",
+        "....KRRRRRRRRRrrK.........",
+        "...KRRRRRRRRrrK...........",
+        "..KRRRRRRrrKK.............",
+        ".KRrrrrrKK................",
+        ".KrrKKKK..................",
+        "..KK......................",
+    ],
+    // on_fire
+    [
+        "...............KKK....Y...",
+        ".....Y........KSSSK..YY...",
+        ".....YY..Y...KSSKK...YOY..",
+        "....YOY..O..KSSK....YOOY..",
+        "....YOOYKKKKKSGKKKK..OO...",
+        ".....OOKGGGgGGGGgGGKK.....",
+        "......KGgGGGGgGGGGGgGK....",
+        ".....KRGgRRRGGRRRRgGRRKYK.",
+        "....KRHRgRRRRgRRRRRgRrYYK.",
+        "....KRHRRRRRRRRRRRRRRrKRK.",
+        "...KRHRRWWRRRRRWWRRRRrKRK.",
+        "...KRHRRWPRRRRRWPRRRrrRK..",
+        "...KRRRRWWRRRRRWWRRRrKK...",
+        "...KRRRRRRRRRRRRRRRRrK....",
+        "..KKRRRRRRRMMRRRRRRrrK....",
+        ".KRRRRRRRRMTTMRRRRRrK.....",
+        "..KKKRRRRRRMMRRRRRrrK.....",
+        "....KRRRRRRRRRRRRrrK......",
+        ".....KRRRRRRRRRRrrK.......",
+        ".....KRRRRRRRRRrrK........",
+        "....KRRRRRRRRRrrK.........",
+        "...KRRRRRRRRrrK...........",
+        "..KRRRRRRrrKK.............",
+        ".KRrrrrrKK................",
+        ".KrrKKKK..................",
+        "..KK......................",
+    ],
+    // sleeping
+    [
+        "...............KKK..CCCC..",
+        "..............KSSSK...C...",
+        ".............KSSKK...C....",
+        "............KSSK....CCCCCC",
+        "........KKKKKSGKKKK.....CC",
+        ".......KGGGgGGGGgGGKK.....",
+        "......KGgGGGGgGGGGGgGK....",
+        ".....KRGgRRRGGRRRRgGRRK...",
+        "....KRHRgRRRRgRRRRRgRrK...",
+        "....KRHRRRRRRRRRRRRRRrK...",
+        "...KRHRRRRRRRRRRRRRRRrK...",
+        "...KRHRRRRRRRRRRRRRRrrK...",
+        "...KRRRRMMRRRRRMMRRRrK....",
+        "...KRRBBRRRRRRRRRBBRrK....",
+        "..KKRRRRRRRRRRRRRRRrrKK...",
+        ".KRRRRRRRRMMMMRRRRRrKrRK..",
+        "..KKKRRRRRRRRRRRRRrrKKK...",
+        "....KRRRRRRRRRRRRrrK......",
+        ".....KRRRRRRRRRRrrK.......",
+        ".....KRRRRRRRRRrrK........",
+        "....KRRRRRRRRRrrK.........",
+        "...KRRRRRRRRrrK...........",
+        "..KRRRRRRrrKK.............",
+        ".KRrrrrrKK................",
+        ".KrrKKKK..................",
+        "..KK......................",
+    ],
+    // proud
+    [
+        "...............KKK........",
+        "..............KSSSK.......",
+        ".............KSSKK........",
+        "............KSSK.......Y..",
+        "...Y....KKKKKSGKKKK...YYY.",
+        ".......KGGGgGGGGgGGKK..Y..",
+        ".K....KGgGGGGgGGGGGgGK..K.",
+        "KRK..KRGgRRRGGRRRRgGRRKKRK",
+        "KRK.KRHRgRRRRgRRRRRgRrKKRK",
+        ".KRKKRHRRRRRRRRRRRRRRrKRK.",
+        "..KRRHRRMMRRRRRMMRRRRrRK..",
+        "...KRHRMRRMRRRMRRMRRrrK...",
+        "...KRRRRRRRRRRRRRRRRrK....",
+        "...KRRBBRRRRRRRRRBBRrK....",
+        "...KRRRRRRMMMMRRRRRrrK....",
+        "...KRRRRRRRTTRRRRRRrK.....",
+        "....KRRRRRRRRRRRRRrrK.....",
+        "....KRRRRRRRRRRRRrrK......",
+        ".....KRRRRRRRRRRrrK.......",
+        ".....KRRRRRRRRRrrK........",
+        "....KRRRRRRRRRrrK.........",
+        "...KRRRRRRRRrrK...........",
+        "..KRRRRRRrrKK.............",
+        ".KRrrrrrKK................",
+        ".KrrKKKK..................",
+        "..KK......................",
+    ],
+    // worried
+    [
+        "...............KKK........",
+        "..............KSSSK.......",
+        ".............KSSKK........",
+        "............KSSK..........",
+        "........KKKKKSGKKKK.......",
+        ".......KGGGgGGGGgGGKK.....",
+        "......KGgGGGGgGGGGGgGK....",
+        ".....KRGgRRRGGRRRRgGRRK...",
+        "....KRHRgRRRRgRRRRRgRrK...",
+        "....KRHRRRRRRRRRRRRRRrK...",
+        "...KRHRRPWRRRRRPWRRRRrK...",
+        "...KRHRRPPRRRRRPPRRRrrK...",
+        "..KKRRRRPPRRRRRPPRRRrKK...",
+        ".KRRRRRRRRRRRRRRRRRRrRRK..",
+        ".KRRRRRRRRRMMRRRRRRrrrRK..",
+        "..KKRRRRRRMRRMRRRRRrKKK...",
+        "....KRRRRRRRRRRRRRrrK.....",
+        "....KRRRRRRRRRRRRrrK......",
+        ".....KRRRRRRRRRRrrK.......",
+        ".....KRRRRRRRRRrrK........",
+        "....KRRRRRRRRRrrK.........",
+        "...KRRRRRRRRrrK...........",
+        "..KRRRRRRrrKK.............",
+        ".KRrrrrrKK................",
+        ".KrrKKKK..................",
+        "..KK......................",
+    ],
+    // dizzy
+    [
+        "...............KKK........",
+        "......Y.Y.....KSSSK.......",
+        ".............KSSKK.Y......",
+        "............KSSK..........",
+        "........KKKKKSGKKKK.......",
+        ".......KGGGgGGGGgGGKK.....",
+        "......KGgGGGGgGGGGGgGK....",
+        ".....KRGgRRRGGRRRRgGRRK...",
+        "....KRHRgRRRRgRRRRRgRrK...",
+        "....KRHRRRRRRRRRRRRRRrK...",
+        "...KRHRMRMRRRRMRMRRRRrK...",
+        "...KRHRRMRRRRRRMRRRRrrK...",
+        "...KRRRMRMRRRRMRMRRRrK....",
+        "...KRRRRRRRRRRRRRRRRrK....",
+        "..KKRRRRRRMRMRRRRRRrrKK...",
+        ".KRRRRRRRRRMRMRRRRRrKrRK..",
+        "..KKKRRRRRRRRRRRRRrrKKK...",
+        "....KRRRRRRRRRRRRrrK......",
+        ".....KRRRRRRRRRRrrK.......",
+        ".....KRRRRRRRRRrrK........",
+        "....KRRRRRRRRRrrK.........",
+        "...KRRRRRRRRrrK...........",
+        "..KRRRRRRrrKK.............",
+        ".KRrrrrrKK................",
+        ".KrrKKKK..................",
+        "..KK......................",
+    ],
+    // happy_blink
+    [
+        "...............KKK........",
+        "..............KSSSK.......",
+        ".............KSSKK........",
+        "............KSSK..........",
+        "........KKKKKSGKKKK.......",
+        ".......KGGGgGGGGgGGKK.....",
+        "......KGgGGGGgGGGGGgGK....",
+        ".....KRGgRRRGGRRRRgGRRK...",
+        "....KRHRgRRRRgRRRRRgRrK...",
+        "....KRHRRRRRRRRRRRRRRrK...",
+        "...KRHRRRRRRRRRRRRRRRrK...",
+        "...KRHRRRRRRRRRRRRRRrrK...",
+        "...KRRRRMMRRRRRMMRRRrK....",
+        "...KRRBBRRRRRRRRRBBRrK....",
+        "..KKRRRRRRMRRMRRRRRrrKK...",
+        ".KRRRRRRRRRMMRRRRRRrKrRK..",
+        "..KKKRRRRRRRRRRRRRrrKKK...",
+        "....KRRRRRRRRRRRRrrK......",
+        ".....KRRRRRRRRRRrrK.......",
+        ".....KRRRRRRRRRrrK........",
+        "....KRRRRRRRRRrrK.........",
+        "...KRRRRRRRRrrK...........",
+        "..KRRRRRRrrKK.............",
+        ".KRrrrrrKK................",
+        ".KrrKKKK..................",
+        "..KK......................",
+    ],
+    // waiting_blink
+    [
+        "...............KKK........",
+        "..............KSSSK.......",
+        ".............KSSKK........",
+        "............KSSK..........",
+        "........KKKKKSGKKKK.......",
+        ".......KGGGgGGGGgGGKK.....",
+        "......KGgGGGGgGGGGGgGK....",
+        ".....KRGgRRRGGRRRRgGRRK...",
+        "....KRHRgRRRRgRRRRRgRrK...",
+        "....KRHRRRRRRRRRRRRRRrK...",
+        "...KRHRRRRRRRRRRRRRRRrK...",
+        "...KRHRRRRRRRRRRRRRRrrK...",
+        "...KRRRRMMRRRRRMMRRRrK....",
+        "...KRRRRRRRRRRRRRRRRrK....",
+        "..KKRRRRRRRMMRRRRRRrrKK...",
+        ".KRRRRRRRRRMMRRRRRRrKrRK..",
+        "..KKKRRRRRRRRRRRRRrrKKK...",
+        "....KRRRRRRRRRRRRrrK......",
+        ".....KRRRRRRRRRRrrK.......",
+        ".....KRRRRRRRRRrrK........",
+        "....KRRRRRRRRRrrK.........",
+        "...KRRRRRRRRrrK...........",
+        "..KRRRRRRrrKK.............",
+        ".KRrrrrrKK................",
+        ".KrrKKKK..................",
+        "..KK......................",
+    ],
+];
+
+/// A pixel's colour: true colour in the pepe theme, the 256-colour palette
+/// everywhere else
+fn color(pixel: u8, true_color: bool) -> Option<Color> {
+    let (rgb, indexed) = match pixel {
+        b'K' => ((0x2c, 0x0a, 0x0b), 52),
+        b'R' => ((0xef, 0x33, 0x24), 196),
+        b'r' => ((0xb8, 0x1c, 0x1e), 160),
+        b'H' => ((0xff, 0xa0, 0x82), 217),
+        b'G' => ((0x7a, 0xc8, 0x46), 76),
+        b'g' | b'S' => ((0x2e, 0x78, 0x32), 28),
+        b'W' => ((0xff, 0xff, 0xff), 231),
+        b'P' | b'M' => ((0x24, 0x08, 0x0a), 16),
+        b'B' | b'T' => ((0xff, 0x80, 0x9a), 211),
+        b'Y' => ((0xff, 0xd2, 0x50), 221),
+        b'O' => ((0xff, 0x78, 0x28), 208),
+        b'C' => ((0x8c, 0xd2, 0xff), 117),
+        _ => return None,
+    };
+    Some(if true_color {
+        Color::Rgb(rgb.0, rgb.1, rgb.2)
+    } else {
+        Color::Indexed(indexed)
+    })
 }
 
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum Mouth {
-    Smile,
-    Flat,
-    Open,
-    Frown,
-}
-
-fn face(mood: Mood, blink: bool) -> (Eyes, Mouth) {
+/// The picture for `mood` at `frame`, as rows of pixels. The effects move on
+/// two frames: flames flicker, sweat drips, the zzz drift up.
+fn pixels(rows: &[&str], mood: Mood, frame: u64) -> Vec<Vec<u8>> {
+    let mut grid: Vec<Vec<u8>> = rows.iter().map(|r| r.as_bytes().to_vec()).collect();
+    let tick = (frame / 3) % 2 == 1;
+    if !tick {
+        return grid;
+    }
     match mood {
-        _ if blink => (Eyes::Closed, Mouth::Smile),
-        Mood::Waiting => (Eyes::Open, Mouth::Flat),
-        Mood::Happy => (Eyes::Open, Mouth::Smile),
-        Mood::Sweating => (Eyes::Wide, Mouth::Flat),
-        Mood::OnFire => (Eyes::Wide, Mouth::Open),
-        Mood::Sleeping => (Eyes::Closed, Mouth::Flat),
-        Mood::Proud => (Eyes::Smiling, Mouth::Smile),
-        Mood::Worried => (Eyes::Open, Mouth::Frown),
-        Mood::Dizzy => (Eyes::Wide, Mouth::Open),
-    }
-}
-
-/// What the face paints at (x, y), if anything
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
-enum Paint {
-    White,
-    Pupil,
-    Dark,
-    Blush,
-}
-
-/// Left edge of each eye; eyes are 2×2 at rows 5-6
-const EYES_X: [usize; 2] = [5, 10];
-
-fn face_pixel(eyes: Eyes, mouth: Mouth, blush: bool, x: usize, y: usize) -> Option<Paint> {
-    for ex in EYES_X {
-        let (dx, dy) = (x as isize - ex as isize, y as isize - 5);
-        let paint = match (eyes, dx, dy) {
-            (Eyes::Open, 0..=1, 0) | (Eyes::Open, 0, 1) => Some(Paint::White),
-            (Eyes::Open, 1, 1) => Some(Paint::Pupil),
-            (Eyes::Wide, 0..=1, 0..=1) => Some(Paint::White),
-            (Eyes::Closed, 0..=1, 1) => Some(Paint::Dark),
-            (Eyes::Smiling, 0 | 2, 1) | (Eyes::Smiling, 1, 0) => Some(Paint::Dark),
-            _ => None,
-        };
-        if paint.is_some() {
-            return paint;
+        Mood::OnFire => {
+            for px in grid.iter_mut().flatten() {
+                *px = match *px {
+                    b'Y' => b'O',
+                    b'O' => b'Y',
+                    other => other,
+                };
+            }
         }
-    }
-    if blush && y == 7 && (x == 4 || x == 12) {
-        return Some(Paint::Blush);
-    }
-    // Mouth: a 4×2 area at x 7-10, rows 8-9
-    let (mx, my) = (x as isize - 7, y as isize - 8);
-    if !(0..=3).contains(&mx) || !(0..=1).contains(&my) {
-        return None;
-    }
-    let corner = mx == 0 || mx == 3;
-    let dark = match mouth {
-        Mouth::Smile => (my == 0) == corner,
-        Mouth::Frown => (my == 1) == corner,
-        Mouth::Flat => my == 1,
-        Mouth::Open => !corner,
-    };
-    dark.then_some(Paint::Dark)
-}
-
-fn pixel(mood: Mood, eyes: Eyes, mouth: Mouth, x: usize, y: usize) -> Option<Color> {
-    let asleep = mood == Mood::Sleeping;
-    let blush = matches!(mood, Mood::Happy | Mood::Proud);
-    let c = |awake: u8, sleeping: u8| Some(Color::Indexed(if asleep { sleeping } else { awake }));
-    let base = SPRITE[y].as_bytes()[x];
-    if base == b'R' {
-        if let Some(paint) = face_pixel(eyes, mouth, blush, x, y) {
-            return match paint {
-                Paint::White => c(231, 250),
-                Paint::Pupil | Paint::Dark => c(16, 16),
-                Paint::Blush => c(211, 174),
-            };
+        Mood::Sweating | Mood::Sleeping => {
+            // The drop falls a pixel, the zzz rise one
+            let down = mood == Mood::Sweating;
+            let from = grid.clone();
+            for row in grid.iter_mut() {
+                for px in row.iter_mut().filter(|p| **p == b'C') {
+                    *px = b'.';
+                }
+            }
+            for (y, row) in from.iter().enumerate() {
+                for (x, &px) in row.iter().enumerate() {
+                    let to = if down { y + 1 } else { y.wrapping_sub(1) };
+                    if px == b'C' && to < grid.len() && grid[to][x] == b'.' {
+                        grid[to][x] = b'C';
+                    }
+                }
+            }
         }
+        _ => {}
     }
-    match base {
-        b'K' => c(52, 236),
-        b'R' => c(196, 131),
-        b'r' => c(160, 95),
-        b'H' => c(217, 181),
-        b'G' => c(76, 65),
-        b'g' => c(28, 22),
-        _ => None,
-    }
+    grid
 }
 
-/// The mascot, `HEIGHT` lines of at most `WIDTH` cells. `frame` drives the
-/// animation.
-pub fn lines(mood: Mood, frame: u64) -> Vec<Line<'static>> {
-    // Pepe is a picture in colour: with colour off he stays home
-    if super::theme::no_color() {
-        return vec![Line::raw(""); HEIGHT as usize];
-    }
-    sprite(mood, frame)
-}
-
-/// The picture itself, whatever the terminal's colour setting
-fn sprite(mood: Mood, frame: u64) -> Vec<Line<'static>> {
-    // Blink for one frame every four seconds while awake
-    let blink = matches!(mood, Mood::Happy | Mood::Waiting) && frame % 40 == 39;
-    let (eyes, mouth) = face(mood, blink);
-    let tick = (frame / 3) % 2 == 0;
-
-    let effect = |row: usize| -> (&'static str, Color) {
-        let spark = Color::Indexed(186);
-        let cool = Color::Indexed(117);
-        let hot = Color::Indexed(if tick { 215 } else { 209 });
-        match (mood, row) {
-            (Mood::OnFire, 0) => (if tick { " ,'" } else { " ', " }, hot),
-            (Mood::OnFire, 1) => (if tick { " (" } else { "  )" }, hot),
-            (Mood::Sweating | Mood::Worried, 2) if tick => ("  ,", cool),
-            (Mood::Sweating | Mood::Worried, 3) if !tick => ("  '", cool),
-            (Mood::Sleeping, 0) => (if tick { "  z" } else { "   z" }, cool),
-            (Mood::Sleeping, 1) => (if tick { " z" } else { "  z" }, cool),
-            (Mood::Proud, 1) => ("  ✦", spark),
-            (Mood::Proud, 3) => (" ·", spark),
-            (Mood::Dizzy, 1) => (if tick { " @" } else { " ~" }, spark),
-            _ => ("", Color::Reset),
-        }
-    };
-
-    (0..SPRITE.len() / 2)
+/// Pixel rows drawn two to a cell with half blocks
+fn draw(grid: &[Vec<u8>], width: usize, true_color: bool) -> Vec<Line<'static>> {
+    (0..grid.len().div_ceil(2))
         .map(|row| {
-            let mut spans: Vec<Span> = (0..SPRITE_WIDTH)
+            let spans: Vec<Span> = (0..width)
                 .map(|x| {
-                    let top = pixel(mood, eyes, mouth, x, row * 2);
-                    let bottom = pixel(mood, eyes, mouth, x, row * 2 + 1);
+                    let at = |y: usize| grid.get(y).and_then(|r| r.get(x)).copied();
+                    let top = at(row * 2).and_then(|p| color(p, true_color));
+                    let bottom = at(row * 2 + 1).and_then(|p| color(p, true_color));
                     match (top, bottom) {
                         (Some(t), Some(b)) => Span::styled("▀", Style::new().fg(t).bg(b)),
                         (Some(t), None) => Span::styled("▀", Style::new().fg(t)),
@@ -218,18 +643,59 @@ fn sprite(mood: Mood, frame: u64) -> Vec<Line<'static>> {
                     }
                 })
                 .collect();
-            let (text, color) = effect(row);
-            spans.push(Span::styled(text, Style::new().fg(color)));
             Line::from(spans)
         })
         .collect()
 }
 
+fn sprite(rows: &[&str], width: usize, mood: Mood, frame: u64) -> Vec<Line<'static>> {
+    let true_color = theme::current() == Theme::Pepe;
+    draw(&pixels(rows, mood, frame), width, true_color)
+}
+
+/// Blink for one frame every four seconds while awake
+fn blinks(mood: Mood, frame: u64) -> bool {
+    matches!(mood, Mood::Happy | Mood::Waiting) && frame % 40 == 39
+}
+
+/// The small mascot, `HEIGHT` lines of `WIDTH` cells at most. `frame` drives
+/// the animation.
+pub fn lines(mood: Mood, frame: u64) -> Vec<Line<'static>> {
+    // Pepe is a picture in colour: with colour off he stays home
+    if theme::no_color() {
+        return vec![Line::raw(""); HEIGHT as usize];
+    }
+    sprite(
+        &SMALL[mood.index(blinks(mood, frame))],
+        SMALL_WIDTH,
+        mood,
+        frame,
+    )
+}
+
+/// The big mascot, `BIG_HEIGHT` lines of `BIG_WIDTH` cells
+pub fn big_lines(mood: Mood, frame: u64) -> Vec<Line<'static>> {
+    if theme::no_color() {
+        return vec![Line::raw(""); BIG_HEIGHT as usize];
+    }
+    sprite(
+        &BIG[mood.index(blinks(mood, frame))],
+        BIG_WIDTH as usize,
+        mood,
+        frame,
+    )
+}
+
 /// Keep the sprite's colours as drawn when the theme adjusts the frame: they
 /// are the picture, not the palette. `area` is where the lines were drawn.
 pub fn keep(area: Rect) {
-    super::theme::keep(Rect {
-        height: area.height.min(HEIGHT),
+    keep_rows(area, HEIGHT);
+}
+
+/// `keep` for a sprite `rows` cells tall
+pub fn keep_rows(area: Rect, rows: u16) {
+    theme::keep(Rect {
+        height: area.height.min(rows),
         ..area
     });
 }
@@ -250,9 +716,24 @@ mod tests {
     ];
 
     #[test]
-    fn sprite_is_rectangular_and_fits() {
-        assert!(SPRITE.iter().all(|row| row.len() == SPRITE_WIDTH));
-        assert_eq!(SPRITE.len(), HEIGHT as usize * 2);
+    fn sprites_are_rectangular_and_fit() {
+        for picture in SMALL {
+            assert!(picture.iter().all(|r| r.len() == SMALL_WIDTH));
+            assert_eq!(picture.len(), HEIGHT as usize * 2);
+        }
+        for picture in BIG {
+            assert!(picture.iter().all(|r| r.len() == BIG_WIDTH as usize));
+            assert_eq!(picture.len(), BIG_HEIGHT as usize * 2);
+        }
+    }
+
+    #[test]
+    fn every_pixel_has_a_colour() {
+        for row in SMALL.iter().flatten().chain(BIG.iter().flatten()) {
+            for px in row.bytes().filter(|&p| p != b'.') {
+                assert!(color(px, true).is_some(), "{}", px as char);
+            }
+        }
     }
 
     #[test]
@@ -260,41 +741,47 @@ mod tests {
         for mood in MOODS {
             assert!(mood.says().chars().count() <= WIDTH as usize);
             for frame in 0..80 {
-                let lines = sprite(mood, frame);
-                assert_eq!(lines.len(), HEIGHT as usize);
-                for line in lines {
-                    assert!(line.width() <= WIDTH as usize, "{mood:?} {line:?}");
-                }
-            }
-        }
-    }
-
-    #[test]
-    fn face_is_painted_on_the_body() {
-        // Every pixel the face touches must be body, or it would be lost
-        for mood in MOODS {
-            let (eyes, mouth) = face(mood, false);
-            for (y, row) in SPRITE.iter().enumerate() {
-                for x in 0..SPRITE_WIDTH {
-                    if face_pixel(eyes, mouth, true, x, y).is_some() {
-                        assert_eq!(row.as_bytes()[x], b'R', "{mood:?} at {x},{y}");
-                    }
-                }
+                let small = sprite(
+                    &SMALL[mood.index(blinks(mood, frame))],
+                    SMALL_WIDTH,
+                    mood,
+                    frame,
+                );
+                assert_eq!(small.len(), HEIGHT as usize);
+                assert!(small.iter().all(|l| l.width() <= WIDTH as usize));
+                let big = sprite(
+                    &BIG[mood.index(blinks(mood, frame))],
+                    BIG_WIDTH as usize,
+                    mood,
+                    frame,
+                );
+                assert_eq!(big.len(), BIG_HEIGHT as usize);
+                assert!(big.iter().all(|l| l.width() == BIG_WIDTH as usize));
             }
         }
     }
 
     #[test]
     fn moods_have_different_faces() {
-        let face_of = |mood| {
-            let (eyes, mouth) = face(mood, false);
-            (0..SPRITE.len())
-                .flat_map(|y| (0..SPRITE_WIDTH).map(move |x| (x, y)))
-                .map(|(x, y)| pixel(mood, eyes, mouth, x, y))
-                .collect::<Vec<_>>()
-        };
-        assert_ne!(face_of(Mood::Happy), face_of(Mood::Worried));
-        assert_ne!(face_of(Mood::Happy), face_of(Mood::Proud));
-        assert_ne!(face_of(Mood::Proud), face_of(Mood::Sleeping));
+        for (i, a) in SMALL.iter().enumerate() {
+            for b in &SMALL[i + 1..] {
+                assert_ne!(a, b);
+            }
+        }
+        for (i, a) in BIG.iter().enumerate() {
+            for b in &BIG[i + 1..] {
+                assert_ne!(a, b);
+            }
+        }
+    }
+
+    #[test]
+    fn effects_move_between_frames() {
+        let fire = |frame| pixels(&BIG[Mood::OnFire.index(false)], Mood::OnFire, frame);
+        assert_ne!(fire(0), fire(3));
+        let sweat = |frame| pixels(&SMALL[Mood::Sweating.index(false)], Mood::Sweating, frame);
+        assert_ne!(sweat(0), sweat(3));
+        let calm = |frame| pixels(&SMALL[Mood::Happy.index(false)], Mood::Happy, frame);
+        assert_eq!(calm(0), calm(3));
     }
 }

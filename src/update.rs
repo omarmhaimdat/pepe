@@ -343,17 +343,20 @@ fn installer_updater() -> Option<AxoUpdater> {
 
 // ─── Saying it ───────────────────────────────────────────────────────────────
 
-/// A ratatui line as ANSI text: the mascot is drawn with 256-colour cells
+/// A ratatui line as ANSI text: the mascot is drawn with 256-colour cells,
+/// or true colour in pepe's own theme
 fn ansi(line: &Line) -> String {
+    let code = |color: Option<Color>, layer: u8| match color {
+        Some(Color::Indexed(n)) => Some(format!("{layer}8;5;{n}")),
+        Some(Color::Rgb(r, g, b)) => Some(format!("{layer}8;2;{r};{g};{b}")),
+        _ => None,
+    };
     let mut out = String::new();
     for span in &line.spans {
-        let mut codes = Vec::new();
-        if let Some(Color::Indexed(n)) = span.style.fg {
-            codes.push(format!("38;5;{n}"));
-        }
-        if let Some(Color::Indexed(n)) = span.style.bg {
-            codes.push(format!("48;5;{n}"));
-        }
+        let codes: Vec<String> = [code(span.style.fg, 3), code(span.style.bg, 4)]
+            .into_iter()
+            .flatten()
+            .collect();
         if codes.is_empty() {
             out.push_str(&span.content);
         } else {
@@ -864,9 +867,9 @@ mod tests {
             text.contains("cargo install --locked --force --git \\"),
             "long commands wrap"
         );
-        // Seven sprite rows and the words under them; "what's new", three
+        // Eight sprite rows and the words under them; "what's new", three
         // entries and the count of the rest; the notes link; the hint
-        assert_eq!(text.lines().filter(|l| !l.is_empty()).count(), 15);
+        assert_eq!(text.lines().filter(|l| !l.is_empty()).count(), 16);
         assert!(
             text.contains("4× less CPU for the same requests"),
             "entries are not cut short"
