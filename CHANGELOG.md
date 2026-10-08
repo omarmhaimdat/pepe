@@ -6,6 +6,1065 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+## [0.17.1](https://github.com/omarmhaimdat/pepe/compare/v0.17.0...v0.17.1) - 2026-10-08
+
+### Fixed
+
+- *(deps)* bump toml from 0.8.23 to 0.9.6 ([#89](https://github.com/omarmhaimdat/pepe/pull/89))
+
+  Bumps [toml](https://github.com/toml-rs/toml) from 0.8.23 to 0.9.6.
+  <details>
+  <summary>Commits</summary>
+  <ul>
+  <li><a
+  href="https://github.com/toml-rs/toml/commit/4695fb02fc3902345ffbfb54fd5df6adcc3bbd4d"><code>4695fb0</code></a>
+  chore: Release</li>
+  <li><a
+  href="https://github.com/toml-rs/toml/commit/6a77ed71cf68369e823f7827b34eaa2a06d0126d"><code>6a77ed7</code></a>
+  docs: Update changelog</li>
+  <li><a
+  href="https://github.com/toml-rs/toml/commit/c1e81979644a7a80141ab2d0ca284a4560eb4079"><code>c1e8197</code></a>
+  refactor: Switch serde dependency to serde_core (<a
+  href="https://redirect.github.com/toml-rs/toml/issues/1036">#1036</a>)</li>
+  <li><a
+  href="https://github.com/toml-rs/toml/commit/d85d6cd61cf122ee44db8834bc2a55e881bb0750"><code>d85d6cd</code></a>
+  refactor: Switch serde dependency to serde_core</li>
+  <li><a
+  href="https://github.com/toml-rs/toml/commit/9154dcb3b2eea8a84db183806411adf081bc0977"><code>9154dcb</code></a>
+  chore: Release</li>
+  <li><a
+  href="https://github.com/toml-rs/toml/commit/38f445c94071cfc0bbb2f4a3c0254457a3fde8cb"><code>38f445c</code></a>
+  docs: Update changelog</li>
+  <li><a
+  href="https://github.com/toml-rs/toml/commit/1ce8a75f2d5faa778deb43e9abd3960247f0d5b2"><code>1ce8a75</code></a>
+  feat(edit): Expose Table::span (<a
+  href="https://redirect.github.com/toml-rs/toml/issues/1031">#1031</a>)</li>
+  <li><a
+  href="https://github.com/toml-rs/toml/commit/290c28fa6078b2e61b897fe7a71afc26c70daa76"><code>290c28f</code></a>
+  feat(edit): Expose Table::span</li>
+  <li><a
+  href="https://github.com/toml-rs/toml/commit/b2bc739b201d14ed0dafabf4784bb56f9318c5be"><code>b2bc739</code></a>
+  chore(deps): Update Rust Stable to v1.89 (<a
+  href="https://redirect.github.com/toml-rs/toml/issues/1026">#1026</a>)</li>
+  <li><a
+  href="https://github.com/toml-rs/toml/commit/bd21148c49c784cb9136e5d069471dfeae13a339"><code>bd21148</code></a>
+  chore: Release</li>
+  <li>Additional commits viewable in <a
+  href="https://github.com/toml-rs/toml/compare/toml-v0.8.23...toml-v0.9.6">compare
+  view</a></li>
+  </ul>
+  </details>
+  <br />
+
+
+
+### Other
+
+- bump the github-actions group across 1 directory with 5 updates ([#94](https://github.com/omarmhaimdat/pepe/pull/94))
+
+  Bumps the github-actions group with 5 updates in the / directory:
+
+  | Package | From | To |
+  | --- | --- | --- |
+  | [actions/checkout](https://github.com/actions/checkout) | `6` | `7` |
+  |
+  [docker/setup-buildx-action](https://github.com/docker/setup-buildx-action)
+  | `3` | `4` |
+  |
+  [docker/build-push-action](https://github.com/docker/build-push-action)
+  | `6` | `7` |
+  |
+  [docker/setup-qemu-action](https://github.com/docker/setup-qemu-action)
+  | `3` | `4` |
+  | [docker/login-action](https://github.com/docker/login-action) | `3` |
+  `4` |
+
+
+  Updates `actions/checkout` from 6 to 7
+  <details>
+  <summary>Release notes</summary>
+  <p><em>Sourced from <a
+  href="https://github.com/actions/checkout/releases">actions/checkout's
+  releases</a>.</em></p>
+  <blockquote>
+  <h2>v7.0.0</h2>
+  <h2>What's Changed</h2>
+  <ul>
+  <li>block checking out fork pr for pull_request_target and workflow_run
+  by <a href="https://github.com/aiqiaoy"><code>@​aiqiaoy</code></a> in <a
+  href="https://redirect.github.com/actions/checkout/pull/2454">actions/checkout#2454</a></li>
+  <li>Bump actions/publish-immutable-action from 0.0.3 to 0.0.4 in the
+  minor-actions-dependencies group across 1 directory by <a
+  href="https://github.com/dependabot"><code>@​dependabot</code></a>[bot]
+  in <a
+  href="https://redirect.github.com/actions/checkout/pull/2458">actions/checkout#2458</a></li>
+  <li>Bump flatted from 3.3.1 to 3.4.2 by <a
+  href="https://github.com/dependabot"><code>@​dependabot</code></a>[bot]
+  in <a
+  href="https://redirect.github.com/actions/checkout/pull/2460">actions/checkout#2460</a></li>
+  <li>Bump js-yaml from 4.1.0 to 4.2.0 by <a
+  href="https://github.com/dependabot"><code>@​dependabot</code></a>[bot]
+  in <a
+  href="https://redirect.github.com/actions/checkout/pull/2461">actions/checkout#2461</a></li>
+  <li>Bump <code>@​actions/core</code> and
+  <code>@​actions/tool-cache</code> and Remove uuid by <a
+  href="https://github.com/dependabot"><code>@​dependabot</code></a>[bot]
+  in <a
+  href="https://redirect.github.com/actions/checkout/pull/2459">actions/checkout#2459</a></li>
+  <li>upgrade module to esm and update dependencies by <a
+  href="https://github.com/aiqiaoy"><code>@​aiqiaoy</code></a> in <a
+  href="https://redirect.github.com/actions/checkout/pull/2463">actions/checkout#2463</a></li>
+  <li>Bump the minor-npm-dependencies group across 1 directory with 3
+  updates by <a
+  href="https://github.com/dependabot"><code>@​dependabot</code></a>[bot]
+  in <a
+  href="https://redirect.github.com/actions/checkout/pull/2462">actions/checkout#2462</a></li>
+  <li>getting ready for checkout v7 release by <a
+  href="https://github.com/aiqiaoy"><code>@​aiqiaoy</code></a> in <a
+  href="https://redirect.github.com/actions/checkout/pull/2464">actions/checkout#2464</a></li>
+  <li>update error wording by <a
+  href="https://github.com/aiqiaoy"><code>@​aiqiaoy</code></a> in <a
+  href="https://redirect.github.com/actions/checkout/pull/2467">actions/checkout#2467</a></li>
+  </ul>
+  <h2>New Contributors</h2>
+  <ul>
+  <li><a href="https://github.com/aiqiaoy"><code>@​aiqiaoy</code></a> made
+  their first contribution in <a
+  href="https://redirect.github.com/actions/checkout/pull/2454">actions/checkout#2454</a></li>
+  </ul>
+  <p><strong>Full Changelog</strong>: <a
+  href="https://github.com/actions/checkout/compare/v6.0.3...v7.0.0">https://github.com/actions/checkout/compare/v6.0.3...v7.0.0</a></p>
+  <h2>v6.1.0</h2>
+  <h2>What's Changed</h2>
+  <ul>
+  <li><strong>[BREAKING]</strong> backport
+  <code>allow-unsafe-pr-checkout</code> to v6 by <a
+  href="https://github.com/aiqiaoy"><code>@​aiqiaoy</code></a> in <a
+  href="https://redirect.github.com/actions/checkout/pull/2500">actions/checkout#2500</a></li>
+  <li>backport fixes to releases-v6 by <a
+  href="https://github.com/aiqiaoy"><code>@​aiqiaoy</code></a> in <a
+  href="https://redirect.github.com/actions/checkout/pull/2527">actions/checkout#2527</a></li>
+  </ul>
+  <p><a
+  href="https://github.blog/changelog/2026-06-18-safer-pull_request_target-defaults-for-github-actions-checkout/">https://github.blog/changelog/2026-06-18-safer-pull_request_target-defaults-for-github-actions-checkout/</a>
+  for more details about this breaking change</p>
+  <p><strong>Full Changelog</strong>: <a
+  href="https://github.com/actions/checkout/compare/v6.0.3...v6.1.0">https://github.com/actions/checkout/compare/v6.0.3...v6.1.0</a></p>
+  <h2>v6.0.3</h2>
+  <h2>What's Changed</h2>
+  <ul>
+  <li>Update changelog by <a
+  href="https://github.com/ericsciple"><code>@​ericsciple</code></a> in <a
+  href="https://redirect.github.com/actions/checkout/pull/2357">actions/checkout#2357</a></li>
+  <li>fix: expand merge commit SHA regex and add SHA-256 test cases by <a
+  href="https://github.com/yaananth"><code>@​yaananth</code></a> in <a
+  href="https://redirect.github.com/actions/checkout/pull/2414">actions/checkout#2414</a></li>
+  <li>Fix checkout init for SHA-256 repositories by <a
+  href="https://github.com/yaananth"><code>@​yaananth</code></a> in <a
+  href="https://redirect.github.com/actions/checkout/pull/2439">actions/checkout#2439</a></li>
+  <li>Update changelog for v6.0.3 by <a
+  href="https://github.com/yaananth"><code>@​yaananth</code></a> in <a
+  href="https://redirect.github.com/actions/checkout/pull/2446">actions/checkout#2446</a></li>
+  </ul>
+  <h2>New Contributors</h2>
+  <ul>
+  <li><a href="https://github.com/yaananth"><code>@​yaananth</code></a>
+  made their first contribution in <a
+  href="https://redirect.github.com/actions/checkout/pull/2414">actions/checkout#2414</a></li>
+  </ul>
+  <p><strong>Full Changelog</strong>: <a
+  href="https://github.com/actions/checkout/compare/v6...v6.0.3">https://github.com/actions/checkout/compare/v6...v6.0.3</a></p>
+  <h2>v6.0.2</h2>
+  <h2>What's Changed</h2>
+  <ul>
+  <li>Add orchestration_id to git user-agent when ACTIONS_ORCHESTRATION_ID
+  is set by <a
+  href="https://github.com/TingluoHuang"><code>@​TingluoHuang</code></a>
+  in <a
+  href="https://redirect.github.com/actions/checkout/pull/2355">actions/checkout#2355</a></li>
+  <li>Fix tag handling: preserve annotations and explicit fetch-tags by <a
+  href="https://github.com/ericsciple"><code>@​ericsciple</code></a> in <a
+  href="https://redirect.github.com/actions/checkout/pull/2356">actions/checkout#2356</a></li>
+  </ul>
+  <p><strong>Full Changelog</strong>: <a
+  href="https://github.com/actions/checkout/compare/v6.0.1...v6.0.2">https://github.com/actions/checkout/compare/v6.0.1...v6.0.2</a></p>
+  <h2>v6.0.1</h2>
+  <h2>What's Changed</h2>
+  <ul>
+  <li>Update all references from v5 and v4 to v6 by <a
+  href="https://github.com/ericsciple"><code>@​ericsciple</code></a> in <a
+  href="https://redirect.github.com/actions/checkout/pull/2314">actions/checkout#2314</a></li>
+  <li>Add worktree support for persist-credentials includeIf by <a
+  href="https://github.com/ericsciple"><code>@​ericsciple</code></a> in <a
+  href="https://redirect.github.com/actions/checkout/pull/2327">actions/checkout#2327</a></li>
+  <li>Clarify v6 README by <a
+  href="https://github.com/ericsciple"><code>@​ericsciple</code></a> in <a
+  href="https://redirect.github.com/actions/checkout/pull/2328">actions/checkout#2328</a></li>
+  </ul>
+  <!-- raw HTML omitted -->
+  </blockquote>
+  <p>... (truncated)</p>
+  </details>
+  <details>
+  <summary>Changelog</summary>
+  <p><em>Sourced from <a
+  href="https://github.com/actions/checkout/blob/main/CHANGELOG.md">actions/checkout's
+  changelog</a>.</em></p>
+  <blockquote>
+  <h1>Changelog</h1>
+  <h2>v7.0.1</h2>
+  <ul>
+  <li>Skip running unsafe pr check if input is default by <a
+  href="https://github.com/aiqiaoy"><code>@​aiqiaoy</code></a> in <a
+  href="https://redirect.github.com/actions/checkout/pull/2518">actions/checkout#2518</a></li>
+  <li>Trim only ascii whitespace for branch by <a
+  href="https://github.com/aiqiaoy"><code>@​aiqiaoy</code></a> in <a
+  href="https://redirect.github.com/actions/checkout/pull/2521">actions/checkout#2521</a></li>
+  <li>Escape values passed to --unset by <a
+  href="https://github.com/aiqiaoy"><code>@​aiqiaoy</code></a> in <a
+  href="https://redirect.github.com/actions/checkout/pull/2530">actions/checkout#2530</a></li>
+  <li>Various dependency updates</li>
+  </ul>
+  <h2>v7.0.0</h2>
+  <ul>
+  <li>Block checking out fork PR for pull_request_target and workflow_run
+  by <a href="https://github.com/aiqiaoy"><code>@​aiqiaoy</code></a> in <a
+  href="https://redirect.github.com/actions/checkout/pull/2454">actions/checkout#2454</a></li>
+  <li>Various dependency updates</li>
+  </ul>
+  <h2>v6.0.3</h2>
+  <ul>
+  <li>Fix checkout init for SHA-256 repositories by <a
+  href="https://github.com/yaananth"><code>@​yaananth</code></a> in <a
+  href="https://redirect.github.com/actions/checkout/pull/2439">actions/checkout#2439</a></li>
+  <li>fix: expand merge commit SHA regex and add SHA-256 test cases by <a
+  href="https://github.com/yaananth"><code>@​yaananth</code></a> in <a
+  href="https://redirect.github.com/actions/checkout/pull/2414">actions/checkout#2414</a></li>
+  </ul>
+  <h2>v6.0.2</h2>
+  <ul>
+  <li>Fix tag handling: preserve annotations and explicit fetch-tags by <a
+  href="https://github.com/ericsciple"><code>@​ericsciple</code></a> in <a
+  href="https://redirect.github.com/actions/checkout/pull/2356">actions/checkout#2356</a></li>
+  </ul>
+  <h2>v6.0.1</h2>
+  <ul>
+  <li>Add worktree support for persist-credentials includeIf by <a
+  href="https://github.com/ericsciple"><code>@​ericsciple</code></a> in <a
+  href="https://redirect.github.com/actions/checkout/pull/2327">actions/checkout#2327</a></li>
+  </ul>
+  <h2>v6.0.0</h2>
+  <ul>
+  <li>Persist creds to a separate file by <a
+  href="https://github.com/ericsciple"><code>@​ericsciple</code></a> in <a
+  href="https://redirect.github.com/actions/checkout/pull/2286">actions/checkout#2286</a></li>
+  <li>Update README to include Node.js 24 support details and requirements
+  by <a href="https://github.com/salmanmkc"><code>@​salmanmkc</code></a>
+  in <a
+  href="https://redirect.github.com/actions/checkout/pull/2248">actions/checkout#2248</a></li>
+  </ul>
+  <h2>v5.0.1</h2>
+  <ul>
+  <li>Port v6 cleanup to v5 by <a
+  href="https://github.com/ericsciple"><code>@​ericsciple</code></a> in <a
+  href="https://redirect.github.com/actions/checkout/pull/2301">actions/checkout#2301</a></li>
+  </ul>
+  <h2>v5.0.0</h2>
+  <ul>
+  <li>Update actions checkout to use node 24 by <a
+  href="https://github.com/salmanmkc"><code>@​salmanmkc</code></a> in <a
+  href="https://redirect.github.com/actions/checkout/pull/2226">actions/checkout#2226</a></li>
+  </ul>
+  <h2>v4.3.1</h2>
+  <ul>
+  <li>Port v6 cleanup to v4 by <a
+  href="https://github.com/ericsciple"><code>@​ericsciple</code></a> in <a
+  href="https://redirect.github.com/actions/checkout/pull/2305">actions/checkout#2305</a></li>
+  </ul>
+  <h2>v4.3.0</h2>
+  <ul>
+  <li>docs: update README.md by <a
+  href="https://github.com/motss"><code>@​motss</code></a> in <a
+  href="https://redirect.github.com/actions/checkout/pull/1971">actions/checkout#1971</a></li>
+  <li>Add internal repos for checking out multiple repositories by <a
+  href="https://github.com/mouismail"><code>@​mouismail</code></a> in <a
+  href="https://redirect.github.com/actions/checkout/pull/1977">actions/checkout#1977</a></li>
+  <li>Documentation update - add recommended permissions to Readme by <a
+  href="https://github.com/benwells"><code>@​benwells</code></a> in <a
+  href="https://redirect.github.com/actions/checkout/pull/2043">actions/checkout#2043</a></li>
+  <li>Adjust positioning of user email note and permissions heading by <a
+  href="https://github.com/joshmgross"><code>@​joshmgross</code></a> in <a
+  href="https://redirect.github.com/actions/checkout/pull/2044">actions/checkout#2044</a></li>
+  <li>Update README.md by <a
+  href="https://github.com/nebuk89"><code>@​nebuk89</code></a> in <a
+  href="https://redirect.github.com/actions/checkout/pull/2194">actions/checkout#2194</a></li>
+  <li>Update CODEOWNERS for actions by <a
+  href="https://github.com/TingluoHuang"><code>@​TingluoHuang</code></a>
+  in <a
+  href="https://redirect.github.com/actions/checkout/pull/2224">actions/checkout#2224</a></li>
+  <li>Update package dependencies by <a
+  href="https://github.com/salmanmkc"><code>@​salmanmkc</code></a> in <a
+  href="https://redirect.github.com/actions/checkout/pull/2236">actions/checkout#2236</a></li>
+  </ul>
+  <h2>v4.2.2</h2>
+  <ul>
+  <li><code>url-helper.ts</code> now leverages well-known environment
+  variables by <a href="https://github.com/jww3"><code>@​jww3</code></a>
+  in <a
+  href="https://redirect.github.com/actions/checkout/pull/1941">actions/checkout#1941</a></li>
+  <li>Expand unit test coverage for <code>isGhes</code> by <a
+  href="https://github.com/jww3"><code>@​jww3</code></a> in <a
+  href="https://redirect.github.com/actions/checkout/pull/1946">actions/checkout#1946</a></li>
+  </ul>
+  <h2>v4.2.1</h2>
+  <ul>
+  <li>Check out other refs/* by commit if provided, fall back to ref by <a
+  href="https://github.com/orhantoy"><code>@​orhantoy</code></a> in <a
+  href="https://redirect.github.com/actions/checkout/pull/1924">actions/checkout#1924</a></li>
+  </ul>
+  <!-- raw HTML omitted -->
+  </blockquote>
+  <p>... (truncated)</p>
+  </details>
+  <details>
+  <summary>Commits</summary>
+  <ul>
+  <li><a
+  href="https://github.com/actions/checkout/commit/3d3c42e5aac5ba805825da76410c181273ba90b1"><code>3d3c42e</code></a>
+  prep v7.0.1 release (<a
+  href="https://redirect.github.com/actions/checkout/issues/2531">#2531</a>)</li>
+  <li><a
+  href="https://github.com/actions/checkout/commit/28802689a136bfcdb721715abd713740beecbe07"><code>2880268</code></a>
+  escape values passed to --unset (<a
+  href="https://redirect.github.com/actions/checkout/issues/2530">#2530</a>)</li>
+  <li><a
+  href="https://github.com/actions/checkout/commit/12cd2235efa0937479335606d7c3ac9f6c0973b1"><code>12cd223</code></a>
+  trim only ascii whitespace for branch (<a
+  href="https://redirect.github.com/actions/checkout/issues/2521">#2521</a>)</li>
+  <li><a
+  href="https://github.com/actions/checkout/commit/62661c4e71a304b2823ed026347b8d34c3eac541"><code>62661c4</code></a>
+  skip running unsafe pr check if input is default (<a
+  href="https://redirect.github.com/actions/checkout/issues/2518">#2518</a>)</li>
+  <li><a
+  href="https://github.com/actions/checkout/commit/e8d4307400f9427dba7cb98e488d6ab85f1cec5f"><code>e8d4307</code></a>
+  Bump the minor-actions-dependencies group with 2 updates (<a
+  href="https://redirect.github.com/actions/checkout/issues/2499">#2499</a>)</li>
+  <li><a
+  href="https://github.com/actions/checkout/commit/631c942040754b6e095e929c1677c07e10ed4f87"><code>631c942</code></a>
+  eslint 9 (<a
+  href="https://redirect.github.com/actions/checkout/issues/2474">#2474</a>)</li>
+  <li><a
+  href="https://github.com/actions/checkout/commit/4f1f4aec02e41874fa0262ea8ff5172d7978ad1e"><code>4f1f4ae</code></a>
+  Bump actions/upload-artifact from 4 to 7 (<a
+  href="https://redirect.github.com/actions/checkout/issues/2476">#2476</a>)</li>
+  <li><a
+  href="https://github.com/actions/checkout/commit/ba097532fb203f7e88c9c3c0b899b49469908a92"><code>ba09753</code></a>
+  Bump actions/checkout from 6 to 7 (<a
+  href="https://redirect.github.com/actions/checkout/issues/2488">#2488</a>)</li>
+  <li><a
+  href="https://github.com/actions/checkout/commit/b9e0990d219a03df7633c93f6f005a8fecbcab22"><code>b9e0990</code></a>
+  Bump docker/login-action from 3.3.0 to 4.2.0 (<a
+  href="https://redirect.github.com/actions/checkout/issues/2479">#2479</a>)</li>
+  <li><a
+  href="https://github.com/actions/checkout/commit/e8cb398be4a550817e382abf69e4c12c76fce1f2"><code>e8cb398</code></a>
+  Bump docker/build-push-action from 6.5.0 to 7.2.0 (<a
+  href="https://redirect.github.com/actions/checkout/issues/2478">#2478</a>)</li>
+  <li>Additional commits viewable in <a
+  href="https://github.com/actions/checkout/compare/v6...v7">compare
+  view</a></li>
+  </ul>
+  </details>
+  <br />
+
+  Updates `docker/setup-buildx-action` from 3 to 4
+  <details>
+  <summary>Release notes</summary>
+  <p><em>Sourced from <a
+  href="https://github.com/docker/setup-buildx-action/releases">docker/setup-buildx-action's
+  releases</a>.</em></p>
+  <blockquote>
+  <h2>v4.0.0</h2>
+  <ul>
+  <li>Node 24 as default runtime (requires <a
+  href="https://github.com/actions/runner/releases/tag/v2.327.1">Actions
+  Runner v2.327.1</a> or later) by <a
+  href="https://github.com/crazy-max"><code>@​crazy-max</code></a> in <a
+  href="https://redirect.github.com/docker/setup-buildx-action/pull/483">docker/setup-buildx-action#483</a></li>
+  <li>Remove deprecated inputs/outputs by <a
+  href="https://github.com/crazy-max"><code>@​crazy-max</code></a> in <a
+  href="https://redirect.github.com/docker/setup-buildx-action/pull/464">docker/setup-buildx-action#464</a></li>
+  <li>Switch to ESM and update config/test wiring by <a
+  href="https://github.com/crazy-max"><code>@​crazy-max</code></a> in <a
+  href="https://redirect.github.com/docker/setup-buildx-action/pull/481">docker/setup-buildx-action#481</a></li>
+  <li>Bump <code>@​actions/core</code> from 1.11.1 to 3.0.0 in <a
+  href="https://redirect.github.com/docker/setup-buildx-action/pull/475">docker/setup-buildx-action#475</a></li>
+  <li>Bump <code>@​docker/actions-toolkit</code> from 0.63.0 to 0.79.0 in
+  <a
+  href="https://redirect.github.com/docker/setup-buildx-action/pull/482">docker/setup-buildx-action#482</a>
+  <a
+  href="https://redirect.github.com/docker/setup-buildx-action/pull/485">docker/setup-buildx-action#485</a></li>
+  <li>Bump js-yaml from 4.1.0 to 4.1.1 in <a
+  href="https://redirect.github.com/docker/setup-buildx-action/pull/452">docker/setup-buildx-action#452</a></li>
+  <li>Bump lodash from 4.17.21 to 4.17.23 in <a
+  href="https://redirect.github.com/docker/setup-buildx-action/pull/472">docker/setup-buildx-action#472</a></li>
+  <li>Bump minimatch from 3.1.2 to 3.1.5 in <a
+  href="https://redirect.github.com/docker/setup-buildx-action/pull/480">docker/setup-buildx-action#480</a></li>
+  </ul>
+  <p><strong>Full Changelog</strong>: <a
+  href="https://github.com/docker/setup-buildx-action/compare/v3.12.0...v4.0.0">https://github.com/docker/setup-buildx-action/compare/v3.12.0...v4.0.0</a></p>
+  <h2>v3.12.0</h2>
+  <ul>
+  <li>Deprecate <code>install</code> input by <a
+  href="https://github.com/crazy-max"><code>@​crazy-max</code></a> in <a
+  href="https://redirect.github.com/docker/setup-buildx-action/pull/455">docker/setup-buildx-action#455</a></li>
+  <li>Bump <code>@​docker/actions-toolkit</code> from 0.62.1 to 0.63.0 in
+  <a
+  href="https://redirect.github.com/docker/setup-buildx-action/pull/434">docker/setup-buildx-action#434</a></li>
+  <li>Bump brace-expansion from 1.1.11 to 1.1.12 in <a
+  href="https://redirect.github.com/docker/setup-buildx-action/pull/436">docker/setup-buildx-action#436</a></li>
+  <li>Bump form-data from 2.5.1 to 2.5.5 in <a
+  href="https://redirect.github.com/docker/setup-buildx-action/pull/432">docker/setup-buildx-action#432</a></li>
+  <li>Bump undici from 5.28.4 to 5.29.0 in <a
+  href="https://redirect.github.com/docker/setup-buildx-action/pull/435">docker/setup-buildx-action#435</a></li>
+  </ul>
+  <p><strong>Full Changelog</strong>: <a
+  href="https://github.com/docker/setup-buildx-action/compare/v3.11.1...v3.12.0">https://github.com/docker/setup-buildx-action/compare/v3.11.1...v3.12.0</a></p>
+  <h2>v3.11.1</h2>
+  <ul>
+  <li>Fix <code>keep-state</code> not being respected by <a
+  href="https://github.com/crazy-max"><code>@​crazy-max</code></a> in <a
+  href="https://redirect.github.com/docker/setup-buildx-action/pull/429">docker/setup-buildx-action#429</a></li>
+  </ul>
+  <p><strong>Full Changelog</strong>: <a
+  href="https://github.com/docker/setup-buildx-action/compare/v3.11.0...v3.11.1">https://github.com/docker/setup-buildx-action/compare/v3.11.0...v3.11.1</a></p>
+  <h2>v3.11.0</h2>
+  <ul>
+  <li>Keep BuildKit state support by <a
+  href="https://github.com/crazy-max"><code>@​crazy-max</code></a> in <a
+  href="https://redirect.github.com/docker/setup-buildx-action/pull/427">docker/setup-buildx-action#427</a></li>
+  <li>Remove aliases created when installing by default by <a
+  href="https://github.com/hashhar"><code>@​hashhar</code></a> in <a
+  href="https://redirect.github.com/docker/setup-buildx-action/pull/139">docker/setup-buildx-action#139</a></li>
+  <li>Bump <code>@​docker/actions-toolkit</code> from 0.56.0 to 0.62.1 in
+  <a
+  href="https://redirect.github.com/docker/setup-buildx-action/pull/422">docker/setup-buildx-action#422</a>
+  <a
+  href="https://redirect.github.com/docker/setup-buildx-action/pull/425">docker/setup-buildx-action#425</a></li>
+  </ul>
+  <p><strong>Full Changelog</strong>: <a
+  href="https://github.com/docker/setup-buildx-action/compare/v3.10.0...v3.11.0">https://github.com/docker/setup-buildx-action/compare/v3.10.0...v3.11.0</a></p>
+  <h2>v3.10.0</h2>
+  <ul>
+  <li>Bump <code>@​docker/actions-toolkit</code> from 0.54.0 to 0.56.0 in
+  <a
+  href="https://redirect.github.com/docker/setup-buildx-action/pull/408">docker/setup-buildx-action#408</a></li>
+  </ul>
+  <p><strong>Full Changelog</strong>: <a
+  href="https://github.com/docker/setup-buildx-action/compare/v3.9.0...v3.10.0">https://github.com/docker/setup-buildx-action/compare/v3.9.0...v3.10.0</a></p>
+  <h2>v3.9.0</h2>
+  <ul>
+  <li>Bump <code>@​docker/actions-toolkit</code> from 0.48.0 to 0.54.0 in
+  <a
+  href="https://redirect.github.com/docker/setup-buildx-action/pull/402">docker/setup-buildx-action#402</a>
+  <a
+  href="https://redirect.github.com/docker/setup-buildx-action/pull/404">docker/setup-buildx-action#404</a></li>
+  </ul>
+  <p><strong>Full Changelog</strong>: <a
+  href="https://github.com/docker/setup-buildx-action/compare/v3.8.0...v3.9.0">https://github.com/docker/setup-buildx-action/compare/v3.8.0...v3.9.0</a></p>
+  <h2>v3.8.0</h2>
+  <ul>
+  <li>Make cloud prefix optional to download buildx if driver is cloud by
+  <a href="https://github.com/crazy-max"><code>@​crazy-max</code></a> in
+  <a
+  href="https://redirect.github.com/docker/setup-buildx-action/pull/390">docker/setup-buildx-action#390</a></li>
+  <li>Bump <code>@​actions/core</code> from 1.10.1 to 1.11.1 in <a
+  href="https://redirect.github.com/docker/setup-buildx-action/pull/370">docker/setup-buildx-action#370</a></li>
+  <li>Bump <code>@​docker/actions-toolkit</code> from 0.39.0 to 0.48.0 in
+  <a
+  href="https://redirect.github.com/docker/setup-buildx-action/pull/389">docker/setup-buildx-action#389</a></li>
+  <li>Bump cross-spawn from 7.0.3 to 7.0.6 in <a
+  href="https://redirect.github.com/docker/setup-buildx-action/pull/382">docker/setup-buildx-action#382</a></li>
+  </ul>
+  <p><strong>Full Changelog</strong>: <a
+  href="https://github.com/docker/setup-buildx-action/compare/v3.7.1...v3.8.0">https://github.com/docker/setup-buildx-action/compare/v3.7.1...v3.8.0</a></p>
+  <!-- raw HTML omitted -->
+  </blockquote>
+  <p>... (truncated)</p>
+  </details>
+  <details>
+  <summary>Commits</summary>
+  <ul>
+  <li><a
+  href="https://github.com/docker/setup-buildx-action/commit/f87e5991a6d7451dcb8d9637bfbc97413f497069"><code>f87e599</code></a>
+  Merge pull request <a
+  href="https://redirect.github.com/docker/setup-buildx-action/issues/624">#624</a>
+  from crazy-max/skip-pull-with-endpoint</li>
+  <li><a
+  href="https://github.com/docker/setup-buildx-action/commit/e7002743e035c0054da46ca559364576b2fce022"><code>e700274</code></a>
+  chore: update generated content</li>
+  <li><a
+  href="https://github.com/docker/setup-buildx-action/commit/3061c919c67ba542099ba309c9181d1900cecc07"><code>3061c91</code></a>
+  skip BuildKit image pre-pulls for explicit endpoints</li>
+  <li><a
+  href="https://github.com/docker/setup-buildx-action/commit/594f3bf4285d9ea8dc53c9a0c9c4092420091003"><code>594f3bf</code></a>
+  Merge pull request <a
+  href="https://redirect.github.com/docker/setup-buildx-action/issues/609">#609</a>
+  from crazy-max/pull-buildkit-image-before-create</li>
+  <li><a
+  href="https://github.com/docker/setup-buildx-action/commit/bd6e702fc33b636671900d5b5edfab64698c9c25"><code>bd6e702</code></a>
+  chore: update generated content</li>
+  <li><a
+  href="https://github.com/docker/setup-buildx-action/commit/6268c9da9abbd1309c8a16a75f92a878715c3032"><code>6268c9d</code></a>
+  pull BuildKit image before builder creation</li>
+  <li><a
+  href="https://github.com/docker/setup-buildx-action/commit/e8235251b82e23c90e6fad50016f0a78b7f28f11"><code>e823525</code></a>
+  Merge pull request <a
+  href="https://redirect.github.com/docker/setup-buildx-action/issues/621">#621</a>
+  from docker/dependabot/github_actions/codeql-actions-...</li>
+  <li><a
+  href="https://github.com/docker/setup-buildx-action/commit/533ed8ed095b0b133ef16fb495aad119524e220d"><code>533ed8e</code></a>
+  build(deps): bump the codeql-actions group with 2 updates</li>
+  <li><a
+  href="https://github.com/docker/setup-buildx-action/commit/bedaf135699075c88620cd30772b9b6eadc9ba99"><code>bedaf13</code></a>
+  Merge pull request <a
+  href="https://redirect.github.com/docker/setup-buildx-action/issues/620">#620</a>
+  from crazy-max/shared-error-helpers</li>
+  <li><a
+  href="https://github.com/docker/setup-buildx-action/commit/d5079fba84d5edd23d25ba7f3045122175ca6ee2"><code>d5079fb</code></a>
+  chore: update generated content</li>
+  <li>Additional commits viewable in <a
+  href="https://github.com/docker/setup-buildx-action/compare/v3...v4">compare
+  view</a></li>
+  </ul>
+  </details>
+  <br />
+
+  Updates `docker/build-push-action` from 6 to 7
+  <details>
+  <summary>Release notes</summary>
+  <p><em>Sourced from <a
+  href="https://github.com/docker/build-push-action/releases">docker/build-push-action's
+  releases</a>.</em></p>
+  <blockquote>
+  <h2>v7.0.0</h2>
+  <ul>
+  <li>Node 24 as default runtime (requires <a
+  href="https://github.com/actions/runner/releases/tag/v2.327.1">Actions
+  Runner v2.327.1</a> or later) by <a
+  href="https://github.com/crazy-max"><code>@​crazy-max</code></a> in <a
+  href="https://redirect.github.com/docker/build-push-action/pull/1470">docker/build-push-action#1470</a></li>
+  <li>Remove deprecated <code>DOCKER_BUILD_NO_SUMMARY</code> and
+  <code>DOCKER_BUILD_EXPORT_RETENTION_DAYS</code> envs by <a
+  href="https://github.com/crazy-max"><code>@​crazy-max</code></a> in <a
+  href="https://redirect.github.com/docker/build-push-action/pull/1473">docker/build-push-action#1473</a></li>
+  <li>Remove legacy export-build tool support for build summary by <a
+  href="https://github.com/crazy-max"><code>@​crazy-max</code></a> in <a
+  href="https://redirect.github.com/docker/build-push-action/pull/1474">docker/build-push-action#1474</a></li>
+  <li>Switch to ESM and update config/test wiring by <a
+  href="https://github.com/crazy-max"><code>@​crazy-max</code></a> in <a
+  href="https://redirect.github.com/docker/build-push-action/pull/1466">docker/build-push-action#1466</a></li>
+  <li>Bump <code>@​actions/core</code> from 1.11.1 to 3.0.0 in <a
+  href="https://redirect.github.com/docker/build-push-action/pull/1454">docker/build-push-action#1454</a></li>
+  <li>Bump <code>@​docker/actions-toolkit</code> from 0.62.1 to 0.79.0 in
+  <a
+  href="https://redirect.github.com/docker/build-push-action/pull/1453">docker/build-push-action#1453</a>
+  <a
+  href="https://redirect.github.com/docker/build-push-action/pull/1472">docker/build-push-action#1472</a>
+  <a
+  href="https://redirect.github.com/docker/build-push-action/pull/1479">docker/build-push-action#1479</a></li>
+  <li>Bump minimatch from 3.1.2 to 3.1.5 in <a
+  href="https://redirect.github.com/docker/build-push-action/pull/1463">docker/build-push-action#1463</a></li>
+  </ul>
+  <p><strong>Full Changelog</strong>: <a
+  href="https://github.com/docker/build-push-action/compare/v6.19.2...v7.0.0">https://github.com/docker/build-push-action/compare/v6.19.2...v7.0.0</a></p>
+  <h2>v6.19.2</h2>
+  <ul>
+  <li>Preserve port in <code>GIT_AUTH_TOKEN</code> host by <a
+  href="https://github.com/crazy-max"><code>@​crazy-max</code></a> in <a
+  href="https://redirect.github.com/docker/build-push-action/pull/1458">docker/build-push-action#1458</a></li>
+  </ul>
+  <p><strong>Full Changelog</strong>: <a
+  href="https://github.com/docker/build-push-action/compare/v6.19.1...v6.19.2">https://github.com/docker/build-push-action/compare/v6.19.1...v6.19.2</a></p>
+  <h2>v6.19.1</h2>
+  <ul>
+  <li>Derive <code>GIT_AUTH_TOKEN</code> host from GitHub server URL by <a
+  href="https://github.com/crazy-max"><code>@​crazy-max</code></a> in <a
+  href="https://redirect.github.com/docker/build-push-action/pull/1456">docker/build-push-action#1456</a></li>
+  </ul>
+  <p><strong>Full Changelog</strong>: <a
+  href="https://github.com/docker/build-push-action/compare/v6.19.0...v6.19.1">https://github.com/docker/build-push-action/compare/v6.19.0...v6.19.1</a></p>
+  <h2>v6.19.0</h2>
+  <ul>
+  <li>Scope default git auth token to <code>github.com</code> by <a
+  href="https://github.com/crazy-max"><code>@​crazy-max</code></a> in <a
+  href="https://redirect.github.com/docker/build-push-action/pull/1451">docker/build-push-action#1451</a></li>
+  <li>Bump brace-expansion from 1.1.11 to 1.1.12 in <a
+  href="https://redirect.github.com/docker/build-push-action/pull/1396">docker/build-push-action#1396</a></li>
+  <li>Bump form-data from 2.5.1 to 2.5.5 in <a
+  href="https://redirect.github.com/docker/build-push-action/pull/1391">docker/build-push-action#1391</a></li>
+  <li>Bump js-yaml from 3.14.1 to 3.14.2 in <a
+  href="https://redirect.github.com/docker/build-push-action/pull/1429">docker/build-push-action#1429</a></li>
+  <li>Bump lodash from 4.17.21 to 4.17.23 in <a
+  href="https://redirect.github.com/docker/build-push-action/pull/1446">docker/build-push-action#1446</a></li>
+  <li>Bump tmp from 0.2.3 to 0.2.4 in <a
+  href="https://redirect.github.com/docker/build-push-action/pull/1398">docker/build-push-action#1398</a></li>
+  <li>Bump undici from 5.28.4 to 5.29.0 in <a
+  href="https://redirect.github.com/docker/build-push-action/pull/1397">docker/build-push-action#1397</a></li>
+  </ul>
+  <p><strong>Full Changelog</strong>: <a
+  href="https://github.com/docker/build-push-action/compare/v6.18.0...v6.19.0">https://github.com/docker/build-push-action/compare/v6.18.0...v6.19.0</a></p>
+  <h2>v6.18.0</h2>
+  <ul>
+  <li>Bump <code>@​docker/actions-toolkit</code> from 0.61.0 to 0.62.1 in
+  <a
+  href="https://redirect.github.com/docker/build-push-action/pull/1381">docker/build-push-action#1381</a></li>
+  </ul>
+  <blockquote>
+  <p>[!NOTE]
+  <a
+  href="https://docs.docker.com/build/ci/github-actions/build-summary/">Build
+  summary</a> is now supported with <a
+  href="https://docs.docker.com/build-cloud/">Docker Build Cloud</a>.</p>
+  </blockquote>
+  <p><strong>Full Changelog</strong>: <a
+  href="https://github.com/docker/build-push-action/compare/v6.17.0...v6.18.0">https://github.com/docker/build-push-action/compare/v6.17.0...v6.18.0</a></p>
+  <h2>v6.17.0</h2>
+  <ul>
+  <li>Bump <code>@​docker/actions-toolkit</code> from 0.59.0 to 0.61.0 by
+  <a href="https://github.com/crazy-max"><code>@​crazy-max</code></a> in
+  <a
+  href="https://redirect.github.com/docker/build-push-action/pull/1364">docker/build-push-action#1364</a></li>
+  </ul>
+  <blockquote>
+  <p>[!NOTE]
+  Build record is now exported using the <a
+  href="https://docs.docker.com/reference/cli/docker/buildx/history/export/"><code>buildx
+  history export</code></a> command instead of the legacy export-build
+  tool.</p>
+  </blockquote>
+  <p><strong>Full Changelog</strong>: <a
+  href="https://github.com/docker/build-push-action/compare/v6.16.0...v6.17.0">https://github.com/docker/build-push-action/compare/v6.16.0...v6.17.0</a></p>
+  <h2>v6.16.0</h2>
+  <ul>
+  <li>Handle no default attestations env var by <a
+  href="https://github.com/crazy-max"><code>@​crazy-max</code></a> in <a
+  href="https://redirect.github.com/docker/build-push-action/pull/1343">docker/build-push-action#1343</a></li>
+  </ul>
+  <!-- raw HTML omitted -->
+  </blockquote>
+  <p>... (truncated)</p>
+  </details>
+  <details>
+  <summary>Commits</summary>
+  <ul>
+  <li><a
+  href="https://github.com/docker/build-push-action/commit/c3c9e263c25d99ce0380d002d59b67737d91b0dc"><code>c3c9e26</code></a>
+  Merge pull request <a
+  href="https://redirect.github.com/docker/build-push-action/issues/1621">#1621</a>
+  from docker/dependabot/npm_and_yarn/docker/actions-t...</li>
+  <li><a
+  href="https://github.com/docker/build-push-action/commit/459b6741834dcd35f946352017e7675bd2089d42"><code>459b674</code></a>
+  [dependabot skip] chore: update generated content</li>
+  <li><a
+  href="https://github.com/docker/build-push-action/commit/4dedcb23c91d79c1629bf53ec2c3bcfffef5b34e"><code>4dedcb2</code></a>
+  chore(deps): Bump <code>@​docker/actions-toolkit</code> from 0.99.0 to
+  0.100.0</li>
+  <li><a
+  href="https://github.com/docker/build-push-action/commit/379bf63a979bd70751945601fa04c50674509952"><code>379bf63</code></a>
+  Merge pull request <a
+  href="https://redirect.github.com/docker/build-push-action/issues/1620">#1620</a>
+  from crazy-max/buildx-error-message</li>
+  <li><a
+  href="https://github.com/docker/build-push-action/commit/9877975c9e0b0b661592ff61049069507f9bc2f6"><code>9877975</code></a>
+  chore: update generated content</li>
+  <li><a
+  href="https://github.com/docker/build-push-action/commit/7ed0556ffafb8eb312463411ef0a84a1dfe24d94"><code>7ed0556</code></a>
+  use the shared Buildx error summary helper</li>
+  <li><a
+  href="https://github.com/docker/build-push-action/commit/91670ba5a4df99a24efff8637a78c83fd1b0f6b1"><code>91670ba</code></a>
+  Merge pull request <a
+  href="https://redirect.github.com/docker/build-push-action/issues/1618">#1618</a>
+  from docker/dependabot/npm_and_yarn/docker/actions-t...</li>
+  <li><a
+  href="https://github.com/docker/build-push-action/commit/80dbc8614a5c0ce4356740f69179cf829ecdc79a"><code>80dbc86</code></a>
+  [dependabot skip] chore: update generated content</li>
+  <li><a
+  href="https://github.com/docker/build-push-action/commit/50cac3a3b6f55e6015d6483d1dd72a3ecb90d20d"><code>50cac3a</code></a>
+  chore(deps): Bump <code>@​docker/actions-toolkit</code> from 0.98.0 to
+  0.99.0</li>
+  <li><a
+  href="https://github.com/docker/build-push-action/commit/03b4d6cac0163b44733e1fa60adfd6da560ee4d1"><code>03b4d6c</code></a>
+  Merge pull request <a
+  href="https://redirect.github.com/docker/build-push-action/issues/1617">#1617</a>
+  from crazy-max/fix-metadata-workflow-commands</li>
+  <li>Additional commits viewable in <a
+  href="https://github.com/docker/build-push-action/compare/v6...v7">compare
+  view</a></li>
+  </ul>
+  </details>
+  <br />
+
+  Updates `docker/setup-qemu-action` from 3 to 4
+  <details>
+  <summary>Release notes</summary>
+  <p><em>Sourced from <a
+  href="https://github.com/docker/setup-qemu-action/releases">docker/setup-qemu-action's
+  releases</a>.</em></p>
+  <blockquote>
+  <h2>v4.0.0</h2>
+  <ul>
+  <li>Node 24 as default runtime (requires <a
+  href="https://github.com/actions/runner/releases/tag/v2.327.1">Actions
+  Runner v2.327.1</a> or later) by <a
+  href="https://github.com/crazy-max"><code>@​crazy-max</code></a> in <a
+  href="https://redirect.github.com/docker/setup-qemu-action/pull/245">docker/setup-qemu-action#245</a></li>
+  <li>Switch to ESM and update config/test wiring by <a
+  href="https://github.com/crazy-max"><code>@​crazy-max</code></a> in <a
+  href="https://redirect.github.com/docker/setup-qemu-action/pull/241">docker/setup-qemu-action#241</a></li>
+  <li>Bump <code>@​actions/core</code> from 1.11.1 to 3.0.0 in <a
+  href="https://redirect.github.com/docker/setup-qemu-action/pull/244">docker/setup-qemu-action#244</a></li>
+  <li>Bump <code>@​docker/actions-toolkit</code> from 0.67.0 to 0.77.0 in
+  <a
+  href="https://redirect.github.com/docker/setup-qemu-action/pull/243">docker/setup-qemu-action#243</a></li>
+  <li>Bump <code>@​isaacs/brace-expansion</code> from 5.0.0 to 5.0.1 in <a
+  href="https://redirect.github.com/docker/setup-qemu-action/pull/240">docker/setup-qemu-action#240</a></li>
+  <li>Bump js-yaml from 3.14.1 to 3.14.2 in <a
+  href="https://redirect.github.com/docker/setup-qemu-action/pull/231">docker/setup-qemu-action#231</a></li>
+  <li>Bump lodash from 4.17.21 to 4.17.23 in <a
+  href="https://redirect.github.com/docker/setup-qemu-action/pull/238">docker/setup-qemu-action#238</a></li>
+  </ul>
+  <p><strong>Full Changelog</strong>: <a
+  href="https://github.com/docker/setup-qemu-action/compare/v3.7.0...v4.0.0">https://github.com/docker/setup-qemu-action/compare/v3.7.0...v4.0.0</a></p>
+  <h2>v3.7.0</h2>
+  <ul>
+  <li>Bump <code>@​docker/actions-toolkit</code> from 0.56.0 to 0.67.0 in
+  <a
+  href="https://redirect.github.com/docker/setup-qemu-action/pull/217">docker/setup-qemu-action#217</a>
+  <a
+  href="https://redirect.github.com/docker/setup-qemu-action/pull/230">docker/setup-qemu-action#230</a></li>
+  <li>Bump brace-expansion from 1.1.11 to 1.1.12 in <a
+  href="https://redirect.github.com/docker/setup-qemu-action/pull/220">docker/setup-qemu-action#220</a></li>
+  <li>Bump form-data from 2.5.1 to 2.5.5 in <a
+  href="https://redirect.github.com/docker/setup-qemu-action/pull/218">docker/setup-qemu-action#218</a></li>
+  <li>Bump tmp from 0.2.3 to 0.2.4 in <a
+  href="https://redirect.github.com/docker/setup-qemu-action/pull/221">docker/setup-qemu-action#221</a></li>
+  <li>Bump undici from 5.28.4 to 5.29.0 in <a
+  href="https://redirect.github.com/docker/setup-qemu-action/pull/219">docker/setup-qemu-action#219</a></li>
+  </ul>
+  <p><strong>Full Changelog</strong>: <a
+  href="https://github.com/docker/setup-qemu-action/compare/v3.6.0...v3.7.0">https://github.com/docker/setup-qemu-action/compare/v3.6.0...v3.7.0</a></p>
+  <h2>v3.6.0</h2>
+  <ul>
+  <li>Display binfmt version by <a
+  href="https://github.com/crazy-max"><code>@​crazy-max</code></a> in <a
+  href="https://redirect.github.com/docker/setup-qemu-action/pull/202">docker/setup-qemu-action#202</a></li>
+  </ul>
+  <p><strong>Full Changelog</strong>: <a
+  href="https://github.com/docker/setup-qemu-action/compare/v3.5.0...v3.6.0">https://github.com/docker/setup-qemu-action/compare/v3.5.0...v3.6.0</a></p>
+  <h2>v3.5.0</h2>
+  <ul>
+  <li>Bump <code>@​docker/actions-toolkit</code> from 0.54.0 to 0.56.0 in
+  <a
+  href="https://redirect.github.com/docker/setup-qemu-action/pull/205">docker/setup-qemu-action#205</a></li>
+  </ul>
+  <p><strong>Full Changelog</strong>: <a
+  href="https://github.com/docker/setup-qemu-action/compare/v3.4.0...v3.5.0">https://github.com/docker/setup-qemu-action/compare/v3.4.0...v3.5.0</a></p>
+  <h2>v3.4.0</h2>
+  <ul>
+  <li>Bump <code>@​docker/actions-toolkit</code> from 0.49.0 to 0.54.0 in
+  <a
+  href="https://redirect.github.com/docker/setup-qemu-action/pull/193">docker/setup-qemu-action#193</a>
+  <a
+  href="https://redirect.github.com/docker/setup-qemu-action/pull/197">docker/setup-qemu-action#197</a></li>
+  </ul>
+  <p><strong>Full Changelog</strong>: <a
+  href="https://github.com/docker/setup-qemu-action/compare/v3.3.0...v3.4.0">https://github.com/docker/setup-qemu-action/compare/v3.3.0...v3.4.0</a></p>
+  <h2>v3.3.0</h2>
+  <ul>
+  <li>Add <code>cache-image</code> input to enable/disable caching of
+  binfmt image by <a
+  href="https://github.com/crazy-max"><code>@​crazy-max</code></a> in <a
+  href="https://redirect.github.com/docker/setup-qemu-action/pull/130">docker/setup-qemu-action#130</a></li>
+  <li>Bump <code>@​actions/core</code> from 1.10.1 to 1.11.1 in <a
+  href="https://redirect.github.com/docker/setup-qemu-action/pull/172">docker/setup-qemu-action#172</a></li>
+  <li>Bump <code>@​docker/actions-toolkit</code> from 0.35.0 to 0.49.0 in
+  <a
+  href="https://redirect.github.com/docker/setup-qemu-action/pull/187">docker/setup-qemu-action#187</a></li>
+  <li>Bump cross-spawn from 7.0.3 to 7.0.6 in <a
+  href="https://redirect.github.com/docker/setup-qemu-action/pull/182">docker/setup-qemu-action#182</a></li>
+  <li>Bump path-to-regexp from 6.2.2 to 6.3.0 in <a
+  href="https://redirect.github.com/docker/setup-qemu-action/pull/162">docker/setup-qemu-action#162</a></li>
+  </ul>
+  <p><strong>Full Changelog</strong>: <a
+  href="https://github.com/docker/setup-qemu-action/compare/v3.2.0...v3.3.0">https://github.com/docker/setup-qemu-action/compare/v3.2.0...v3.3.0</a></p>
+  <h2>v3.2.0</h2>
+  <ul>
+  <li>Bump <code>@​docker/actions-toolkit</code> from 0.31.0 to 0.35.0 in
+  <a
+  href="https://redirect.github.com/docker/setup-qemu-action/pull/154">docker/setup-qemu-action#154</a>
+  <a
+  href="https://redirect.github.com/docker/setup-qemu-action/pull/155">docker/setup-qemu-action#155</a></li>
+  </ul>
+  <p><strong>Full Changelog</strong>: <a
+  href="https://github.com/docker/setup-qemu-action/compare/v3.1.0...v3.2.0">https://github.com/docker/setup-qemu-action/compare/v3.1.0...v3.2.0</a></p>
+  <h2>v3.1.0</h2>
+  <!-- raw HTML omitted -->
+  </blockquote>
+  <p>... (truncated)</p>
+  </details>
+  <details>
+  <summary>Commits</summary>
+  <ul>
+  <li><a
+  href="https://github.com/docker/setup-qemu-action/commit/99012661954931238ded8c8b007157a8430204e1"><code>9901266</code></a>
+  Merge pull request <a
+  href="https://redirect.github.com/docker/setup-qemu-action/issues/342">#342</a>
+  from docker/dependabot/npm_and_yarn/js-yaml-4.3.2</li>
+  <li><a
+  href="https://github.com/docker/setup-qemu-action/commit/9364d8b005eaf92e44e311ad68698e0e4d1fc775"><code>9364d8b</code></a>
+  Merge pull request <a
+  href="https://redirect.github.com/docker/setup-qemu-action/issues/340">#340</a>
+  from docker/dependabot/npm_and_yarn/humanfs/node-0.16.8</li>
+  <li><a
+  href="https://github.com/docker/setup-qemu-action/commit/95c3240fd1cc4bb767d163c4336f203f1f98c8c1"><code>95c3240</code></a>
+  Merge pull request <a
+  href="https://redirect.github.com/docker/setup-qemu-action/issues/337">#337</a>
+  from docker/dependabot/npm_and_yarn/postcss-selector-...</li>
+  <li><a
+  href="https://github.com/docker/setup-qemu-action/commit/c24671a9f635f27130098a37aaa28a0fe899c1f8"><code>c24671a</code></a>
+  Merge pull request <a
+  href="https://redirect.github.com/docker/setup-qemu-action/issues/338">#338</a>
+  from docker/dependabot/github_actions/codeql-actions-...</li>
+  <li><a
+  href="https://github.com/docker/setup-qemu-action/commit/fa83965153d27e053b76aa86ad2b4753aad68c34"><code>fa83965</code></a>
+  Merge pull request <a
+  href="https://redirect.github.com/docker/setup-qemu-action/issues/345">#345</a>
+  from crazy-max/shared-error-helpers</li>
+  <li><a
+  href="https://github.com/docker/setup-qemu-action/commit/f396a658a52c1a0725759b74ea48a6fb8e0e575e"><code>f396a65</code></a>
+  build(deps): bump the codeql-actions group across 1 directory with 2
+  updates</li>
+  <li><a
+  href="https://github.com/docker/setup-qemu-action/commit/a63df2fb68af6df486c0bcef37b58fa32674f8da"><code>a63df2f</code></a>
+  chore: update generated content</li>
+  <li><a
+  href="https://github.com/docker/setup-qemu-action/commit/3e4165fc6d948cdd283528a2da5d91dca944f777"><code>3e4165f</code></a>
+  use the shared error helper for Docker commands</li>
+  <li><a
+  href="https://github.com/docker/setup-qemu-action/commit/18c52d952150b11a3c9f65b4b5b751ba623d1fd5"><code>18c52d9</code></a>
+  Merge pull request <a
+  href="https://redirect.github.com/docker/setup-qemu-action/issues/344">#344</a>
+  from docker/dependabot/npm_and_yarn/docker/actions-to...</li>
+  <li><a
+  href="https://github.com/docker/setup-qemu-action/commit/896cbedb64417124655bfd0b9a72fac2f0140044"><code>896cbed</code></a>
+  [dependabot skip] chore: update generated content</li>
+  <li>Additional commits viewable in <a
+  href="https://github.com/docker/setup-qemu-action/compare/v3...v4">compare
+  view</a></li>
+  </ul>
+  </details>
+  <br />
+
+  Updates `docker/login-action` from 3 to 4
+  <details>
+  <summary>Release notes</summary>
+  <p><em>Sourced from <a
+  href="https://github.com/docker/login-action/releases">docker/login-action's
+  releases</a>.</em></p>
+  <blockquote>
+  <h2>v4.0.0</h2>
+  <ul>
+  <li>Node 24 as default runtime (requires <a
+  href="https://github.com/actions/runner/releases/tag/v2.327.1">Actions
+  Runner v2.327.1</a> or later) by <a
+  href="https://github.com/crazy-max"><code>@​crazy-max</code></a> in <a
+  href="https://redirect.github.com/docker/login-action/pull/929">docker/login-action#929</a></li>
+  <li>Switch to ESM and update config/test wiring by <a
+  href="https://github.com/crazy-max"><code>@​crazy-max</code></a> in <a
+  href="https://redirect.github.com/docker/login-action/pull/927">docker/login-action#927</a></li>
+  <li>Bump <code>@​actions/core</code> from 1.11.1 to 3.0.0 in <a
+  href="https://redirect.github.com/docker/login-action/pull/919">docker/login-action#919</a></li>
+  <li>Bump <code>@​aws-sdk/client-ecr</code> from 3.890.0 to 3.1000.0 in
+  <a
+  href="https://redirect.github.com/docker/login-action/pull/909">docker/login-action#909</a>
+  <a
+  href="https://redirect.github.com/docker/login-action/pull/920">docker/login-action#920</a></li>
+  <li>Bump <code>@​aws-sdk/client-ecr-public</code> from 3.890.0 to
+  3.1000.0 in <a
+  href="https://redirect.github.com/docker/login-action/pull/909">docker/login-action#909</a>
+  <a
+  href="https://redirect.github.com/docker/login-action/pull/920">docker/login-action#920</a></li>
+  <li>Bump <code>@​docker/actions-toolkit</code> from 0.63.0 to 0.77.0 in
+  <a
+  href="https://redirect.github.com/docker/login-action/pull/910">docker/login-action#910</a>
+  <a
+  href="https://redirect.github.com/docker/login-action/pull/928">docker/login-action#928</a></li>
+  <li>Bump <code>@​isaacs/brace-expansion</code> from 5.0.0 to 5.0.1 in <a
+  href="https://redirect.github.com/docker/login-action/pull/921">docker/login-action#921</a></li>
+  <li>Bump js-yaml from 4.1.0 to 4.1.1 in <a
+  href="https://redirect.github.com/docker/login-action/pull/901">docker/login-action#901</a></li>
+  </ul>
+  <p><strong>Full Changelog</strong>: <a
+  href="https://github.com/docker/login-action/compare/v3.7.0...v4.0.0">https://github.com/docker/login-action/compare/v3.7.0...v4.0.0</a></p>
+  <h2>v3.7.0</h2>
+  <ul>
+  <li>Add <code>scope</code> input to set scopes for the authentication
+  token by <a
+  href="https://github.com/crazy-max"><code>@​crazy-max</code></a> in <a
+  href="https://redirect.github.com/docker/login-action/pull/912">docker/login-action#912</a></li>
+  <li>Add support for AWS European Sovereign Cloud ECR by <a
+  href="https://github.com/dphi"><code>@​dphi</code></a> in <a
+  href="https://redirect.github.com/docker/login-action/pull/914">docker/login-action#914</a></li>
+  <li>Ensure passwords are redacted with <code>registry-auth</code> input
+  by <a href="https://github.com/crazy-max"><code>@​crazy-max</code></a>
+  in <a
+  href="https://redirect.github.com/docker/login-action/pull/911">docker/login-action#911</a></li>
+  <li>build(deps): bump lodash from 4.17.21 to 4.17.23 in <a
+  href="https://redirect.github.com/docker/login-action/pull/915">docker/login-action#915</a></li>
+  </ul>
+  <p><strong>Full Changelog</strong>: <a
+  href="https://github.com/docker/login-action/compare/v3.6.0...v3.7.0">https://github.com/docker/login-action/compare/v3.6.0...v3.7.0</a></p>
+  <h2>v3.6.0</h2>
+  <ul>
+  <li>Add <code>registry-auth</code> input for raw authentication to
+  registries by <a
+  href="https://github.com/crazy-max"><code>@​crazy-max</code></a> in <a
+  href="https://redirect.github.com/docker/login-action/pull/887">docker/login-action#887</a></li>
+  <li>Bump <code>@​aws-sdk/client-ecr</code> to 3.890.0 in <a
+  href="https://redirect.github.com/docker/login-action/pull/882">docker/login-action#882</a>
+  <a
+  href="https://redirect.github.com/docker/login-action/pull/890">docker/login-action#890</a></li>
+  <li>Bump <code>@​aws-sdk/client-ecr-public</code> to 3.890.0 in <a
+  href="https://redirect.github.com/docker/login-action/pull/882">docker/login-action#882</a>
+  <a
+  href="https://redirect.github.com/docker/login-action/pull/890">docker/login-action#890</a></li>
+  <li>Bump <code>@​docker/actions-toolkit</code> from 0.62.1 to 0.63.0 in
+  <a
+  href="https://redirect.github.com/docker/login-action/pull/883">docker/login-action#883</a></li>
+  <li>Bump brace-expansion from 1.1.11 to 1.1.12 in <a
+  href="https://redirect.github.com/docker/login-action/pull/880">docker/login-action#880</a></li>
+  <li>Bump undici from 5.28.4 to 5.29.0 in <a
+  href="https://redirect.github.com/docker/login-action/pull/879">docker/login-action#879</a></li>
+  <li>Bump tmp from 0.2.3 to 0.2.4 in <a
+  href="https://redirect.github.com/docker/login-action/pull/881">docker/login-action#881</a></li>
+  </ul>
+  <p><strong>Full Changelog</strong>: <a
+  href="https://github.com/docker/login-action/compare/v3.5.0...v3.6.0">https://github.com/docker/login-action/compare/v3.5.0...v3.6.0</a></p>
+  <h2>v3.5.0</h2>
+  <ul>
+  <li>Support dual-stack endpoints for AWS ECR by <a
+  href="https://github.com/Spacefish"><code>@​Spacefish</code></a> <a
+  href="https://github.com/crazy-max"><code>@​crazy-max</code></a> in <a
+  href="https://redirect.github.com/docker/login-action/pull/874">docker/login-action#874</a>
+  <a
+  href="https://redirect.github.com/docker/login-action/pull/876">docker/login-action#876</a></li>
+  <li>Bump <code>@​aws-sdk/client-ecr</code> to 3.859.0 in <a
+  href="https://redirect.github.com/docker/login-action/pull/860">docker/login-action#860</a>
+  <a
+  href="https://redirect.github.com/docker/login-action/pull/878">docker/login-action#878</a></li>
+  <li>Bump <code>@​aws-sdk/client-ecr-public</code> to 3.859.0 in <a
+  href="https://redirect.github.com/docker/login-action/pull/860">docker/login-action#860</a>
+  <a
+  href="https://redirect.github.com/docker/login-action/pull/878">docker/login-action#878</a></li>
+  <li>Bump <code>@​docker/actions-toolkit</code> from 0.57.0 to 0.62.1 in
+  <a
+  href="https://redirect.github.com/docker/login-action/pull/870">docker/login-action#870</a></li>
+  <li>Bump form-data from 2.5.1 to 2.5.5 in <a
+  href="https://redirect.github.com/docker/login-action/pull/875">docker/login-action#875</a></li>
+  </ul>
+  <p><strong>Full Changelog</strong>: <a
+  href="https://github.com/docker/login-action/compare/v3.4.0...v3.5.0">https://github.com/docker/login-action/compare/v3.4.0...v3.5.0</a></p>
+  <h2>v3.4.0</h2>
+  <ul>
+  <li>Bump <code>@​actions/core</code> from 1.10.1 to 1.11.1 in <a
+  href="https://redirect.github.com/docker/login-action/pull/791">docker/login-action#791</a></li>
+  <li>Bump <code>@​aws-sdk/client-ecr</code> to 3.766.0 in <a
+  href="https://redirect.github.com/docker/login-action/pull/789">docker/login-action#789</a>
+  <a
+  href="https://redirect.github.com/docker/login-action/pull/856">docker/login-action#856</a></li>
+  <li>Bump <code>@​aws-sdk/client-ecr-public</code> to 3.758.0 in <a
+  href="https://redirect.github.com/docker/login-action/pull/789">docker/login-action#789</a>
+  <a
+  href="https://redirect.github.com/docker/login-action/pull/856">docker/login-action#856</a></li>
+  <li>Bump <code>@​docker/actions-toolkit</code> from 0.35.0 to 0.57.0 in
+  <a
+  href="https://redirect.github.com/docker/login-action/pull/801">docker/login-action#801</a>
+  <a
+  href="https://redirect.github.com/docker/login-action/pull/806">docker/login-action#806</a>
+  <a
+  href="https://redirect.github.com/docker/login-action/pull/858">docker/login-action#858</a></li>
+  <li>Bump cross-spawn from 7.0.3 to 7.0.6 in <a
+  href="https://redirect.github.com/docker/login-action/pull/814">docker/login-action#814</a></li>
+  <li>Bump https-proxy-agent from 7.0.5 to 7.0.6 in <a
+  href="https://redirect.github.com/docker/login-action/pull/823">docker/login-action#823</a></li>
+  <li>Bump path-to-regexp from 6.2.2 to 6.3.0 in <a
+  href="https://redirect.github.com/docker/login-action/pull/777">docker/login-action#777</a></li>
+  </ul>
+  <p><strong>Full Changelog</strong>: <a
+  href="https://github.com/docker/login-action/compare/v3.3.0...v3.4.0">https://github.com/docker/login-action/compare/v3.3.0...v3.4.0</a></p>
+  <!-- raw HTML omitted -->
+  </blockquote>
+  <p>... (truncated)</p>
+  </details>
+  <details>
+  <summary>Commits</summary>
+  <ul>
+  <li><a
+  href="https://github.com/docker/login-action/commit/dbcb813823bdd20940b903addbd779551569679f"><code>dbcb813</code></a>
+  Merge pull request <a
+  href="https://redirect.github.com/docker/login-action/issues/1051">#1051</a>
+  from docker/dependabot/npm_and_yarn/aws-sdk-dependen...</li>
+  <li><a
+  href="https://github.com/docker/login-action/commit/5bcb015ee6ec720ecdeaef2dc1164122e9b209fc"><code>5bcb015</code></a>
+  [dependabot skip] chore: update generated content</li>
+  <li><a
+  href="https://github.com/docker/login-action/commit/b30b2f2d3196c1714318ba0c3c3bec211d949752"><code>b30b2f2</code></a>
+  build(deps): bump the aws-sdk-dependencies group across 1 directory with
+  2 up...</li>
+  <li><a
+  href="https://github.com/docker/login-action/commit/9087f1e6d666fe0292409e3c819680c18526e108"><code>9087f1e</code></a>
+  Merge pull request <a
+  href="https://redirect.github.com/docker/login-action/issues/1057">#1057</a>
+  from docker/dependabot/npm_and_yarn/js-yaml-5.2.2</li>
+  <li><a
+  href="https://github.com/docker/login-action/commit/0009830ea169ca16c24c0ea4cac1c325bfa3aee4"><code>0009830</code></a>
+  [dependabot skip] chore: update generated content</li>
+  <li><a
+  href="https://github.com/docker/login-action/commit/23255232d3e43c8f0052d9a0dba82a515a88ce92"><code>2325523</code></a>
+  build(deps): bump js-yaml from 5.2.1 to 5.2.2</li>
+  <li><a
+  href="https://github.com/docker/login-action/commit/4ec1d4a769e8b05a89a7396551dc38b329211688"><code>4ec1d4a</code></a>
+  Merge pull request <a
+  href="https://redirect.github.com/docker/login-action/issues/1056">#1056</a>
+  from docker/dependabot/npm_and_yarn/postcss-8.5.22</li>
+  <li><a
+  href="https://github.com/docker/login-action/commit/5fc99ba47bca274c5a499688f71c7ea79c0ea1b3"><code>5fc99ba</code></a>
+  Merge pull request <a
+  href="https://redirect.github.com/docker/login-action/issues/1053">#1053</a>
+  from docker/dependabot/github_actions/aws-actions/co...</li>
+  <li><a
+  href="https://github.com/docker/login-action/commit/e512bd59d16c53d79ea5c0f0e345fe554453c4bb"><code>e512bd5</code></a>
+  Merge pull request <a
+  href="https://redirect.github.com/docker/login-action/issues/1052">#1052</a>
+  from docker/dependabot/github_actions/codeql-actions...</li>
+  <li><a
+  href="https://github.com/docker/login-action/commit/a146c91b8f371700d323bae808af7cbdc2766ed5"><code>a146c91</code></a>
+  Merge pull request <a
+  href="https://redirect.github.com/docker/login-action/issues/1059">#1059</a>
+  from crazy-max/harden-buildx-scope-paths</li>
+  <li>Additional commits viewable in <a
+  href="https://github.com/docker/login-action/compare/v3...v4">compare
+  view</a></li>
+  </ul>
+  </details>
+  <br />
+
+
+  Dependabot will resolve any conflicts with this PR as long as you don't
+  alter it yourself. You can also trigger a rebase manually by commenting
+  `@dependabot rebase`.
+
+
 ## [0.17.0](https://github.com/omarmhaimdat/pepe/compare/v0.16.1...v0.17.0) - 2026-10-07
 
 ### Added
