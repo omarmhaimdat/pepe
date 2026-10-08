@@ -6,6 +6,100 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+## [0.19.0](https://github.com/omarmhaimdat/pepe/compare/v0.18.0...v0.19.0) - 2026-10-08
+
+### Added
+
+- pepe logs, nginx's traffic now against each minute, hour and day ([#98](https://github.com/omarmhaimdat/pepe/pull/98))
+
+  ## What
+
+  A new subcommand, `pepe logs`, that reads nginx's access and error logs
+  and says how busy the server is now against how busy it has been.
+
+  ```bash
+  pepe logs /var/log/nginx/access.log /var/log/nginx/error.log
+  zcat access.log.*.gz | pepe logs -
+  docker compose logs -f -n 1000 nginx | pepe logs
+  pepe logs access.log --since 24h --json > traffic.json
+  ```
+
+  - **Now** is the request rate over the last minute (`--window`) of the
+  log's own timestamps. A log whose last line is older than five minutes
+  is held at its last line instead of the clock.
+  - **Each minute, hour and day** has its requests, req/s, busiest second,
+  4xx and 5xx shares, mean request time and error log lines, and how now
+  compares (`+12%`, `×3.4`, `÷2.5`). Cards say what a usual slot sees (the
+  median), which was the busiest, and what the same slot an hour, a day or
+  a week ago saw.
+  - **Read as a stream**: lines are folded into counts of a fixed size (an
+  hour of seconds, a day of minutes, ninety days of hours, ten years of
+  days; capped maps of paths, clients, user agents), so memory doesn't
+  grow with the log.
+  - **Four views**: Traffic (a bar per slot with the rate now drawn
+  across, and the table; `m` `h` `d`), Paths (by requests, 5xx, 4xx or
+  mean time, with statuses, clients, user agents, methods and query
+  parameter names), Errors (the error log grouped by cause, and the paths
+  answering 5xx and 4xx), Log (the last 2,000 lines of all files in time
+  order; `x` errors only, `/` search, `enter` everything read from a
+  line).
+  - **Formats**: nginx `combined` (and `rt=`/`urt=` after it), a `--format
+  '<log_format>'` as nginx.conf has it, JSON lines under nginx's or
+  Caddy's names, and the error log. A line that fits none is still
+  searched for a time, a request and a status; what can't be read is
+  counted and the first such line shown.
+  - At a terminal the files are followed, through rotation. Piped out, or
+  with `--json`, they are read to the end and a report is printed. With no
+  file named and nothing piped in, `/var/log/nginx/access.log` and
+  `error.log` are read if they are there.
+
+  ## Where
+
+  - `src/logs.rs`: timestamps, the line readers, the counts, the file
+  follower, the text and JSON reports.
+  - `src/ui/logs.rs`: the screen.
+  - `src/cli.rs`, `src/main.rs`: `LogsArgs` and `run_logs`.
+  - README section "Reading nginx logs", a ROADMAP entry, `pepe-logs(1)`
+  and the completions regenerated.
+
+  No new dependency: dates are worked out by hand, and the local offset
+  comes from `libc`, which is already there on Unix.
+
+  ## For the reviewer
+
+  - **Paths are grouped by default**: numbers, UUIDs and long hex ids in a
+  path count as one (`/items/*`); `--exact-paths` turns that off.
+  - **Piped input with the screen** (Unix): the pipe is put aside with
+  `dup` and the terminal, opened by its own name from `ttyname_r(stdout)`,
+  takes descriptor 0, so crossterm reads keys as usual. `/dev/tty` itself
+  can't be polled on macOS. On Windows piped input gets the report, not
+  the screen.
+  - **The error log names no time zone**; its times are taken to be this
+  machine's.
+  - **No `.gz`**: that would need a dependency; `zcat … | pepe logs -`
+  does it.
+  - Only `/var/log/nginx/` is looked in by default; nginx.conf isn't read
+  for other paths or for the `log_format`.
+  - The global load flags (`-n`, `-c`, …) show in `pepe logs --help` and
+  do nothing there, as with `completions` and `self-update`.
+
+  ## Tested
+
+  - 14 new tests (243 in all pass; `cargo clippy --all-targets -- -D
+  warnings` and `cargo fmt --check` clean): every timestamp form, combined
+  / custom format / JSON / error log lines, cause grouping, slot rates and
+  now-versus, flat memory over three days of lines, files read oldest
+  first, followed and reopened after rotation, and every view drawn at
+  60×16 up to 200×60 with its keys.
+  - By hand on a generated three-day log (1.96M lines, 288 MB, plus an
+  error log): read in about 1.4 s with 17 MB resident on an M-series Mac.
+  This is one run, not a `bench/` record.
+  - The live screen was driven in a pseudo-terminal, with lines appended
+  to the file and with input piped in the shape `docker compose logs`
+  gives. It has not been run against a real nginx or a real Docker
+  container, nor on Linux or Windows.
+
+
 ## [0.18.0](https://github.com/omarmhaimdat/pepe/compare/v0.17.1...v0.18.0) - 2026-10-08
 
 ### Added
