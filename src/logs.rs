@@ -40,6 +40,16 @@ const CLIENTS: usize = 50_000;
 const AGENTS: usize = 2_000;
 const PARAMS: usize = 2_000;
 const CAUSES: usize = 1_000;
+/// A file is read by every core, this much of it at a time for each
+const SPRINT_CHUNK: u64 = 1 << 20;
+/// The last lines the log view keeps are in this much of a file's end,
+/// each being at most `LINE_KEPT` long
+const SPRINT_KEEP: u64 = (RECENT * LINE_KEPT * 2) as u64;
+/// A file smaller than this is read before more threads could be started
+const SPRINT_MIN: u64 = 16 << 20;
+/// A thread hands its counts over this often, so the screen has something
+/// to show while a long log is read
+const SPRINT_MERGE: Duration = Duration::from_secs(1);
 
 // ─── Time ────────────────────────────────────────────────────────────────────
 
@@ -236,6 +246,28 @@ impl Stamp {
         // Before 2001 it isn't a time anyone's log has
         let n = digits(whole).filter(|&n| n >= 1_000_000_000)?;
         Some(Stamp::epoch(n as f64))
+    }
+
+    /// `parse`, remembering the last answer: a log's lines come many to a
+    /// second, each with the same time written the same way
+    fn remembered(text: &str) -> Option<Stamp> {
+        thread_local! {
+            static LAST: std::cell::Cell<([u8; 40], usize, Option<Stamp>)> =
+                const { std::cell::Cell::new(([0; 40], 0, None)) };
+        }
+        let b = text.as_bytes();
+        if b.is_empty() || b.len() > 40 {
+            return Stamp::parse(text);
+        }
+        let (bytes, len, stamp) = LAST.get();
+        if len == b.len() && bytes[..len] == *b {
+            return stamp;
+        }
+        let stamp = Stamp::parse(text);
+        let mut bytes = [0; 40];
+        bytes[..b.len()].copy_from_slice(b);
+        LAST.set((bytes, b.len(), stamp));
+        stamp
     }
 
     /// Seconds since the epoch, or milliseconds when it is too large for those
@@ -529,7 +561,7 @@ impl Format {
             let value = if value == "-" { "" } else { value };
             match field {
                 Field::Client => record.client = value.into(),
-                Field::At => record.at = Stamp::parse(value),
+                Field::At => record.at = Stamp::remembered(value),
                 Field::Request => {
                     let (method, target) = request_line(value);
                     record.method = method.into();
@@ -770,24 +802,25 @@ fn unprefixed(line: &str) -> &str {
 /// `rt=0.005 urt="0.004"` after the format's end, as nginx's own example
 /// of timing in a log has them
 fn extras(rest: &str, record: &mut Record) {
-    let mut rest = rest;
-    while let Some(equals) = rest.find('=') {
-        let key = rest[..equals].rsplit(' ').next().unwrap_or("");
-        let after = &rest[equals + 1..];
+    let b = rest.as_bytes();
+    let mut from = 0;
+    while let Some(equals) = memchr::memchr(b'=', &b[from..]).map(|i| from + i) {
+        let key = memchr::memrchr(b' ', &b[from..equals]).map_or(from, |i| from + i + 1);
         // A quoted value may have spaces: `urt="0.004, 0.010"`
-        let (value, then) = match after.strip_prefix('"') {
-            Some(quoted) => {
-                let end = quoted.find('"').unwrap_or(quoted.len());
-                (&quoted[..end], &quoted[(end + 1).min(quoted.len())..])
-            }
-            None => after.split_at(after.find(' ').unwrap_or(after.len())),
+        let (value, next) = if b.get(equals + 1) == Some(&b'"') {
+            let open = equals + 2;
+            let close = memchr::memchr(b'"', &b[open..]).map_or(b.len(), |i| open + i);
+            (&rest[open..close], (close + 1).min(b.len()))
+        } else {
+            let end = memchr::memchr(b' ', &b[equals + 1..]).map_or(b.len(), |i| equals + 1 + i);
+            (&rest[equals + 1..end], end)
         };
-        match key {
+        match &rest[key..equals] {
             "rt" | "request_time" => record.time = seconds(value),
             "urt" | "upstream_response_time" => record.upstream = seconds(value),
             _ => {}
         }
-        rest = then;
+        from = next;
     }
 }
 
@@ -1076,6 +1109,11 @@ impl<V: Default + Copy> Rolling<V> {
         self.open.as_mut().map(|(_, v)| v)
     }
 
+    /// The count held out of the map: the one `at` last gave
+    fn held(&mut self) -> Option<&mut V> {
+        self.open.as_mut().map(|(_, v)| v)
+    }
+
     #[cfg(test)]
     fn len(&self) -> usize {
         self.map.len() + usize::from(self.open.is_some())
@@ -1142,16 +1180,32 @@ pub struct Row {
 pub struct Top<V> {
     /// Where each name's count is in `counts`: a name already seen is
     /// hashed once to find it
-    places: HashMap<String, u32>,
+    places: HashMap<String, u32, Keyed>,
     counts: Vec<V>,
     cap: usize,
     pub other: u64,
 }
 
-impl<V: Default> Top<V> {
+/// What a name's count needs for two readers' counts to be made one
+pub trait Tally: Default {
+    fn add(&mut self, other: &Self);
+    fn requests(&self) -> u64;
+}
+
+impl Tally for u64 {
+    fn add(&mut self, other: &Self) {
+        *self += other;
+    }
+
+    fn requests(&self) -> u64 {
+        *self
+    }
+}
+
+impl<V: Tally> Top<V> {
     fn new(cap: usize) -> Self {
         Top {
-            places: HashMap::new(),
+            places: HashMap::with_hasher(Keyed::new()),
             counts: Vec::new(),
             cap,
             other: 0,
@@ -1170,6 +1224,24 @@ impl<V: Default> Top<V> {
             .insert(name.to_string(), self.counts.len() as u32);
         self.counts.push(V::default());
         self.counts.last_mut()
+    }
+
+    /// Add what another reader counted
+    fn absorb(&mut self, other: Top<V>) {
+        self.other += other.other;
+        for (name, place) in other.places {
+            let theirs = &other.counts[place as usize];
+            if let Some(&mine) = self.places.get(name.as_str()) {
+                self.counts[mine as usize].add(theirs);
+            } else if self.counts.len() >= self.cap {
+                self.other += theirs.requests();
+            } else {
+                self.places.insert(name, self.counts.len() as u32);
+                let mut count = V::default();
+                count.add(theirs);
+                self.counts.push(count);
+            }
+        }
     }
 
     pub fn len(&self) -> usize {
@@ -1195,6 +1267,75 @@ impl<V: Default> Top<V> {
     }
 }
 
+/// The hash the names are found by: eight bytes at a time through a
+/// multiply folded onto itself, under a key drawn when pepe starts. The
+/// names in a log are chosen by whoever sends the requests, so the key is
+/// what keeps them from being chosen to collide; SipHash, which the
+/// standard map would use, costs several times as much for a user agent.
+#[derive(Debug, Clone, Copy)]
+struct Keyed {
+    seed: u64,
+    key: u64,
+}
+
+impl Keyed {
+    fn new() -> Keyed {
+        use std::hash::BuildHasher;
+        static KEYS: OnceLock<(u64, u64)> = OnceLock::new();
+        let (seed, key) = *KEYS.get_or_init(|| {
+            let random = std::collections::hash_map::RandomState::new();
+            (random.hash_one(1u8), random.hash_one(2u8) | 1)
+        });
+        Keyed { seed, key }
+    }
+}
+
+impl std::hash::BuildHasher for Keyed {
+    type Hasher = Folded;
+
+    fn build_hasher(&self) -> Folded {
+        Folded {
+            hash: self.seed,
+            key: self.key,
+        }
+    }
+}
+
+struct Folded {
+    hash: u64,
+    key: u64,
+}
+
+fn fold_multiply(a: u64, b: u64) -> u64 {
+    let wide = u128::from(a).wrapping_mul(u128::from(b));
+    (wide as u64) ^ ((wide >> 64) as u64)
+}
+
+impl std::hash::Hasher for Folded {
+    fn write(&mut self, bytes: &[u8]) {
+        let mut hash = self.hash ^ (bytes.len() as u64).wrapping_mul(0x9E37_79B9_7F4A_7C15);
+        let mut words = bytes.chunks_exact(8);
+        for word in &mut words {
+            let word = u64::from_le_bytes(word.try_into().expect("eight bytes"));
+            hash = fold_multiply(hash ^ word, self.key);
+        }
+        let rest = words.remainder();
+        if !rest.is_empty() {
+            let mut word = [0; 8];
+            word[..rest.len()].copy_from_slice(rest);
+            hash = fold_multiply(hash ^ u64::from_le_bytes(word), self.key);
+        }
+        self.hash = hash;
+    }
+
+    // What `str` adds after its bytes, which their length has already said
+    fn write_u8(&mut self, _: u8) {}
+
+    fn finish(&self) -> u64 {
+        fold_multiply(self.hash, self.key ^ 0xD6E8_FEB8_6659_FD93)
+    }
+}
+
 /// What a path saw
 #[derive(Debug, Clone, Copy, Default, PartialEq)]
 pub struct PathStat {
@@ -1203,6 +1344,20 @@ pub struct PathStat {
     pub c5xx: u64,
     pub time_us: u64,
     pub timed: u64,
+}
+
+impl Tally for PathStat {
+    fn add(&mut self, other: &Self) {
+        self.requests += other.requests;
+        self.c4xx += other.c4xx;
+        self.c5xx += other.c5xx;
+        self.time_us += other.time_us;
+        self.timed += other.timed;
+    }
+
+    fn requests(&self) -> u64 {
+        self.requests
+    }
 }
 
 impl PathStat {
@@ -1219,6 +1374,8 @@ pub struct Cause {
     pub last: Option<Stamp>,
     /// The first line that said it, as written
     pub example: String,
+    /// Where that line was in what was read
+    order: u64,
 }
 
 /// A line kept for the log view
@@ -1229,6 +1386,8 @@ pub struct Recent {
     /// When it was written; a line that doesn't say has the time of the
     /// line read before it
     pub at: i64,
+    /// Where it was in what was read: lines of one second stay in order
+    order: u64,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -1287,6 +1446,31 @@ pub struct Stats {
     /// Lines nothing could be read from, and the first of them
     pub unread: u64,
     pub first_unread: Option<String>,
+    first_unread_order: u64,
+    /// Where the next line is in what is read: its number, or, while a
+    /// file is read by several threads, a place that keeps their lines in
+    /// the file's order
+    order: u64,
+    /// The time of the last line that had one
+    carry: i64,
+    /// The second of the last request, while the counts held out of
+    /// their maps are that second's, its minute's, its hour's and its day's
+    hot: Option<Stamp>,
+    /// Where a path with ids in it is written without them
+    scratch: String,
+    /// Lines are kept for the log view. Off while a thread reads a part
+    /// of a file too far from its end to have any of its last lines.
+    keeping: bool,
+    /// The requests of one second that came one after the other at the
+    /// start of a stretch of the file, and those at its end so far: where
+    /// a second is cut in two by the threads reading it, the halves are
+    /// put together again (see `merge`)
+    head: Option<(Stamp, u32)>,
+    run: Option<(Stamp, u32)>,
+    /// The runs at the ends of the stretches read
+    edges: Vec<(Stamp, u32)>,
+    /// What the edges of each second add up to
+    stitched: HashMap<i64, u32>,
     /// Requests whose line had no time
     pub undated: u64,
     /// Lines older than `--since`
@@ -1338,6 +1522,16 @@ impl Default for Stats {
             bytes: 0,
             unread: 0,
             first_unread: None,
+            first_unread_order: 0,
+            order: 0,
+            carry: 0,
+            hot: None,
+            scratch: String::new(),
+            keeping: true,
+            head: None,
+            run: None,
+            edges: Vec::new(),
+            stitched: HashMap::new(),
             undated: 0,
             skipped: 0,
             first: None,
@@ -1405,20 +1599,53 @@ fn cause_of(message: &str) -> String {
 
 /// A path with what names one thing among many made `*`: numbers, UUIDs
 /// and long hex ids. `/items/42/photos` and `/items/43/photos` are one path.
+#[cfg(test)]
 pub fn grouped(path: &str) -> Cow<'_, str> {
+    let mut scratch = String::new();
+    match grouped_into(path, &mut scratch) {
+        made if made.len() == path.len() && made == path => Cow::Borrowed(path),
+        made => Cow::Owned(made.to_string()),
+    }
+}
+
+/// `grouped`, written into `scratch` when the path has an id in it: a
+/// line's path is looked up and let go of, and needs no memory of its own
+fn grouped_into<'a>(path: &'a str, scratch: &'a mut String) -> &'a str {
+    // An id has a digit in it, and most paths have none
+    if !path.bytes().any(|c| c.is_ascii_digit()) {
+        return path;
+    }
     let is_id = |part: &str| {
         let hex = part.len() >= 16 && part.bytes().all(|c| c.is_ascii_hexdigit() || c == b'-');
         !part.is_empty() && (hex || part.bytes().all(|c| c.is_ascii_digit()))
     };
-    // An id has a digit in it, and most paths have none
-    if !path.bytes().any(|c| c.is_ascii_digit()) || !path.split('/').any(is_id) {
-        return Cow::Borrowed(path);
+    scratch.clear();
+    let mut any = false;
+    let mut rest = path;
+    loop {
+        let (part, after) = match split_at_byte(rest, b'/') {
+            Some((part, after)) => (part, Some(after)),
+            None => (rest, None),
+        };
+        if is_id(part) {
+            scratch.push('*');
+            any = true;
+        } else {
+            scratch.push_str(part);
+        }
+        match after {
+            Some(after) => {
+                scratch.push('/');
+                rest = after;
+            }
+            None => break,
+        }
     }
-    let parts: Vec<&str> = path
-        .split('/')
-        .map(|part| if is_id(part) { "*" } else { part })
-        .collect();
-    Cow::Owned(parts.join("/"))
+    if any {
+        scratch
+    } else {
+        path
+    }
 }
 
 /// Where a line kept for the log view ends
@@ -1442,6 +1669,7 @@ impl Stats {
     /// that is being written from one that was.
     pub fn fold(&mut self, line: Line<'_>, raw: &str, wall: i64) {
         self.lines += 1;
+        self.order += 1;
         let at = match &line {
             Line::Request(r) => r.at,
             Line::Fault(f) => f.at,
@@ -1462,12 +1690,19 @@ impl Stats {
                 self.unread += 1;
                 if self.first_unread.is_none() {
                     self.first_unread = Some(cut(raw));
+                    self.first_unread_order = self.order;
                 }
                 Kind::Unread
             }
         };
-        let at = at.map_or_else(|| self.recent.back().map_or(0, |last| last.at), |at| at.at);
-        self.keep(raw, kind, at);
+        if let Some(at) = at {
+            self.carry = at.at;
+        }
+        if self.keeping {
+            self.keep(raw, kind, self.carry);
+        } else {
+            self.recent_base += 1;
+        }
     }
 
     /// Keep a line for the log view, in its place by time: an error log
@@ -1500,8 +1735,16 @@ impl Stats {
         if cut < raw.len() {
             text.push('…');
         }
-        self.recent
-            .insert(place - usize::from(full), Recent { text, kind, at });
+        let order = self.order;
+        self.recent.insert(
+            place - usize::from(full),
+            Recent {
+                text,
+                kind,
+                at,
+                order,
+            },
+        );
     }
 
     fn seen(&mut self, at: Stamp, wall: i64) {
@@ -1524,12 +1767,13 @@ impl Stats {
         );
         let time_us = r.time.map(|t| (t * 1e6) as u64);
         let (path, query) = split_at_byte(&r.target, b'?').unwrap_or((&r.target, ""));
+        let mut scratch = std::mem::take(&mut self.scratch);
         let path = if self.exact_paths {
-            Cow::Borrowed(path)
+            path
         } else {
-            grouped(path)
+            grouped_into(path, &mut scratch)
         };
-        if let Some(stat) = self.paths.get(&path) {
+        if let Some(stat) = self.paths.get(path) {
             stat.requests += 1;
             stat.c4xx += c4xx;
             stat.c5xx += c5xx;
@@ -1538,13 +1782,17 @@ impl Stats {
                 stat.timed += 1;
             }
         }
-        for pair in query.split('&').filter(|_| !query.is_empty()) {
-            let name = pair.split('=').next().unwrap_or("");
+        self.scratch = scratch;
+        let mut query = query;
+        while !query.is_empty() {
+            let (pair, rest) = split_at_byte(query, b'&').unwrap_or((query, ""));
+            let name = split_at_byte(pair, b'=').map_or(pair, |(name, _)| name);
             if !name.is_empty() && name.len() <= 64 {
                 if let Some(count) = self.params.get(name) {
                     *count += 1;
                 }
             }
+            query = rest;
         }
         for (top, name) in [
             (&mut self.methods, &r.method),
@@ -1568,10 +1816,27 @@ impl Stats {
             return;
         };
         self.seen(at, wall);
+        match &mut self.run {
+            Some((second, n)) if second.at == at.at => *n += 1,
+            run => {
+                if self.head.is_none() {
+                    self.head = *run;
+                }
+                *run = Some((at, 1));
+            }
+        }
 
-        // This second's count, which is also how a slot knows its busiest
+        // This second's count, which is also how a slot knows its busiest.
+        // A request in the second the one before it was in counts where
+        // that one did, with nothing to look up.
+        let hot = self.hot == Some(at);
+        let mut found = true;
         let mut this_second = 0;
-        if let Some(second) = self.seconds.at(at.at) {
+        let second = match hot {
+            true => self.seconds.held(),
+            false => self.seconds.at(at.at),
+        };
+        if let Some(second) = second {
             second[0] += 1;
             second[1] += c4xx as u32;
             second[2] += c5xx as u32;
@@ -1579,23 +1844,33 @@ impl Stats {
             if self.peak.is_none_or(|(_, most)| this_second > most) {
                 self.peak = Some((at, this_second));
             }
+        } else {
+            found = false;
         }
         for slots in &mut self.slots {
-            if let Some(slot) = slots.at(at.local()) {
-                slot.requests += 1;
-                slot.c4xx += c4xx;
-                slot.c5xx += c5xx;
-                slot.bytes += r.bytes;
-                if let Some(us) = time_us {
-                    slot.time_us += us;
-                    slot.timed += 1;
-                }
-                slot.peak = slot.peak.max(this_second);
+            let slot = match hot {
+                true => slots.slots.held(),
+                false => slots.at(at.local()),
+            };
+            let Some(slot) = slot else {
+                found = false;
+                continue;
+            };
+            slot.requests += 1;
+            slot.c4xx += c4xx;
+            slot.c5xx += c5xx;
+            slot.bytes += r.bytes;
+            if let Some(us) = time_us {
+                slot.time_us += us;
+                slot.timed += 1;
             }
+            slot.peak = slot.peak.max(this_second);
         }
+        self.hot = found.then_some(at);
     }
 
     fn fault(&mut self, f: &Fault, raw: &str, wall: i64) {
+        self.hot = None;
         self.faults += 1;
         match self.levels.get_mut(f.level) {
             Some(count) => *count += 1,
@@ -1620,6 +1895,7 @@ impl Stats {
                         count: 1,
                         last: f.at,
                         example: cut(raw),
+                        order: self.order,
                     },
                 );
             }
@@ -1634,6 +1910,146 @@ impl Stats {
                     }
                 }
             }
+        }
+    }
+
+    /// A stretch of the file ends here: its first and last seconds may go
+    /// on in the stretches beside it
+    fn end_stretch(&mut self) {
+        self.edges.extend(self.head.take());
+        self.edges.extend(self.run.take());
+    }
+
+    /// A second had this many requests: its slots and the log may not
+    /// have seen one busier
+    fn busy(&mut self, at: Stamp, requests: u32) {
+        self.hot = None;
+        let busier = self
+            .peak
+            .is_none_or(|(when, most)| requests > most || (requests == most && at.at < when.at));
+        if busier {
+            self.peak = Some((at, requests));
+        }
+        for slots in &mut self.slots {
+            if let Some(slot) = slots.at(at.local()) {
+                slot.peak = slot.peak.max(requests);
+            }
+        }
+    }
+
+    /// Add what another reader counted from another part of the same logs.
+    /// The sum is what one reader would have counted from all of it, in
+    /// whatever order the parts are added.
+    pub fn merge(&mut self, other: Stats) {
+        self.hot = None;
+        self.lines += other.lines;
+        self.requests += other.requests;
+        self.bytes += other.bytes;
+        self.unread += other.unread;
+        self.undated += other.undated;
+        self.skipped += other.skipped;
+        self.faults += other.faults;
+        self.other_causes += other.other_causes;
+        self.read_bytes += other.read_bytes;
+        self.live |= other.live;
+        self.order = self.order.max(other.order);
+        self.carry = self.carry.max(other.carry);
+        if other.first_unread.is_some()
+            && (self.first_unread.is_none() || other.first_unread_order < self.first_unread_order)
+        {
+            self.first_unread = other.first_unread;
+            self.first_unread_order = other.first_unread_order;
+        }
+        if let Some(first) = other.first {
+            if self.first.is_none_or(|mine| first.at < mine.at) {
+                self.first = Some(first);
+            }
+        }
+        if let Some(last) = other.last {
+            if self.last.is_none_or(|mine| last.at >= mine.at) {
+                self.last = Some(last);
+            }
+        }
+        for (code, n) in other.statuses {
+            *self.statuses.entry(code).or_default() += n;
+        }
+        self.methods.absorb(other.methods);
+        self.paths.absorb(other.paths);
+        self.clients.absorb(other.clients);
+        self.agents.absorb(other.agents);
+        self.params.absorb(other.params);
+        self.time.absorb(&other.time);
+        self.upstream.absorb(&other.upstream);
+        // A second both readers had lines of is as busy as the two together
+        let offset = other.last.map_or(0, |last| last.offset);
+        for (key, theirs) in other.seconds.all() {
+            let Some(mine) = self.seconds.at(key) else {
+                continue;
+            };
+            let shared = mine[0] > 0;
+            for (mine, theirs) in mine.iter_mut().zip(theirs) {
+                *mine += theirs;
+            }
+            let whole = mine[0];
+            if shared {
+                self.busy(Stamp { at: key, offset }, whole);
+            }
+        }
+        for (mine, theirs) in self.slots.iter_mut().zip(&other.slots) {
+            for (key, slot) in theirs.slots.all() {
+                if let Some(mine) = mine.slots.at(key) {
+                    mine.requests += slot.requests;
+                    mine.c4xx += slot.c4xx;
+                    mine.c5xx += slot.c5xx;
+                    mine.bytes += slot.bytes;
+                    mine.time_us += slot.time_us;
+                    mine.timed += slot.timed;
+                    mine.faults += slot.faults;
+                    mine.peak = mine.peak.max(slot.peak);
+                }
+            }
+        }
+        if let Some((at, most)) = other.peak {
+            self.busy(at, most);
+        }
+        // A second cut in two by the readers: each has its half as a run at
+        // an edge, and the halves together are what the second saw
+        for (at, requests) in other.edges {
+            let whole = self.stitched.entry(at.at).or_default();
+            *whole += requests;
+            let whole = *whole;
+            self.busy(at, whole);
+        }
+        for (level, n) in other.levels {
+            *self.levels.entry(level).or_default() += n;
+        }
+        for (what, theirs) in other.causes {
+            let room = self.causes.len() < CAUSES;
+            match self.causes.get_mut(&what) {
+                Some(mine) => {
+                    mine.count += theirs.count;
+                    if theirs.last.map(|at| at.at) > mine.last.map(|at| at.at) {
+                        mine.last = theirs.last;
+                    }
+                    if theirs.order < mine.order {
+                        mine.example = theirs.example;
+                        mine.order = theirs.order;
+                    }
+                }
+                None if room => {
+                    self.causes.insert(what, theirs);
+                }
+                None => self.other_causes += theirs.count,
+            }
+        }
+        // The last lines of both, by time and then by place in the file
+        self.recent_base += other.recent_base;
+        if !other.recent.is_empty() {
+            let mut lines: Vec<Recent> = self.recent.drain(..).chain(other.recent).collect();
+            lines.sort_by_key(|line| (line.at, line.order));
+            let over = lines.len().saturating_sub(RECENT);
+            self.recent_base += over as u64;
+            self.recent.extend(lines.into_iter().skip(over));
         }
     }
 
@@ -1863,6 +2279,160 @@ fn first_stamp(path: &Path, parser: &Parser) -> Option<i64> {
     None
 }
 
+/// Count the lines of `chunk`, which ends where a line does
+fn fold_lines(chunk: &[u8], job: &Job, stats: &mut Stats, wall: i64) {
+    // Nearly every chunk is UTF-8 as it stands, and is found to be all at
+    // once; one that isn't is looked at by line
+    let valid = std::str::from_utf8(chunk).is_ok();
+    let mut from = 0;
+    while from < chunk.len() {
+        let end = memchr::memchr(b'\n', &chunk[from..]).map_or(chunk.len(), |i| from + i);
+        let line = &chunk[from..end];
+        from = end + 1;
+        let text = if valid {
+            // SAFETY: the chunk is UTF-8, and a line of it, cut at the
+            // ASCII newlines, is too
+            Cow::Borrowed(unsafe { std::str::from_utf8_unchecked(line) })
+        } else {
+            String::from_utf8_lossy(line)
+        };
+        let text = text.trim();
+        if text.is_empty() {
+            continue;
+        }
+        let line = job.parser.read(text);
+        let at = match &line {
+            Line::Request(r) => r.at,
+            Line::Fault(f) => f.at,
+            Line::Unread => None,
+        };
+        if let (Some(since), Some(at)) = (job.since, at) {
+            if at.at < since {
+                stats.skipped += 1;
+                continue;
+            }
+        }
+        stats.fold(line, text, wall);
+    }
+}
+
+#[cfg(unix)]
+fn read_at(file: &std::fs::File, buf: &mut [u8], offset: u64) -> std::io::Result<usize> {
+    std::os::unix::fs::FileExt::read_at(file, buf, offset)
+}
+
+#[cfg(windows)]
+fn read_at(file: &std::fs::File, buf: &mut [u8], offset: u64) -> std::io::Result<usize> {
+    std::os::windows::fs::FileExt::seek_read(file, buf, offset)
+}
+
+/// Fill `buf` from `offset` on, as far as the file goes; how far that was
+fn read_full_at(file: &std::fs::File, buf: &mut [u8], offset: u64) -> usize {
+    let mut filled = 0;
+    while filled < buf.len() {
+        match read_at(file, &mut buf[filled..], offset + filled as u64) {
+            Ok(0) => break,
+            Ok(n) => filled += n,
+            Err(e) if e.kind() == std::io::ErrorKind::Interrupted => {}
+            Err(_) => break,
+        }
+    }
+    filled
+}
+
+/// Read what a file has now on every core: each thread takes the next
+/// stretch of it, counts the lines that start there, and adds its counts
+/// to the shared ones. A line belongs to the stretch it starts in, so no
+/// line is counted twice or missed, and since adding counts gives the
+/// same sum in any order, the result is what one thread reading from the
+/// top would have had. Returns where the reading got to, which is the
+/// start of a line; the rest, and what is appended, is the tail's.
+fn sprint(path: &Path, job: &Job, shared: &Shared, chunk: u64, threads: usize) -> u64 {
+    let Ok(file) = std::fs::File::open(path) else {
+        return 0;
+    };
+    let len = file.metadata().map_or(0, |meta| meta.len());
+    let chunks = len / chunk;
+    if chunks < 2 || threads < 2 {
+        return 0;
+    }
+    let base = shared.lock().order;
+    let next = std::sync::atomic::AtomicU64::new(0);
+    let reached = std::sync::atomic::AtomicU64::new(0);
+    let wall = wall();
+    let fresh = || Stats {
+        exact_paths: job.exact_paths,
+        ..Stats::default()
+    };
+    std::thread::scope(|scope| {
+        for _ in 0..threads.min(chunks as usize) {
+            scope.spawn(|| {
+                let mut local = fresh();
+                let mut buf: Vec<u8> = Vec::new();
+                let mut merged = std::time::Instant::now();
+                while !shared.stop.load(Ordering::Relaxed) {
+                    let i = next.fetch_add(1, Ordering::Relaxed);
+                    if i >= chunks {
+                        break;
+                    }
+                    // One byte before the stretch says whether a line
+                    // starts at its first byte
+                    let from = (i * chunk).saturating_sub(1);
+                    buf.resize(((i + 1) * chunk - from) as usize, 0);
+                    let filled = read_full_at(&file, &mut buf, from);
+                    buf.truncate(filled);
+                    let start = match i {
+                        0 => 0,
+                        _ => match memchr::memchr(b'\n', &buf) {
+                            Some(newline) => newline + 1,
+                            None => buf.len(),
+                        },
+                    };
+                    // The last line that starts here may end further on
+                    let mut end = buf.len();
+                    while start < buf.len() && buf.last() != Some(&b'\n') {
+                        let had = buf.len();
+                        buf.resize(had + 64 * 1024, 0);
+                        let more = read_full_at(&file, &mut buf[had..], from + had as u64);
+                        buf.truncate(had + more);
+                        if let Some(newline) = memchr::memchr(b'\n', &buf[had..]) {
+                            end = had + newline + 1;
+                            break;
+                        }
+                        if more == 0 {
+                            // The file ends inside a line still being written
+                            end = memchr::memrchr(b'\n', &buf)
+                                .map_or(start, |i| i + 1)
+                                .max(start);
+                            break;
+                        }
+                        end = buf.len();
+                    }
+                    if start < end {
+                        local.order = base + from + start as u64;
+                        local.keeping = (i + 1) * chunk + SPRINT_KEEP >= len;
+                        fold_lines(&buf[start..end], job, &mut local, wall);
+                        local.end_stretch();
+                        local.read_bytes += (end - start) as u64;
+                    }
+                    reached.fetch_max(from + end.max(start) as u64, Ordering::Relaxed);
+                    if merged.elapsed() >= SPRINT_MERGE {
+                        shared.lock().merge(std::mem::replace(&mut local, fresh()));
+                        merged = std::time::Instant::now();
+                    }
+                }
+                shared.lock().merge(local);
+            });
+        }
+    });
+    let mut stats = shared.lock();
+    stats.stitched = HashMap::new();
+    if shared.stop.load(Ordering::Relaxed) {
+        return 0;
+    }
+    reached.load(Ordering::Relaxed)
+}
+
 /// One file being read
 struct Tail {
     path: Option<PathBuf>,
@@ -1894,8 +2464,16 @@ fn identity(meta: &std::fs::Metadata) -> u64 {
 
 impl Tail {
     fn open(path: &Path) -> Result<Tail, String> {
+        Tail::open_at(path, 0)
+    }
+
+    /// The file from `position` on, which is where a line starts
+    fn open_at(path: &Path, position: u64) -> Result<Tail, String> {
+        use std::io::Seek;
         let unreadable = |e: std::io::Error| format!("couldn't read {}: {e}", path.display());
-        let file = std::fs::File::open(path).map_err(unreadable)?;
+        let mut file = std::fs::File::open(path).map_err(unreadable)?;
+        file.seek(std::io::SeekFrom::Start(position))
+            .map_err(unreadable)?;
         let meta = file.metadata().map_err(unreadable)?;
         if meta.is_dir() {
             return Err(format!("{} is a directory", path.display()));
@@ -1903,7 +2481,7 @@ impl Tail {
         Ok(Tail {
             path: Some(path.to_path_buf()),
             input: Box::new(BufReader::with_capacity(CHUNK, file)),
-            position: 0,
+            position,
             identity: identity(&meta),
             pending: Vec::new(),
         })
@@ -1955,41 +2533,7 @@ impl Tail {
                 let mut stats = shared.lock();
                 let wall = wall();
                 stats.read_bytes += whole as u64;
-                let chunk = &self.pending[..whole];
-                // Nearly every chunk is UTF-8 as it stands, and is found
-                // to be all at once; one that isn't is looked at by line
-                let valid = std::str::from_utf8(chunk).is_ok();
-                let mut from = 0;
-                while from < chunk.len() {
-                    let end =
-                        memchr::memchr(b'\n', &chunk[from..]).map_or(chunk.len(), |i| from + i);
-                    let line = &chunk[from..end];
-                    from = end + 1;
-                    let text = if valid {
-                        // SAFETY: the chunk is UTF-8, and a line of it,
-                        // cut at the ASCII newlines, is too
-                        Cow::Borrowed(unsafe { std::str::from_utf8_unchecked(line) })
-                    } else {
-                        String::from_utf8_lossy(line)
-                    };
-                    let text = text.trim();
-                    if text.is_empty() {
-                        continue;
-                    }
-                    let line = job.parser.read(text);
-                    let at = match &line {
-                        Line::Request(r) => r.at,
-                        Line::Fault(f) => f.at,
-                        Line::Unread => None,
-                    };
-                    if let (Some(since), Some(at)) = (job.since, at) {
-                        if at.at < since {
-                            stats.skipped += 1;
-                            continue;
-                        }
-                    }
-                    stats.fold(line, text, wall);
-                }
+                fold_lines(&self.pending[..whole], job, &mut stats, wall);
                 drop(stats);
                 self.pending.drain(..whole);
             }
@@ -2043,7 +2587,20 @@ pub fn read(job: &Job, shared: &Shared) {
         .sum();
     // Stdin ends when its writer does; a file being followed never does
     let following = job.follow && !files.is_empty();
+    let threads = std::thread::available_parallelism().map_or(1, usize::from);
     for tail in &mut tails {
+        // A file of any size is first read by every core, as far as it
+        // goes now; its last lines and what comes after, by this thread
+        let path = tail
+            .path
+            .clone()
+            .filter(|path| std::fs::metadata(path).is_ok_and(|meta| meta.len() >= SPRINT_MIN));
+        if let Some(path) = path {
+            let reached = sprint(&path, job, shared, SPRINT_CHUNK, threads);
+            if let Ok(rest) = Tail::open_at(&path, reached) {
+                *tail = rest;
+            }
+        }
         tail.drain(job, shared, !following);
     }
     shared.lock().caught_up = true;
@@ -3054,5 +3611,154 @@ mod tests {
             .contains("/rotated"));
         shared.stop();
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn every_core_reading_counts_what_one_would() {
+        let dir = std::env::temp_dir().join(format!("pepe-sprint-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("access.log");
+        // An hour and a half in which seconds have from none to forty
+        // requests, so that most stretches cut one in two; error log lines,
+        // lines that can't be read, a line longer than a stretch, and bytes
+        // that aren't UTF-8
+        let mut log = String::new();
+        let mut n = 0u64;
+        for s in 0..5_400 {
+            let here = (s * 7 % 11) * (s % 4) + u64::from(s % 900 == 0) * 10;
+            for _ in 0..here {
+                n += 1;
+                let status = if n % 53 == 0 {
+                    502
+                } else if n % 17 == 0 {
+                    404
+                } else {
+                    200
+                };
+                log.push_str(&hit(
+                    s as i64,
+                    &format!("/p{}/{}?k{}=1", n % 7, n % 3_000, n % 5),
+                    status,
+                ));
+                log.push_str(&format!(" rt=0.{:03}\n", n % 400));
+            }
+            if s % 97 == 0 {
+                let at = civil(AT + s as i64 + i64::from(local_offset()));
+                log.push_str(&format!(
+                    "{}/{:02}/{:02} {:02}:{:02}:{:02} [error] 1#1: *{s} upstream timed out (110: Connection timed out) while reading, client: 10.0.0.{}\n",
+                    at.year, at.month, at.day, at.hour, at.minute, at.second, s % 5
+                ));
+            }
+            if s % 1_300 == 5 {
+                log.push_str(&format!("not a line {s}\n"));
+            }
+            if s == 2_000 {
+                log.push_str(&hit(s as i64, &"/long".repeat(1_000), 200));
+                log.push('\n');
+            }
+        }
+        let mut bytes = log.into_bytes();
+        let at = bytes.len() / 3;
+        let line_start = bytes[..at].iter().rposition(|&c| c == b'\n').unwrap() + 1;
+        bytes[line_start] = 0xff;
+        bytes.extend_from_slice(hit(5_400, "/unfinished", 200).as_bytes());
+        std::fs::write(&path, &bytes).unwrap();
+
+        let job = Job {
+            files: vec![path.clone()],
+            piped: None,
+            parser: Parser::default(),
+            since: Some(AT + 10),
+            follow: false,
+            exact_paths: false,
+        };
+        let wall = AT + 86_400;
+        let one = Shared::default();
+        Tail::open(&path).unwrap().drain(&job, &one, false);
+        let one = one.lock();
+        assert!(
+            one.requests > 30_000 && one.unread == 5 && one.skipped > 0,
+            "{}",
+            one.requests
+        );
+        let expected = json_report(&one, &job, wall, 60, 50);
+        let lines = |stats: &Stats| -> Vec<String> {
+            stats.recent.iter().map(|line| line.text.clone()).collect()
+        };
+
+        for (chunk, threads) in [(1_024, 4), (3_000, 3), (64 * 1024, 8), (1 << 20, 2)] {
+            let many = Shared::default();
+            let reached = sprint(&path, &job, &many, chunk, threads);
+            assert!(
+                reached > 0 && reached <= bytes.len() as u64,
+                "{chunk}: {reached}"
+            );
+            assert_eq!(
+                bytes[reached as usize - 1],
+                b'\n',
+                "{chunk}: at a line's start"
+            );
+            Tail::open_at(&path, reached)
+                .unwrap()
+                .drain(&job, &many, false);
+            let many = many.lock();
+            assert_eq!(
+                json_report(&many, &job, wall, 60, 50),
+                expected,
+                "{chunk} × {threads}"
+            );
+            assert_eq!(many.read_bytes, one.read_bytes, "{chunk}");
+            assert_eq!(many.peak, one.peak, "{chunk}");
+            assert_eq!(lines(&many), lines(&one), "{chunk}");
+            assert_eq!(many.recent_base, one.recent_base, "{chunk}");
+            assert_eq!(many.first_unread, one.first_unread, "{chunk}");
+            assert!(many.stitched.is_empty());
+        }
+        // Too small to be worth a second thread
+        assert_eq!(sprint(&path, &job, &Shared::default(), 1 << 30, 8), 0);
+        assert_eq!(sprint(&path, &job, &Shared::default(), 1_024, 1), 0);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn names_are_found_by_a_keyed_hash() {
+        use std::hash::BuildHasher;
+        let keyed = Keyed::new();
+        // The same key for every map of a run, so counts can be added
+        assert_eq!(keyed.hash_one("/a"), Keyed::new().hash_one("/a"));
+        let mut seen = std::collections::HashSet::new();
+        for i in 0..20_000u32 {
+            assert!(
+                seen.insert(keyed.hash_one(format!("/items/{i}").as_str())),
+                "{i}"
+            );
+        }
+        // Length counts, and so does what is past the last whole word
+        for (a, b) in [
+            ("", "\0"),
+            ("abcdefgh", "abcdefgh\0"),
+            ("abcdefghi", "abcdefghj"),
+        ] {
+            assert_ne!(keyed.hash_one(a), keyed.hash_one(b), "{a:?} {b:?}");
+        }
+        let mut top: Top<PathStat> = Top::new(2);
+        let mut other: Top<PathStat> = Top::new(2);
+        for (top, names) in [(&mut top, ["a", "b"]), (&mut other, ["b", "c"])] {
+            for name in names {
+                top.get(name).unwrap().requests += 2;
+            }
+        }
+        top.absorb(other);
+        assert_eq!((top.len(), top.other), (2, 2), "c came after the cap");
+        assert_eq!(
+            top.top(1, |p| p.requests)[0],
+            (
+                "b",
+                &PathStat {
+                    requests: 4,
+                    ..Default::default()
+                }
+            )
+        );
     }
 }

@@ -420,6 +420,26 @@ impl Histogram {
         self.max = 0;
     }
 
+    /// Add what another histogram recorded
+    pub fn absorb(&mut self, other: &Histogram) {
+        if other.count == 0 {
+            return;
+        }
+        if other.counts.len() > self.counts.len() {
+            self.counts.resize(other.counts.len(), 0);
+        }
+        for (mine, theirs) in self.counts.iter_mut().zip(&other.counts) {
+            *mine += theirs;
+        }
+        self.min = if self.count == 0 {
+            other.min
+        } else {
+            self.min.min(other.min)
+        };
+        self.max = self.max.max(other.max);
+        self.count += other.count;
+    }
+
     pub fn count(&self) -> u64 {
         self.count
     }
