@@ -1880,9 +1880,16 @@ fn identity(meta: &std::fs::Metadata) -> u64 {
     std::os::unix::fs::MetadataExt::ino(meta)
 }
 
+/// Windows has no inode to ask for; when a file was made tells two apart,
+/// except that a file made under a name just vacated is given the old
+/// one's time. Such a rotation is still seen when the new file is shorter
+/// than what was read of the old.
 #[cfg(not(unix))]
-fn identity(_: &std::fs::Metadata) -> u64 {
-    0
+fn identity(meta: &std::fs::Metadata) -> u64 {
+    meta.created()
+        .ok()
+        .and_then(|made| made.duration_since(std::time::UNIX_EPOCH).ok())
+        .map_or(0, |since| since.as_nanos() as u64)
 }
 
 impl Tail {
@@ -2004,9 +2011,9 @@ impl Tail {
         if identity(&meta) == self.identity && meta.len() >= self.position {
             return;
         }
-        if identity(&meta) != self.identity {
-            self.drain(job, shared, true);
-        }
+        // What the old file still has, last line included, is read out of
+        // the handle to it. A file emptied in place has nothing more.
+        self.drain(job, shared, true);
         if let Ok(fresh) = Tail::open(&path) {
             *self = fresh;
         }
@@ -2268,7 +2275,7 @@ pub fn report(stats: &Stats, name: &str, wall: i64, window: i64, rows: usize) ->
 
     if !stats.statuses.is_empty() {
         let mut codes: Vec<(&u16, &u64)> = stats.statuses.iter().collect();
-        codes.sort_by(|a, b| b.1.cmp(a.1));
+        codes.sort_by_key(|(_, n)| std::cmp::Reverse(**n));
         let codes: Vec<String> = codes
             .iter()
             .take(8)

@@ -889,7 +889,7 @@ impl LogsScreen {
                 code => (code.to_string(), *n, status_color(*code)),
             })
             .collect();
-        statuses.sort_by(|a, b| b.1.cmp(&a.1));
+        statuses.sort_by_key(|status| std::cmp::Reverse(status.1));
         let counted = |top: &logs::Top<u64>, n: usize| -> Counts {
             top.top(n, |n| *n)
                 .into_iter()
