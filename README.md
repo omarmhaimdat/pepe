@@ -522,6 +522,34 @@ The repository is also an action: it installs a pinned release, runs `pepe --jso
 
 Outputs: `total_requests`, `failed_requests`, `requests_per_second`, `p50_ms`, `p99_ms`, and `report`, the path of the JSON. `version` pins a release (`0.9.0`); the default is the latest. Linux and macOS runners.
 
+**Against the base branch.** With `baseline: auto`, every run on a branch keeps its report in the Actions cache, and a pull request is held against its base branch's last one with `pepe compare`. `comment: true` posts the result on the pull request, one comment updated on every push, and `gate: true` fails the step when it says Slower or Worse. The first run on the base branch after this is added makes the baseline; until then a pull request's comment says so.
+
+```yaml
+permissions:
+  pull-requests: write
+steps:
+  - uses: omarmhaimdat/pepe@v0
+    with:
+      url: https://staging.example.com/api/health
+      args: -n 5000 -c 20
+      baseline: auto
+      comment: true
+      gate: true
+```
+
+> ### pepe · ▲ Slower than `main` · https://staging.example.com/api/health
+> | | `main` | this PR | |
+> |---|---|---|---|
+> | p99 | 120.0 ms | 166.0 ms | ▲ up 38% |
+> | median | 30.0 ms | 31.0 ms | within the usual spread (±5%) |
+> | throughput | 260 req/s | 252 req/s | within the usual spread (±5%) |
+> | failed | 0% | 0% | |
+>
+> - ▲ p99 up 38%: 120.0ms → 166.0ms
+> - ▲ A long tail is new: p99 is 5.4× the median, was 4.0×
+
+`baseline` can also name a report file, for a baseline kept in the repository or fetched from elsewhere. The comparison is in the job summary too, and in two more outputs: `verdict` (`faster`, `same`, `slower`, `better`, `worse`) and `compare`, the path of `pepe compare --json`'s output.
+
 ### Proxies
 
 HTTP, HTTPS and SOCKS5, with or without credentials:
