@@ -488,7 +488,7 @@ jq '.summary.latency.p99_ms' results.json
 The repository is also an action: it installs a pinned release, runs `pepe --json`, puts the numbers in the job summary and in outputs, and can fail the job on a condition over the report.
 
 ```yaml
-- uses: omarmhaimdat/pepe@master
+- uses: omarmhaimdat/pepe@v0
   id: load
   with:
     url: https://staging.example.com/api/health
