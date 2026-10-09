@@ -6,6 +6,35 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+## [0.22.1](https://github.com/omarmhaimdat/pepe/compare/v0.22.0...v0.22.1) - 2026-10-09
+
+### Fixed
+
+- *(logs)* the traffic chart fills its panel instead of half of it ([#121](https://github.com/omarmhaimdat/pepe/pull/121))
+
+  The bug in the screenshot: the dashboard's traffic chart has its bars in
+  the right half of the panel and the left half blank.
+
+  The chart took the finest round grain whose bars fit the panel, then
+  widened the bars only when they covered less than half of it. An hour at
+  30s a bar is 120 bars, so on a terminal 230 cells wide the bars sat in
+  the right half; ten minutes at 5s a bar did the same on anything wider
+  than 240 cells, and the README's own recording ([#114](https://github.com/omarmhaimdat/pepe/pull/114)) shows it too.
+
+  Now there is a bar per column, each over its share of the seconds, and a
+  bar holds a rate rather than a count, so bars of 4 and of 5 seconds
+  stand level; the title says "~4s a bar" when the share isn't whole.
+  Short spans still get wider bars. A test draws the dashboard at six
+  widths, 80 to 300 columns, and wants the bars over at least three
+  quarters of the panel; before the fix it failed at 240 and 300.
+
+  Once this and #114 are both in, `assets/record.sh
+  assets/tapes/logs.tape` should be run again so the README's logs
+  recording shows a full chart.
+
+  **Squash-merge with the title as it is.**
+
+
 ## [0.22.0](https://github.com/omarmhaimdat/pepe/compare/v0.21.0...v0.22.0) - 2026-10-09
 
 ### Added
