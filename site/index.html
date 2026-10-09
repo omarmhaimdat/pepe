@@ -3,114 +3,333 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>pepe · HTTP load generator</title>
-<meta name="description" content="pepe is an HTTP load generator with a live dashboard, built to cost less than the server it tests. Install it in one line.">
-<link rel="icon" href="/assets/logo.svg" type="image/svg+xml">
+<title>pepe · HTTP load testing with a live terminal dashboard</title>
+<meta name="description" content="pepe is a fast HTTP load testing tool with a live terminal dashboard and a verdict in plain words. Ramp to find capacity, replay access logs, test OpenAPI specs, chain requests, and watch nginx logs live. One binary, written in Rust.">
+<link rel="canonical" href="https://pepe.mhaimdat.com/">
+<link rel="icon" href="assets/logo.svg" type="image/svg+xml">
+<meta name="theme-color" content="#140f0d">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://pepe.mhaimdat.com/">
+<meta property="og:title" content="pepe · HTTP load testing with a live terminal dashboard">
+<meta property="og:description" content="Load test an endpoint and read what happened: a live dashboard, a verdict in plain words, ramps, replays, OpenAPI, flows and live nginx logs. One binary.">
+<meta property="og:image" content="https://pepe.mhaimdat.com/img/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="https://pepe.mhaimdat.com/img/og.png">
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"SoftwareApplication","name":"pepe","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","description":"HTTP load testing tool with a live terminal dashboard.","url":"https://pepe.mhaimdat.com/","license":"https://opensource.org/licenses/MIT","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"author":{"@type":"Person","name":"Omar Mhaimdat"},"codeRepository":"https://github.com/omarmhaimdat/pepe"}
+</script>
 <style>
   :root {
-    --bg: #1e1e2e; --panel: #181825; --line: #313244; --text: #cdd6f4; --dim: #a6adc8;
-    --accent: #5fd7ff; --ok: #a6e3a1; --warn: #f9e2af; --code-bg: #11111b;
-  }
-  @media (prefers-color-scheme: light) {
-    :root { --bg: #fafafa; --panel: #ffffff; --line: #e5e5ea; --text: #1d1d1f; --dim: #5c5c66;
-            --accent: #005f87; --ok: #40a02b; --warn: #df8e1d; --code-bg: #f0f0f3; }
+    --ground: #140f0d; --surface: #1d1613; --raised: #261d19; --line: #3a2c25;
+    --text: #f3e8de; --dim: #b3a195; --faint: #8a796d;
+    --ember: #ff8a3d; --flame: #ffc27a; --good: #9ccf6a; --warn: #f0cf5a; --bad: #ff5a6e;
+    --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+    --sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   }
   * { box-sizing: border-box; }
-  body { margin: 0; background: var(--bg); color: var(--text);
-         font: 16px/1.55 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; }
-  main { max-width: 760px; margin: 0 auto; padding: 48px 16px 64px; }
-  header { display: flex; align-items: center; gap: 20px; margin-bottom: 8px; }
-  .logo { width: 72px; height: 63px; flex: none; }
-  h1 { font-size: 40px; margin: 0; letter-spacing: -0.5px; }
-  .tagline { color: var(--dim); margin: 0 0 32px; font-size: 18px; }
-  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 20px; }
-  .tabs { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
-  .tabs button { font: inherit; font-size: 14px; color: var(--dim); background: transparent;
-                 border: 1px solid var(--line); border-radius: 999px; padding: 5px 12px; cursor: pointer; }
-  .tabs button[aria-selected="true"] { color: var(--text); border-color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent); }
+  html { scroll-behavior: smooth; }
+  body { margin: 0; background: var(--ground); color: var(--text); font: 17px/1.6 var(--sans);
+         -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; }
+  a { color: var(--ember); text-decoration: none; }
+  a:hover { color: var(--flame); }
+  code, kbd, pre { font-family: var(--mono); }
+  .wrap { max-width: 1120px; margin: 0 auto; padding: 0 24px; }
+
+  /* The bar on top */
+  .top { display: flex; align-items: center; gap: 28px; padding: 22px 0; }
+  .brand { display: flex; align-items: center; gap: 10px; color: var(--text); font: 700 20px var(--mono); }
+  .brand:hover { color: var(--text); }
+  .mark { width: 30px; height: 26px; }
+  .top nav { margin-left: auto; display: flex; gap: 26px; font-size: 15px; }
+  .top nav a { color: var(--dim); } .top nav a:hover { color: var(--text); }
+  .top .gh { color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 6px 14px; }
+  .top .gh:hover { border-color: var(--ember); }
+
+  /* Hero */
+  .hero { text-align: center; padding: 56px 0 0; position: relative; }
+  .hero::before { content: ""; position: absolute; inset: -80px 0 auto; height: 620px; pointer-events: none;
+    background: radial-gradient(60% 55% at 50% 30%, rgba(255,138,61,.16), transparent 70%); }
+  .hero > * { position: relative; }
+  .pill { display: inline-block; font: 13px var(--mono); color: var(--flame); border: 1px solid var(--line);
+          background: var(--surface); border-radius: 999px; padding: 5px 14px; margin-bottom: 26px; }
+  h1 { font-size: clamp(38px, 6.2vw, 68px); line-height: 1.04; letter-spacing: -0.035em; margin: 0 auto 20px; max-width: 15ch; font-weight: 750; }
+  h1 em { font-style: normal; color: var(--ember); }
+  .lede { color: var(--dim); font-size: clamp(17px, 2vw, 20px); max-width: 56ch; margin: 0 auto 34px; }
+
+  /* Install */
+  .install { max-width: 720px; margin: 0 auto; text-align: left; background: var(--surface);
+             border: 1px solid var(--line); border-radius: 14px; padding: 14px; }
+  .tabs { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 10px; }
+  .tabs button { font: 13px var(--mono); color: var(--faint); background: transparent; border: 0;
+                 border-radius: 7px; padding: 6px 11px; cursor: pointer; }
+  .tabs button:hover { color: var(--text); }
+  .tabs button[aria-selected="true"] { color: var(--ground); background: var(--ember); font-weight: 700; }
   .panel { display: none; } .panel.on { display: block; }
-  pre { position: relative; margin: 0; background: var(--code-bg); border-radius: 8px; padding: 14px 92px 14px 16px;
-        overflow-x: auto; font: 14px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; white-space: pre-wrap; word-break: break-all; }
-  pre button { position: absolute; top: 8px; right: 8px; font: inherit; font-size: 12px; color: var(--dim);
-               background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 4px 9px; cursor: pointer; }
-  pre button:hover, .tabs button:hover { color: var(--text); }
-  .note { color: var(--dim); font-size: 14px; margin: 10px 0 0; }
-  .then { margin-top: 20px; }
-  .then p { margin: 0 0 8px; color: var(--dim); font-size: 14px; }
-  h2 { font-size: 20px; margin: 40px 0 12px; }
-  .shot { width: 100%; border-radius: 10px; border: 1px solid var(--line); display: block; }
-  ul.points { padding-left: 20px; margin: 0; color: var(--dim); }
-  ul.points li { margin: 6px 0; } ul.points b { color: var(--text); font-weight: 600; }
-  nav { display: flex; flex-wrap: wrap; gap: 8px 18px; margin-top: 36px; font-size: 15px; }
-  a { color: var(--accent); text-decoration: none; } a:hover { text-decoration: underline; }
-  footer { margin-top: 40px; color: var(--dim); font-size: 13px; }
-  kbd { font: 13px ui-monospace, SFMono-Regular, Menlo, monospace; background: var(--code-bg); border-radius: 4px; padding: 1px 5px; }
+  .cmd { position: relative; margin: 0; background: var(--ground); border-radius: 9px; padding: 14px 84px 14px 16px;
+         font-size: 14.5px; line-height: 1.5; overflow-x: auto; white-space: pre-wrap; word-break: break-all; }
+  .cmd::before { content: "$ "; color: var(--ember); }
+  .cmd button { position: absolute; top: 9px; right: 9px; font: 12px var(--mono); color: var(--dim);
+                background: var(--raised); border: 1px solid var(--line); border-radius: 6px; padding: 4px 10px; cursor: pointer; }
+  .cmd button:hover { color: var(--text); border-color: var(--ember); }
+  .note { color: var(--faint); font-size: 14px; margin: 10px 4px 2px; }
+  .note kbd, p kbd, li kbd { font-size: .88em; background: var(--raised); border-radius: 4px; padding: 1px 6px; color: var(--text); }
+
+  /* A terminal with a picture of pepe in it */
+  .term { margin: 56px auto 0; border: 1px solid var(--line); border-radius: 14px; overflow: hidden; background: var(--ground);
+          box-shadow: 0 40px 120px -30px rgba(255,138,61,.28), 0 0 0 1px rgba(0,0,0,.4); }
+  .term .bar { display: flex; align-items: center; gap: 7px; padding: 11px 14px; background: var(--surface); border-bottom: 1px solid var(--line); }
+  .term .bar i { width: 11px; height: 11px; border-radius: 50%; background: var(--line); }
+  .term .bar span { margin: 0 auto; font: 13px var(--mono); color: var(--faint); transform: translateX(-27px);
+                    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+  .term img { display: block; width: 100%; height: auto; }
+
+  section { padding: 104px 0 0; }
+  .eyebrow { font: 13px var(--mono); color: var(--ember); letter-spacing: .08em; text-transform: uppercase; margin: 0 0 12px; }
+  h2 { font-size: clamp(28px, 3.6vw, 42px); line-height: 1.1; letter-spacing: -0.025em; margin: 0 0 16px; max-width: 22ch; }
+  .sub { color: var(--dim); max-width: 62ch; margin: 0 0 40px; }
+
+  /* The verdict */
+  .verdicts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+  .verdict { background: var(--surface); border-radius: 12px; padding: 22px 22px 20px; border-left: 3px solid var(--c); font: 14px/1.65 var(--mono); }
+  .verdict b { color: var(--c); font-size: 16px; display: block; margin-bottom: 8px; }
+  .verdict span { color: var(--dim); display: block; padding-left: 2ch; text-indent: -2ch; }
+  .verdict span::before { content: attr(data-g) " "; color: var(--c); }
+
+  /* What it does */
+  .grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+  .card { background: var(--surface); border: 1px solid transparent; border-radius: 12px; padding: 24px; transition: border-color .15s; }
+  .card:hover { border-color: var(--line); }
+  .card h3 { margin: 0 0 8px; font-size: 18px; letter-spacing: -0.01em; }
+  .card p { margin: 0 0 16px; color: var(--dim); font-size: 15.5px; line-height: 1.55; }
+  .card code { display: block; font-size: 13px; color: var(--flame); background: var(--ground); border-radius: 7px; padding: 9px 11px;
+               white-space: nowrap; overflow-x: auto; }
+  .card code::before { content: "$ "; color: var(--faint); }
+
+  /* Two columns: words and a picture */
+  .split { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 48px; align-items: center; }
+  .split.top { align-items: start; }
+  .split .term { margin: 0; }
+  ul.ticks { list-style: none; padding: 0; margin: 0 0 28px; }
+  ul.ticks li { padding-left: 26px; position: relative; margin: 10px 0; color: var(--dim); }
+  ul.ticks li::before { content: "✔"; position: absolute; left: 0; color: var(--good); }
+  ul.ticks b { color: var(--text); font-weight: 600; }
+
+  /* Numbers */
+  .numbers { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 28px; }
+  .number { background: var(--surface); border-radius: 12px; padding: 24px; }
+  .number b { display: block; font: 700 clamp(30px, 3.6vw, 44px)/1 var(--mono); color: var(--ember); letter-spacing: -0.03em; margin-bottom: 10px; }
+  .number span { color: var(--dim); font-size: 14.5px; line-height: 1.45; display: block; }
+  table { width: 100%; border-collapse: collapse; font: 14px var(--mono); background: var(--surface); border-radius: 12px; overflow: hidden; }
+  th, td { text-align: right; padding: 12px 18px; border-bottom: 1px solid var(--ground); white-space: nowrap; }
+  th:first-child, td:first-child { text-align: left; }
+  th { color: var(--faint); font-weight: 400; } td { color: var(--dim); } td.us { color: var(--text); font-weight: 700; }
+  .scroll { overflow-x: auto; border-radius: 12px; }
+  .fine { color: var(--faint); font-size: 14px; margin-top: 14px; max-width: 80ch; }
+
+  /* CI */
+  pre.code { margin: 0; background: var(--surface); border-radius: 12px; padding: 22px 24px; font-size: 13.5px; line-height: 1.7; overflow-x: auto; color: var(--dim); }
+  pre.code .k { color: var(--flame); } pre.code .s { color: var(--good); } pre.code .c { color: var(--faint); }
+
+  .cta { text-align: center; padding: 120px 0 0; }
+  .cta h2 { margin: 0 auto 28px; }
+  .button { display: inline-block; font-weight: 650; color: var(--ground); background: var(--ember); border-radius: 10px; padding: 13px 26px; margin: 0 6px 12px; }
+  .button:hover { color: var(--ground); background: var(--flame); }
+  .button.ghost { color: var(--text); background: transparent; border: 1px solid var(--line); }
+  .button.ghost:hover { border-color: var(--ember); background: transparent; color: var(--text); }
+  footer { margin-top: 110px; border-top: 1px solid var(--surface); padding: 30px 0 46px; color: var(--faint); font-size: 14px;
+           display: flex; flex-wrap: wrap; gap: 10px 24px; }
+  footer a { color: var(--dim); } footer .right { margin-left: auto; }
+
+  @media (max-width: 900px) {
+    .verdicts, .grid { grid-template-columns: 1fr; }
+    .numbers { grid-template-columns: 1fr 1fr; }
+    .split { grid-template-columns: 1fr; gap: 28px; }
+    .top nav a:not(.gh) { display: none; }
+    .term .bar span { transform: none; margin: 0 0 0 10px; }
+    section { padding-top: 76px; }
+  }
+  @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } .card { transition: none; } }
 </style>
 </head>
 <body>
-<main>
-  <header>
-    <svg class="logo" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 112" width="128" height="112" shape-rendering="crispEdges"><rect x="80" y="0" width="8" height="8" fill="#008700"/><rect x="88" y="0" width="8" height="8" fill="#008700"/><rect x="72" y="8" width="8" height="8" fill="#008700"/><rect x="80" y="8" width="8" height="8" fill="#008700"/><rect x="40" y="16" width="8" height="8" fill="#5f0000"/><rect x="48" y="16" width="8" height="8" fill="#008700"/><rect x="56" y="16" width="8" height="8" fill="#5fd700"/><rect x="64" y="16" width="8" height="8" fill="#5fd700"/><rect x="72" y="16" width="8" height="8" fill="#5fd700"/><rect x="80" y="16" width="8" height="8" fill="#5fd700"/><rect x="88" y="16" width="8" height="8" fill="#008700"/><rect x="96" y="16" width="8" height="8" fill="#5f0000"/><rect x="32" y="24" width="8" height="8" fill="#5f0000"/><rect x="40" y="24" width="8" height="8" fill="#ff0000"/><rect x="48" y="24" width="8" height="8" fill="#008700"/><rect x="56" y="24" width="8" height="8" fill="#5fd700"/><rect x="64" y="24" width="8" height="8" fill="#5fd700"/><rect x="72" y="24" width="8" height="8" fill="#5fd700"/><rect x="80" y="24" width="8" height="8" fill="#5fd700"/><rect x="88" y="24" width="8" height="8" fill="#008700"/><rect x="96" y="24" width="8" height="8" fill="#ff0000"/><rect x="104" y="24" width="8" height="8" fill="#5f0000"/><rect x="24" y="32" width="8" height="8" fill="#5f0000"/><rect x="32" y="32" width="8" height="8" fill="#ff0000"/><rect x="40" y="32" width="8" height="8" fill="#ffafaf"/><rect x="48" y="32" width="8" height="8" fill="#ff0000"/><rect x="56" y="32" width="8" height="8" fill="#ff0000"/><rect x="64" y="32" width="8" height="8" fill="#ff0000"/><rect x="72" y="32" width="8" height="8" fill="#ff0000"/><rect x="80" y="32" width="8" height="8" fill="#ff0000"/><rect x="88" y="32" width="8" height="8" fill="#ff0000"/><rect x="96" y="32" width="8" height="8" fill="#ff0000"/><rect x="104" y="32" width="8" height="8" fill="#ff0000"/><rect x="112" y="32" width="8" height="8" fill="#5f0000"/><rect x="24" y="40" width="8" height="8" fill="#5f0000"/><rect x="32" y="40" width="8" height="8" fill="#ff0000"/><rect x="40" y="40" width="8" height="8" fill="#ffffff"/><rect x="48" y="40" width="8" height="8" fill="#ffffff"/><rect x="56" y="40" width="8" height="8" fill="#ff0000"/><rect x="64" y="40" width="8" height="8" fill="#ff0000"/><rect x="72" y="40" width="8" height="8" fill="#ff0000"/><rect x="80" y="40" width="8" height="8" fill="#ffffff"/><rect x="88" y="40" width="8" height="8" fill="#ffffff"/><rect x="96" y="40" width="8" height="8" fill="#ff0000"/><rect x="104" y="40" width="8" height="8" fill="#ff0000"/><rect x="112" y="40" width="8" height="8" fill="#d70000"/><rect x="120" y="40" width="8" height="8" fill="#5f0000"/><rect x="16" y="48" width="8" height="8" fill="#5f0000"/><rect x="24" y="48" width="8" height="8" fill="#ff0000"/><rect x="32" y="48" width="8" height="8" fill="#ff0000"/><rect x="40" y="48" width="8" height="8" fill="#ffffff"/><rect x="48" y="48" width="8" height="8" fill="#000000"/><rect x="56" y="48" width="8" height="8" fill="#ff0000"/><rect x="64" y="48" width="8" height="8" fill="#ff0000"/><rect x="72" y="48" width="8" height="8" fill="#ff0000"/><rect x="80" y="48" width="8" height="8" fill="#ffffff"/><rect x="88" y="48" width="8" height="8" fill="#000000"/><rect x="96" y="48" width="8" height="8" fill="#ff0000"/><rect x="104" y="48" width="8" height="8" fill="#ff0000"/><rect x="112" y="48" width="8" height="8" fill="#d70000"/><rect x="120" y="48" width="8" height="8" fill="#5f0000"/><rect x="16" y="56" width="8" height="8" fill="#5f0000"/><rect x="24" y="56" width="8" height="8" fill="#ff0000"/><rect x="32" y="56" width="8" height="8" fill="#ff87af"/><rect x="40" y="56" width="8" height="8" fill="#ff0000"/><rect x="48" y="56" width="8" height="8" fill="#ff0000"/><rect x="56" y="56" width="8" height="8" fill="#ff0000"/><rect x="64" y="56" width="8" height="8" fill="#ff0000"/><rect x="72" y="56" width="8" height="8" fill="#ff0000"/><rect x="80" y="56" width="8" height="8" fill="#ff0000"/><rect x="88" y="56" width="8" height="8" fill="#ff0000"/><rect x="96" y="56" width="8" height="8" fill="#ff87af"/><rect x="104" y="56" width="8" height="8" fill="#ff0000"/><rect x="112" y="56" width="8" height="8" fill="#d70000"/><rect x="120" y="56" width="8" height="8" fill="#5f0000"/><rect x="16" y="64" width="8" height="8" fill="#5f0000"/><rect x="24" y="64" width="8" height="8" fill="#ff0000"/><rect x="32" y="64" width="8" height="8" fill="#ff0000"/><rect x="40" y="64" width="8" height="8" fill="#ff0000"/><rect x="48" y="64" width="8" height="8" fill="#ff0000"/><rect x="56" y="64" width="8" height="8" fill="#000000"/><rect x="64" y="64" width="8" height="8" fill="#ff0000"/><rect x="72" y="64" width="8" height="8" fill="#ff0000"/><rect x="80" y="64" width="8" height="8" fill="#000000"/><rect x="88" y="64" width="8" height="8" fill="#ff0000"/><rect x="96" y="64" width="8" height="8" fill="#ff0000"/><rect x="104" y="64" width="8" height="8" fill="#d70000"/><rect x="112" y="64" width="8" height="8" fill="#5f0000"/><rect x="24" y="72" width="8" height="8" fill="#5f0000"/><rect x="32" y="72" width="8" height="8" fill="#ff0000"/><rect x="40" y="72" width="8" height="8" fill="#ff0000"/><rect x="48" y="72" width="8" height="8" fill="#ff0000"/><rect x="56" y="72" width="8" height="8" fill="#ff0000"/><rect x="64" y="72" width="8" height="8" fill="#000000"/><rect x="72" y="72" width="8" height="8" fill="#000000"/><rect x="80" y="72" width="8" height="8" fill="#ff0000"/><rect x="88" y="72" width="8" height="8" fill="#ff0000"/><rect x="96" y="72" width="8" height="8" fill="#d70000"/><rect x="104" y="72" width="8" height="8" fill="#5f0000"/><rect x="24" y="80" width="8" height="8" fill="#5f0000"/><rect x="32" y="80" width="8" height="8" fill="#ff0000"/><rect x="40" y="80" width="8" height="8" fill="#ff0000"/><rect x="48" y="80" width="8" height="8" fill="#ff0000"/><rect x="56" y="80" width="8" height="8" fill="#ff0000"/><rect x="64" y="80" width="8" height="8" fill="#ff0000"/><rect x="72" y="80" width="8" height="8" fill="#ff0000"/><rect x="80" y="80" width="8" height="8" fill="#ff0000"/><rect x="88" y="80" width="8" height="8" fill="#d70000"/><rect x="96" y="80" width="8" height="8" fill="#5f0000"/><rect x="16" y="88" width="8" height="8" fill="#5f0000"/><rect x="24" y="88" width="8" height="8" fill="#ff0000"/><rect x="32" y="88" width="8" height="8" fill="#ff0000"/><rect x="40" y="88" width="8" height="8" fill="#ff0000"/><rect x="48" y="88" width="8" height="8" fill="#ff0000"/><rect x="56" y="88" width="8" height="8" fill="#ff0000"/><rect x="64" y="88" width="8" height="8" fill="#ff0000"/><rect x="72" y="88" width="8" height="8" fill="#d70000"/><rect x="80" y="88" width="8" height="8" fill="#d70000"/><rect x="88" y="88" width="8" height="8" fill="#5f0000"/><rect x="8" y="96" width="8" height="8" fill="#5f0000"/><rect x="16" y="96" width="8" height="8" fill="#ff0000"/><rect x="24" y="96" width="8" height="8" fill="#ff0000"/><rect x="32" y="96" width="8" height="8" fill="#ff0000"/><rect x="40" y="96" width="8" height="8" fill="#d70000"/><rect x="48" y="96" width="8" height="8" fill="#d70000"/><rect x="56" y="96" width="8" height="8" fill="#d70000"/><rect x="64" y="96" width="8" height="8" fill="#5f0000"/><rect x="72" y="96" width="8" height="8" fill="#5f0000"/><rect x="0" y="104" width="8" height="8" fill="#5f0000"/><rect x="8" y="104" width="8" height="8" fill="#d70000"/><rect x="16" y="104" width="8" height="8" fill="#d70000"/><rect x="24" y="104" width="8" height="8" fill="#5f0000"/><rect x="32" y="104" width="8" height="8" fill="#5f0000"/><rect x="40" y="104" width="8" height="8" fill="#5f0000"/></svg>
-    <div>
-      <h1>pepe</h1>
-    </div>
+<div class="wrap">
+  <header class="top">
+    <a class="brand" href="#top" aria-label="pepe"><svg class="mark" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 112" width="128" height="112" shape-rendering="crispEdges"><rect x="80" y="0" width="8" height="8" fill="#008700"/><rect x="88" y="0" width="8" height="8" fill="#008700"/><rect x="72" y="8" width="8" height="8" fill="#008700"/><rect x="80" y="8" width="8" height="8" fill="#008700"/><rect x="40" y="16" width="8" height="8" fill="#5f0000"/><rect x="48" y="16" width="8" height="8" fill="#008700"/><rect x="56" y="16" width="8" height="8" fill="#5fd700"/><rect x="64" y="16" width="8" height="8" fill="#5fd700"/><rect x="72" y="16" width="8" height="8" fill="#5fd700"/><rect x="80" y="16" width="8" height="8" fill="#5fd700"/><rect x="88" y="16" width="8" height="8" fill="#008700"/><rect x="96" y="16" width="8" height="8" fill="#5f0000"/><rect x="32" y="24" width="8" height="8" fill="#5f0000"/><rect x="40" y="24" width="8" height="8" fill="#ff0000"/><rect x="48" y="24" width="8" height="8" fill="#008700"/><rect x="56" y="24" width="8" height="8" fill="#5fd700"/><rect x="64" y="24" width="8" height="8" fill="#5fd700"/><rect x="72" y="24" width="8" height="8" fill="#5fd700"/><rect x="80" y="24" width="8" height="8" fill="#5fd700"/><rect x="88" y="24" width="8" height="8" fill="#008700"/><rect x="96" y="24" width="8" height="8" fill="#ff0000"/><rect x="104" y="24" width="8" height="8" fill="#5f0000"/><rect x="24" y="32" width="8" height="8" fill="#5f0000"/><rect x="32" y="32" width="8" height="8" fill="#ff0000"/><rect x="40" y="32" width="8" height="8" fill="#ffafaf"/><rect x="48" y="32" width="8" height="8" fill="#ff0000"/><rect x="56" y="32" width="8" height="8" fill="#ff0000"/><rect x="64" y="32" width="8" height="8" fill="#ff0000"/><rect x="72" y="32" width="8" height="8" fill="#ff0000"/><rect x="80" y="32" width="8" height="8" fill="#ff0000"/><rect x="88" y="32" width="8" height="8" fill="#ff0000"/><rect x="96" y="32" width="8" height="8" fill="#ff0000"/><rect x="104" y="32" width="8" height="8" fill="#ff0000"/><rect x="112" y="32" width="8" height="8" fill="#5f0000"/><rect x="24" y="40" width="8" height="8" fill="#5f0000"/><rect x="32" y="40" width="8" height="8" fill="#ff0000"/><rect x="40" y="40" width="8" height="8" fill="#ffffff"/><rect x="48" y="40" width="8" height="8" fill="#ffffff"/><rect x="56" y="40" width="8" height="8" fill="#ff0000"/><rect x="64" y="40" width="8" height="8" fill="#ff0000"/><rect x="72" y="40" width="8" height="8" fill="#ff0000"/><rect x="80" y="40" width="8" height="8" fill="#ffffff"/><rect x="88" y="40" width="8" height="8" fill="#ffffff"/><rect x="96" y="40" width="8" height="8" fill="#ff0000"/><rect x="104" y="40" width="8" height="8" fill="#ff0000"/><rect x="112" y="40" width="8" height="8" fill="#d70000"/><rect x="120" y="40" width="8" height="8" fill="#5f0000"/><rect x="16" y="48" width="8" height="8" fill="#5f0000"/><rect x="24" y="48" width="8" height="8" fill="#ff0000"/><rect x="32" y="48" width="8" height="8" fill="#ff0000"/><rect x="40" y="48" width="8" height="8" fill="#ffffff"/><rect x="48" y="48" width="8" height="8" fill="#000000"/><rect x="56" y="48" width="8" height="8" fill="#ff0000"/><rect x="64" y="48" width="8" height="8" fill="#ff0000"/><rect x="72" y="48" width="8" height="8" fill="#ff0000"/><rect x="80" y="48" width="8" height="8" fill="#ffffff"/><rect x="88" y="48" width="8" height="8" fill="#000000"/><rect x="96" y="48" width="8" height="8" fill="#ff0000"/><rect x="104" y="48" width="8" height="8" fill="#ff0000"/><rect x="112" y="48" width="8" height="8" fill="#d70000"/><rect x="120" y="48" width="8" height="8" fill="#5f0000"/><rect x="16" y="56" width="8" height="8" fill="#5f0000"/><rect x="24" y="56" width="8" height="8" fill="#ff0000"/><rect x="32" y="56" width="8" height="8" fill="#ff87af"/><rect x="40" y="56" width="8" height="8" fill="#ff0000"/><rect x="48" y="56" width="8" height="8" fill="#ff0000"/><rect x="56" y="56" width="8" height="8" fill="#ff0000"/><rect x="64" y="56" width="8" height="8" fill="#ff0000"/><rect x="72" y="56" width="8" height="8" fill="#ff0000"/><rect x="80" y="56" width="8" height="8" fill="#ff0000"/><rect x="88" y="56" width="8" height="8" fill="#ff0000"/><rect x="96" y="56" width="8" height="8" fill="#ff87af"/><rect x="104" y="56" width="8" height="8" fill="#ff0000"/><rect x="112" y="56" width="8" height="8" fill="#d70000"/><rect x="120" y="56" width="8" height="8" fill="#5f0000"/><rect x="16" y="64" width="8" height="8" fill="#5f0000"/><rect x="24" y="64" width="8" height="8" fill="#ff0000"/><rect x="32" y="64" width="8" height="8" fill="#ff0000"/><rect x="40" y="64" width="8" height="8" fill="#ff0000"/><rect x="48" y="64" width="8" height="8" fill="#ff0000"/><rect x="56" y="64" width="8" height="8" fill="#000000"/><rect x="64" y="64" width="8" height="8" fill="#ff0000"/><rect x="72" y="64" width="8" height="8" fill="#ff0000"/><rect x="80" y="64" width="8" height="8" fill="#000000"/><rect x="88" y="64" width="8" height="8" fill="#ff0000"/><rect x="96" y="64" width="8" height="8" fill="#ff0000"/><rect x="104" y="64" width="8" height="8" fill="#d70000"/><rect x="112" y="64" width="8" height="8" fill="#5f0000"/><rect x="24" y="72" width="8" height="8" fill="#5f0000"/><rect x="32" y="72" width="8" height="8" fill="#ff0000"/><rect x="40" y="72" width="8" height="8" fill="#ff0000"/><rect x="48" y="72" width="8" height="8" fill="#ff0000"/><rect x="56" y="72" width="8" height="8" fill="#ff0000"/><rect x="64" y="72" width="8" height="8" fill="#000000"/><rect x="72" y="72" width="8" height="8" fill="#000000"/><rect x="80" y="72" width="8" height="8" fill="#ff0000"/><rect x="88" y="72" width="8" height="8" fill="#ff0000"/><rect x="96" y="72" width="8" height="8" fill="#d70000"/><rect x="104" y="72" width="8" height="8" fill="#5f0000"/><rect x="24" y="80" width="8" height="8" fill="#5f0000"/><rect x="32" y="80" width="8" height="8" fill="#ff0000"/><rect x="40" y="80" width="8" height="8" fill="#ff0000"/><rect x="48" y="80" width="8" height="8" fill="#ff0000"/><rect x="56" y="80" width="8" height="8" fill="#ff0000"/><rect x="64" y="80" width="8" height="8" fill="#ff0000"/><rect x="72" y="80" width="8" height="8" fill="#ff0000"/><rect x="80" y="80" width="8" height="8" fill="#ff0000"/><rect x="88" y="80" width="8" height="8" fill="#d70000"/><rect x="96" y="80" width="8" height="8" fill="#5f0000"/><rect x="16" y="88" width="8" height="8" fill="#5f0000"/><rect x="24" y="88" width="8" height="8" fill="#ff0000"/><rect x="32" y="88" width="8" height="8" fill="#ff0000"/><rect x="40" y="88" width="8" height="8" fill="#ff0000"/><rect x="48" y="88" width="8" height="8" fill="#ff0000"/><rect x="56" y="88" width="8" height="8" fill="#ff0000"/><rect x="64" y="88" width="8" height="8" fill="#ff0000"/><rect x="72" y="88" width="8" height="8" fill="#d70000"/><rect x="80" y="88" width="8" height="8" fill="#d70000"/><rect x="88" y="88" width="8" height="8" fill="#5f0000"/><rect x="8" y="96" width="8" height="8" fill="#5f0000"/><rect x="16" y="96" width="8" height="8" fill="#ff0000"/><rect x="24" y="96" width="8" height="8" fill="#ff0000"/><rect x="32" y="96" width="8" height="8" fill="#ff0000"/><rect x="40" y="96" width="8" height="8" fill="#d70000"/><rect x="48" y="96" width="8" height="8" fill="#d70000"/><rect x="56" y="96" width="8" height="8" fill="#d70000"/><rect x="64" y="96" width="8" height="8" fill="#5f0000"/><rect x="72" y="96" width="8" height="8" fill="#5f0000"/><rect x="0" y="104" width="8" height="8" fill="#5f0000"/><rect x="8" y="104" width="8" height="8" fill="#d70000"/><rect x="16" y="104" width="8" height="8" fill="#d70000"/><rect x="24" y="104" width="8" height="8" fill="#5f0000"/><rect x="32" y="104" width="8" height="8" fill="#5f0000"/><rect x="40" y="104" width="8" height="8" fill="#5f0000"/></svg> pepe</a>
+    <nav aria-label="Site">
+      <a href="#modes">What it does</a>
+      <a href="#logs">Logs</a>
+      <a href="#speed">Speed</a>
+      <a href="https://github.com/omarmhaimdat/pepe#usage">Docs</a>
+      <a class="gh" href="https://github.com/omarmhaimdat/pepe">GitHub</a>
+    </nav>
   </header>
-  <p class="tagline">An HTTP load generator with a live dashboard, built to cost less than the server it tests.</p>
 
-  <section class="card" aria-label="Install">
-    <div class="tabs" role="tablist">
-      <button role="tab" data-tab="shell">macOS &amp; Linux</button>
-      <button role="tab" data-tab="windows">Windows</button>
-      <button role="tab" data-tab="brew">Homebrew</button>
-      <button role="tab" data-tab="nix">Nix</button>
-      <button role="tab" data-tab="cargo">From source</button>
-    </div>
-    <div class="panel" data-panel="shell">
-      <pre><code>curl -LsSf https://pepe.mhaimdat.com/install.sh | sh</code><button type="button">copy</button></pre>
-      <p class="note">Installs to <kbd>~/.local/bin</kbd>, puts it on your PATH, and sets up tab completion and <kbd>man pepe</kbd> for your shell. Updates later with <kbd>pepe self-update</kbd>.</p>
-    </div>
-    <div class="panel" data-panel="windows">
-      <pre><code>powershell -ExecutionPolicy Bypass -c "irm https://pepe.mhaimdat.com/install.ps1 | iex"</code><button type="button">copy</button></pre>
-      <p class="note">Installs to <kbd>~\.local\bin</kbd>, puts it on your PATH, and sets up tab completion for PowerShell. Updates later with <kbd>pepe self-update</kbd>.</p>
-    </div>
-    <div class="panel" data-panel="brew">
-      <pre><code>brew install omarmhaimdat/pepe/pepe</code><button type="button">copy</button></pre>
-      <p class="note">macOS and Linux. Completions and the man page go where Homebrew activates them.</p>
-    </div>
-    <div class="panel" data-panel="nix">
-      <pre><code>nix profile install github:omarmhaimdat/pepe</code><button type="button">copy</button></pre>
-      <p class="note">Or try it without installing: <kbd>nix run github:omarmhaimdat/pepe -- https://example.com</kbd></p>
-    </div>
-    <div class="panel" data-panel="cargo">
-      <pre><code>cargo install --locked --git https://github.com/omarmhaimdat/pepe</code><button type="button">copy</button></pre>
-      <p class="note">Then <kbd>pepe completions --install</kbd> for tab completion and the man page. Prebuilt, signed binaries for every platform are on the <a href="https://github.com/omarmhaimdat/pepe/releases/latest">releases page</a>.</p>
-    </div>
-    <div class="then">
-      <p>then</p>
-      <pre><code>pepe https://example.com</code><button type="button">copy</button></pre>
-    </div>
-  </section>
+  <main id="top">
+    <div class="hero">
+      <a class="pill" href="https://github.com/omarmhaimdat/pepe/blob/master/CHANGELOG.md">New: <b>pepe logs</b> reads nginx logs live →</a>
+      <h1>Load test it. Then <em>read</em> what happened.</h1>
+      <p class="lede">pepe is an HTTP load testing tool with a live terminal dashboard and a verdict in plain words. One small binary, light enough that the server is what you measure.</p>
 
-  <h2>What you get</h2>
-  <img class="shot" src="/assets/run.gif" alt="pepe's dashboard during a run: throughput, latency percentiles and a heatmap, status codes, a request log, and a verdict when the run ends" width="1280" height="720" loading="lazy">
-  <ul class="points" style="margin-top:16px">
-    <li><b>A live dashboard</b> with a latency heatmap, percentiles, throughput, status codes, failure causes and a request log you can open any request from. Pause, resume and change concurrency while it runs.</li>
-    <li><b>A verdict in plain words</b> when the run ends: Healthy, Degraded or Failing, and why.</li>
-    <li><b>Any curl command</b> as input, straight from a browser's "Copy as cURL".</li>
-    <li><b>A setup screen</b> when you run <kbd>pepe</kbd> on its own, <b>ramp mode</b> to find where a target stops keeping up, and <b>API mode</b> for the endpoints of an OpenAPI spec.</li>
-    <li><b>Light</b>: one thread sends about 100k requests a second at 2.5× less CPU than comparable tools, and pepe says when it, not the target, is the limit.</li>
-  </ul>
+      <div class="install" id="install" aria-label="Install">
+        <div class="tabs" role="tablist">
+          <button role="tab" data-tab="shell">macOS &amp; Linux</button>
+          <button role="tab" data-tab="windows">Windows</button>
+          <button role="tab" data-tab="brew">Homebrew</button>
+          <button role="tab" data-tab="nix">Nix</button>
+          <button role="tab" data-tab="docker">Docker</button>
+          <button role="tab" data-tab="cargo">Source</button>
+        </div>
+        <div class="panel" data-panel="shell">
+          <pre class="cmd"><code>curl -LsSf https://pepe.mhaimdat.com/install.sh | sh</code><button type="button">copy</button></pre>
+          <p class="note">Installs to <kbd>~/.local/bin</kbd> with tab completion and <kbd>man pepe</kbd>. Later: <kbd>pepe self-update</kbd>.</p>
+        </div>
+        <div class="panel" data-panel="windows">
+          <pre class="cmd"><code>powershell -ExecutionPolicy Bypass -c "irm https://pepe.mhaimdat.com/install.ps1 | iex"</code><button type="button">copy</button></pre>
+          <p class="note">Installs to <kbd>~\.local\bin</kbd> with tab completion for PowerShell. Later: <kbd>pepe self-update</kbd>.</p>
+        </div>
+        <div class="panel" data-panel="brew">
+          <pre class="cmd"><code>brew install omarmhaimdat/pepe/pepe</code><button type="button">copy</button></pre>
+          <p class="note">macOS and Linux. Completions and the man page go where Homebrew activates them.</p>
+        </div>
+        <div class="panel" data-panel="nix">
+          <pre class="cmd"><code>nix run github:omarmhaimdat/pepe -- https://example.com</code><button type="button">copy</button></pre>
+          <p class="note">Or keep it: <kbd>nix profile install github:omarmhaimdat/pepe</kbd></p>
+        </div>
+        <div class="panel" data-panel="docker">
+          <pre class="cmd"><code>docker run --rm -it ghcr.io/omarmhaimdat/pepe https://example.com</code><button type="button">copy</button></pre>
+          <p class="note">A few megabytes, for <kbd>linux/amd64</kbd> and <kbd>linux/arm64</kbd>.</p>
+        </div>
+        <div class="panel" data-panel="cargo">
+          <pre class="cmd"><code>cargo install --locked --git https://github.com/omarmhaimdat/pepe</code><button type="button">copy</button></pre>
+          <p class="note">Signed binaries for every platform are on the <a href="https://github.com/omarmhaimdat/pepe/releases/latest">releases page</a>.</p>
+        </div>
+      </div>
 
-  <nav aria-label="More">
-    <a href="https://github.com/omarmhaimdat/pepe">GitHub</a>
-    <a href="https://github.com/omarmhaimdat/pepe#usage">Usage</a>
-    <a href="https://github.com/omarmhaimdat/pepe/releases">Releases</a>
-    <a href="https://github.com/omarmhaimdat/pepe/blob/master/CHANGELOG.md">Changelog</a>
-    <a href="https://github.com/omarmhaimdat/pepe/blob/master/bench/README.md">Benchmarks</a>
-    <a href="https://github.com/omarmhaimdat/pepe/blob/master/ROADMAP.md">Roadmap</a>
-  </nav>
-  <footer>MIT licensed. Made by <a href="https://github.com/omarmhaimdat">Omar Mhaimdat</a>.</footer>
-</main>
+      <figure class="term" style="margin-left:0;margin-right:0">
+        <div class="bar"><i></i><i></i><i></i><span>pepe -z 1m -c 50 https://api.example.com/checkout</span></div>
+        <img src="img/run.png" width="2896" height="1836" alt="pepe's dashboard during a run. Four large numbers: 44 requests a second, a 202 ms median, a 1.84 s p99 and 99.6% success. Beside them a progress bar, the p99 on a heat scale from bell to ghost, and findings: a long tail, six closed connections. Below, a latency heatmap, percentile lines, throughput, the latest requests, errors by cause, and full latency percentiles.">
+      </figure>
+    </div>
+
+    <section id="verdict">
+      <p class="eyebrow">A verdict, not a spreadsheet</p>
+      <h2>It says what the numbers mean.</h2>
+      <p class="sub">When a run ends pepe leaves a verdict in your shell: one word, and the findings behind it. Failures are grouped by cause with the first response body, so "503 from the upstream" is there without opening a log.</p>
+      <div class="verdicts">
+        <div class="verdict" style="--c:var(--good)"><b>✔ Healthy</b><span data-g="✔">100% of requests succeeded</span><span data-g="✔">p99 is 2.1× the median</span><span data-g="✔">throughput held for the whole run</span></div>
+        <div class="verdict" style="--c:var(--warn)"><b>▲ Degraded</b><span data-g="✔">99.6% of requests succeeded</span><span data-g="▲">long tail: p99 is 9.1× the median</span><span data-g="▲">p99 jumped 4.5× to 45ms at 26s</span></div>
+        <div class="verdict" style="--c:var(--bad)"><b>✖ Failing</b><span data-g="✖">12% of requests failed</span><span data-g="✖">1,204 × 503 from the upstream</span><span data-g="✖">31 × timed out after 20s</span></div>
+      </div>
+      <p class="fine">Examples of the wording. The dashboard above is drawn by pepe's own code on a sample run.</p>
+    </section>
+
+    <section id="modes">
+      <p class="eyebrow">What it does</p>
+      <h2>One endpoint, a whole API, or last night's traffic.</h2>
+      <p class="sub">Every mode has the same dashboard, the same verdict, and a <kbd>--json</kbd> report for scripts.</p>
+      <div class="grid">
+        <div class="card"><h3>Run</h3><p>Send load at a URL and watch latency, throughput and errors as they happen. Pause, resume and change concurrency while it runs.</p><code>pepe -z 30s -c 50 https://example.com</code></div>
+        <div class="card"><h3>Ramp</h3><p>Raise the load step by step to find where the target stops keeping up, with a capacity estimate at the end.</p><code>pepe ramp URL --to 200 --until 'p99 &gt; 500ms'</code></div>
+        <div class="card"><h3>Any curl command</h3><p>Paste "Copy as cURL" from a browser, Postman or Insomnia. It is sent exactly as curl would send it.</p><code>pepe --curl -- curl -X POST URL -d '{"a":1}'</code></div>
+        <div class="card"><h3>OpenAPI</h3><p>Load test the endpoints of an OpenAPI 3 or Swagger 2 spec, picked by tag, with parameters and credentials set on screen.</p><code>pepe api openapi.yaml --tag Billing</code></div>
+        <div class="card"><h3>Flows</h3><p>A sequence of requests where each step feeds the next: log in, take the token, add to cart, check out.</p><code>pepe flow checkout.toml -c 20 -z 1m</code></div>
+        <div class="card"><h3>Replay</h3><p>Send the URLs of an access log in their real proportions, so staging sees the mix production does.</p><code>pepe replay access.log --base-url https://staging</code></div>
+        <div class="card"><h3>Open model</h3><p>A fixed arrival rate instead of fixed concurrency, and pepe says when the concurrency you gave it can't carry it.</p><code>pepe --rate 500 -c 100 -z 2m URL</code></div>
+        <div class="card"><h3>Soak</h3><p>Hours-long runs that write their report every minute, so a crash at hour six doesn't lose the data.</p><code>pepe -z 8h --snapshot soak.json URL</code></div>
+        <div class="card"><h3>Setup screen</h3><p>Run it with no arguments and fill in a form. The equivalent command is shown as you go, and saved as <kbd>pepe.toml</kbd> if you like.</p><code>pepe</code></div>
+      </div>
+    </section>
+
+    <section id="logs">
+      <div class="split top">
+        <div>
+          <p class="eyebrow">pepe logs</p>
+          <h2>And what the server saw.</h2>
+          <p class="sub" style="margin-bottom:22px">Point pepe at nginx's access and error logs and it shows the server as it is right now: live, on the host, with nothing to install but pepe.</p>
+          <pre class="cmd" style="background:var(--surface)"><code>pepe logs /var/log/nginx/access.log</code><button type="button">copy</button></pre>
+          <p class="note">Docker too: <kbd>docker compose logs -f nginx | pepe logs</kbd></p>
+        </div>
+        <ul class="ticks" style="margin-top:34px">
+          <li><b>Requests a second now</b>, against a usual minute, hour and day.</li>
+          <li><b>A verdict</b>: Steady, Busy, Degraded or Failing, with the path that fails and what the error log says of it.</li>
+          <li><b>Top paths, clients, status codes</b> and the error log grouped by cause.</li>
+          <li><b>Any size of log</b>: read by every core at gigabytes a second, in memory that doesn't grow with the file.</li>
+        </ul>
+      </div>
+      <figure class="term" style="margin:44px 0 0">
+        <div class="bar"><i></i><i></i><i></i><span>pepe logs access.log error.log</span></div>
+        <img loading="lazy" src="img/logs.png" width="2896" height="1836" alt="pepe logs: 36 requests a second now, 0.3% answering 5xx, a 30 ms median request time, and the verdict Busy at 2.4 times a usual minute. A chart of the last 25 minutes with traffic doubling, the top paths, status codes, the error log's messages and the latest lines.">
+      </figure>
+    </section>
+
+    <section id="speed">
+      <p class="eyebrow">Light</p>
+      <h2>Built to cost less than the server it tests.</h2>
+      <p class="sub">A load generator that is busy can't tell you the server is. pepe is measured against wrk, oha and vegeta on every release, and tells you when it, not the target, is the limit.</p>
+      <div class="numbers">
+        <div class="number"><b>398k</b><span>requests a second from one thread, on a 4-vCPU Linux VM</span></div>
+        <div class="number"><b>2.4 ms</b><span>of CPU per 1,000 requests. wrk: 3.5 ms. oha: 6.8 ms.</span></div>
+        <div class="number"><b>4 MB</b><span>of memory at 64 connections, and 4.5 MB after ten million requests</span></div>
+        <div class="number"><b>4 GB/s</b><span>of nginx log read by <kbd>pepe logs</kbd> on a 14-core laptop</span></div>
+      </div>
+      <div class="scroll">
+        <table>
+          <thead><tr><th>Linux arm64, 4 vCPU</th><th>pepe</th><th>wrk</th><th>oha</th></tr></thead>
+          <tbody>
+            <tr><td>GET, 64 connections</td><td class="us">398k req/s · 2.4 ms · 4.0 MB</td><td>282k · 3.5 ms · 4.5 MB</td><td>305k · 6.8 ms · 67 MB</td></tr>
+            <tr><td>GET, 1,000 connections</td><td class="us">296k req/s · 3.2 ms · 5.8 MB</td><td>228k · 4.4 ms · 7.7 MB</td><td>183k · 5.6 ms · 73 MB</td></tr>
+            <tr><td>HTTPS, 64 connections</td><td class="us">284k req/s · 3.3 ms · 6.0 MB</td><td>218k · 4.5 ms · 10.8 MB</td><td>250k · 8.1 ms · 42 MB</td></tr>
+            <tr><td>10 million requests</td><td class="us">343k req/s · 2.9 ms · 4.5 MB</td><td>304k · 3.3 ms · 4.6 MB</td><td>316k · 6.5 ms · 2,404 MB</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="fine">Requests a second each tool reported, CPU milliseconds per 1,000 requests, and peak memory, against a local server that answers from memory. Where pepe is level rather than ahead, the method, and every other workload are in the <a href="https://github.com/omarmhaimdat/pepe/blob/master/bench/README.md">benchmark notes</a>.</p>
+    </section>
+
+    <section id="ci">
+      <div class="split">
+        <div>
+          <p class="eyebrow">In a pipeline</p>
+          <h2>Fail the build when p99 slips.</h2>
+          <p class="sub" style="margin-bottom:22px">The repository is a GitHub Action: it installs a pinned release, runs the test, puts the numbers in the job summary, and fails the job on a condition over the report.</p>
+          <ul class="ticks">
+            <li><b>JSON</b> with the same percentiles the dashboard shows.</li>
+            <li><b>Docker image</b> at <kbd>ghcr.io/omarmhaimdat/pepe</kbd>.</li>
+            <li><b>A config file</b>: <kbd>pepe.toml</kbd> in a project, so <kbd>pepe</kbd> there runs the agreed test.</li>
+          </ul>
+        </div>
+<pre class="code"><span class="k">- uses</span>: omarmhaimdat/pepe@master
+  <span class="k">with</span>:
+    <span class="k">url</span>: <span class="s">https://staging.example.com/api/health</span>
+    <span class="k">args</span>: <span class="s">-z 30s -c 20</span>
+    <span class="k">fail-if</span>: <span class="s">".summary.latency.p99_ms &gt; 300
+      or .summary.failed_requests &gt; 0"</span>
+
+<span class="c"># or anywhere else</span>
+pepe --json -z 30s -c 20 URL &gt; report.json</pre>
+      </div>
+    </section>
+
+    <div class="cta">
+      <h2>Point it at something.</h2>
+      <a class="button" href="#install">Install pepe</a>
+      <a class="button ghost" href="https://github.com/omarmhaimdat/pepe">Star it on GitHub</a>
+    </div>
+  </main>
+
+  <footer>
+    <span>MIT licensed. Made by <a href="https://github.com/omarmhaimdat">Omar Mhaimdat</a>.</span>
+    <span class="right">
+      <a href="https://github.com/omarmhaimdat/pepe#usage">Docs</a> ·
+      <a href="https://github.com/omarmhaimdat/pepe/releases">Releases</a> ·
+      <a href="https://github.com/omarmhaimdat/pepe/blob/master/CHANGELOG.md">Changelog</a> ·
+      <a href="https://github.com/omarmhaimdat/pepe/blob/master/ROADMAP.md">Roadmap</a> ·
+      <a href="https://github.com/omarmhaimdat/pepe/blob/master/bench/README.md">Benchmarks</a>
+    </span>
+  </footer>
+</div>
 <script>
   // Open on the tab for this machine; the others are a click away
   const platform = (navigator.userAgentData && navigator.userAgentData.platform) || navigator.platform || "";
@@ -122,7 +341,7 @@
   }
   tabs.forEach(t => t.addEventListener("click", () => show(t.dataset.tab)));
   show(first);
-  document.querySelectorAll("pre button").forEach(b => b.addEventListener("click", async () => {
+  document.querySelectorAll(".cmd button").forEach(b => b.addEventListener("click", async () => {
     try { await navigator.clipboard.writeText(b.previousElementSibling.textContent); b.textContent = "copied"; }
     catch { b.textContent = "select it"; }
     setTimeout(() => { b.textContent = "copy"; }, 1500);

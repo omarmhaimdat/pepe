@@ -1,7 +1,8 @@
 # Custom dist publish job (see `publish-jobs` in dist-workspace.toml).
 # Mirrors every release artifact to the R2 bucket behind pepe.mhaimdat.com:
 #
-#   /index.html, /assets/*      -> the install page (site/ in this repo)
+#   /index.html, /img/*,        -> the site (site/ in this repo) and the
+#   /assets/*                      logo and recordings it and the README show
 #   /install.sh, /install.ps1   -> pepe's installers (install/ in this repo):
 #                                  they run the release installer below, then
 #                                  `pepe completions --install`
@@ -71,6 +72,11 @@ jobs:
             --cache-control "public, max-age=300"
           r2 ../repo/assets/logo.svg "s3://$R2_BUCKET/assets/logo.svg" \
             --content-type "image/svg+xml" --cache-control "public, max-age=86400"
+          for png in ../repo/site/img/*.png; do
+            [ -f "$png" ] || continue
+            r2 "$png" "s3://$R2_BUCKET/img/$(basename "$png")" \
+              --content-type "image/png" --cache-control "public, max-age=86400"
+          done
           for gif in ../repo/assets/*.gif; do
             [ -f "$gif" ] || continue
             r2 "$gif" "s3://$R2_BUCKET/assets/$(basename "$gif")" \
@@ -81,7 +87,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          for path in index.html install.sh install.ps1 latest/pepe-installer.sh latest/pepe-installer.ps1 "$TAG/sha256.sum"; do
+          for path in index.html img/run.png img/logs.png img/og.png install.sh install.ps1 latest/pepe-installer.sh latest/pepe-installer.ps1 "$TAG/sha256.sum"; do
             code=$(curl -s -o /dev/null -w '%{http_code}' "https://pepe.mhaimdat.com/$path")
             echo "$path -> $code"
             [ "$code" = "200" ]
