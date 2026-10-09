@@ -1,0 +1,48 @@
+# Custom dist publish job (see `publish-jobs` in dist-workspace.toml).
+# The repository is also a GitHub Action (action.yml). Once the GitHub
+# Release for vX.Y.Z exists, this moves the floating major tag (v0, later
+# v1) to the same commit, so `uses: omarmhaimdat/pepe@v0` gets the latest
+# release the way actions are usually pinned, while @vX.Y.Z stays exact.
+#
+# The Marketplace listing follows the releases by itself once the first
+# one has been published there by hand (the checkbox on a release's edit
+# page, after accepting the Marketplace Developer Agreement).
+name: Publish the action
+
+on:
+  workflow_call:
+    inputs:
+      plan:
+        required: true
+        type: string
+
+jobs:
+  publish-action:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      TAG: ${{ fromJson(inputs.plan).announcement_tag }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Move the major tag to this release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          # The Release must exist: the major tag only ever points at one
+          gh release view "$TAG" --json tagName --jq .tagName
+          major="v${TAG#v}"; major="${major%%.*}"
+          commit=$(git rev-list -n 1 "$TAG")
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -fa "$major" "$commit" -m "$major -> $TAG"
+          # A tag pushed with GITHUB_TOKEN starts no workflow, and $major
+          # has no patch number so it would not match release.yml anyway
+          git push --force "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "refs/tags/$major"
+          echo "$major -> $TAG ($commit)" >> "$GITHUB_STEP_SUMMARY"
