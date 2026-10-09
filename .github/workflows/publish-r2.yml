@@ -87,7 +87,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          for path in index.html img/run.png img/logs.png img/og.png install.sh install.ps1 latest/pepe-installer.sh latest/pepe-installer.ps1 "$TAG/sha256.sum"; do
+          for path in index.html img/run.png img/ramp.png img/api.png img/logs.png img/og.png install.sh install.ps1 latest/pepe-installer.sh latest/pepe-installer.ps1 "$TAG/sha256.sum"; do
             code=$(curl -s -o /dev/null -w '%{http_code}' "https://pepe.mhaimdat.com/$path")
             echo "$path -> $code"
             [ "$code" = "200" ]
