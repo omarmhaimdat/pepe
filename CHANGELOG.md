@@ -6,6 +6,63 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+## [0.19.2](https://github.com/omarmhaimdat/pepe/compare/v0.19.1...v0.19.2) - 2026-10-09
+
+### Fixed
+
+- *(logs)* the screen survives what else is written to the terminal, and reads compose's colour ([#102](https://github.com/omarmhaimdat/pepe/pull/102))
+
+  ## What
+
+  `docker compose logs -f nginx | pepe logs` left the screen in ruins
+  (doubled header rows, blank path names, shifted columns, `nginx_twitter`
+  listed as a client). Two causes, both outside pepe's drawing code:
+
+  - compose's **stderr** still points at the terminal; its `WARN[0000] …
+  version is obsolete` line landed at the bottom row, where the hidden
+  cursor sat, and scrolled the alternate screen up one row. ratatui only
+  redraws what changed, so every later frame was one row off the truth.
+  - compose **colours** the `nginx_twitter | ` prefix even into a pipe;
+  the escapes went into the parse (client = container name) and into drawn
+  cells, where the terminal interpreted them and shifted columns.
+
+  ## Changes
+
+  - **Lines are cleaned at ingest** (`logs::clean`): CSI/OSC escapes
+  stripped, tabs → spaces, other control characters dropped. Nothing read
+  from a log can move the cursor.
+  - **The screen repairs itself**: the hidden cursor is parked at the
+  top-left after every frame, so stray output overwrites a row rather than
+  scrolling; and the whole frame is rewritten cell-for-cell every second
+  (`REPAINT`), so damage heals. Verified against a fake coloured compose
+  stream writing to stderr every few seconds.
+  - **A pipe is caught up with from its first chunk** — it has no end to
+  be short of. The title no longer says `reading` forever; an empty pipe
+  says *Waiting for the first line*.
+  - **Design**: number cards are fixed-width panels packed from the left
+  (they were stretched across all 200 columns); chart bars cap at 4 wide
+  with the picked one in the accent colour, and the pick's marker no
+  longer stamps over the date label; the paths list is capped at 96
+  columns so the numbers sit next to the names.
+  - **CLI**: a bare word given as the URL (`pepe logs` on a 0.16 binary
+  gave `Invalid URL "logs": relative URL without a base`) now says it
+  isn't a URL nor a command *this* pepe has, lists the commands from clap,
+  and points at `pepe self-update`; a host with no scheme is shown with
+  `https://` in front.
+
+  ## Notes for review
+
+  - The full repaint is ~15 KB/s over SSH on a 200×60 terminal; `REPAINT`
+  is one constant if that ever needs slowing.
+  - `view::panel` and `view::inset` are now `pub(super)` so the logs
+  screen shares the dashboard's cards.
+  - Tests: colour/control stripping, the piped caught-up state, the
+  empty-pipe wording, and the three URL messages. 246 pass; clippy and fmt
+  clean.
+
+  🤖 Generated with [Claude Code](https://claude.com/claude-code)
+
+
 ## [0.19.1](https://github.com/omarmhaimdat/pepe/compare/v0.19.0...v0.19.1) - 2026-10-08
 
 ### Fixed
