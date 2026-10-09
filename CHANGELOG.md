@@ -6,6 +6,35 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+## [0.21.0](https://github.com/omarmhaimdat/pepe/compare/v0.20.2...v0.21.0) - 2026-10-09
+
+### Added
+
+- *(api)* `pepe api` alone asks for the spec, which can be pasted whole ([#114](https://github.com/omarmhaimdat/pepe/pull/114))
+
+  `pepe api` with nothing after it printed an error. Now, at a terminal,
+  it opens the setup screen in API mode with the Spec field focused, the
+  way `pepe` alone opens it for a URL. The field takes a file, a URL, or
+  the OpenAPI document itself: paste the whole spec anywhere on the form
+  (multi-line text, or text opening a JSON object, is the document; one
+  line is a name) and the field says "the pasted spec, 312 lines";
+  backspace or typing starts over with a name. Piped, `pepe api` still
+  errors as before.
+
+  - The loader takes the document as a source too, so `pepe api "$(cat
+  spec.json)"` works, and a pasted spec that names servers with `://` is
+  no longer taken for a URL origin. The command printed on quit says `api
+  '<the pasted spec>'` where there is no file to name.
+  - The README's recordings are redone for the panel UI: run, setup, ramp
+  and API, which now shows `pepe api` asking for the spec, and a new one
+  for `pepe logs` in the nginx logs section. `record.sh` writes a day of
+  nginx logs for it and keeps appending to them while recording, so "now"
+  is a live number rather than a log that stopped.
+  - Completions and man page regenerated for the new help text.
+
+  **Squash-merge with the title as it is.**
+
+
 ## [0.20.2](https://github.com/omarmhaimdat/pepe/compare/v0.20.1...v0.20.2) - 2026-10-09
 
 ### Fixed
