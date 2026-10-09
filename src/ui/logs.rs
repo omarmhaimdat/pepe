@@ -505,10 +505,18 @@ impl LogsScreen {
         } else {
             label("nothing dated yet")
         };
+        // Where the counts start, when that isn't where the log does
+        let from = stats.since.map_or(String::new(), |since| {
+            let local = since + i64::from(clock.offset);
+            match wall - since {
+                0..=86_399 => format!(" · from {}", time_of_day(local)),
+                _ => format!(" · from {}", day_and_time(local)),
+            }
+        });
         let right = Line::from(vec![
             state,
             label(format!(
-                " · {} · {}",
+                "{from} · {} · {}",
                 time_of_day(clock.now + i64::from(clock.offset)),
                 offset_label(clock.offset)
             )),

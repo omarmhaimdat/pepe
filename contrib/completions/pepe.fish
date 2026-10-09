@@ -217,7 +217,7 @@ complete -c pepe -n "__fish_pepe_using_subcommand flow" -l json -d 'Output resul
 complete -c pepe -n "__fish_pepe_using_subcommand flow" -s i -l setup -d 'Open the setup screen to review or change the settings before starting (it opens by itself when no URL is given)'
 complete -c pepe -n "__fish_pepe_using_subcommand logs" -l format -d 'The access log\'s log_format as nginx.conf has it, on one line, when it isn\'t `combined`: \'$remote_addr [$time_local] "$request" $status $request_time\'' -r
 complete -c pepe -n "__fish_pepe_using_subcommand logs" -l window -d 'What "now" is measured over, e.g. 10s, 1m, 5m' -r
-complete -c pepe -n "__fish_pepe_using_subcommand logs" -l since -d 'Leave out what is older than this, e.g. 90m, 24h, 7d' -r
+complete -c pepe -n "__fish_pepe_using_subcommand logs" -l since -d 'How far back to start, e.g. 90m, 24h, 7d. At a terminal a log that is being written is shown live, from five minutes back, without it' -r
 complete -c pepe -n "__fish_pepe_using_subcommand logs" -l rows -d 'Rows in each table of the report' -r
 complete -c pepe -n "__fish_pepe_using_subcommand logs" -s n -l number -d 'Number of requests to perform' -r
 complete -c pepe -n "__fish_pepe_using_subcommand logs" -s z -l duration -d 'Duration of the test, e.g. 10s, 3m, 2h (mutually exclusive with -n)' -r
@@ -235,6 +235,7 @@ complete -c pepe -n "__fish_pepe_using_subcommand logs" -l config -d 'Read setti
 complete -c pepe -n "__fish_pepe_using_subcommand logs" -l write-config -d 'Write the settings as they stand to this file, as a pepe.toml, and exit' -r -F
 complete -c pepe -n "__fish_pepe_using_subcommand logs" -s c -l concurrency -d 'Number of concurrent requests at a time' -r
 complete -c pepe -n "__fish_pepe_using_subcommand logs" -s u -l user-agent -d 'User-Agent string, default is pepe/{version}' -r
+complete -c pepe -n "__fish_pepe_using_subcommand logs" -l all -d 'Read all of the log before following it, however far back it goes'
 complete -c pepe -n "__fish_pepe_using_subcommand logs" -l exact-paths -d 'Count /items/1 and /items/2 apart. Without it the numbers and ids in a path count as one, /items/*'
 complete -c pepe -n "__fish_pepe_using_subcommand logs" -s h -l help -d 'Print help'
 complete -c pepe -n "__fish_pepe_using_subcommand logs" -s k -l insecure -d 'Accept invalid TLS certificates (self-signed, expired, wrong host)'

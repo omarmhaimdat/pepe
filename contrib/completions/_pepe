@@ -327,7 +327,7 @@ _arguments "${_arguments_options[@]}" : \
 _arguments "${_arguments_options[@]}" : \
 '--format=[The access log'\''s log_format as nginx.conf has it, on one line, when it isn'\''t \`combined\`\: '\''\$remote_addr \[\$time_local\] "\$request" \$status \$request_time'\'']:LOG_FORMAT:_default' \
 '--window=[What "now" is measured over, e.g. 10s, 1m, 5m]:TIME:_default' \
-'--since=[Leave out what is older than this, e.g. 90m, 24h, 7d]:TIME:_default' \
+'--since=[How far back to start, e.g. 90m, 24h, 7d. At a terminal a log that is being written is shown live, from five minutes back, without it]:TIME:_default' \
 '--rows=[Rows in each table of the report]:N:_default' \
 '-n+[Number of requests to perform]:NUMBER:_default' \
 '--number=[Number of requests to perform]:NUMBER:_default' \
@@ -354,6 +354,7 @@ _arguments "${_arguments_options[@]}" : \
 '--concurrency=[Number of concurrent requests at a time]:CONCURRENCY:_default' \
 '-u+[User-Agent string, default is pepe/{version}]:USER_AGENT:_default' \
 '--user-agent=[User-Agent string, default is pepe/{version}]:USER_AGENT:_default' \
+'(--since)--all[Read all of the log before following it, however far back it goes]' \
 '--exact-paths[Count /items/1 and /items/2 apart. Without it the numbers and ids in a path count as one, /items/*]' \
 '-h[Print help]' \
 '--help[Print help]' \
