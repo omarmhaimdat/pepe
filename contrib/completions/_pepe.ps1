@@ -363,6 +363,7 @@ Register-ArgumentCompleter -Native -CommandName 'pepe' -ScriptBlock {
             break
         }
         'pepe;compare' {
+            [CompletionResult]::new('--svg', '--svg', [CompletionResultType]::ParameterName, 'Also write the verdict as a card, an SVG for a README or a page')
             [CompletionResult]::new('-n', '-n', [CompletionResultType]::ParameterName, 'Number of requests to perform')
             [CompletionResult]::new('--number', '--number', [CompletionResultType]::ParameterName, 'Number of requests to perform')
             [CompletionResult]::new('-z', '-z', [CompletionResultType]::ParameterName, 'Duration of the test, e.g. 10s, 3m, 2h (mutually exclusive with -n)')

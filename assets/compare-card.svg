@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="460" height="160" viewBox="0 0 460 160" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="13">
+<title>pepe · Slower</title>
+<rect width="460" height="160" rx="8" fill="#140f0d"/>
+<rect x="1" y="1" width="458" height="158" rx="7" fill="#1d1613" stroke="#2e231d"/>
+<text x="16" y="30" fill="#ff8a3d" font-weight="bold">pepe</text>
+<text x="58" y="30" fill="#9c8a7e">· compare</text>
+<text x="444" y="30" fill="#f0cf5a" font-weight="bold" font-size="16" text-anchor="end">▲ Slower</text>
+<text x="16" y="52" fill="#9c8a7e" font-size="11">before.json</text>
+<text x="444" y="52" fill="#9c8a7e" font-size="11" text-anchor="end">after.json</text>
+<line x1="12" y1="60" x2="448" y2="60" stroke="#2e231d"/>
+<text x="16" y="82" fill="#9c8a7e">p99</text>
+<text x="150" y="82" fill="#f3e8de">10.14ms</text>
+<text x="250" y="82" fill="#9c8a7e">→</text>
+<text x="270" y="82" fill="#f3e8de">22.21ms</text>
+<text x="444" y="82" fill="#f0cf5a" text-anchor="end">▲ 119%</text>
+<text x="16" y="104" fill="#9c8a7e">median</text>
+<text x="150" y="104" fill="#f3e8de">6.51ms</text>
+<text x="250" y="104" fill="#9c8a7e">→</text>
+<text x="270" y="104" fill="#f3e8de">18.11ms</text>
+<text x="444" y="104" fill="#f0cf5a" text-anchor="end">▲ 178%</text>
+<text x="16" y="126" fill="#9c8a7e">throughput</text>
+<text x="150" y="126" fill="#f3e8de">1.2k req/s</text>
+<text x="250" y="126" fill="#9c8a7e">→</text>
+<text x="270" y="126" fill="#f3e8de">439 req/s</text>
+<text x="444" y="126" fill="#f0cf5a" text-anchor="end">▼ 63%</text>
+<text x="16" y="148" fill="#9c8a7e">failed</text>
+<text x="150" y="148" fill="#f3e8de">0%</text>
+<text x="250" y="148" fill="#9c8a7e">→</text>
+<text x="270" y="148" fill="#f3e8de">0%</text>
+<text x="444" y="148" fill="#9c8a7e" text-anchor="end"></text>
+</svg>

@@ -245,6 +245,7 @@ complete -c pepe -n "__fish_pepe_using_subcommand logs" -l disable-keepalive -d 
 complete -c pepe -n "__fish_pepe_using_subcommand logs" -l disable-redirects -d 'Prevent http redirects'
 complete -c pepe -n "__fish_pepe_using_subcommand logs" -l json -d 'Output results in JSON format'
 complete -c pepe -n "__fish_pepe_using_subcommand logs" -s i -l setup -d 'Open the setup screen to review or change the settings before starting (it opens by itself when no URL is given)'
+complete -c pepe -n "__fish_pepe_using_subcommand compare" -l svg -d 'Also write the verdict as a card, an SVG for a README or a page' -r -F
 complete -c pepe -n "__fish_pepe_using_subcommand compare" -s n -l number -d 'Number of requests to perform' -r
 complete -c pepe -n "__fish_pepe_using_subcommand compare" -s z -l duration -d 'Duration of the test, e.g. 10s, 3m, 2h (mutually exclusive with -n)' -r
 complete -c pepe -n "__fish_pepe_using_subcommand compare" -s m -l method -d 'HTTP method, e.g. GET, POST, PUT, DELETE' -r
