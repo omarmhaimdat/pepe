@@ -2133,6 +2133,16 @@ impl Stats {
         out
     }
 
+    /// (requests, 4xx, 5xx) of each of the `n` seconds up to now, oldest first
+    pub fn seconds_back(&self, clock: Clock, n: usize) -> Vec<[u32; 3]> {
+        let from = clock.now - n as i64 + 1;
+        let mut out = vec![[0; 3]; n];
+        for (at, second) in self.seconds.range(from, clock.now) {
+            out[(at - from) as usize] = *second;
+        }
+        out
+    }
+
     /// A grain's slots, oldest first, each with its rate over the part of
     /// it the log covers
     pub fn rows(&self, grain: Grain, clock: Clock) -> Vec<Row> {
