@@ -6,6 +6,48 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+## [0.22.0](https://github.com/omarmhaimdat/pepe/compare/v0.21.0...v0.22.0) - 2026-10-09
+
+### Added
+
+- *(compare)* `pepe compare before.json after.json` says what moved ([#117](https://github.com/omarmhaimdat/pepe/pull/117))
+
+  First of three: this, then the action's baseline and PR comment ([#2](https://github.com/omarmhaimdat/pepe/pull/2)),
+  then the card ([#3](https://github.com/omarmhaimdat/pepe/pull/3)). Each is based on master and contains the one before;
+  merge them in order, and a release has to carry this one before the
+  action PR is merged, because the action runs the released binary.
+
+  Two runs of the same build never give the same p99. `pepe compare
+  before.json after.json` holds a report against an earlier one and calls
+  a number a change only when it moved more than two runs like these
+  wobble on their own: the run's own latency spread, scaled by how many
+  requests sit past the percentile. Measured against a local server, the
+  p99 of 2,000-request runs sat ±25% apart and that of 20,000-request runs
+  ±1%; the model is fitted to that, with a 5% floor, and 10% for a ramp's
+  capacity fit.
+
+  - The verdict is **Faster**, **About the same**, **Slower**, or, when
+  failures appeared or rose, **Worse** (**Better** when they fell):
+  failures outrank speed.
+  - Findings in the end-of-run report's shape, coloured in the shell: `p99
+  up 38%: 120.0ms → 166.0ms`, `Median within the usual spread: 30.00ms →
+  31.00ms (±5%)`, `A long tail is new: p99 is 5.4× the median, was 4.0×`.
+  Different targets or concurrency are said first.
+  - Run, API, flow and replay reports compare their summary; ramp reports
+  their capacity estimate and the level that held.
+  - `--gate` exits 1 on Slower or Worse, for CI. `--json` gives the
+  verdict, every number with its change and the spread it was held
+  against, and the findings.
+  - Every report now carries a `target` block (mode, method, URL or
+  source, concurrency), so the comparison can tell two tests apart.
+
+  Tried on real reports: two identical 2,000-request runs read "About the
+  same (p99 ±24%)"; the same run against a slower endpoint reads "Slower",
+  and `--gate` exits 1.
+
+  **Squash-merge with the title as it is.**
+
+
 ## [0.21.0](https://github.com/omarmhaimdat/pepe/compare/v0.20.2...v0.21.0) - 2026-10-09
 
 ### Added
