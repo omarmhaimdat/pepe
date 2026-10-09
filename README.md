@@ -385,6 +385,7 @@ At a terminal a log that is being written is shown live: the screen starts five 
 
 | View | Shows |
 | --- | --- |
+| **Dashboard** | Opens first. The rate now, the share answering 5xx and the request time drawn large; a verdict in a word (Steady, Busy, Quiet, Degraded, Failing) with what fails and what the error log says of it; traffic as a bar for every few seconds of the last minutes or hour, 4xx and 5xx in their colours; the top paths, the status codes, the error log's messages and the newest lines |
 | **Traffic** | A bar per slot with the rate now drawn across them, and the table of slots; `m`, `h`, `d` switch between minutes, hours and days |
 | **Paths** | The paths by requests, 5xx, 4xx or mean time (`s`), with status codes, clients, user agents, methods and query parameter names beside them |
 | **Errors** | The error log's messages grouped by cause, most frequent first, each with the first line that said it; the paths answering 5xx and 4xx |
