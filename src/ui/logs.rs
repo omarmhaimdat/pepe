@@ -945,31 +945,40 @@ impl LogsScreen {
             _ => clock.now,
         };
         let span = (clock.now - since + 1).clamp(60, 3_600) as usize;
-        let per = [1, 2, 5, 10, 15, 30, 60, 120]
-            .into_iter()
-            .find(|per| span.div_ceil(*per) <= width)
-            .unwrap_or(120);
-        let bars = span.div_ceil(per).min(width);
-        let seconds = stats.seconds_back(clock, bars * per);
-        let sums: Vec<[u32; 3]> = seconds
-            .chunks(per)
-            .map(|chunk| {
-                chunk.iter().fold([0; 3], |mut sum, second| {
+        // One bar a column, each over its share of the seconds: a bar
+        // holds a rate, so bars of 2 and of 3 seconds stand level. The
+        // finest round grain that fit used to be taken, and an hour at
+        // 30s a bar is 120 bars, half of a wide terminal left empty
+        let bars = span.min(width);
+        let per = span as f64 / bars as f64;
+        let seconds = stats.seconds_back(clock, span);
+        let sums: Vec<[f64; 3]> = (0..bars)
+            .map(|i| {
+                let from = (i as f64 * per).round() as usize;
+                let to = (((i + 1) as f64 * per).round() as usize).clamp(from + 1, span);
+                let slot = &seconds[from..to];
+                let mut sum = [0.0; 3];
+                for second in slot {
                     for (sum, n) in sum.iter_mut().zip(second) {
-                        *sum += n;
+                        *sum += f64::from(*n);
                     }
-                    sum
-                })
+                }
+                sum.map(|n| n / (to - from) as f64)
             })
             .collect();
-        let most = sums.iter().map(|s| s[0]).max().unwrap_or(0).max(1);
+        let most = sums
+            .iter()
+            .map(|s| s[0])
+            .fold(0.0_f64, f64::max)
+            .max(f64::EPSILON);
         section(
             f,
             head,
             &format!(
-                "Traffic · last {} · {} a bar",
-                format::span(Duration::from_secs((bars * per) as u64)),
-                format::span(Duration::from_secs(per as u64))
+                "Traffic · last {} · {}{} a bar",
+                format::span(Duration::from_secs(span as u64)),
+                if per.fract() == 0.0 { "" } else { "~" },
+                format::span(Duration::from_secs(per.round() as u64))
             ),
             Some(Line::from(vec![
                 Span::styled("█", Style::new().fg(BAR)),
@@ -988,15 +997,12 @@ impl LogsScreen {
         let left = plot.x + AXIS + (width - bars * cell) as u16;
         let buf = f.buffer_mut();
         for (i, [all, c4xx, c5xx]) in sums.iter().enumerate() {
-            if *all == 0 {
+            if *all == 0.0 {
                 continue;
             }
             // Eighths of a cell, from the bottom: answered, then 4xx, then
             // 5xx, each as much of the bar as it was of the requests
-            let scale = |n: u32| {
-                ((u64::from(n) * u64::from(total) * 2 + u64::from(most)) / (2 * u64::from(most)))
-                    as u32
-            };
+            let scale = |n: f64| (n / most * f64::from(total)).round() as u32;
             let top = scale(*all).max(1);
             let bad = scale(*c5xx).min(top);
             let warn = scale(*c4xx).min(top - bad);
@@ -1008,8 +1014,8 @@ impl LogsScreen {
             };
             // Too few 5xx to show in the bar are still marked under it
             let x = left + (i * cell) as u16;
-            let failing = f64::from(*c5xx) / f64::from(*all);
-            if *c5xx > 0 {
+            let failing = c5xx / all;
+            if *c5xx > 0.0 {
                 let mark = if failing >= 0.01 { "▀" } else { "·" };
                 buf.set_string(x, plot.y + height, mark.repeat(cell), Style::new().fg(BAD));
             }
@@ -1059,7 +1065,7 @@ impl LogsScreen {
         buf.set_string(
             plot.x,
             plot.y,
-            format!("{:>axis$}", rate(f64::from(most) / per as f64)),
+            format!("{:>axis$}", rate(most)),
             Style::new().fg(LABEL),
         );
         buf.set_string(
@@ -1071,7 +1077,7 @@ impl LogsScreen {
         // Under the bars and their marks: when they start and end
         let y = plot.y + height + 1;
         let local = |at: i64| time_of_day(at + i64::from(clock.offset));
-        let from = local(clock.now - (bars * per) as i64 + 1);
+        let from = local(clock.now - span as i64 + 1);
         let to = if clock.live {
             "now".to_string()
         } else {
@@ -2175,6 +2181,33 @@ mod tests {
     }
 
     #[test]
+    fn the_traffic_chart_fills_its_panel_at_any_width() {
+        for width in [80u16, 100, 140, 200, 240, 300] {
+            let mut s = screen();
+            let out = draw(&mut s, width, 44);
+            let lines: Vec<&str> = out.lines().collect();
+            let times = lines
+                .iter()
+                .position(|l| l.contains("11:56:") || l.contains("11:5"))
+                .expect("the row of times under the bars");
+            let bottom = lines[times - 2];
+            let first = bottom
+                .chars()
+                .position(|c| "▁▂▃▄▅▆▇█".contains(c))
+                .expect("bars");
+            let last = bottom.trim_end().chars().count();
+            let plot = usize::from(width) - 4 - usize::from(AXIS);
+            let drawn = last - first;
+            assert!(
+                drawn * 4 >= plot * 3,
+                "at {width} columns the bars cover {drawn} of {plot} cells:\n{out}"
+            );
+            let title = lines.iter().find(|l| l.contains("A BAR")).unwrap();
+            assert!(title.contains("LAST 10M"), "{title}");
+        }
+    }
+
+    #[test]
     fn traffic_holds_now_against_each_slot() {
         let mut s = screen();
         s.tab = Tab::Traffic;
@@ -2409,7 +2442,7 @@ mod tests {
         assert!(text.contains("4xx 0.8% · 10 logged"), "{text}");
         assert!(text.contains("p99 89.86ms"), "{text}");
         // Ten minutes of traffic, which doubles halfway
-        assert!(text.contains("TRAFFIC · LAST 10M · 5S A BAR"), "{text}");
+        assert!(text.contains("TRAFFIC · LAST 10M · ~4S A BAR"), "{text}");
         assert!(text.contains("█ answered  █ 4xx  █ 5xx  · a few"), "{text}");
         // Every tenth second /search answers 502: a mark under the bar
         assert!(text.contains("▀▀▀"), "{text}");
