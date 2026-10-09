@@ -6,6 +6,138 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+## [0.20.0](https://github.com/omarmhaimdat/pepe/compare/v0.19.3...v0.20.0) - 2026-10-09
+
+### Added
+
+- *(logs)* a dashboard opens first, and every view is on panels ([#108](https://github.com/omarmhaimdat/pepe/pull/108))
+
+  The same change as #105, this time into `master`.
+
+  #105 was opened on top of #104's branch (`fix/logs-live`) so that its
+  diff would show only the screen. #104 was then squash-merged, its branch
+  stayed, and #105 was merged into that branch, not into `master`. So the
+  dashboard never reached `master` and release-plz had nothing to release.
+  This is #105's one commit cherry-picked onto today's `master`; nothing
+  else is in it.
+
+  **Squash-merge it with the title as it is** (`feat(logs): …`), so
+  release-plz opens the release PR. The site merged in #107 already shows
+  this dashboard in its Logs picture, so the release that carries the site
+  should carry this too.
+
+  ## What (from #105)
+
+  `pepe logs` opened on a table of minutes. It now opens on a
+  **Dashboard**, and Traffic, Paths, Errors and Log are views 2 to 5.
+
+  - **Three numbers drawn large**: the rate now with a sparkline and how
+  it stands against a usual minute; the share answering 5xx; the request
+  time's p50 with p90 and p99.
+  - **A verdict** beside them, in the colour of the server's health and
+  never of its load: Steady, Busy, Quiet, Degraded, Failing, or Ended,
+  with the path answering the most 5xx and the error log's most frequent
+  message.
+  - **Traffic**, a bar for every few seconds as far back as is known, up
+  to an hour, with 4xx and 5xx in yellow and red in proportion, and a mark
+  under bars whose 5xx are too few to show.
+  - **Top paths, status codes, the error log by message**, and the newest
+  lines.
+  - The other views are each on a panel, with the numbers in one line
+  above them; bars that say how much are one colour everywhere, so green,
+  yellow and red mean health.
+  - The number keys are now 1 to 5: Traffic was `1` and is `2`.
+
+  ## Tested
+
+  - 248 tests pass on this branch; clippy 1.98 `-D warnings` and `cargo
+  fmt --check` clean.
+  - As in #105: every view was rendered through pepe's theme to an image
+  and looked at, and the release binary was driven through all five views
+  on a live log in a pseudo-terminal. That was on #105's branch; on this
+  one only the tests and lints were run, the code being the same commit.
+
+
+
+### Other
+
+- *(site)* pepe.mhaimdat.com as a terminal, drawn the way pepe draws ([#107](https://github.com/omarmhaimdat/pepe/pull/107))
+
+  ## What
+
+  `site/index.html` was an install box and a GIF. It is now a site that
+  looks and behaves like pepe itself. (The first commit here is a
+  conventional landing page; the second replaces it, after it was rightly
+  called generic. Squash them.)
+
+  - **One typeface, flat panels on the warm ground, no gradients**: the
+  palette is `src/ui/theme.rs`'s, and the tabs, the key chips on the
+  bottom line and the bar on the hovered table row are drawn as the
+  dashboard draws them.
+  - **Pepe and the big digits are pixels**: Pepe is taken from the cells
+  the dashboard draws him in, and `398`, `2.4`, `4.0` are set in
+  `bigtext.rs`'s block face, both as inline SVG.
+  - **Four of pepe's screens, in the page without a frame**: Run, Ramp,
+  API and Logs, each with the command that makes it. The pictures have the
+  page's own background, so they read as part of it.
+  - **The keys work**: `1`-`4`, `tab` and the arrows switch screens; `i`
+  goes to the install line and `c` copies it; `g`, `d`, `b` open GitHub,
+  the docs and the benchmarks; `?` lists them.
+  - **What it does** as a table of eleven commands, and **against the
+  others** as bars: the README's Linux figures for pepe, wrk and oha, with
+  a link to the benchmark notes for the method and for where pepe is level
+  rather than ahead.
+  - The install box as before (opens on the visitor's platform, copy
+  button), now with a Docker tab.
+  - Title, description, canonical, Open Graph and Twitter tags, JSON-LD,
+  and `img/og.png` for links to unfold into.
+
+  One static file, no build step, no dependencies, no tracking. It stacks
+  down to phone widths, where the table drops its last column.
+
+  ## The pictures
+
+  `site/img/{run,ramp,api,logs}.png` are pepe's own drawing code, rendered
+  to cells through the pepe theme (as the `preview` test in
+  `src/ui/view.rs` does) and drawn at 2× by headless Chrome. The data is
+  made up: the tests' sample run, a simulated ramp that saturates, ten
+  invented endpoints, a generated nginx log.
+
+  ## Deploy
+
+  `publish-r2.yml` uploads `site/img/*.png` to `/img/` and checks they
+  answer 200. The site goes out with the next release; `docs:` doesn't
+  make one on its own.
+
+  ## For the reviewer
+
+  - **`logs.png` shows the dashboard from #105**, which is not merged. If
+  #105 doesn't land, that picture wants replacing.
+  - **`https://pepe.mhaimdat.com/` answers 404 today; only `/index.html`
+  answers.** The bucket has no index for the root, and the repo's website
+  link, the canonical and `og:url` all point at the root. It needs a rule
+  on the Cloudflare side.
+  - **A bug the API picture shows**: in the dashboard's first card,
+  "requests / s" and "avg 249 · peak 268" overlap ("requests / savg") when
+  the numbers are three digits. That is in `src/ui/view.rs`, not here.
+  - The verdict panel beside the numbers is an example of the wording.
+  - `og.png` is still the first design's (headline, command, the run
+  screen); it suits either.
+  - Single-key shortcuts are ignored while a modifier is held or a field
+  has focus. `tab` switches screens only when nothing on the page has
+  focus, so keyboard navigation of the links still works once you have
+  tabbed in.
+
+  ## Tested
+
+  - Looked at in headless Chrome at 1400 and 520 px wide. Two things found
+  that way and fixed: the hero Pepe had picked up the edge of the card
+  beside him, and a table header wrapped.
+  - The keys and the copy button are not exercised by anything automatic,
+  and I have not pressed them in a real browser: headless Chrome only took
+  pictures. Safari and Firefox are unchecked.
+
+
 ## [0.19.3](https://github.com/omarmhaimdat/pepe/compare/v0.19.2...v0.19.3) - 2026-10-09
 
 ### Fixed
