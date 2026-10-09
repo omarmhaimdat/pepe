@@ -320,7 +320,7 @@ Register-ArgumentCompleter -Native -CommandName 'pepe' -ScriptBlock {
         'pepe;logs' {
             [CompletionResult]::new('--format', '--format', [CompletionResultType]::ParameterName, 'The access log''s log_format as nginx.conf has it, on one line, when it isn''t `combined`: ''$remote_addr [$time_local] "$request" $status $request_time''')
             [CompletionResult]::new('--window', '--window', [CompletionResultType]::ParameterName, 'What "now" is measured over, e.g. 10s, 1m, 5m')
-            [CompletionResult]::new('--since', '--since', [CompletionResultType]::ParameterName, 'Leave out what is older than this, e.g. 90m, 24h, 7d')
+            [CompletionResult]::new('--since', '--since', [CompletionResultType]::ParameterName, 'How far back to start, e.g. 90m, 24h, 7d. At a terminal a log that is being written is shown live, from five minutes back, without it')
             [CompletionResult]::new('--rows', '--rows', [CompletionResultType]::ParameterName, 'Rows in each table of the report')
             [CompletionResult]::new('-n', '-n', [CompletionResultType]::ParameterName, 'Number of requests to perform')
             [CompletionResult]::new('--number', '--number', [CompletionResultType]::ParameterName, 'Number of requests to perform')
@@ -347,6 +347,7 @@ Register-ArgumentCompleter -Native -CommandName 'pepe' -ScriptBlock {
             [CompletionResult]::new('--concurrency', '--concurrency', [CompletionResultType]::ParameterName, 'Number of concurrent requests at a time')
             [CompletionResult]::new('-u', '-u', [CompletionResultType]::ParameterName, 'User-Agent string, default is pepe/{version}')
             [CompletionResult]::new('--user-agent', '--user-agent', [CompletionResultType]::ParameterName, 'User-Agent string, default is pepe/{version}')
+            [CompletionResult]::new('--all', '--all', [CompletionResultType]::ParameterName, 'Read all of the log before following it, however far back it goes')
             [CompletionResult]::new('--exact-paths', '--exact-paths', [CompletionResultType]::ParameterName, 'Count /items/1 and /items/2 apart. Without it the numbers and ids in a path count as one, /items/*')
             [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')

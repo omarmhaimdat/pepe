@@ -1004,6 +1004,17 @@ async fn run_logs(args: &Cli, what: &cli::LogsArgs) -> Result<(), Box<dyn std::e
         aside = logs::piped_aside();
         screen = aside.is_some();
     }
+    // At a terminal a log that is being written is watched, not read: the
+    // screen starts a few minutes back, enough for "now" to be right at
+    // once and for the chart to have something in it. A log nobody is
+    // writing has no now, and is read whole.
+    let mut since = since;
+    if screen && since.is_none() && !what.all && !files.is_empty() {
+        let wall = logs::wall();
+        if logs::being_written(&files, &parser, wall) {
+            since = Some(wall - window.max(logs::LOOKBACK));
+        }
+    }
     let mut job = logs::Job {
         files,
         piped: aside,

@@ -4,7 +4,7 @@
 .SH NAME
 pepe\-logs \- Read nginx logs: requests per second now, against each minute, hour and day
 .SH SYNOPSIS
-\fBpepe logs\fR [\fB\-\-format\fR] [\fB\-\-window\fR] [\fB\-\-since\fR] [\fB\-\-exact\-paths\fR] [\fB\-\-rows\fR] [\fB\-h\fR|\fB\-\-help\fR] [\fIFILES\fR] 
+\fBpepe logs\fR [\fB\-\-format\fR] [\fB\-\-window\fR] [\fB\-\-since\fR] [\fB\-\-all\fR] [\fB\-\-exact\-paths\fR] [\fB\-\-rows\fR] [\fB\-h\fR|\fB\-\-help\fR] [\fIFILES\fR] 
 .SH DESCRIPTION
 Read nginx logs: requests per second now, against each minute, hour and day
 .SH OPTIONS
@@ -16,7 +16,10 @@ The access log\*(Aqs log_format as nginx.conf has it, on one line, when it isn\*
 What "now" is measured over, e.g. 10s, 1m, 5m
 .TP
 \fB\-\-since\fR \fI<TIME>\fR
-Leave out what is older than this, e.g. 90m, 24h, 7d
+How far back to start, e.g. 90m, 24h, 7d. At a terminal a log that is being written is shown live, from five minutes back, without it
+.TP
+\fB\-\-all\fR
+Read all of the log before following it, however far back it goes
 .TP
 \fB\-\-exact\-paths\fR
 Count /items/1 and /items/2 apart. Without it the numbers and ids in a path count as one, /items/*

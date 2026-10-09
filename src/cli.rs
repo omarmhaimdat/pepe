@@ -200,9 +200,14 @@ pub struct LogsArgs {
     #[arg(long, default_value = "60s", value_name = "TIME")]
     pub window: String,
 
-    /// Leave out what is older than this, e.g. 90m, 24h, 7d
+    /// How far back to start, e.g. 90m, 24h, 7d. At a terminal a log that
+    /// is being written is shown live, from five minutes back, without it
     #[arg(long, value_name = "TIME")]
     pub since: Option<String>,
+
+    /// Read all of the log before following it, however far back it goes
+    #[arg(long, conflicts_with = "since")]
+    pub all: bool,
 
     /// Count /items/1 and /items/2 apart. Without it the numbers and ids
     /// in a path count as one, /items/*
