@@ -312,6 +312,12 @@ impl Dashboard {
             self.peak_busy,
             self.rate.map(|r| (r, self.rate_missed)),
         )
+        .with_target(
+            "run",
+            Some(&self.args.method),
+            &self.args.url,
+            self.concurrency as u32,
+        )
         .with_warmup(self.args.warmup(), self.warmup_requests)
         .with_timeline(&self.timeline)
         .with_slowest(&self.slowest)

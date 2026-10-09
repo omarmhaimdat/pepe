@@ -18,6 +18,7 @@ use crate::ramp::{Ramp, RampPlan, Tick};
 mod api;
 mod cache;
 mod cli;
+mod compare;
 mod completions;
 mod config;
 mod contrib;
@@ -246,6 +247,7 @@ async fn run_json(args: &Cli) -> Result<(), Box<dyn std::error::Error>> {
                 load.peak_busy(),
                 load.rate().map(|r| (r, load.missed())),
             )
+            .with_target("run", Some(&args.method), &args.url, args.concurrency)
             .with_warmup(args.warmup(), warmup_requests)
             .with_timeline(timeline)
             .with_slowest(slowest)
@@ -549,6 +551,7 @@ async fn run_api_json(args: &Cli, run: &api::ApiRun) -> Result<(), Box<dyn std::
             load.peak_busy(),
             load.rate().map(|r| (r, load.missed())),
         )
+        .with_target("api", None, &run.spec.base_url, args.concurrency)
         .with_warmup(args.warmup(), warmup_requests)
         .with_connects(&connects);
     let mut report = serde_json::to_value(&report)?;
@@ -699,6 +702,7 @@ async fn flow_session(
 }
 
 async fn run_flow_json(args: &Cli, flow: flow::Flow) -> Result<(), Box<dyn std::error::Error>> {
+    let name = flow.name.clone();
     let views = flow.views();
     let (clients, connects) = flow_clients(args, &flow, args.concurrency as usize)?;
     let mut load = load::start_flow(clients, flow, args.concurrency as usize, plan(args), false);
@@ -747,6 +751,7 @@ async fn run_flow_json(args: &Cli, flow: flow::Flow) -> Result<(), Box<dyn std::
             load.peak_busy(),
             load.rate().map(|r| (r, load.missed())),
         )
+        .with_target("flow", None, &name, args.concurrency)
         .with_warmup(args.warmup(), warmup_requests)
         .with_connects(&connects);
     let mut report = serde_json::to_value(&report)?;
@@ -917,6 +922,12 @@ async fn run_replay_json(
             load.peak_busy(),
             load.rate().map(|r| (r, load.missed())),
         )
+        .with_target(
+            "replay",
+            None,
+            &what.log.display().to_string(),
+            args.concurrency,
+        )
         .with_warmup(args.warmup(), warmup_requests)
         .with_connects(&connects);
     let mut report = serde_json::to_value(&report)?;
@@ -1065,6 +1076,32 @@ async fn run_logs(args: &Cli, what: &cli::LogsArgs) -> Result<(), Box<dyn std::e
     Ok(())
 }
 
+/// `pepe compare before.json after.json`: what moved, as a report or as
+/// JSON; with --gate, exit 1 when it is a regression
+fn run_compare(args: &Cli, what: &cli::CompareArgs) -> Result<(), Box<dyn std::error::Error>> {
+    let sides = (
+        compare::Side::read(&what.before),
+        compare::Side::read(&what.after),
+    );
+    let (before, after) = match sides {
+        (Ok(before), Ok(after)) => (before, after),
+        (Err(e), _) | (_, Err(e)) => {
+            eprintln!("error: {e}");
+            std::process::exit(2);
+        }
+    };
+    let comparison = compare::compare(&before, &after);
+    if args.json {
+        println!("{}", comparison.to_json()?);
+    } else {
+        print_report(&comparison.report());
+    }
+    if what.gate && comparison.regression {
+        std::process::exit(1);
+    }
+    Ok(())
+}
+
 async fn run_api(args: &Cli, api: &cli::ApiArgs) -> Result<(), Box<dyn std::error::Error>> {
     let mut run = match api::ApiRun::load(api).await {
         Ok(run) => run,
@@ -1154,6 +1191,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     if let Some(cli::Command::Logs(what)) = args.command.clone() {
         return run_logs(&args, &what).await;
+    }
+    if let Some(cli::Command::Compare(what)) = args.command.clone() {
+        return run_compare(&args, &what);
     }
     if let Some(cli::Command::Flow(what)) = args.command.clone() {
         if let Err(e) = args.validate() {

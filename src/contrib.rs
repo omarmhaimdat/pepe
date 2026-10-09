@@ -104,7 +104,11 @@ const ENVIRONMENT: [(&str, &str); 4] = [
     ),
 ];
 
-const EXAMPLES: [(&str, &str); 8] = [
+const EXAMPLES: [(&str, &str); 9] = [
+    (
+        "pepe compare before.json after.json",
+        "What moved between two runs, and whether it is more than runs wobble",
+    ),
     (
         "pepe logs /var/log/nginx/access.log /var/log/nginx/error.log",
         "Requests per second now, against each minute, hour and day of the log",
@@ -195,12 +199,13 @@ fn main_page() -> String {
 }
 
 /// Each subcommand's page: (subcommand, page name, how it's typed)
-const SUBCOMMANDS: [(&str, &str, &str); 7] = [
+const SUBCOMMANDS: [(&str, &str, &str); 8] = [
     ("ramp", "pepe-ramp", "pepe ramp"),
     ("api", "pepe-api", "pepe api"),
     ("replay", "pepe-replay", "pepe replay"),
     ("flow", "pepe-flow", "pepe flow"),
     ("logs", "pepe-logs", "pepe logs"),
+    ("compare", "pepe-compare", "pepe compare"),
     ("self-update", "pepe-self-update", "pepe self-update"),
     ("completions", "pepe-completions", "pepe completions"),
 ];

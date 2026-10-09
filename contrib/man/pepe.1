@@ -122,6 +122,9 @@ Run a sequence of requests from a flow file, each step fed by the last
 pepe\-logs(1)
 Read nginx logs: requests per second now, against each minute, hour and day
 .TP
+pepe\-compare(1)
+Hold a run\*(Aqs JSON report against an earlier one and say what moved
+.TP
 pepe\-help(1)
 Print this message or the help of the given subcommand(s)
 .ie \n(.g .ds Aq \(aq
@@ -214,6 +217,9 @@ Run again; back to the setup screen
 \fB?\fR
 Show all keys
 .SH EXAMPLES
+.TP
+\fBpepe compare before.json after.json\fR
+What moved between two runs, and whether it is more than runs wobble
 .TP
 \fBpepe logs /var/log/nginx/access.log /var/log/nginx/error.log\fR
 Requests per second now, against each minute, hour and day of the log
