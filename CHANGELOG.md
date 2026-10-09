@@ -6,6 +6,78 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+## [0.19.3](https://github.com/omarmhaimdat/pepe/compare/v0.19.2...v0.19.3) - 2026-10-09
+
+### Fixed
+
+- *(logs)* at a terminal a log being written is shown live, not read from its start ([#104](https://github.com/omarmhaimdat/pepe/pull/104))
+
+  ## What
+
+  `pepe logs` on a host read the whole log before the screen had anything
+  to say about now, and the numbers on it were the log's history rather
+  than the server's present. At a terminal, a log that is being written is
+  now shown live.
+
+  - **Live by default.** If the last line of any of the files is from the
+  last five minutes, the screen starts five minutes back (or `--window`
+  back, if that is longer) and follows from there. Five minutes rather
+  than none, so that "now" is right from the first frame and the chart has
+  bars in it. The title says where the counts start: `● live · from
+  15:33:40`.
+  - **`--since 24h`** starts further back, as before; **`--all`** (new)
+  reads everything first. The two conflict.
+  - **A log nobody is writing is read whole**, as before: it has no now,
+  and starting five minutes before the clock would show nothing.
+  - **Unchanged**: piped out or `--json` (a report of the whole log, or of
+  `--since`), and what is piped in.
+
+  ## How
+
+  - `seek_since` finds where a time starts in a file by halving it, a log
+  being in order of time, and reading 64 KB at each step. What it can't
+  tell (no dated line in the 64 KB) it settles toward the top of the file,
+  so more is read, never less. Lines before the time that are still read
+  are left out by the filter that was already there.
+  - This serves `--since` everywhere, not only the live default: on a
+  two-day, 193 MB log `--since 1h` takes 0.03 s where the whole log takes
+  0.11 s, and the gap grows with the file.
+  - The multi-threaded read takes a place to start from, so `--since 30d`
+  of a large log still uses every core.
+  - `being_written` reads the last 64 KB of each file for its last
+  timestamp.
+
+  ## For the reviewer
+
+  - This changes what `pepe logs access.log` shows at a terminal on a live
+  host: the cards (a usual minute, the busiest) now describe the last
+  minutes until the screen has been open longer, and "an hour ago" / "a
+  day ago" are empty without `--since` or `--all`.
+  - A file whose lines aren't in time order can be taken up at the wrong
+  place; `--all` reads it whole.
+  - The error log's times are this machine's, so on a machine in another
+  zone than the server it can be judged written or not wrongly; `--since`
+  and `--all` say it outright.
+  - Titled `fix` so it is a patch release.
+
+  ## Tested
+
+  - New test: a six-hour log with undated lines, taken up 1 s, 5 min, 1 h
+  and nearly 6 h back; the place is a line's start, at most 128 KB before
+  the first line wanted, the counts are exactly the requests since, and
+  every byte is accounted for in the progress. Also before the log's
+  start, after its end, a missing file, and `being_written` either side of
+  five minutes.
+  - 247 tests pass; clippy 1.98 `-D warnings` and `cargo fmt --check`
+  clean; man page and completions regenerated for `--all`.
+  - By hand: a generated two-day log ending now, with its error log, on
+  the screen in a pseudo-terminal: it opens five minutes back (11,058
+  requests of 1.3M), shows `● live`, and counts lines appended while it
+  runs. Reading a whole 3.45 GB log takes the same time as on master,
+  within the noise of alternating runs.
+  - Not run against a real nginx host, nor on Linux or Windows.
+
+
 ## [0.19.2](https://github.com/omarmhaimdat/pepe/compare/v0.19.1...v0.19.2) - 2026-10-09
 
 ### Fixed
