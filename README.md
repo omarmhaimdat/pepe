@@ -277,7 +277,7 @@ pepe
 pepe -i -c 50 -z 30s https://example.com
 ```
 
-- `tab` switches mode: **Single URL**, **Ramp** or **API**. What the modes share is kept.
+- `tab` switches mode: **Single URL**, **Ramp** or **API**. What the modes share is kept. In API mode the spec is a file, a URL, or the OpenAPI document itself, pasted in.
 - `↑` `↓` move between fields, `←` `→` change a choice, `enter` starts.
 - Paste a curl command anywhere and the form is filled in from it.
 - `ctrl-t` sends the request once and shows the response, to check it before the run.
@@ -370,6 +370,8 @@ The dashboard's first tab lists the most frequent URLs (`--rows`, 20 by default)
 
 ### Reading nginx logs
 
+![Reading nginx logs: the dashboard with the rate now and a verdict, then traffic by the hour, paths, errors and the log](assets/logs.gif)
+
 What the server already knows about its traffic: `pepe logs` reads nginx's access and error logs and says how busy the server is now against how busy it has been.
 
 ```bash
@@ -403,14 +405,15 @@ pepe logs access.log --format '$remote_addr [$time_local] "$request" $status $bo
 
 ![API mode: the endpoints of a spec picked on screen, then a dashboard with a row per endpoint](assets/api.gif)
 
-`pepe api` reads an OpenAPI 3 (or Swagger 2) spec, from a file or a URL, in JSON or YAML, and turns its operations into requests.
+`pepe api` reads an OpenAPI 3 (or Swagger 2) spec, from a file or a URL, in JSON or YAML, and turns its operations into requests. With nothing after it, it opens the setup screen and asks for the spec: type a path or a URL, or paste the whole document.
 
 ```bash
+pepe api
 pepe api openapi.yaml
 pepe api https://api.example.com/openapi.json --auth bearer:$TOKEN -c 20 -z 1m
 ```
 
-It opens on a plan screen. Nothing is sent, and no endpoint is switched on, until you say so.
+Once the spec is loaded, it opens on a plan screen. Nothing is sent, and no endpoint is switched on, until you say so.
 
 - Endpoints are listed under the spec's tags. `space` switches an endpoint on or off, or a whole tag; `/` filters the list.
 - `enter` on an endpoint goes to its parameters: path, query, header and cookie parameters with their type, description and the values the spec allows, then the body and the endpoint's share of the traffic. `enter` edits one, `space` steps through the spec's values, `del` leaves it out. Several values (`a, b`) are sent in turn, or together for array parameters.

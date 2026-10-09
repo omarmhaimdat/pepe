@@ -289,7 +289,8 @@ impl Default for RampArgs {
 
 #[derive(clap::Args, Debug, Clone, Default)]
 pub struct ApiArgs {
-    /// The OpenAPI spec: a file or URL, JSON or YAML (or `spec` in pepe.toml)
+    /// The OpenAPI spec: a file, a URL or the document itself, JSON or
+    /// YAML (or `spec` in pepe.toml). Without it, the setup screen asks
     #[arg(default_value_t = String::new(), hide_default_value = true)]
     pub spec: String,
 
@@ -574,7 +575,12 @@ impl Cli {
                 }
             }
             Some(Command::Api(api)) => {
-                target = api.spec.clone();
+                // A spec pasted on the setup screen has no name to give
+                target = if crate::openapi::is_document(&api.spec) {
+                    "<the pasted spec>".into()
+                } else {
+                    api.spec.clone()
+                };
                 if let Some(server) = &api.server {
                     flag("--server", server);
                 }

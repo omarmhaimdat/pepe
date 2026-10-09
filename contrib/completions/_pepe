@@ -192,7 +192,7 @@ _arguments "${_arguments_options[@]}" : \
 '--json[Output results in JSON format]' \
 '-i[Open the setup screen to review or change the settings before starting (it opens by itself when no URL is given)]' \
 '--setup[Open the setup screen to review or change the settings before starting (it opens by itself when no URL is given)]' \
-'::spec -- The OpenAPI spec\: a file or URL, JSON or YAML (or `spec` in pepe.toml):_default' \
+'::spec -- The OpenAPI spec\: a file, a URL or the document itself, JSON or YAML (or `spec` in pepe.toml). Without it, the setup screen asks:_default' \
 && ret=0
 ;;
 (ramp)
