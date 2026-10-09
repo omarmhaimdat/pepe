@@ -28,6 +28,26 @@ inputs:
       e.g. ".summary.latency.p99_ms > 300 or .summary.failed_requests > 0".
     required: false
     default: ""
+  baseline:
+    description: >-
+      What to compare the run with. "auto" keeps each branch's last report
+      in the Actions cache and holds a pull request against its base
+      branch's; a path names a report file (pepe --json) to compare with.
+      Empty, nothing is compared.
+    required: false
+    default: ""
+  comment:
+    description: >-
+      On a pull request, post the result as a comment, and update that
+      comment on later runs. The job needs `pull-requests: write`.
+    required: false
+    default: "false"
+  gate:
+    description: >-
+      Fail the step when the comparison with the baseline says Slower or
+      Worse. Nothing happens without a baseline.
+    required: false
+    default: "false"
 
 outputs:
   report:
@@ -48,6 +68,12 @@ outputs:
   p99_ms:
     description: 99th percentile latency in milliseconds
     value: ${{ steps.run.outputs.p99_ms }}
+  compare:
+    description: Path of the comparison JSON (pepe compare --json); empty without a baseline
+    value: ${{ steps.compare.outputs.compare }}
+  verdict:
+    description: "The comparison's word: faster, same, slower, worse or better; empty without a baseline"
+    value: ${{ steps.compare.outputs.verdict }}
 
 runs:
   using: composite
@@ -103,6 +129,142 @@ runs:
             echo "pepe's sending thread was saturated; the numbers are pepe's limit as much as the target's. Add \`--threads 2\` to args."
           fi
         } >> "$GITHUB_STEP_SUMMARY"
+
+    # The base branch's last report, kept in the Actions cache. A pull
+    # request can read the caches its base branch made; the key never
+    # matches whole, so the restore key finds the newest
+    - name: Restore the baseline
+      if: inputs.baseline == 'auto'
+      uses: actions/cache/restore@v4
+      with:
+        path: ${{ runner.temp }}/pepe-baseline
+        key: pepe-baseline-${{ github.base_ref || github.ref_name }}-${{ github.run_id }}
+        restore-keys: |
+          pepe-baseline-${{ github.base_ref || github.ref_name }}-
+
+    - name: Compare with the baseline
+      id: compare
+      shell: bash
+      env:
+        BASELINE: ${{ inputs.baseline }}
+        BASE: ${{ github.base_ref || github.ref_name }}
+        REPORT: ${{ steps.run.outputs.report }}
+        GATE: ${{ inputs.gate }}
+      run: |
+        set -euo pipefail
+        case "$BASELINE" in
+          "") exit 0 ;;
+          auto) before="${RUNNER_TEMP}/pepe-baseline/report.json" ;;
+          *) before="$BASELINE" ;;
+        esac
+        if [ ! -f "$before" ]; then
+          echo "no baseline yet for $BASE: this run becomes it" | tee -a "$GITHUB_STEP_SUMMARY"
+          exit 0
+        fi
+        if ! pepe compare --help >/dev/null 2>&1; then
+          echo "::error::a baseline needs pepe 0.21 or newer; set the version input"
+          exit 1
+        fi
+        compare="${RUNNER_TEMP}/pepe-compare.json"
+        pepe --json compare "$before" "$REPORT" > "$compare"
+        {
+          echo "compare=$compare"
+          echo "verdict=$(jq -r '.verdict' "$compare")"
+        } >> "$GITHUB_OUTPUT"
+        {
+          echo
+          echo '```'
+          pepe compare "$before" "$REPORT" || true
+          echo '```'
+        } >> "$GITHUB_STEP_SUMMARY"
+        if [ "$GATE" = "true" ] && [ "$(jq -r '.regression' "$compare")" = "true" ]; then
+          echo "::error::$(jq -r '.verdict' "$compare") than the baseline: $(jq -r '[.findings[] | select(.level != "Healthy") | .text] | join("; ")' "$compare")"
+          exit 1
+        fi
+
+    # Only a branch's own runs set its baseline: a pull request compares
+    # with its base branch and leaves the cache as it was
+    - name: Keep this report as the branch's baseline
+      if: inputs.baseline == 'auto' && github.event_name != 'pull_request' && github.event_name != 'pull_request_target'
+      shell: bash
+      env:
+        REPORT: ${{ steps.run.outputs.report }}
+      run: |
+        mkdir -p "${RUNNER_TEMP}/pepe-baseline"
+        cp "$REPORT" "${RUNNER_TEMP}/pepe-baseline/report.json"
+    - if: inputs.baseline == 'auto' && github.event_name != 'pull_request' && github.event_name != 'pull_request_target'
+      uses: actions/cache/save@v4
+      with:
+        path: ${{ runner.temp }}/pepe-baseline
+        key: pepe-baseline-${{ github.ref_name }}-${{ github.run_id }}
+
+    # One comment per pull request, found again by its marker and updated
+    - name: Comment on the pull request
+      if: always() && inputs.comment == 'true' && (github.event_name == 'pull_request' || github.event_name == 'pull_request_target') && steps.run.outputs.report != ''
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+        REPORT: ${{ steps.run.outputs.report }}
+        COMPARE: ${{ steps.compare.outputs.compare }}
+        URL: ${{ inputs.url }}
+        BASE: ${{ github.base_ref }}
+        PR: ${{ github.event.pull_request.number }}
+        REPO: ${{ github.repository }}
+        RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+      run: |
+        set -euo pipefail
+        body="${RUNNER_TEMP}/pepe-comment.md"
+        {
+          echo "<!-- pepe-load-test -->"
+          if [ -n "$COMPARE" ] && [ -f "$COMPARE" ]; then
+            verdict=$(jq -r '.verdict' "$COMPARE")
+            case "$verdict" in
+              worse) glyph="✖" ;;
+              slower) glyph="▲" ;;
+              *) glyph="✔" ;;
+            esac
+            word=$(jq -r '{better: "Better than", faster: "Faster than", same: "About the same as", slower: "Slower than", worse: "Worse than"}[.verdict]' "$COMPARE")
+            echo "### pepe · $glyph $word \`$BASE\` · $URL"
+            echo
+            echo "| | \`$BASE\` | this PR | |"
+            echo "|---|---|---|---|"
+            jq -r '
+              def ms: if . == null then "" elif . >= 100 then "\(. * 10 | round / 10) ms" else "\(. * 100 | round / 100) ms" end;
+              def rate: if . == null then "" elif . >= 1000 then "\(. / 100 | round / 10)k req/s" else "\(. | round) req/s" end;
+              def pct: if . == 0 then "0%" elif . < 1 then "\(. * 100 | round / 100)%" else "\(. * 10 | round / 10)%" end;
+              def word: if .significant then (if .change_percent > 0 then "▲ up \(.change_percent | round)%" else "▼ down \(-.change_percent | round)%" end) else "within the usual spread (±\(.noise_percent | round)%)" end;
+              def row(name; m; f): (.changes[] | select(.metric == m)) as $c | if $c then "| \(name) | \($c.before | f) | \($c.after | f) | \($c | word) |" else empty end;
+              row("p99"; "p99_ms"; ms),
+              row("median"; "median_ms"; ms),
+              row("throughput"; "requests_per_second"; rate),
+              row("capacity"; "capacity_per_second"; rate),
+              "| failed | \(.before.failed_percent | pct) | \(.after.failed_percent | pct) | |",
+              "| requests | \(.before.requests) | \(.after.requests) | |"
+            ' "$COMPARE"
+            echo
+            jq -r '.findings[] | "- \({Healthy: "✔", Degraded: "▲", Failing: "✖"}[.level] // "•") \(.text)"' "$COMPARE"
+          else
+            echo "### pepe · $URL"
+            echo
+            echo "| requests | failed | req/s | p50 | p99 | max |"
+            echo "|---|---|---|---|---|---|"
+            jq -r '.summary | "| \(.total_requests) | \(.failed_requests) | \(.requests_per_second | floor) | \(.latency.median_ms) ms | \(.latency.p99_ms) ms | \(.latency.max_ms) ms |"' "$REPORT"
+            if [ -n "$BASE" ]; then
+              echo
+              echo "No baseline for \`$BASE\` yet; its next run on \`$BASE\` makes one."
+            fi
+          fi
+          echo
+          echo "<sub>[pepe](https://github.com/omarmhaimdat/pepe) · [this run]($RUN_URL)</sub>"
+        } > "$body"
+        existing=$(gh api "repos/$REPO/issues/$PR/comments" --paginate --jq '[.[] | select(.body | startswith("<!-- pepe-load-test -->"))][0].id // empty' 2>/dev/null || true)
+        if [ -n "$existing" ]; then
+          gh api -X PATCH "repos/$REPO/issues/comments/$existing" -F body=@"$body" >/dev/null \
+            && echo "updated the comment" || echo "::warning::couldn't update the pull request comment (does the job have pull-requests: write?)"
+        else
+          gh api "repos/$REPO/issues/$PR/comments" -F body=@"$body" >/dev/null \
+            && echo "commented" || echo "::warning::couldn't comment on the pull request (does the job have pull-requests: write?)"
+        fi
 
     - name: Check the condition
       if: inputs.fail-if != ''

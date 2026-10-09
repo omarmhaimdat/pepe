@@ -13,6 +13,8 @@ on:
 
 permissions:
   contents: read
+  # The action comments on this pull request, as a user's would
+  pull-requests: write
 
 jobs:
   action:
@@ -22,6 +24,14 @@ jobs:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
+      # The pepe of this branch, not the last release: the action uses a
+      # pepe already on the PATH
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: swatinem/rust-cache@v2
+      - name: Build pepe
+        run: |
+          cargo build --release --quiet
+          echo "$PWD/target/release" >> "$GITHUB_PATH"
       - name: A target
         run: |
           python3 -m http.server 8089 --bind 127.0.0.1 >/dev/null 2>&1 &
@@ -38,10 +48,29 @@ jobs:
           FAILED: ${{ steps.pepe.outputs.failed_requests }}
           RPS: ${{ steps.pepe.outputs.requests_per_second }}
           P99: ${{ steps.pepe.outputs.p99_ms }}
+          VERDICT: ${{ steps.pepe.outputs.verdict }}
         run: |
           echo "total=$TOTAL failed=$FAILED rps=$RPS p99=$P99"
           [ "$TOTAL" = "300" ] && [ "$FAILED" = "0" ]
           test -f "${{ steps.pepe.outputs.report }}"
+          [ -z "$VERDICT" ]
+      - name: The same run again, against the first as its baseline, gated and commented
+        id: again
+        uses: ./
+        with:
+          url: http://127.0.0.1:8089/
+          args: -n 300 -c 4
+          baseline: ${{ steps.pepe.outputs.report }}
+          gate: true
+          comment: true
+      - name: A verdict, and the comparison
+        env:
+          VERDICT: ${{ steps.again.outputs.verdict }}
+          COMPARE: ${{ steps.again.outputs.compare }}
+        run: |
+          echo "verdict=$VERDICT"
+          case "$VERDICT" in faster|same|slower|better|worse) ;; *) exit 1 ;; esac
+          jq -e '.changes | length > 0' "$COMPARE"
       - name: A condition that must fail the step
         id: should-fail
         continue-on-error: true
