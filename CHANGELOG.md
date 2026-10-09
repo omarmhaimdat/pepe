@@ -6,6 +6,52 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+## [0.20.2](https://github.com/omarmhaimdat/pepe/compare/v0.20.1...v0.20.2) - 2026-10-09
+
+### Fixed
+
+- *(action)* a description short enough for the Marketplace ([#113](https://github.com/omarmhaimdat/pepe/pull/113))
+
+  The Marketplace refuses to publish the action: its description must be
+  under 125 characters, and the one in action.yml was 137. Now 124, saying
+  the same thing.
+
+  The Marketplace reads action.yml at the release's tag, so this needs a
+  release before the "Publish this Action to the GitHub Marketplace" box
+  can be ticked. **Squash-merge with the title as it is** so release-plz
+  opens the release PR; publish from that release.
+
+
+
+### Other
+
+- *(action)* every release moves the v0 tag, so the action is pinned like others ([#111](https://github.com/omarmhaimdat/pepe/pull/111))
+
+  The repository is also a GitHub Action, and the README told people to
+  use it at `@master`. Actions are pinned to a floating major tag
+  (`actions/checkout@v7`), and the Marketplace lists releases, so pepe
+  should have both.
+
+  - `publish-action.yml` is a dist publish job like the Homebrew, R2 and
+  Docker ones: once the GitHub Release for vX.Y.Z exists, it moves the
+  `vX` tag (`v0` today, `v1` after 1.0) to the same commit, with
+  `GITHUB_TOKEN`, which starts no further workflow.
+  - The README and the site now say `omarmhaimdat/pepe@v0`.
+  - Added to `release.yml` by hand: `dist generate` refuses to rewrite it
+  while `allow-dirty = ["ci"]` is set (it is, so Dependabot can bump the
+  actions in it).
+
+  Not in this PR, because GitHub has no API for it: the Marketplace
+  listing takes a one-time click on one release's edit page, "Publish this
+  Action to the GitHub Marketplace", after accepting the Marketplace
+  Developer Agreement. After that, the listing follows the releases by
+  itself.
+
+  **Squash-merge with the title as it is.** It's a `ci:` commit, so it
+  rides along with the next feat/fix release; that release is the first
+  one to move `v0`.
+
+
 ## [0.20.1](https://github.com/omarmhaimdat/pepe/compare/v0.20.0...v0.20.1) - 2026-10-09
 
 ### Fixed
