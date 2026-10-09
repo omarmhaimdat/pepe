@@ -9,6 +9,10 @@ use crate::timeline::{Sample, Timeline};
 
 #[derive(Serialize, Clone)]
 pub struct JsonReport {
+    /// What was tested and with what load, so two reports can be told
+    /// apart before their numbers are held against each other
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub target: Option<Target>,
     pub summary: JsonSummary,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub generator: Option<Generator>,
@@ -20,6 +24,17 @@ pub struct JsonReport {
     /// it every minute while the run goes and once more when it ends
     #[serde(skip_serializing_if = "Option::is_none")]
     pub snapshot: Option<Snapshot>,
+}
+
+#[derive(Serialize, Clone, PartialEq, Debug)]
+pub struct Target {
+    /// run, ramp, api, flow or replay
+    pub mode: &'static str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub method: Option<String>,
+    /// The URL, or the spec, flow file or log the requests came from
+    pub url: String,
+    pub concurrency: u32,
 }
 
 #[derive(Serialize, Clone, Copy, PartialEq, Debug)]
@@ -254,6 +269,23 @@ fn ms(d: Duration) -> f64 {
 }
 
 impl JsonReport {
+    /// What was tested: the URL for a run, else what the requests came from
+    pub fn with_target(
+        mut self,
+        mode: &'static str,
+        method: Option<&str>,
+        url: &str,
+        concurrency: u32,
+    ) -> Self {
+        self.target = Some(Target {
+            mode,
+            method: method.map(str::to_string),
+            url: url.to_string(),
+            concurrency,
+        });
+        self
+    }
+
     /// `rate`: the `--rate` asked for and the starts it missed
     pub fn with_generator(
         mut self,
@@ -349,6 +381,7 @@ impl JsonReport {
 
     pub fn generate(metrics: &Metrics, elapsed: Duration, interrupted: bool) -> Self {
         Self {
+            target: None,
             generator: None,
             timeline: Vec::new(),
             snapshot: None,

@@ -1,0 +1,22 @@
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.TH pepe-compare 1  pepe "User Commands"
+.SH NAME
+pepe\-compare \- Hold a run\*(Aqs JSON report against an earlier one and say what moved
+.SH SYNOPSIS
+\fBpepe compare\fR [\fB\-\-gate\fR] [\fB\-h\fR|\fB\-\-help\fR] <\fIBEFORE\fR> <\fIAFTER\fR> 
+.SH DESCRIPTION
+Hold a run\*(Aqs JSON report against an earlier one and say what moved
+.SH OPTIONS
+.TP
+\fB\-\-gate\fR
+Exit 1 when the verdict is Slower or Worse, for CI
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Print help
+.TP
+<\fIBEFORE\fR>
+The earlier report (`pepe \-\-json`, `\-\-snapshot`, or a ramp\*(Aqs)
+.TP
+<\fIAFTER\fR>
+The later one, of the same test

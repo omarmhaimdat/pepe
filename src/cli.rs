@@ -183,6 +183,20 @@ pub enum Command {
     Flow(FlowArgs),
     /// Read nginx logs: requests per second now, against each minute, hour and day
     Logs(LogsArgs),
+    /// Hold a run's JSON report against an earlier one and say what moved
+    Compare(CompareArgs),
+}
+
+#[derive(clap::Args, Debug, Clone, PartialEq)]
+pub struct CompareArgs {
+    /// The earlier report (`pepe --json`, `--snapshot`, or a ramp's)
+    pub before: std::path::PathBuf,
+    /// The later one, of the same test
+    pub after: std::path::PathBuf,
+
+    /// Exit 1 when the verdict is Slower or Worse, for CI
+    #[arg(long)]
+    pub gate: bool,
 }
 
 #[derive(clap::Args, Debug, Clone, PartialEq)]

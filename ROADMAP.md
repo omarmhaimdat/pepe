@@ -103,8 +103,9 @@ Get the results where they're needed.
 - [ ] **A versioned report** (S). `"schema_version": 1` in the JSON and a
       JSON Schema published with each release, so a script or an agent
       can depend on the field names while sections keep being added.
-- [ ] **Compare two runs** (M). `pepe compare before.json after.json` says
-      what moved, in the verdict's language.
+- [x] **Compare two runs** (M): `pepe compare before.json after.json` says
+      what moved, in the verdict's language, and only when it moved more
+      than runs of that size wobble; `--gate` exits 1 on a regression — next release
 - [ ] **CSV and per-request export** (S). One line per request for
       spreadsheets and notebooks.
 - [ ] **JUnit XML** (S). So CI systems show thresholds as test results.

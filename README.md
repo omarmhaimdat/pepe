@@ -460,6 +460,7 @@ jq '.summary.latency.p99_ms' results.json
 
 ```json
 {
+  "target": { "mode": "run", "method": "GET", "url": "https://example.com", "concurrency": 20 },
   "summary": {
     "total_requests": 1000,
     "successful_requests": 1000,
@@ -485,6 +486,28 @@ jq '.summary.latency.p99_ms' results.json
 ```
 
 `server_timing` is there when the target sends `Server-Timing` headers, and `slowest_requests` lists the five slowest responses with the request id their backend gave them, so they can be found in its logs.
+
+### Comparing two runs
+
+`pepe compare` holds a report against an earlier one of the same test and says what moved, in the verdict's words. A number is only called a change when it moved more than two runs like these wobble on their own: the run's own latency spread, scaled by how many requests back the number, so a p99 from 200 requests is given more room than one from 20,000.
+
+```bash
+pepe --json -n 5000 -c 20 https://staging.example.com/api > before.json
+# ... deploy ...
+pepe --json -n 5000 -c 20 https://staging.example.com/api > after.json
+pepe compare before.json after.json
+```
+
+```
+pepe · compare before.json → after.json
+▲ Slower · 5,000 → 5,000 requests · p99 120.0ms → 166.0ms · 260 req/s → 252 req/s
+  ▲ p99 up 38%: 120.0ms → 166.0ms
+  ✔ Median within the usual spread: 30.00ms → 31.00ms (±5%)
+  ✔ Throughput within the usual spread: 260 req/s → 252 req/s (±5%)
+  ▲ A long tail is new: p99 is 5.4× the median, was 4.0×
+```
+
+The verdict is one of **Faster**, **About the same**, **Slower**, and, when failures appeared or rose, **Worse** (or **Better** when they fell): failures outrank speed. Two reports of different targets or concurrency are compared all the same, with that said first. Ramp reports compare their capacity estimate and the level that held. `--gate` exits 1 on Slower or Worse, for CI, and `--json` prints the verdict, each number before and after with its change and the spread it was held against, and the findings.
 
 ### In GitHub Actions
 
