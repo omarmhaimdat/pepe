@@ -6,6 +6,44 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+## [0.23.0](https://github.com/omarmhaimdat/pepe/compare/v0.22.1...v0.23.0) - 2026-10-09
+
+### Added
+
+- *(action)* a pull request is held against its base branch, in a comment ([#118](https://github.com/omarmhaimdat/pepe/pull/118))
+
+  Second of three, on top of #117 (`pepe compare`). Merge #117 first and
+  let its release go out: the action runs the released binary, so merged
+  before that, `baseline` would fail with "needs pepe 0.21 or newer". The
+  CI on this PR doesn't wait for it: the action's test now builds pepe
+  from the branch, which is what the action prefers to installing a
+  release.
+
+  Three inputs on the action:
+
+  - `baseline: auto` keeps every branch's last report in the Actions cache
+  and holds a pull request against its base branch's with `pepe compare`;
+  a path names a report file instead. A pull request only reads the cache;
+  a branch's own runs write it, so the first run on the base branch after
+  this is added makes the baseline, and until then the comment says so.
+  - `comment: true` posts the result on the pull request as one comment,
+  found again by its marker and updated on every push: the verdict in the
+  heading, a table of p99, median, throughput, capacity and failures
+  before and after, each with its change or "within the usual spread",
+  then the findings. Needs `pull-requests: write`; warns rather than fails
+  without it, as on a fork.
+  - `gate: true` fails the step on Slower or Worse.
+
+  Two new outputs, `verdict` and `compare`. The README's action section
+  shows the comment.
+
+  The action's test runs it twice, the second time against the first as
+  its baseline, gated, and commenting on this very pull request, so the
+  comment should appear below.
+
+  **Squash-merge with the title as it is.**
+
+
 ## [0.22.1](https://github.com/omarmhaimdat/pepe/compare/v0.22.0...v0.22.1) - 2026-10-09
 
 ### Fixed
