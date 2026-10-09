@@ -22,9 +22,7 @@ impl ApiRun {
     /// Read the spec and plan it with the flags given
     pub async fn load(api: &ApiArgs) -> Result<Self, String> {
         let doc = openapi::load(&api.spec).await?;
-        // A spec fetched over http says where the API is when it names no server
-        let origin = api.spec.contains("://").then_some(api.spec.as_str());
-        let spec = Spec::parse(&doc, origin, api.server.as_deref())?;
+        let spec = Spec::parse(&doc, openapi::origin(&api.spec), api.server.as_deref())?;
         let credentials = Credentials::parse(&api.auth, &spec)?;
         let options = PlanOptions {
             only: api.only.clone(),

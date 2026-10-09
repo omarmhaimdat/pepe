@@ -1164,8 +1164,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     if let Some(cli::Command::Api(api)) = args.command.clone() {
         if api.spec.is_empty() {
-            eprintln!("error: api needs a spec: pepe api openapi.yaml, or `spec` under [api] in pepe.toml");
-            std::process::exit(2);
+            // With nothing to load yet, the setup screen asks for the spec:
+            // a file, a URL, or the document pasted in
+            let interactive = !args.json && stdin().is_terminal() && stdout().is_terminal();
+            if !interactive {
+                eprintln!("error: api needs a spec: pepe api openapi.yaml, or `spec` under [api] in pepe.toml");
+                std::process::exit(2);
+            }
+            return run_screens(&args, true).await;
         }
         if let Err(e) = args.validate() {
             eprintln!("{}", e);
@@ -1214,9 +1220,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     if args.json {
         return run_json(&args).await;
     }
+    run_screens(&args, setup).await
+}
 
+/// The screens (the setup form when `setup`, then the run), and what they
+/// leave in the shell
+async fn run_screens(args: &Cli, setup: bool) -> Result<(), Box<dyn std::error::Error>> {
     let check = update::Check::start();
-    let farewell = run_interactive(&args, setup).await?;
+    let farewell = run_interactive(args, setup).await?;
     if let Some(report) = farewell.report {
         print_report(&report);
     }
