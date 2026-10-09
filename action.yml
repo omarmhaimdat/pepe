@@ -1,7 +1,7 @@
 name: pepe load test
 description: >-
-  Load-test a URL with pepe and get requests per second, latency percentiles
-  and failures as outputs, with a condition that fails the job
+  Load-test a URL with pepe: requests per second, latency percentiles and
+  failures as outputs, and a condition to fail the job
 author: Omar Mhaimdat
 branding:
   icon: activity
