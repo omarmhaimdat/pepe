@@ -122,6 +122,9 @@ Run a sequence of requests from a flow file, each step fed by the last
 pepe\-logs(1)
 Read nginx logs: requests per second now, against each minute, hour and day
 .TP
+pepe\-ping(1)
+Ping a URL: a request a second, each split into DNS, connect, TLS, first byte and download, on a graph
+.TP
 pepe\-help(1)
 Print this message or the help of the given subcommand(s)
 .ie \n(.g .ds Aq \(aq
@@ -213,7 +216,38 @@ Run again; back to the setup screen
 .TP
 \fB?\fR
 Show all keys
+.SH "PING KEYS"
+.TP
+\fBtab, 1\-3\fR
+Graph, Phases or Pings
+.TP
+\fBup, down\fR
+Pick a target, or a ping in the list
+.TP
+\fBspace\fR
+Pause or resume the pings
+.TP
+\fB+, \-, w\fR
+Half or twice the time on the graph; the whole run
+.TP
+\fB0, l, s, f\fR
+Start at zero; a log scale; dots instead of braille; hide the failures
+.TP
+\fBt\fR
+The table over the whole run, or over what the graph shows
+.TP
+\fBa, x\fR
+Pings: one target or all; failures only
+.TP
+\fBenter\fR
+Pings: everything about the picked one
+.TP
+\fB?\fR
+Show all keys
 .SH EXAMPLES
+.TP
+\fBpepe ping https://example.com api.example.com \-\-slo total=500\fR
+A request a second to each, split into DNS, connect, TLS, first byte and download, on a graph
 .TP
 \fBpepe logs /var/log/nginx/access.log /var/log/nginx/error.log\fR
 Requests per second now, against each minute, hour and day of the log
@@ -252,4 +286,4 @@ Set to anything to draw without colour: reverse video and shades instead
 \fBPEPE_THEME\fR
 light or dark, for the terminal\*(Aqs background; otherwise COLORFGBG decides
 .SH "SEE ALSO"
-pepe\-ramp(1), pepe\-api(1), pepe\-self\-update(1), and \fBhttps://github.com/omarmhaimdat/pepe\fR
+pepe\-ping(1), pepe\-ramp(1), pepe\-api(1), pepe\-self\-update(1), and \fBhttps://github.com/omarmhaimdat/pepe\fR

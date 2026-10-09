@@ -368,6 +368,72 @@ _arguments "${_arguments_options[@]}" : \
 '*::files -- Access and error logs, rotated ones too; `-` or nothing reads what is piped in, and with nothing at all nginx'\''s own in /var/log/nginx:_files' \
 && ret=0
 ;;
+(ping)
+_arguments "${_arguments_options[@]}" : \
+'--every=[Time between pings, e.g. 1s, 500ms, 2m]:TIME:_default' \
+'--window=[How much of the run the graph shows, e.g. 60s, 5m; + and - change it on screen, w shows the whole run]:TIME:_default' \
+'*--name=[What to call each target, in order\: --name api --name cdn, or --name api,cdn]:NAME:_default' \
+'*--color=[A colour for each target'\''s line, in order\: red, green, yellow, blue, magenta, cyan, white, gray, their light- forms, or #RRGGBB]:COLOR:_default' \
+'--interface=[Send from this interface (en0, eth0) or local address]:NAME|IP:_default' \
+'--port=[With --tcp\: the port of a target that names none]:PORT:_default' \
+'--tcp-rst=[With --tcp\: a connection refused counts as an answer (the host is there) rather than a failure]:TCP_RST:((pong\:"An answer\: something is there to refuse"
+fail\:"A failure"))' \
+'--slo=[Limits a ping must meet, in milliseconds\: total=500,ttfb=200, connect=100,dns=50,tls=150,download=100. Breaking one marks the ping, and the run exits 4 at the end]:KEY=MS,...:_default' \
+'--ymin=[The graph'\''s floor, in milliseconds]:MS:_default' \
+'--ymax=[The graph'\''s ceiling, in milliseconds; without it the graph fits what it shows]:MS:_default' \
+'--save=[Write the JSON report to this file when the run ends, whatever else is shown]:FILE:_files' \
+'--save-body=[Write the last body received to this file when the run ends]:FILE:_files' \
+'-n+[Number of requests to perform]:NUMBER:_default' \
+'--number=[Number of requests to perform]:NUMBER:_default' \
+'-z+[Duration of the test, e.g. 10s, 3m, 2h (mutually exclusive with -n)]:DURATION:_default' \
+'--duration=[Duration of the test, e.g. 10s, 3m, 2h (mutually exclusive with -n)]:DURATION:_default' \
+'-m+[HTTP method, e.g. GET, POST, PUT, DELETE]:METHOD:_default' \
+'--method=[HTTP method, e.g. GET, POST, PUT, DELETE]:METHOD:_default' \
+'*-H+[HTTP headers, e.g. -H '\''Accept\: application/json'\'']:HEADERS:_default' \
+'*--headers=[HTTP headers, e.g. -H '\''Accept\: application/json'\'']:HEADERS:_default' \
+'-t+[Time in seconds to wait for a response]:TIMEOUT:_default' \
+'--timeout=[Time in seconds to wait for a response]:TIMEOUT:_default' \
+'--warmup=[Send for this long before measuring, e.g. 5s\: connections open, caches fill and JITs settle without counting against the run]:TIME:_default' \
+'--threads=[Threads sending requests (default 1), or "auto" to add one whenever those sending are all busy. One sends 100k requests a second or more; the dashboard says when it is the limit]:N|auto:_default' \
+'--rate=[Start this many requests a second, spread evenly, instead of as many as the concurrency allows; -c is then the most in flight at once, and pepe says when it holds the rate back]:PER_SECOND:_default' \
+'-d+[HTTP request body]:BODY:_default' \
+'--body=[HTTP request body]:BODY:_default' \
+'-p+[Proxy server URL\: http\://user\:pass@host\:port or socks5\://host\:port]:PROXY:_default' \
+'--proxy=[Proxy server URL\: http\://user\:pass@host\:port or socks5\://host\:port]:PROXY:_default' \
+'--trace-header=[Response header holding the request id to show for the slowest requests and in the inspector, so they can be found in the server'\''s logs; without it, X-Request-Id, traceparent, CF-Ray, X-Amzn-Trace-Id and other common ones are looked for]:NAME:_default' \
+'--snapshot=[Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run'\''s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run]:FILE:_files' \
+'--config=[Read settings from this file instead of ./pepe.toml; flags on the command line win over it]:FILE:_files' \
+'--write-config=[Write the settings as they stand to this file, as a pepe.toml, and exit]:FILE:_files' \
+'-c+[Number of concurrent requests at a time]:CONCURRENCY:_default' \
+'--concurrency=[Number of concurrent requests at a time]:CONCURRENCY:_default' \
+'-u+[User-Agent string, default is pepe/{version}]:USER_AGENT:_default' \
+'--user-agent=[User-Agent string, default is pepe/{version}]:USER_AGENT:_default' \
+'(-6)-4[Resolve names to IPv4 addresses only]' \
+'(-4)-6[Resolve names to IPv6 addresses only]' \
+'--all-ips[Ping every address a name resolves to, each as a target of its own]' \
+'--tcp[Only connect\: a TCP ping of the port, with no request sent]' \
+'--cmd[The targets are commands\: run each one every interval and graph how long it takes; its exit code is the status]' \
+'--keep-alive[Keep the connection between pings, as a browser would. The DNS, connect and TLS phases are then measured once; without it every ping measures all five]' \
+'--bell[Ring the terminal bell when a ping fails or breaks the SLO]' \
+'(--ymin)-0[Start the graph at zero (the same as --ymin 0)]' \
+'-s[Draw the graph with dots rather than braille, for terminals and fonts that lack it]' \
+'--simple-graphics[Draw the graph with dots rather than braille, for terminals and fonts that lack it]' \
+'(--csv)--jsonl[No screen\: one JSON object per ping on stdout, as it happens]' \
+'--csv[No screen\: one CSV line per ping on stdout, under a header]' \
+'--show-body[Keep the first kilobyte of each body for the inspector]' \
+'-h[Print help]' \
+'--help[Print help]' \
+'-k[Accept invalid TLS certificates (self-signed, expired, wrong host)]' \
+'--insecure[Accept invalid TLS certificates (self-signed, expired, wrong host)]' \
+'--disable-compression[Disable HTTP compression, e.g. gzip]' \
+'--disable-keepalive[Disable HTTP keepalive, e.g. Connection\: close]' \
+'--disable-redirects[Prevent http redirects]' \
+'--json[Output results in JSON format]' \
+'-i[Open the setup screen to review or change the settings before starting (it opens by itself when no URL is given)]' \
+'--setup[Open the setup screen to review or change the settings before starting (it opens by itself when no URL is given)]' \
+'*::targets -- What to ping\: URLs or hosts (https unless a port is given), host\:port, aws\:REGION, a range like 10.0.0.0/29, or commands with --cmd; several are graphed together:_default' \
+&& ret=0
+;;
 (help)
 _arguments "${_arguments_options[@]}" : \
 ":: :_pepe__subcmd__help_commands" \
@@ -408,6 +474,10 @@ _arguments "${_arguments_options[@]}" : \
 _arguments "${_arguments_options[@]}" : \
 && ret=0
 ;;
+(ping)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
 (help)
 _arguments "${_arguments_options[@]}" : \
 && ret=0
@@ -431,6 +501,7 @@ _pepe_commands() {
 'replay:Send the URLs of an access log in their real proportions' \
 'flow:Run a sequence of requests from a flow file, each step fed by the last' \
 'logs:Read nginx logs\: requests per second now, against each minute, hour and day' \
+'ping:Ping a URL\: a request a second, each split into DNS, connect, TLS, first byte and download, on a graph' \
 'help:Print this message or the help of the given subcommand(s)' \
     )
     _describe -t commands 'pepe commands' commands "$@"
@@ -460,6 +531,7 @@ _pepe__subcmd__help_commands() {
 'replay:Send the URLs of an access log in their real proportions' \
 'flow:Run a sequence of requests from a flow file, each step fed by the last' \
 'logs:Read nginx logs\: requests per second now, against each minute, hour and day' \
+'ping:Ping a URL\: a request a second, each split into DNS, connect, TLS, first byte and download, on a graph' \
 'help:Print this message or the help of the given subcommand(s)' \
     )
     _describe -t commands 'pepe help commands' commands "$@"
@@ -489,6 +561,11 @@ _pepe__subcmd__help__subcmd__logs_commands() {
     local commands; commands=()
     _describe -t commands 'pepe help logs commands' commands "$@"
 }
+(( $+functions[_pepe__subcmd__help__subcmd__ping_commands] )) ||
+_pepe__subcmd__help__subcmd__ping_commands() {
+    local commands; commands=()
+    _describe -t commands 'pepe help ping commands' commands "$@"
+}
 (( $+functions[_pepe__subcmd__help__subcmd__ramp_commands] )) ||
 _pepe__subcmd__help__subcmd__ramp_commands() {
     local commands; commands=()
@@ -508,6 +585,11 @@ _pepe__subcmd__help__subcmd__self-update_commands() {
 _pepe__subcmd__logs_commands() {
     local commands; commands=()
     _describe -t commands 'pepe logs commands' commands "$@"
+}
+(( $+functions[_pepe__subcmd__ping_commands] )) ||
+_pepe__subcmd__ping_commands() {
+    local commands; commands=()
+    _describe -t commands 'pepe ping commands' commands "$@"
 }
 (( $+functions[_pepe__subcmd__ramp_commands] )) ||
 _pepe__subcmd__ramp_commands() {

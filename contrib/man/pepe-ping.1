@@ -1,0 +1,98 @@
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.TH pepe-ping 1  pepe "User Commands"
+.SH NAME
+pepe\-ping \- Ping a URL: a request a second, each split into DNS, connect, TLS, first byte and download, on a graph
+.SH SYNOPSIS
+\fBpepe ping\fR [\fB\-\-every\fR] [\fB\-\-window\fR] [\fB\-\-name\fR] [\fB\-\-color\fR] [\fB\-4 \fR] [\fB\-6 \fR] [\fB\-\-all\-ips\fR] [\fB\-\-interface\fR] [\fB\-\-tcp\fR] [\fB\-\-port\fR] [\fB\-\-tcp\-rst\fR] [\fB\-\-cmd\fR] [\fB\-\-keep\-alive\fR] [\fB\-\-slo\fR] [\fB\-\-bell\fR] [\fB\-\-ymin\fR] [\fB\-\-ymax\fR] [\fB\-0 \fR] [\fB\-s\fR|\fB\-\-simple\-graphics\fR] [\fB\-\-jsonl\fR] [\fB\-\-csv\fR] [\fB\-\-save\fR] [\fB\-\-show\-body\fR] [\fB\-\-save\-body\fR] [\fB\-h\fR|\fB\-\-help\fR] [\fITARGETS\fR] 
+.SH DESCRIPTION
+Ping a URL: a request a second, each split into DNS, connect, TLS, first byte and download, on a graph
+.SH OPTIONS
+.TP
+\fB\-\-every\fR \fI<TIME>\fR [default: 1s]
+Time between pings, e.g. 1s, 500ms, 2m
+.TP
+\fB\-\-window\fR \fI<TIME>\fR [default: 60s]
+How much of the run the graph shows, e.g. 60s, 5m; + and \- change it on screen, w shows the whole run
+.TP
+\fB\-\-name\fR \fI<NAME>\fR
+What to call each target, in order: \-\-name api \-\-name cdn, or \-\-name api,cdn
+.TP
+\fB\-\-color\fR \fI<COLOR>\fR
+A colour for each target\*(Aqs line, in order: red, green, yellow, blue, magenta, cyan, white, gray, their light\- forms, or #RRGGBB
+.TP
+\fB\-4\fR
+Resolve names to IPv4 addresses only
+.TP
+\fB\-6\fR
+Resolve names to IPv6 addresses only
+.TP
+\fB\-\-all\-ips\fR
+Ping every address a name resolves to, each as a target of its own
+.TP
+\fB\-\-interface\fR \fI<NAME|IP>\fR
+Send from this interface (en0, eth0) or local address
+.TP
+\fB\-\-tcp\fR
+Only connect: a TCP ping of the port, with no request sent
+.TP
+\fB\-\-port\fR \fI<PORT>\fR [default: 80]
+With \-\-tcp: the port of a target that names none
+.TP
+\fB\-\-tcp\-rst\fR \fI<TCP_RST>\fR [default: pong]
+With \-\-tcp: a connection refused counts as an answer (the host is there) rather than a failure
+.br
+
+.br
+\fIPossible values:\fR
+.RS 14
+.IP \(bu 2
+pong: An answer: something is there to refuse
+.IP \(bu 2
+fail: A failure
+.RE
+.TP
+\fB\-\-cmd\fR
+The targets are commands: run each one every interval and graph how long it takes; its exit code is the status
+.TP
+\fB\-\-keep\-alive\fR
+Keep the connection between pings, as a browser would. The DNS, connect and TLS phases are then measured once; without it every ping measures all five
+.TP
+\fB\-\-slo\fR \fI<KEY=MS,...>\fR
+Limits a ping must meet, in milliseconds: total=500,ttfb=200, connect=100,dns=50,tls=150,download=100. Breaking one marks the ping, and the run exits 4 at the end
+.TP
+\fB\-\-bell\fR
+Ring the terminal bell when a ping fails or breaks the SLO
+.TP
+\fB\-\-ymin\fR \fI<MS>\fR
+The graph\*(Aqs floor, in milliseconds
+.TP
+\fB\-\-ymax\fR \fI<MS>\fR
+The graph\*(Aqs ceiling, in milliseconds; without it the graph fits what it shows
+.TP
+\fB\-0\fR
+Start the graph at zero (the same as \-\-ymin 0)
+.TP
+\fB\-s\fR, \fB\-\-simple\-graphics\fR
+Draw the graph with dots rather than braille, for terminals and fonts that lack it
+.TP
+\fB\-\-jsonl\fR
+No screen: one JSON object per ping on stdout, as it happens
+.TP
+\fB\-\-csv\fR
+No screen: one CSV line per ping on stdout, under a header
+.TP
+\fB\-\-save\fR \fI<FILE>\fR
+Write the JSON report to this file when the run ends, whatever else is shown
+.TP
+\fB\-\-show\-body\fR
+Keep the first kilobyte of each body for the inspector
+.TP
+\fB\-\-save\-body\fR \fI<FILE>\fR
+Write the last body received to this file when the run ends
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Print help (see a summary with \*(Aq\-h\*(Aq)
+.TP
+[\fITARGETS\fR]
+What to ping: URLs or hosts (https unless a port is given), host:port, aws:REGION, a range like 10.0.0.0/29, or commands with \-\-cmd; several are graphed together

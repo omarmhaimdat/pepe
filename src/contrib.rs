@@ -85,6 +85,27 @@ const RAMP_KEYS: [(&str, &str); 6] = [
     ("?", "Show all keys"),
 ];
 
+const PING_KEYS: [(&str, &str); 9] = [
+    ("tab, 1-3", "Graph, Phases or Pings"),
+    ("up, down", "Pick a target, or a ping in the list"),
+    ("space", "Pause or resume the pings"),
+    (
+        "+, -, w",
+        "Half or twice the time on the graph; the whole run",
+    ),
+    (
+        "0, l, s, f",
+        "Start at zero; a log scale; dots instead of braille; hide the failures",
+    ),
+    (
+        "t",
+        "The table over the whole run, or over what the graph shows",
+    ),
+    ("a, x", "Pings: one target or all; failures only"),
+    ("enter", "Pings: everything about the picked one"),
+    ("?", "Show all keys"),
+];
+
 const ENVIRONMENT: [(&str, &str); 4] = [
     (
         "PEPE_NO_UPDATE_CHECK",
@@ -104,7 +125,11 @@ const ENVIRONMENT: [(&str, &str); 4] = [
     ),
 ];
 
-const EXAMPLES: [(&str, &str); 8] = [
+const EXAMPLES: [(&str, &str); 9] = [
+    (
+        "pepe ping https://example.com api.example.com --slo total=500",
+        "A request a second to each, split into DNS, connect, TLS, first byte and download, on a graph",
+    ),
     (
         "pepe logs /var/log/nginx/access.log /var/log/nginx/error.log",
         "Requests per second now, against each minute, hour and day of the log",
@@ -183,11 +208,12 @@ fn main_page() -> String {
     table(&mut roff, "DASHBOARD KEYS", &DASHBOARD_KEYS);
     table(&mut roff, "SETUP SCREEN KEYS", &SETUP_KEYS);
     table(&mut roff, "RAMP KEYS", &RAMP_KEYS);
+    table(&mut roff, "PING KEYS", &PING_KEYS);
     table(&mut roff, "EXAMPLES", &EXAMPLES);
     table(&mut roff, "ENVIRONMENT", &ENVIRONMENT);
     roff.control("SH", ["SEE ALSO"]);
     roff.text([
-        roman("pepe-ramp(1), pepe-api(1), pepe-self-update(1), and "),
+        roman("pepe-ping(1), pepe-ramp(1), pepe-api(1), pepe-self-update(1), and "),
         bold("https://github.com/omarmhaimdat/pepe"),
     ]);
     roff.to_writer(&mut out).unwrap();
@@ -195,7 +221,8 @@ fn main_page() -> String {
 }
 
 /// Each subcommand's page: (subcommand, page name, how it's typed)
-const SUBCOMMANDS: [(&str, &str, &str); 7] = [
+const SUBCOMMANDS: [(&str, &str, &str); 8] = [
+    ("ping", "pepe-ping", "pepe ping"),
     ("ramp", "pepe-ramp", "pepe ramp"),
     ("api", "pepe-api", "pepe api"),
     ("replay", "pepe-replay", "pepe replay"),

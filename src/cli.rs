@@ -183,6 +183,134 @@ pub enum Command {
     Flow(FlowArgs),
     /// Read nginx logs: requests per second now, against each minute, hour and day
     Logs(LogsArgs),
+    /// Ping a URL: a request a second, each split into DNS, connect, TLS, first byte and download, on a graph
+    Ping(PingArgs),
+}
+
+#[derive(clap::Args, Debug, Clone, PartialEq, Default)]
+pub struct PingArgs {
+    /// What to ping: URLs or hosts (https unless a port is given),
+    /// host:port, aws:REGION, a range like 10.0.0.0/29, or commands with
+    /// --cmd; several are graphed together
+    pub targets: Vec<String>,
+
+    /// Time between pings, e.g. 1s, 500ms, 2m
+    #[arg(long, default_value = "1s", value_name = "TIME")]
+    pub every: String,
+
+    /// How much of the run the graph shows, e.g. 60s, 5m; + and - change
+    /// it on screen, w shows the whole run
+    #[arg(long, default_value = "60s", value_name = "TIME")]
+    pub window: String,
+
+    /// What to call each target, in order: --name api --name cdn, or
+    /// --name api,cdn
+    #[arg(long, value_name = "NAME")]
+    pub name: Vec<String>,
+
+    /// A colour for each target's line, in order: red, green, yellow,
+    /// blue, magenta, cyan, white, gray, their light- forms, or #RRGGBB
+    #[arg(long, value_name = "COLOR")]
+    pub color: Vec<String>,
+
+    /// Resolve names to IPv4 addresses only
+    #[arg(short = '4', conflicts_with = "ipv6")]
+    pub ipv4: bool,
+
+    /// Resolve names to IPv6 addresses only
+    #[arg(short = '6', conflicts_with = "ipv4")]
+    pub ipv6: bool,
+
+    /// Ping every address a name resolves to, each as a target of its own
+    #[arg(long)]
+    pub all_ips: bool,
+
+    /// Send from this interface (en0, eth0) or local address
+    #[arg(long, value_name = "NAME|IP")]
+    pub interface: Option<String>,
+
+    /// Only connect: a TCP ping of the port, with no request sent
+    #[arg(long)]
+    pub tcp: bool,
+
+    /// With --tcp: the port of a target that names none
+    #[arg(long, default_value_t = 80, value_name = "PORT")]
+    pub port: u16,
+
+    /// With --tcp: a connection refused counts as an answer (the host is
+    /// there) rather than a failure
+    #[arg(long, value_enum, default_value_t = Refused::Pong)]
+    pub tcp_rst: Refused,
+
+    /// The targets are commands: run each one every interval and graph
+    /// how long it takes; its exit code is the status
+    #[arg(long)]
+    pub cmd: bool,
+
+    /// Keep the connection between pings, as a browser would. The DNS,
+    /// connect and TLS phases are then measured once; without it every
+    /// ping measures all five.
+    #[arg(long)]
+    pub keep_alive: bool,
+
+    /// Limits a ping must meet, in milliseconds: total=500,ttfb=200,
+    /// connect=100,dns=50,tls=150,download=100. Breaking one marks the
+    /// ping, and the run exits 4 at the end.
+    #[arg(long, value_name = "KEY=MS,...")]
+    pub slo: Option<String>,
+
+    /// Ring the terminal bell when a ping fails or breaks the SLO
+    #[arg(long)]
+    pub bell: bool,
+
+    /// The graph's floor, in milliseconds
+    #[arg(long, value_name = "MS")]
+    pub ymin: Option<u64>,
+
+    /// The graph's ceiling, in milliseconds; without it the graph fits
+    /// what it shows
+    #[arg(long, value_name = "MS")]
+    pub ymax: Option<u64>,
+
+    /// Start the graph at zero (the same as --ymin 0)
+    #[arg(short = '0', conflicts_with = "ymin")]
+    pub ymin_zero: bool,
+
+    /// Draw the graph with dots rather than braille, for terminals and
+    /// fonts that lack it
+    #[arg(short = 's', long)]
+    pub simple_graphics: bool,
+
+    /// No screen: one JSON object per ping on stdout, as it happens
+    #[arg(long, conflicts_with = "csv")]
+    pub jsonl: bool,
+
+    /// No screen: one CSV line per ping on stdout, under a header
+    #[arg(long)]
+    pub csv: bool,
+
+    /// Write the JSON report to this file when the run ends, whatever
+    /// else is shown
+    #[arg(long, value_name = "FILE")]
+    pub save: Option<std::path::PathBuf>,
+
+    /// Keep the first kilobyte of each body for the inspector
+    #[arg(long)]
+    pub show_body: bool,
+
+    /// Write the last body received to this file when the run ends
+    #[arg(long, value_name = "FILE")]
+    pub save_body: Option<std::path::PathBuf>,
+}
+
+/// `--tcp-rst`: what a connection refused means
+#[derive(clap::ValueEnum, Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Refused {
+    /// An answer: something is there to refuse
+    #[default]
+    Pong,
+    /// A failure
+    Fail,
 }
 
 #[derive(clap::Args, Debug, Clone, PartialEq)]
@@ -344,8 +472,12 @@ impl Cli {
                 ));
             }
         }
-        // A ramp sets its own concurrency and runs for as long as its steps
-        let ramp = matches!(self.command, Some(Command::Ramp(_)));
+        // A ramp sets its own concurrency and runs for as long as its
+        // steps; a ping sends one at a time
+        let ramp = matches!(
+            self.command,
+            Some(Command::Ramp(_)) | Some(Command::Ping(_))
+        );
         if self.concurrency > self.number && self.duration.is_none() && !ramp {
             return Err(Error::raw(
                 clap::error::ErrorKind::ValueValidation,
