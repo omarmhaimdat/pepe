@@ -6,6 +6,56 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+## [0.20.1](https://github.com/omarmhaimdat/pepe/compare/v0.20.0...v0.20.1) - 2026-10-09
+
+### Fixed
+
+- *(ui)* a card's name and the numbers beside it no longer run together ([#110](https://github.com/omarmhaimdat/pepe/pull/110))
+
+  ## What
+
+  On the load test's dashboard (the tall layout with the four number
+  cards), the first card's name and the text at its right overlapped once
+  the rate reached three digits:
+
+  ```
+  requests / savg 249 · peak 268      before
+  requests / s        avg 249         after
+  ```
+
+  The card is 30 cells wide inside; `requests / s` is 12 and `avg 249 ·
+  peak 268` is 18, so they touched with nothing between. At four digits
+  and up (`avg 12.3k · peak 15.6k`) the numbers were drawn over the end of
+  the name.
+
+  ## Fix
+
+  In `render_cards` (`src/ui/view.rs`), what is beside a card's name gets
+  the room the name leaves, less a two-cell gap, through the existing
+  `fit_parts`: the parts that fit are shown, and the rest give way from
+  the right. So at three digits and up the card says `avg 249` and drops
+  `peak 268`; the peak is still on the Live view's throughput chart and in
+  the Stats view. The other three cards have one part each and are
+  unchanged at any value seen so far.
+
+  ## For the reviewer
+
+  - It is the peak that goes, not the average, only because it is second.
+  If the peak is the one worth keeping, swap the two.
+  - Found while making the site's pictures: `site/img/api.png` shows the
+  overlap ("requests / savg 249"). It can be redrawn once this is in; I
+  have not redrawn it here.
+
+  ## Tested
+
+  - New test `a_card_keeps_a_gap_between_its_name_and_what_is_beside_it`:
+  the header drawn at 40, 240 and 12,000 requests a second. Both parts at
+  two digits, a gap and no "savg" at three, a gap at thousands.
+  - 249 tests pass; clippy 1.98 `-D warnings` and `cargo fmt --check`
+  clean.
+  - Not looked at in a terminal; the test reads the drawn row.
+
+
 ## [0.20.0](https://github.com/omarmhaimdat/pepe/compare/v0.19.3...v0.20.0) - 2026-10-09
 
 ### Added
