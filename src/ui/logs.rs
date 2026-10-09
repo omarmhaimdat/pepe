@@ -8,8 +8,9 @@ use std::time::Duration;
 use crossterm::event::{Event, EventStream, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 use futures::StreamExt;
 use ratatui::{
-    backend::CrosstermBackend,
-    layout::{Constraint, Flex, Layout, Rect},
+    backend::{Backend, CrosstermBackend},
+    buffer::Buffer,
+    layout::{Constraint, Flex, Layout, Position, Rect},
     style::{Color, Style, Stylize},
     text::{Line, Span},
     widgets::{Block, BorderType, Clear, Paragraph},
@@ -19,7 +20,8 @@ use tokio::time::MissedTickBehavior;
 
 use super::kit::{about_line, chips_fit, help, marker, tabs, wrap, FAINT, FIELD, SELECTED};
 use super::view::{
-    bar, label, section, status_color, truncate, value, ACCENT, BAD, GOOD, LABEL, RULE, WARN,
+    bar, inset, label, panel, section, status_color, truncate, value, ACCENT, BAD, GOOD, LABEL,
+    RULE, WARN,
 };
 use super::{format, theme};
 use crate::logs::{
@@ -29,11 +31,17 @@ use crate::logs::{
 
 /// How often the screen is drawn again while nothing is pressed
 const FRAME: Duration = Duration::from_millis(200);
+/// How often the whole frame is written out again, over whatever else was
+/// written to the terminal meanwhile
+const REPAINT: Duration = Duration::from_secs(1);
 const MIN_WIDTH: u16 = 60;
 const MIN_HEIGHT: u16 = 16;
 const BLOCKS: [char; 8] = ['▁', '▂', '▃', '▄', '▅', '▆', '▇', '█'];
 /// Width of a number card
-const CARD: u16 = 22;
+const CARD: u16 = 24;
+const CARD_H: u16 = 4;
+/// Bars of a few slots are this wide at most
+const BAR_MAX: u16 = 4;
 /// The chart's axis labels
 const AXIS: u16 = 7;
 
@@ -294,13 +302,38 @@ impl LogsScreen {
         let mut events = EventStream::new();
         let mut frame = tokio::time::interval(FRAME);
         frame.set_missed_tick_behavior(MissedTickBehavior::Skip);
+        let mut repaint = tokio::time::interval(REPAINT);
+        repaint.set_missed_tick_behavior(MissedTickBehavior::Skip);
         let ctrl_c = tokio::signal::ctrl_c();
         tokio::pin!(ctrl_c);
+        let mut drawn = Buffer::empty(Rect::ZERO);
         loop {
-            terminal.draw(|f| theme::draw(f, |f| self.render(f, logs::wall())))?;
+            terminal.draw(|f| {
+                theme::draw(f, |f| self.render(f, logs::wall()));
+                drawn = f.buffer_mut().clone();
+            })?;
+            // Whatever else writes to the terminal — the stderr of a
+            // `docker compose logs` piped in, say — lands at the cursor.
+            // Parked at the top, it overwrites a row; at the bottom, it
+            // would scroll the screen, which only draws what changed
+            terminal.set_cursor_position(Position::ORIGIN)?;
             tokio::select! {
                 _ = &mut ctrl_c => return Ok(()),
                 _ = frame.tick() => {}
+                _ = repaint.tick() => {
+                    // And what it overwrote is written again, every cell
+                    let width = drawn.area.width.max(1) as usize;
+                    let cells = drawn.content.iter().enumerate().map(|(i, cell)| {
+                        (
+                            drawn.area.x + (i % width) as u16,
+                            drawn.area.y + (i / width) as u16,
+                            cell,
+                        )
+                    });
+                    terminal.backend_mut().draw(cells)?;
+                    terminal.backend_mut().flush()?;
+                    terminal.set_cursor_position(Position::ORIGIN)?;
+                }
                 event = events.next() => match event {
                     Some(Ok(Event::Key(key))) if key.kind == KeyEventKind::Press => {
                         if self.key(key) {
@@ -339,7 +372,7 @@ impl LogsScreen {
         let [title, _, cards, _, notes_area, tab_bar, _, body, footer] = Layout::vertical([
             Constraint::Length(1),
             Constraint::Length(1),
-            Constraint::Length(3),
+            Constraint::Length(CARD_H),
             Constraint::Length(1),
             Constraint::Length(notes.len() as u16),
             Constraint::Length(1),
@@ -568,7 +601,7 @@ impl LogsScreen {
             label(format!("requests · {}", format::bytes(stats.bytes as f64))).into(),
         ));
 
-        let fit = ((area.width / CARD) as usize).clamp(1, cards.len());
+        let fit = (((area.width + 1) / (CARD + 1)) as usize).clamp(1, cards.len());
         // The total gives way first, then the comparisons from the right
         while cards.len() > fit {
             let last = cards.len() - 1;
@@ -578,18 +611,29 @@ impl LogsScreen {
                 last - 1
             });
         }
-        let columns = Layout::horizontal(vec![Constraint::Ratio(1, fit as u32); fit]).split(area);
-        for ((title, number, note), column) in cards.into_iter().zip(columns.iter()) {
-            let width = column.width.saturating_sub(1) as usize;
+        // Each on a card of its own, packed from the left: a row of
+        // padding, the name, the number, and a word on it
+        for (i, (title, number, note)) in cards.into_iter().enumerate() {
+            let card = Rect {
+                x: area.x + i as u16 * (CARD + 1),
+                width: CARD.min(area.width),
+                ..area
+            };
+            panel(f, card);
+            let inner = Rect {
+                y: card.y + 1,
+                height: card.height.saturating_sub(1),
+                ..inset(card, 1, 0)
+            };
             let lines = vec![
                 Line::from(Span::styled(
-                    truncate(&title, width),
+                    truncate(&title, inner.width as usize),
                     Style::new().fg(LABEL).bold(),
                 )),
                 Line::from(number),
                 note,
             ];
-            f.render_widget(Paragraph::new(lines), *column);
+            f.render_widget(Paragraph::new(lines), inner);
         }
     }
 
@@ -602,10 +646,12 @@ impl LogsScreen {
         rows: &[Row],
     ) {
         if rows.is_empty() {
-            let waiting = if stats.caught_up {
-                "No request with a time in the log yet"
-            } else {
+            let waiting = if !stats.caught_up {
                 "Reading…"
+            } else if stats.lines == 0 {
+                "Waiting for the first line"
+            } else {
+                "No request with a time in the log yet"
             };
             f.render_widget(Paragraph::new(label(waiting)), area);
             return;
@@ -722,7 +768,7 @@ impl LogsScreen {
         let shown = &rows[rows.len().saturating_sub(width as usize)..];
         let first = rows.len() - shown.len();
         // A few slots get bars with some width to them
-        let per = (width / shown.len() as u16).clamp(1, 8);
+        let per = (width / shown.len() as u16).clamp(1, BAR_MAX);
         let bar_width = if per >= 3 { per - 1 } else { per } as usize;
         let most = shown.iter().map(|r| r.rate).fold(now, f64::max).max(1e-9);
         let eighths = |r: f64| ((r / most) * f64::from(height) * 8.0).round() as u16;
@@ -755,7 +801,7 @@ impl LogsScreen {
                 };
                 let failing = slot.slot.c5xx as f64 / slot.slot.requests.max(1) as f64;
                 let color = match failing_color(failing) {
-                    Color::Reset if first + i == picked => Color::Reset,
+                    Color::Reset if first + i == picked => ACCENT,
                     Color::Reset => LABEL,
                     color => color,
                 };
@@ -780,13 +826,18 @@ impl LogsScreen {
         let from = self.grain.label(shown[0].start);
         let to = self.grain.label(shown[shown.len() - 1].start);
         let end = area.x + AXIS + width;
-        let to_x = end.saturating_sub(to.chars().count() as u16);
+        let mut to_x = end.saturating_sub(to.chars().count() as u16);
+        let marker =
+            (picked >= first).then(|| left + (picked - first) as u16 * per + bar_width as u16 / 2);
+        // The label of the last slot makes way for the pick's marker
+        if let Some(x) = marker.filter(|x| *x >= to_x) {
+            to_x = x.saturating_sub(to.chars().count() as u16 + 1);
+        }
         if to_x > left + from.chars().count() as u16 + 1 {
             buf.set_string(left, y, &from, Style::new().fg(LABEL));
         }
         buf.set_string(to_x, y, &to, Style::new().fg(LABEL));
-        if picked >= first {
-            let x = left + (picked - first) as u16 * per + bar_width as u16 / 2;
+        if let Some(x) = marker {
             buf.set_string(x, y, "▲", Style::new().fg(ACCENT));
         }
     }
@@ -794,8 +845,11 @@ impl LogsScreen {
     fn render_paths(&self, f: &mut Frame, area: Rect, stats: &Stats) {
         let wide = area.width >= 110;
         let [paths, _, side] = if wide {
+            // A path is read at a glance up to some width; past it, the
+            // numbers would be far from the names, so the rest is for the
+            // lists beside them
             Layout::horizontal([
-                Constraint::Percentage(58),
+                Constraint::Length((area.width * 58 / 100).min(96)),
                 Constraint::Length(3),
                 Constraint::Min(0),
             ])
@@ -896,7 +950,13 @@ impl LogsScreen {
                 .map(|(name, n)| (name.to_string(), *n, Color::Reset))
                 .collect()
         };
-        let each = (side.height / if wide { 3 } else { 2 }).max(3) as usize - 2;
+        // Two lists across when each gets room for a name; one otherwise
+        let across = match (wide, side.width) {
+            (true, w) if w >= 80 => 2,
+            (true, _) => 1,
+            (false, _) => 3,
+        };
+        let each = (side.height / 5usize.div_ceil(across) as u16).max(3) as usize - 2;
         let lists: Vec<(&str, Counts)> = vec![
             ("Status", statuses),
             ("Clients", counted(&stats.clients, each)),
@@ -905,7 +965,7 @@ impl LogsScreen {
             ("Methods", counted(&stats.methods, each)),
         ];
         let lists: Vec<_> = lists.into_iter().filter(|(_, l)| !l.is_empty()).collect();
-        let across = if wide { 2 } else { 3 }.min(lists.len().max(1));
+        let across = across.min(lists.len().max(1));
         let down = lists.len().div_ceil(across).max(1);
         let grid_rows = Layout::vertical(vec![Constraint::Ratio(1, down as u32); down]).split(side);
         for (i, (title, items)) in lists.iter().enumerate() {
@@ -1539,6 +1599,11 @@ mod tests {
             let text = draw(&mut empty, 100, 30);
             assert!(text.contains("reading"), "{text}");
         }
+        empty.tab = Tab::Traffic;
+        assert!(draw(&mut empty, 100, 30).contains("Reading…"));
+        // A pipe with nothing in it yet is caught up, and waited on
+        empty.shared.lock().caught_up = true;
+        assert!(draw(&mut empty, 100, 30).contains("Waiting for the first line"));
         press(&mut empty, KeyCode::Enter);
         press(&mut empty, KeyCode::Up);
         draw(&mut empty, 100, 30);
