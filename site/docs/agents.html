@@ -46,6 +46,21 @@ pepe --allow-host .staging.example.com --dry-run -n 100 https://api.staging.exam
   load      100 requests, 8 at a time, each sent as soon as the last answered
   settings  timeout 20s · connections kept alive · redirects followed
   guard     hosts .staging.example.com</code></pre></figure>
+<h2 id="as-an-mcp-server"><a href="#as-an-mcp-server">As an MCP server</a></h2>
+<p><code>pepe mcp</code> serves the modes as tools over stdio, in the Model Context Protocol: <code>run</code>, <code>ping</code>, <code>ramp</code>, <code>api</code>, <code>flow</code>, <code>replay</code> and <code>compare</code>, each returning pepe's JSON report as text and as structured content. The guardrail flags <code>pepe mcp</code> is started with hold for every call, so whoever starts the server decides where it may send and how much, and a tool call can't loosen them.</p>
+<figure class="code"><div class="bar"><span>bash</span><button type="button" class="copy" aria-label="Copy">copy</button></div><pre><code>pepe mcp --allow-host .staging.example.com --max-requests 10000 --max-rate 500 --max-concurrency 64</code></pre></figure>
+<p>For Claude Code:</p>
+<figure class="code"><div class="bar"><span>bash</span><button type="button" class="copy" aria-label="Copy">copy</button></div><pre><code>claude mcp add pepe -- pepe mcp --allow-host .staging.example.com --max-requests 10000 --max-rate 500</code></pre></figure>
+<p>For a client configured with JSON (Claude Desktop, Cursor and the like):</p>
+<figure class="code"><div class="bar"><span>json</span><button type="button" class="copy" aria-label="Copy">copy</button></div><pre><code>{
+  &quot;mcpServers&quot;: {
+    &quot;pepe&quot;: {
+      &quot;command&quot;: &quot;pepe&quot;,
+      &quot;args&quot;: [&quot;mcp&quot;, &quot;--allow-host&quot;, &quot;.staging.example.com&quot;, &quot;--max-requests&quot;, &quot;10000&quot;, &quot;--max-rate&quot;, &quot;500&quot;]
+    }
+  }
+}</code></pre></figure>
+<p>A tool call that pepe refuses (a host outside the allowed, a cap crossed) comes back as an error with pepe's reason; a limit crossed during the run (<code>fail_if</code>, a ping's <code>slo</code>) comes back as the report with a note, since the report is the answer. A <code>ping</code> without <code>count</code> or <code>duration</code> sends five pings, so no call runs forever.</p>
 <h2 id="diagnose-one-endpoint"><a href="#diagnose-one-endpoint">Diagnose one endpoint</a></h2>
 <figure class="code"><div class="bar"><span>bash</span><button type="button" class="copy" aria-label="Copy">copy</button></div><pre><code>pepe ping https://api.example.com/health -n 5 --json</code></pre></figure>
 <p>Read <code>targets[0]</code>: <code>latency_ms</code> (<code>min</code>, <code>avg</code>, <code>max</code>, <code>jitter</code>, <code>p50</code>, <code>p95</code>, <code>p99</code>); <code>phases_ms</code> (<code>dns</code>, <code>connect</code>, <code>tls_full</code>, <code>tls_resumed</code>, <code>ttfb</code>, <code>download</code>, each with <code>median_ms</code>, <code>p99_ms</code> and <code>max_ms</code>: the largest median is the bottleneck); <code>loss</code>, <code>timeouts</code> and <code>failures</code> by cause; <code>tls.cert.days_left</code> and <code>tls.cert.valid</code>; <code>status_codes</code>; and <code>findings</code>, what to look at, most serious first, each with a <code>level</code> (<code>bad</code>, <code>warn</code>, <code>note</code>, <code>good</code>) and a <code>text</code>. <code>--once</code> prints the same as a few lines of text.</p>
@@ -73,7 +88,7 @@ pepe compare before.json after.json --json --gate</code></pre></figure>
     <nav class="turn"><a class="prev" href="ci.html"><small>Previous</small>CI and Docker</a><a class="next" href="reference.html"><small>Next</small>Command reference</a></nav>
     <p class="edit"><a href="https://github.com/omarmhaimdat/pepe/edit/master/docs/agents.md">Edit this page on GitHub</a></p>
   </main>
-  <aside class="toc"><div class="label">On this page</div><a href="#the-rules" class="h2">The rules</a><a href="#guardrails" class="h2">Guardrails</a><a href="#diagnose-one-endpoint" class="h2">Diagnose one endpoint</a><a href="#watch-it-over-time" class="h2">Watch it over time</a><a href="#load-test" class="h2">Load-test</a><a href="#find-the-capacity" class="h2">Find the capacity</a><a href="#compare-before-and-after" class="h2">Compare before and after</a><a href="#test-a-whole-api-or-a-journey" class="h2">Test a whole API or a journey</a><a href="#the-same-request-every-mode" class="h2">The same request every mode</a></aside>
+  <aside class="toc"><div class="label">On this page</div><a href="#the-rules" class="h2">The rules</a><a href="#guardrails" class="h2">Guardrails</a><a href="#as-an-mcp-server" class="h2">As an MCP server</a><a href="#diagnose-one-endpoint" class="h2">Diagnose one endpoint</a><a href="#watch-it-over-time" class="h2">Watch it over time</a><a href="#load-test" class="h2">Load-test</a><a href="#find-the-capacity" class="h2">Find the capacity</a><a href="#compare-before-and-after" class="h2">Compare before and after</a><a href="#test-a-whole-api-or-a-journey" class="h2">Test a whole API or a journey</a><a href="#the-same-request-every-mode" class="h2">The same request every mode</a></aside>
 </div>
 <script src="docs.js" defer></script>
 </body>

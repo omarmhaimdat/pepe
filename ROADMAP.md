@@ -199,9 +199,10 @@ these build on them.
 - [x] **Guardrails** (S): `--allow-host`, `--max-requests`, `--max-rate`,
       `--max-concurrency` and `--dry-run`, in every mode, in `pepe.toml`
       too — next release
-- [ ] **MCP server** (M). `pepe mcp` serves a run, a ramp, a flow, a
-      replay and a comparison as typed tools, each returning the JSON
-      report, so an agent calls pepe without composing a shell command.
+- [x] **MCP server** (M): `pepe mcp` serves a run, a ping, a ramp, an
+      API, a flow, a replay and a comparison as typed tools over stdio,
+      each returning the JSON report, under the guardrails it was started
+      with — next release
 - [ ] **The engine as a crate** (M). The load engine and the report as a
       library, for Rust harnesses and agents that would rather not start
       a process.

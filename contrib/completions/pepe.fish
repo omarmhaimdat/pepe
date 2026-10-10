@@ -66,6 +66,7 @@ complete -c pepe -n "__fish_pepe_needs_command" -a "logs" -d 'Read nginx logs: r
 complete -c pepe -n "__fish_pepe_needs_command" -a "ping" -d 'Ping a URL: a request a second, each split into DNS, connect, TLS, first byte and download, on a graph'
 complete -c pepe -n "__fish_pepe_needs_command" -a "compare" -d 'Hold a run\'s JSON report against an earlier one and say what moved'
 complete -c pepe -n "__fish_pepe_needs_command" -a "schema" -d 'Print the JSON Schema of a report: run (the default), ramp, ping or compare'
+complete -c pepe -n "__fish_pepe_needs_command" -a "mcp" -d 'Serve pepe\'s modes as tools for an agent over stdio (the Model Context Protocol); the guardrail flags given here hold for every call'
 complete -c pepe -n "__fish_pepe_needs_command" -a "help" -d 'Print this message or the help of the given subcommand(s)'
 complete -c pepe -n "__fish_pepe_using_subcommand self-update" -s n -l number -d 'Number of requests to perform' -r
 complete -c pepe -n "__fish_pepe_using_subcommand self-update" -s z -l duration -d 'Duration of the test, e.g. 10s, 3m, 2h (mutually exclusive with -n)' -r
@@ -420,14 +421,45 @@ complete -c pepe -n "__fish_pepe_using_subcommand schema" -l disable-redirects -
 complete -c pepe -n "__fish_pepe_using_subcommand schema" -l json -d 'Output results in JSON format'
 complete -c pepe -n "__fish_pepe_using_subcommand schema" -l dry-run -d 'Say what would be sent, to where and how much, and send nothing; as JSON with --json'
 complete -c pepe -n "__fish_pepe_using_subcommand schema" -s i -l setup -d 'Open the setup screen to review or change the settings before starting (it opens by itself when no URL is given)'
-complete -c pepe -n "__fish_pepe_using_subcommand help; and not __fish_seen_subcommand_from self-update completions api ramp replay flow logs ping compare schema help" -f -a "self-update" -d 'Update pepe to the latest release, or say what\'s new in it'
-complete -c pepe -n "__fish_pepe_using_subcommand help; and not __fish_seen_subcommand_from self-update completions api ramp replay flow logs ping compare schema help" -f -a "completions" -d 'Tab completion for your shell: print the script, or --install it'
-complete -c pepe -n "__fish_pepe_using_subcommand help; and not __fish_seen_subcommand_from self-update completions api ramp replay flow logs ping compare schema help" -f -a "api" -d 'Load-test every endpoint of an OpenAPI spec'
-complete -c pepe -n "__fish_pepe_using_subcommand help; and not __fish_seen_subcommand_from self-update completions api ramp replay flow logs ping compare schema help" -f -a "ramp" -d 'Raise the load step by step to find where the target stops keeping up'
-complete -c pepe -n "__fish_pepe_using_subcommand help; and not __fish_seen_subcommand_from self-update completions api ramp replay flow logs ping compare schema help" -f -a "replay" -d 'Send the URLs of an access log in their real proportions'
-complete -c pepe -n "__fish_pepe_using_subcommand help; and not __fish_seen_subcommand_from self-update completions api ramp replay flow logs ping compare schema help" -f -a "flow" -d 'Run a sequence of requests from a flow file, each step fed by the last'
-complete -c pepe -n "__fish_pepe_using_subcommand help; and not __fish_seen_subcommand_from self-update completions api ramp replay flow logs ping compare schema help" -f -a "logs" -d 'Read nginx logs: requests per second now, against each minute, hour and day'
-complete -c pepe -n "__fish_pepe_using_subcommand help; and not __fish_seen_subcommand_from self-update completions api ramp replay flow logs ping compare schema help" -f -a "ping" -d 'Ping a URL: a request a second, each split into DNS, connect, TLS, first byte and download, on a graph'
-complete -c pepe -n "__fish_pepe_using_subcommand help; and not __fish_seen_subcommand_from self-update completions api ramp replay flow logs ping compare schema help" -f -a "compare" -d 'Hold a run\'s JSON report against an earlier one and say what moved'
-complete -c pepe -n "__fish_pepe_using_subcommand help; and not __fish_seen_subcommand_from self-update completions api ramp replay flow logs ping compare schema help" -f -a "schema" -d 'Print the JSON Schema of a report: run (the default), ramp, ping or compare'
-complete -c pepe -n "__fish_pepe_using_subcommand help; and not __fish_seen_subcommand_from self-update completions api ramp replay flow logs ping compare schema help" -f -a "help" -d 'Print this message or the help of the given subcommand(s)'
+complete -c pepe -n "__fish_pepe_using_subcommand mcp" -s n -l number -d 'Number of requests to perform' -r
+complete -c pepe -n "__fish_pepe_using_subcommand mcp" -s z -l duration -d 'Duration of the test, e.g. 10s, 3m, 2h (mutually exclusive with -n)' -r
+complete -c pepe -n "__fish_pepe_using_subcommand mcp" -s m -l method -d 'HTTP method, e.g. GET, POST, PUT, DELETE' -r
+complete -c pepe -n "__fish_pepe_using_subcommand mcp" -s H -l headers -d 'HTTP headers, e.g. -H \'Accept: application/json\'' -r
+complete -c pepe -n "__fish_pepe_using_subcommand mcp" -s t -l timeout -d 'Time in seconds to wait for a response' -r
+complete -c pepe -n "__fish_pepe_using_subcommand mcp" -l warmup -d 'Send for this long before measuring, e.g. 5s: connections open, caches fill and JITs settle without counting against the run' -r
+complete -c pepe -n "__fish_pepe_using_subcommand mcp" -l threads -d 'Threads sending requests (default 1), or "auto" to add one whenever those sending are all busy. One sends 100k requests a second or more; the dashboard says when it is the limit' -r
+complete -c pepe -n "__fish_pepe_using_subcommand mcp" -l rate -d 'Start this many requests a second, spread evenly, instead of as many as the concurrency allows; -c is then the most in flight at once, and pepe says when it holds the rate back' -r
+complete -c pepe -n "__fish_pepe_using_subcommand mcp" -s d -l body -d 'HTTP request body' -r
+complete -c pepe -n "__fish_pepe_using_subcommand mcp" -s p -l proxy -d 'Proxy server URL: http://user:pass@host:port or socks5://host:port' -r
+complete -c pepe -n "__fish_pepe_using_subcommand mcp" -l trace-header -d 'Response header holding the request id to show for the slowest requests and in the inspector, so they can be found in the server\'s logs; without it, X-Request-Id, traceparent, CF-Ray, X-Amzn-Trace-Id and other common ones are looked for' -r
+complete -c pepe -n "__fish_pepe_using_subcommand mcp" -l snapshot -d 'Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run\'s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run' -r -F
+complete -c pepe -n "__fish_pepe_using_subcommand mcp" -l allow-host -d 'Refuse to send anywhere but these hosts: api.example.com exactly, or .example.com for it and its subdomains; repeat for more. Every target is checked before anything is sent' -r
+complete -c pepe -n "__fish_pepe_using_subcommand mcp" -l max-requests -d 'Refuse a run that would send more requests than this: -n above it, or -z without a --rate that bounds it' -r
+complete -c pepe -n "__fish_pepe_using_subcommand mcp" -l max-rate -d 'Refuse a --rate above this, and a run with no --rate at all, which sends as fast as the target answers' -r
+complete -c pepe -n "__fish_pepe_using_subcommand mcp" -l max-concurrency -d 'Refuse a concurrency above this' -r
+complete -c pepe -n "__fish_pepe_using_subcommand mcp" -l fail-if -d 'End with exit code 4 when the run crosses this, for CI and scripts: \'p99 > 300ms\', \'errors > 1%\'; repeat for more. The report is still printed. (pepe ping has --slo for the same.)' -r
+complete -c pepe -n "__fish_pepe_using_subcommand mcp" -l metrics -d 'Serve the live numbers for Prometheus at http://ADDR/metrics while the run goes, e.g. :9100 or 127.0.0.1:9100, so a soak run or a long ping shows up in Grafana next to the server\'s own' -r
+complete -c pepe -n "__fish_pepe_using_subcommand mcp" -l config -d 'Read settings from this file instead of ./pepe.toml; flags on the command line win over it' -r -F
+complete -c pepe -n "__fish_pepe_using_subcommand mcp" -l write-config -d 'Write the settings as they stand to this file, as a pepe.toml, and exit' -r -F
+complete -c pepe -n "__fish_pepe_using_subcommand mcp" -s c -l concurrency -d 'Number of concurrent requests at a time' -r
+complete -c pepe -n "__fish_pepe_using_subcommand mcp" -s u -l user-agent -d 'User-Agent string, default is pepe/{version}' -r
+complete -c pepe -n "__fish_pepe_using_subcommand mcp" -s h -l help -d 'Print help'
+complete -c pepe -n "__fish_pepe_using_subcommand mcp" -s k -l insecure -d 'Accept invalid TLS certificates (self-signed, expired, wrong host)'
+complete -c pepe -n "__fish_pepe_using_subcommand mcp" -l disable-compression -d 'Disable HTTP compression, e.g. gzip'
+complete -c pepe -n "__fish_pepe_using_subcommand mcp" -l disable-keepalive -d 'Disable HTTP keepalive, e.g. Connection: close'
+complete -c pepe -n "__fish_pepe_using_subcommand mcp" -l disable-redirects -d 'Prevent http redirects'
+complete -c pepe -n "__fish_pepe_using_subcommand mcp" -l json -d 'Output results in JSON format'
+complete -c pepe -n "__fish_pepe_using_subcommand mcp" -l dry-run -d 'Say what would be sent, to where and how much, and send nothing; as JSON with --json'
+complete -c pepe -n "__fish_pepe_using_subcommand mcp" -s i -l setup -d 'Open the setup screen to review or change the settings before starting (it opens by itself when no URL is given)'
+complete -c pepe -n "__fish_pepe_using_subcommand help; and not __fish_seen_subcommand_from self-update completions api ramp replay flow logs ping compare schema mcp help" -f -a "self-update" -d 'Update pepe to the latest release, or say what\'s new in it'
+complete -c pepe -n "__fish_pepe_using_subcommand help; and not __fish_seen_subcommand_from self-update completions api ramp replay flow logs ping compare schema mcp help" -f -a "completions" -d 'Tab completion for your shell: print the script, or --install it'
+complete -c pepe -n "__fish_pepe_using_subcommand help; and not __fish_seen_subcommand_from self-update completions api ramp replay flow logs ping compare schema mcp help" -f -a "api" -d 'Load-test every endpoint of an OpenAPI spec'
+complete -c pepe -n "__fish_pepe_using_subcommand help; and not __fish_seen_subcommand_from self-update completions api ramp replay flow logs ping compare schema mcp help" -f -a "ramp" -d 'Raise the load step by step to find where the target stops keeping up'
+complete -c pepe -n "__fish_pepe_using_subcommand help; and not __fish_seen_subcommand_from self-update completions api ramp replay flow logs ping compare schema mcp help" -f -a "replay" -d 'Send the URLs of an access log in their real proportions'
+complete -c pepe -n "__fish_pepe_using_subcommand help; and not __fish_seen_subcommand_from self-update completions api ramp replay flow logs ping compare schema mcp help" -f -a "flow" -d 'Run a sequence of requests from a flow file, each step fed by the last'
+complete -c pepe -n "__fish_pepe_using_subcommand help; and not __fish_seen_subcommand_from self-update completions api ramp replay flow logs ping compare schema mcp help" -f -a "logs" -d 'Read nginx logs: requests per second now, against each minute, hour and day'
+complete -c pepe -n "__fish_pepe_using_subcommand help; and not __fish_seen_subcommand_from self-update completions api ramp replay flow logs ping compare schema mcp help" -f -a "ping" -d 'Ping a URL: a request a second, each split into DNS, connect, TLS, first byte and download, on a graph'
+complete -c pepe -n "__fish_pepe_using_subcommand help; and not __fish_seen_subcommand_from self-update completions api ramp replay flow logs ping compare schema mcp help" -f -a "compare" -d 'Hold a run\'s JSON report against an earlier one and say what moved'
+complete -c pepe -n "__fish_pepe_using_subcommand help; and not __fish_seen_subcommand_from self-update completions api ramp replay flow logs ping compare schema mcp help" -f -a "schema" -d 'Print the JSON Schema of a report: run (the default), ramp, ping or compare'
+complete -c pepe -n "__fish_pepe_using_subcommand help; and not __fish_seen_subcommand_from self-update completions api ramp replay flow logs ping compare schema mcp help" -f -a "mcp" -d 'Serve pepe\'s modes as tools for an agent over stdio (the Model Context Protocol); the guardrail flags given here hold for every call'
+complete -c pepe -n "__fish_pepe_using_subcommand help; and not __fish_seen_subcommand_from self-update completions api ramp replay flow logs ping compare schema mcp help" -f -a "help" -d 'Print this message or the help of the given subcommand(s)'

@@ -595,6 +595,52 @@ _arguments "${_arguments_options[@]}" : \
 '::which -- Which report\: run, ramp, ping or compare:_default' \
 && ret=0
 ;;
+(mcp)
+_arguments "${_arguments_options[@]}" : \
+'-n+[Number of requests to perform]:NUMBER:_default' \
+'--number=[Number of requests to perform]:NUMBER:_default' \
+'-z+[Duration of the test, e.g. 10s, 3m, 2h (mutually exclusive with -n)]:DURATION:_default' \
+'--duration=[Duration of the test, e.g. 10s, 3m, 2h (mutually exclusive with -n)]:DURATION:_default' \
+'-m+[HTTP method, e.g. GET, POST, PUT, DELETE]:METHOD:_default' \
+'--method=[HTTP method, e.g. GET, POST, PUT, DELETE]:METHOD:_default' \
+'*-H+[HTTP headers, e.g. -H '\''Accept\: application/json'\'']:HEADERS:_default' \
+'*--headers=[HTTP headers, e.g. -H '\''Accept\: application/json'\'']:HEADERS:_default' \
+'-t+[Time in seconds to wait for a response]:TIMEOUT:_default' \
+'--timeout=[Time in seconds to wait for a response]:TIMEOUT:_default' \
+'--warmup=[Send for this long before measuring, e.g. 5s\: connections open, caches fill and JITs settle without counting against the run]:TIME:_default' \
+'--threads=[Threads sending requests (default 1), or "auto" to add one whenever those sending are all busy. One sends 100k requests a second or more; the dashboard says when it is the limit]:N|auto:_default' \
+'--rate=[Start this many requests a second, spread evenly, instead of as many as the concurrency allows; -c is then the most in flight at once, and pepe says when it holds the rate back]:PER_SECOND:_default' \
+'-d+[HTTP request body]:BODY:_default' \
+'--body=[HTTP request body]:BODY:_default' \
+'-p+[Proxy server URL\: http\://user\:pass@host\:port or socks5\://host\:port]:PROXY:_default' \
+'--proxy=[Proxy server URL\: http\://user\:pass@host\:port or socks5\://host\:port]:PROXY:_default' \
+'--trace-header=[Response header holding the request id to show for the slowest requests and in the inspector, so they can be found in the server'\''s logs; without it, X-Request-Id, traceparent, CF-Ray, X-Amzn-Trace-Id and other common ones are looked for]:NAME:_default' \
+'--snapshot=[Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run'\''s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run]:FILE:_files' \
+'*--allow-host=[Refuse to send anywhere but these hosts\: api.example.com exactly, or .example.com for it and its subdomains; repeat for more. Every target is checked before anything is sent]:HOST:_default' \
+'--max-requests=[Refuse a run that would send more requests than this\: -n above it, or -z without a --rate that bounds it]:N:_default' \
+'--max-rate=[Refuse a --rate above this, and a run with no --rate at all, which sends as fast as the target answers]:PER_SECOND:_default' \
+'--max-concurrency=[Refuse a concurrency above this]:N:_default' \
+'*--fail-if=[End with exit code 4 when the run crosses this, for CI and scripts\: '\''p99 > 300ms'\'', '\''errors > 1%'\''; repeat for more. The report is still printed. (pepe ping has --slo for the same.)]:CONDITION:_default' \
+'--metrics=[Serve the live numbers for Prometheus at http\://ADDR/metrics while the run goes, e.g. \:9100 or 127.0.0.1\:9100, so a soak run or a long ping shows up in Grafana next to the server'\''s own]:ADDR:_default' \
+'--config=[Read settings from this file instead of ./pepe.toml; flags on the command line win over it]:FILE:_files' \
+'--write-config=[Write the settings as they stand to this file, as a pepe.toml, and exit]:FILE:_files' \
+'-c+[Number of concurrent requests at a time]:CONCURRENCY:_default' \
+'--concurrency=[Number of concurrent requests at a time]:CONCURRENCY:_default' \
+'-u+[User-Agent string, default is pepe/{version}]:USER_AGENT:_default' \
+'--user-agent=[User-Agent string, default is pepe/{version}]:USER_AGENT:_default' \
+'-h[Print help]' \
+'--help[Print help]' \
+'-k[Accept invalid TLS certificates (self-signed, expired, wrong host)]' \
+'--insecure[Accept invalid TLS certificates (self-signed, expired, wrong host)]' \
+'--disable-compression[Disable HTTP compression, e.g. gzip]' \
+'--disable-keepalive[Disable HTTP keepalive, e.g. Connection\: close]' \
+'--disable-redirects[Prevent http redirects]' \
+'--json[Output results in JSON format]' \
+'--dry-run[Say what would be sent, to where and how much, and send nothing; as JSON with --json]' \
+'-i[Open the setup screen to review or change the settings before starting (it opens by itself when no URL is given)]' \
+'--setup[Open the setup screen to review or change the settings before starting (it opens by itself when no URL is given)]' \
+&& ret=0
+;;
 (help)
 _arguments "${_arguments_options[@]}" : \
 ":: :_pepe__subcmd__help_commands" \
@@ -647,6 +693,10 @@ _arguments "${_arguments_options[@]}" : \
 _arguments "${_arguments_options[@]}" : \
 && ret=0
 ;;
+(mcp)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
 (help)
 _arguments "${_arguments_options[@]}" : \
 && ret=0
@@ -673,6 +723,7 @@ _pepe_commands() {
 'ping:Ping a URL\: a request a second, each split into DNS, connect, TLS, first byte and download, on a graph' \
 'compare:Hold a run'\''s JSON report against an earlier one and say what moved' \
 'schema:Print the JSON Schema of a report\: run (the default), ramp, ping or compare' \
+'mcp:Serve pepe'\''s modes as tools for an agent over stdio (the Model Context Protocol); the guardrail flags given here hold for every call' \
 'help:Print this message or the help of the given subcommand(s)' \
     )
     _describe -t commands 'pepe commands' commands "$@"
@@ -710,6 +761,7 @@ _pepe__subcmd__help_commands() {
 'ping:Ping a URL\: a request a second, each split into DNS, connect, TLS, first byte and download, on a graph' \
 'compare:Hold a run'\''s JSON report against an earlier one and say what moved' \
 'schema:Print the JSON Schema of a report\: run (the default), ramp, ping or compare' \
+'mcp:Serve pepe'\''s modes as tools for an agent over stdio (the Model Context Protocol); the guardrail flags given here hold for every call' \
 'help:Print this message or the help of the given subcommand(s)' \
     )
     _describe -t commands 'pepe help commands' commands "$@"
@@ -744,6 +796,11 @@ _pepe__subcmd__help__subcmd__logs_commands() {
     local commands; commands=()
     _describe -t commands 'pepe help logs commands' commands "$@"
 }
+(( $+functions[_pepe__subcmd__help__subcmd__mcp_commands] )) ||
+_pepe__subcmd__help__subcmd__mcp_commands() {
+    local commands; commands=()
+    _describe -t commands 'pepe help mcp commands' commands "$@"
+}
 (( $+functions[_pepe__subcmd__help__subcmd__ping_commands] )) ||
 _pepe__subcmd__help__subcmd__ping_commands() {
     local commands; commands=()
@@ -773,6 +830,11 @@ _pepe__subcmd__help__subcmd__self-update_commands() {
 _pepe__subcmd__logs_commands() {
     local commands; commands=()
     _describe -t commands 'pepe logs commands' commands "$@"
+}
+(( $+functions[_pepe__subcmd__mcp_commands] )) ||
+_pepe__subcmd__mcp_commands() {
+    local commands; commands=()
+    _describe -t commands 'pepe mcp commands' commands "$@"
 }
 (( $+functions[_pepe__subcmd__ping_commands] )) ||
 _pepe__subcmd__ping_commands() {
