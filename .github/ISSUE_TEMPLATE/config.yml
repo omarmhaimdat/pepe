@@ -1,0 +1,11 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Documentation
+    url: https://pepe.mhaimdat.com/docs/
+    about: Every mode, every flag and every report, with examples.
+  - name: A question, or an idea to talk over
+    url: https://github.com/omarmhaimdat/pepe/discussions
+    about: Discussions are for everything that isn't a bug or a definite feature.
+  - name: A security problem
+    url: https://github.com/omarmhaimdat/pepe/security/advisories/new
+    about: Please report it privately; SECURITY.md says how.

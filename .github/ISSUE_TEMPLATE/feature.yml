@@ -1,0 +1,25 @@
+name: Feature
+description: Something pepe should do
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Have a look at [ROADMAP.md](https://github.com/omarmhaimdat/pepe/blob/master/ROADMAP.md) first: if it is there, say so and what would make it matter more to you. If it isn't, this is the place.
+  - type: textarea
+    id: problem
+    attributes:
+      label: What you are trying to do
+      description: The situation, not the feature. What are you load-testing or watching, and what can't you see or do today?
+    validations:
+      required: true
+  - type: textarea
+    id: today
+    attributes:
+      label: How you do it today
+      description: Another tool, a script around pepe's JSON, by hand, or not at all.
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What pepe could do
+      description: If you have a shape in mind: a flag, a view, a field in the report, an example of the output.
