@@ -56,6 +56,7 @@ complete -c pepe -n "__fish_pepe_needs_command" -a "ramp" -d 'Raise the load ste
 complete -c pepe -n "__fish_pepe_needs_command" -a "replay" -d 'Send the URLs of an access log in their real proportions'
 complete -c pepe -n "__fish_pepe_needs_command" -a "flow" -d 'Run a sequence of requests from a flow file, each step fed by the last'
 complete -c pepe -n "__fish_pepe_needs_command" -a "logs" -d 'Read nginx logs: requests per second now, against each minute, hour and day'
+complete -c pepe -n "__fish_pepe_needs_command" -a "ping" -d 'Ping a URL: a request a second, each split into DNS, connect, TLS, first byte and download, on a graph'
 complete -c pepe -n "__fish_pepe_needs_command" -a "compare" -d 'Hold a run\'s JSON report against an earlier one and say what moved'
 complete -c pepe -n "__fish_pepe_needs_command" -a "help" -d 'Print this message or the help of the given subcommand(s)'
 complete -c pepe -n "__fish_pepe_using_subcommand self-update" -s n -l number -d 'Number of requests to perform' -r
@@ -245,6 +246,54 @@ complete -c pepe -n "__fish_pepe_using_subcommand logs" -l disable-keepalive -d 
 complete -c pepe -n "__fish_pepe_using_subcommand logs" -l disable-redirects -d 'Prevent http redirects'
 complete -c pepe -n "__fish_pepe_using_subcommand logs" -l json -d 'Output results in JSON format'
 complete -c pepe -n "__fish_pepe_using_subcommand logs" -s i -l setup -d 'Open the setup screen to review or change the settings before starting (it opens by itself when no URL is given)'
+complete -c pepe -n "__fish_pepe_using_subcommand ping" -l every -d 'Time between pings, e.g. 1s, 500ms, 2m' -r
+complete -c pepe -n "__fish_pepe_using_subcommand ping" -l window -d 'How much of the run the graph shows, e.g. 60s, 5m; + and - change it on screen, w shows the whole run' -r
+complete -c pepe -n "__fish_pepe_using_subcommand ping" -l name -d 'What to call each target, in order: --name api --name cdn, or --name api,cdn' -r
+complete -c pepe -n "__fish_pepe_using_subcommand ping" -l color -d 'A colour for each target\'s line, in order: red, green, yellow, blue, magenta, cyan, white, gray, their light- forms, or #RRGGBB' -r
+complete -c pepe -n "__fish_pepe_using_subcommand ping" -l interface -d 'Send from this interface (en0, eth0) or local address' -r
+complete -c pepe -n "__fish_pepe_using_subcommand ping" -l port -d 'With --tcp: the port of a target that names none' -r
+complete -c pepe -n "__fish_pepe_using_subcommand ping" -l tcp-rst -d 'With --tcp: a connection refused counts as an answer (the host is there) rather than a failure' -r -f -a "pong\t'An answer: something is there to refuse'
+fail\t'A failure'"
+complete -c pepe -n "__fish_pepe_using_subcommand ping" -l slo -d 'Limits a ping must meet, in milliseconds: total=500,ttfb=200, connect=100,dns=50,tls=150,download=100. Breaking one marks the ping, and the run exits 4 at the end' -r
+complete -c pepe -n "__fish_pepe_using_subcommand ping" -l ymin -d 'The graph\'s floor, in milliseconds' -r
+complete -c pepe -n "__fish_pepe_using_subcommand ping" -l ymax -d 'The graph\'s ceiling, in milliseconds; without it the graph fits what it shows' -r
+complete -c pepe -n "__fish_pepe_using_subcommand ping" -l save -d 'Write the JSON report to this file when the run ends, whatever else is shown' -r -F
+complete -c pepe -n "__fish_pepe_using_subcommand ping" -l save-body -d 'Write the last body received to this file when the run ends' -r -F
+complete -c pepe -n "__fish_pepe_using_subcommand ping" -s n -l number -d 'Number of requests to perform' -r
+complete -c pepe -n "__fish_pepe_using_subcommand ping" -s z -l duration -d 'Duration of the test, e.g. 10s, 3m, 2h (mutually exclusive with -n)' -r
+complete -c pepe -n "__fish_pepe_using_subcommand ping" -s m -l method -d 'HTTP method, e.g. GET, POST, PUT, DELETE' -r
+complete -c pepe -n "__fish_pepe_using_subcommand ping" -s H -l headers -d 'HTTP headers, e.g. -H \'Accept: application/json\'' -r
+complete -c pepe -n "__fish_pepe_using_subcommand ping" -s t -l timeout -d 'Time in seconds to wait for a response' -r
+complete -c pepe -n "__fish_pepe_using_subcommand ping" -l warmup -d 'Send for this long before measuring, e.g. 5s: connections open, caches fill and JITs settle without counting against the run' -r
+complete -c pepe -n "__fish_pepe_using_subcommand ping" -l threads -d 'Threads sending requests (default 1), or "auto" to add one whenever those sending are all busy. One sends 100k requests a second or more; the dashboard says when it is the limit' -r
+complete -c pepe -n "__fish_pepe_using_subcommand ping" -l rate -d 'Start this many requests a second, spread evenly, instead of as many as the concurrency allows; -c is then the most in flight at once, and pepe says when it holds the rate back' -r
+complete -c pepe -n "__fish_pepe_using_subcommand ping" -s d -l body -d 'HTTP request body' -r
+complete -c pepe -n "__fish_pepe_using_subcommand ping" -s p -l proxy -d 'Proxy server URL: http://user:pass@host:port or socks5://host:port' -r
+complete -c pepe -n "__fish_pepe_using_subcommand ping" -l trace-header -d 'Response header holding the request id to show for the slowest requests and in the inspector, so they can be found in the server\'s logs; without it, X-Request-Id, traceparent, CF-Ray, X-Amzn-Trace-Id and other common ones are looked for' -r
+complete -c pepe -n "__fish_pepe_using_subcommand ping" -l snapshot -d 'Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run\'s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run' -r -F
+complete -c pepe -n "__fish_pepe_using_subcommand ping" -l config -d 'Read settings from this file instead of ./pepe.toml; flags on the command line win over it' -r -F
+complete -c pepe -n "__fish_pepe_using_subcommand ping" -l write-config -d 'Write the settings as they stand to this file, as a pepe.toml, and exit' -r -F
+complete -c pepe -n "__fish_pepe_using_subcommand ping" -s c -l concurrency -d 'Number of concurrent requests at a time' -r
+complete -c pepe -n "__fish_pepe_using_subcommand ping" -s u -l user-agent -d 'User-Agent string, default is pepe/{version}' -r
+complete -c pepe -n "__fish_pepe_using_subcommand ping" -s 4 -d 'Resolve names to IPv4 addresses only'
+complete -c pepe -n "__fish_pepe_using_subcommand ping" -s 6 -d 'Resolve names to IPv6 addresses only'
+complete -c pepe -n "__fish_pepe_using_subcommand ping" -l all-ips -d 'Ping every address a name resolves to, each as a target of its own'
+complete -c pepe -n "__fish_pepe_using_subcommand ping" -l tcp -d 'Only connect: a TCP ping of the port, with no request sent'
+complete -c pepe -n "__fish_pepe_using_subcommand ping" -l cmd -d 'The targets are commands: run each one every interval and graph how long it takes; its exit code is the status'
+complete -c pepe -n "__fish_pepe_using_subcommand ping" -l keep-alive -d 'Keep the connection between pings, as a browser would. The DNS, connect and TLS phases are then measured once; without it every ping measures all five'
+complete -c pepe -n "__fish_pepe_using_subcommand ping" -l bell -d 'Ring the terminal bell when a ping fails or breaks the SLO'
+complete -c pepe -n "__fish_pepe_using_subcommand ping" -s 0 -d 'Start the graph at zero (the same as --ymin 0)'
+complete -c pepe -n "__fish_pepe_using_subcommand ping" -s s -l simple-graphics -d 'Draw the graph with dots rather than braille, for terminals and fonts that lack it'
+complete -c pepe -n "__fish_pepe_using_subcommand ping" -l jsonl -d 'No screen: one JSON object per ping on stdout, as it happens'
+complete -c pepe -n "__fish_pepe_using_subcommand ping" -l csv -d 'No screen: one CSV line per ping on stdout, under a header'
+complete -c pepe -n "__fish_pepe_using_subcommand ping" -l show-body -d 'Keep the first kilobyte of each body for the inspector'
+complete -c pepe -n "__fish_pepe_using_subcommand ping" -s h -l help -d 'Print help'
+complete -c pepe -n "__fish_pepe_using_subcommand ping" -s k -l insecure -d 'Accept invalid TLS certificates (self-signed, expired, wrong host)'
+complete -c pepe -n "__fish_pepe_using_subcommand ping" -l disable-compression -d 'Disable HTTP compression, e.g. gzip'
+complete -c pepe -n "__fish_pepe_using_subcommand ping" -l disable-keepalive -d 'Disable HTTP keepalive, e.g. Connection: close'
+complete -c pepe -n "__fish_pepe_using_subcommand ping" -l disable-redirects -d 'Prevent http redirects'
+complete -c pepe -n "__fish_pepe_using_subcommand ping" -l json -d 'Output results in JSON format'
+complete -c pepe -n "__fish_pepe_using_subcommand ping" -s i -l setup -d 'Open the setup screen to review or change the settings before starting (it opens by itself when no URL is given)'
 complete -c pepe -n "__fish_pepe_using_subcommand compare" -l svg -d 'Also write the verdict as a card, an SVG for a README or a page' -r -F
 complete -c pepe -n "__fish_pepe_using_subcommand compare" -s n -l number -d 'Number of requests to perform' -r
 complete -c pepe -n "__fish_pepe_using_subcommand compare" -s z -l duration -d 'Duration of the test, e.g. 10s, 3m, 2h (mutually exclusive with -n)' -r
@@ -270,12 +319,13 @@ complete -c pepe -n "__fish_pepe_using_subcommand compare" -l disable-keepalive 
 complete -c pepe -n "__fish_pepe_using_subcommand compare" -l disable-redirects -d 'Prevent http redirects'
 complete -c pepe -n "__fish_pepe_using_subcommand compare" -l json -d 'Output results in JSON format'
 complete -c pepe -n "__fish_pepe_using_subcommand compare" -s i -l setup -d 'Open the setup screen to review or change the settings before starting (it opens by itself when no URL is given)'
-complete -c pepe -n "__fish_pepe_using_subcommand help; and not __fish_seen_subcommand_from self-update completions api ramp replay flow logs compare help" -f -a "self-update" -d 'Update pepe to the latest release, or say what\'s new in it'
-complete -c pepe -n "__fish_pepe_using_subcommand help; and not __fish_seen_subcommand_from self-update completions api ramp replay flow logs compare help" -f -a "completions" -d 'Tab completion for your shell: print the script, or --install it'
-complete -c pepe -n "__fish_pepe_using_subcommand help; and not __fish_seen_subcommand_from self-update completions api ramp replay flow logs compare help" -f -a "api" -d 'Load-test every endpoint of an OpenAPI spec'
-complete -c pepe -n "__fish_pepe_using_subcommand help; and not __fish_seen_subcommand_from self-update completions api ramp replay flow logs compare help" -f -a "ramp" -d 'Raise the load step by step to find where the target stops keeping up'
-complete -c pepe -n "__fish_pepe_using_subcommand help; and not __fish_seen_subcommand_from self-update completions api ramp replay flow logs compare help" -f -a "replay" -d 'Send the URLs of an access log in their real proportions'
-complete -c pepe -n "__fish_pepe_using_subcommand help; and not __fish_seen_subcommand_from self-update completions api ramp replay flow logs compare help" -f -a "flow" -d 'Run a sequence of requests from a flow file, each step fed by the last'
-complete -c pepe -n "__fish_pepe_using_subcommand help; and not __fish_seen_subcommand_from self-update completions api ramp replay flow logs compare help" -f -a "logs" -d 'Read nginx logs: requests per second now, against each minute, hour and day'
-complete -c pepe -n "__fish_pepe_using_subcommand help; and not __fish_seen_subcommand_from self-update completions api ramp replay flow logs compare help" -f -a "compare" -d 'Hold a run\'s JSON report against an earlier one and say what moved'
-complete -c pepe -n "__fish_pepe_using_subcommand help; and not __fish_seen_subcommand_from self-update completions api ramp replay flow logs compare help" -f -a "help" -d 'Print this message or the help of the given subcommand(s)'
+complete -c pepe -n "__fish_pepe_using_subcommand help; and not __fish_seen_subcommand_from self-update completions api ramp replay flow logs ping compare help" -f -a "self-update" -d 'Update pepe to the latest release, or say what\'s new in it'
+complete -c pepe -n "__fish_pepe_using_subcommand help; and not __fish_seen_subcommand_from self-update completions api ramp replay flow logs ping compare help" -f -a "completions" -d 'Tab completion for your shell: print the script, or --install it'
+complete -c pepe -n "__fish_pepe_using_subcommand help; and not __fish_seen_subcommand_from self-update completions api ramp replay flow logs ping compare help" -f -a "api" -d 'Load-test every endpoint of an OpenAPI spec'
+complete -c pepe -n "__fish_pepe_using_subcommand help; and not __fish_seen_subcommand_from self-update completions api ramp replay flow logs ping compare help" -f -a "ramp" -d 'Raise the load step by step to find where the target stops keeping up'
+complete -c pepe -n "__fish_pepe_using_subcommand help; and not __fish_seen_subcommand_from self-update completions api ramp replay flow logs ping compare help" -f -a "replay" -d 'Send the URLs of an access log in their real proportions'
+complete -c pepe -n "__fish_pepe_using_subcommand help; and not __fish_seen_subcommand_from self-update completions api ramp replay flow logs ping compare help" -f -a "flow" -d 'Run a sequence of requests from a flow file, each step fed by the last'
+complete -c pepe -n "__fish_pepe_using_subcommand help; and not __fish_seen_subcommand_from self-update completions api ramp replay flow logs ping compare help" -f -a "logs" -d 'Read nginx logs: requests per second now, against each minute, hour and day'
+complete -c pepe -n "__fish_pepe_using_subcommand help; and not __fish_seen_subcommand_from self-update completions api ramp replay flow logs ping compare help" -f -a "ping" -d 'Ping a URL: a request a second, each split into DNS, connect, TLS, first byte and download, on a graph'
+complete -c pepe -n "__fish_pepe_using_subcommand help; and not __fish_seen_subcommand_from self-update completions api ramp replay flow logs ping compare help" -f -a "compare" -d 'Hold a run\'s JSON report against an earlier one and say what moved'
+complete -c pepe -n "__fish_pepe_using_subcommand help; and not __fish_seen_subcommand_from self-update completions api ramp replay flow logs ping compare help" -f -a "help" -d 'Print this message or the help of the given subcommand(s)'

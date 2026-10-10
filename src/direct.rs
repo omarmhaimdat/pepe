@@ -121,7 +121,7 @@ fn proxy_in_environment() -> bool {
 }
 
 /// The same TLS as reqwest's: rustls with ring, the webpki roots, HTTP/1.1
-fn tls_config(insecure: bool) -> ClientConfig {
+pub(crate) fn tls_config(insecure: bool) -> ClientConfig {
     let provider = Arc::new(rustls::crypto::ring::default_provider());
     let builder = ClientConfig::builder_with_provider(provider.clone())
         .with_safe_default_protocol_versions()

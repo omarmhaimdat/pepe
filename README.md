@@ -14,12 +14,13 @@
 
 ![pepe load-testing a server: the live dashboard, the request log, and the verdict](assets/run.gif)
 
-pepe sends requests to a URL, as many at once as you ask, and shows what came back as it happens: throughput, latency percentiles and a heatmap, status codes, failures by cause, and a log you can open any request from. When the run ends it gives a verdict in plain words. It takes a curl command as input, ramps load to find where a target stops keeping up, and load-tests every endpoint of an OpenAPI spec.
+pepe sends requests to a URL, as many at once as you ask, and shows what came back as it happens: throughput, latency percentiles and a heatmap, status codes, failures by cause, and a log you can open any request from. When the run ends it gives a verdict in plain words. It takes a curl command as input, ramps load to find where a target stops keeping up, and load-tests every endpoint of an OpenAPI spec. `pepe ping` is the same engine at one request a second: a graph of a URL's latency over time, each ping split into DNS, connect, TLS, first byte and download.
 
 It is also light. One thread sends 160k requests a second on an Apple M4 Pro and 400k on Linux, for less CPU and less memory per request than [wrk](https://github.com/wg/wrk), a quarter to a half of [oha](https://github.com/hatoo/oha)'s CPU and a tenth of its memory or less, and pepe tells you when it, rather than the target, is the limit.
 
 ## Highlights
 
+- **`pepe ping`**: ping, with HTTP instead of ICMP, and a graph. A request a second to one URL or several, each split into DNS, connect, TLS, first byte and download, with loss, jitter and percentiles, the TLS session and the certificate's expiry, SLO limits that mark pings and fail the exit code, and JSON, JSON Lines or CSV when there's no terminal.
 - **Live dashboard** with a latency heatmap, percentile and throughput charts, status codes, failure causes and a scrollable, filterable request log. Press `enter` on a request to see its headers and body, formatted.
 - **A verdict**, not just numbers: Healthy, Degraded or Failing, with findings such as two latency groups, a long tail, or throughput drifting over the run.
 - **Interactive control**: pause, resume, stop, restart, and raise or lower concurrency while the run is going.
@@ -142,6 +143,7 @@ In the dashboard, `space` pauses, `+` and `-` change concurrency, `tab` switches
 
 ```
 pepe [OPTIONS] [URL]
+pepe ping [OPTIONS] <TARGET>...  a request a second, with a graph
 pepe ramp [OPTIONS] [URL]      raise the load step by step
 pepe api  [OPTIONS] <SPEC>     load-test an OpenAPI spec
 pepe self-update [--check]     update pepe
@@ -400,6 +402,37 @@ pepe logs access.log --format '$remote_addr [$time_local] "$request" $status $bo
 ```
 
 `$time_local`, `$time_iso8601`, `$msec`, `$request` (or `$request_method` and `$request_uri`), `$status`, `$body_bytes_sent`, `$remote_addr`, `$host`, `$http_user_agent`, `$request_time` and `$upstream_response_time` are used; the rest are shown when a line is opened. Lines that couldn't be read are counted and the first is shown. Numbers and ids in a path count as one (`/items/*`) unless `--exact-paths` is given. The error log names no time zone, so its times are taken to be this machine's.
+
+### Pinging a URL
+
+Ping, with HTTP instead of ICMP, and a graph. `pepe ping` sends one request every second to each target and draws its latency over time, with each ping split into where its time went: the DNS lookup, the TCP connect, the TLS handshake, the wait for the first byte and the download. It is what to leave open in a corner of the screen while something is deployed, and the on-ramp to a load test: the same `-H`, `-m`, `-d`, `-k`, `-p` and `-t` apply.
+
+```bash
+pepe ping https://example.com                       # a request a second, forever; q leaves the summary
+pepe ping api.example.com cdn.example.com --name api,cdn   # several, each a line on the graph
+pepe ping https://example.com --every 200ms --window 5m    # faster, with five minutes on screen
+pepe ping https://api.example.com/health --slo total=300,ttfb=100 --bell   # limits; exit 4 if broken
+pepe ping example.com --all-ips -4                  # every IPv4 address it resolves to, each its own line
+pepe ping db.internal --tcp --port 5432             # only connect: a TCP ping of the port
+pepe ping 10.0.0.0/29:8080                          # every host of a range
+pepe ping --cmd 'dig example.com' 'curl -s https://example.com'   # commands, timed
+pepe ping aws:eu-west-1 aws:us-east-1               # cloud regions, by shorthand
+pepe ping https://example.com --jsonl > pings.jsonl # no screen: one JSON object per ping
+pepe ping https://example.com --csv -n 100          # one CSV line per ping, a hundred of them
+pepe ping https://example.com --json -n 10          # the summary as JSON
+```
+
+A host without a scheme is `https://`, unless it has a port or is this machine. Each ping opens its own connection, so every phase is measured every time, and the TLS session is still resumed when the server allows it: the first handshake is full, the next ones resumed, and the report says how long each kind takes. `--keep-alive` keeps the connection instead, as a browser would, and the pings after the first measure only the server. Redirects are followed, each hop listed with its status and time. `-n` and `-z` end the run; without them it runs until `q`.
+
+| View | Shows |
+| --- | --- |
+| **Graph** | Each target's latency as a line, failures marked on top (`✖`), SLO breaks (`▲`) and 5xx (`!`) too; `+` and `-` zoom, `w` the whole run, `0` a floor at zero, `l` a log scale, `s` dots instead of braille, `f` hides the marks |
+| **Phases** | Where the picked target's last and median ping went, as a stacked bar per phase, with curl's running totals (`namelookup`, `connect`, `pretransfer`, `starttransfer`, `total`); the TLS version, cipher and ALPN, full against resumed handshakes; the certificate's subject, issuer and expiry; the addresses at both ends |
+| **Pings** | Every ping, newest last, with each phase; `x` keeps failures and SLO breaks, `a` one target or all, `enter` opens one: its hops, headers, TLS and certificate, and the body with `--show-body` |
+
+The table above the views has each target's last, min, avg, max, jitter, p95, p99, loss and timeouts over what the graph shows, or over the whole run with `t`. `space` pauses. The summary left in the shell has the same, with the medians of each phase and the certificate's expiry; `--save report.json` writes it as JSON too, and `--save-body page.html` the last body.
+
+`--slo total=500,ttfb=200,connect=100,dns=50,tls=150,download=100`, in milliseconds, marks a ping that goes over any of them, counts them in the report, and makes the exit code 4. The exit code is 1 when nothing ever answered. `--bell` rings the terminal on a failed or slow ping. `--interface en0` sends from that interface, `-4` and `-6` pick the address family, `--tcp-rst fail` makes a refused connection a failure in `--tcp` mode rather than the answer it is by default, `--color red,#8cb8ff` colours the lines, and `--ymin` and `--ymax` fix the graph's range. Piped, or with `--jsonl`, `--csv` or `--json`, there is no screen: a line per ping as it happens, then the summary on stderr, or the JSON report on stdout.
 
 ### API mode: load-testing an OpenAPI spec
 

@@ -17,6 +17,7 @@ use crate::ramp::{Ramp, RampPlan, Tick};
 
 mod api;
 mod cache;
+mod cert;
 mod cli;
 mod compare;
 mod completions;
@@ -31,6 +32,7 @@ mod load;
 mod logs;
 mod metrics;
 mod openapi;
+mod ping;
 mod ramp;
 mod replay;
 mod request;
@@ -1076,6 +1078,230 @@ async fn run_logs(args: &Cli, what: &cli::LogsArgs) -> Result<(), Box<dyn std::e
     Ok(())
 }
 
+/// `pepe ping`: a request every so often, each with its phases, on a
+/// graph; or a line per ping when there's no screen to draw on
+async fn run_ping(
+    args: &Cli,
+    what: &cli::PingArgs,
+    matches: &clap::ArgMatches,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let fail = |message: String| -> ! {
+        eprintln!("error: {message}");
+        std::process::exit(2);
+    };
+    let family = match (what.ipv4, what.ipv6) {
+        (true, _) => Some(ping::Family::V4),
+        (_, true) => Some(ping::Family::V6),
+        _ => None,
+    };
+    let every = ping::interval(&what.every, std::time::Duration::from_secs(1))
+        .unwrap_or_else(|e| fail(format!("--every: {e}")));
+    let window = ping::interval(&what.window, std::time::Duration::from_secs(1))
+        .unwrap_or_else(|e| fail(format!("--window: {e}")));
+    let slo = match &what.slo {
+        Some(text) => ping::Slo::parse(text).unwrap_or_else(|e| fail(format!("--slo: {e}"))),
+        None => ping::Slo::default(),
+    };
+    let bind = what.interface.as_deref().map(|name| {
+        ping::local_address(name, family).unwrap_or_else(|e| fail(format!("--interface: {e}")))
+    });
+    let colors: Vec<ratatui::style::Color> = what
+        .color
+        .iter()
+        .flat_map(|c| c.split(','))
+        .map(str::trim)
+        .filter(|c| !c.is_empty())
+        .map(|c| {
+            ui::parse_color(c).unwrap_or_else(|| fail(format!("--color: {c:?} isn't a colour")))
+        })
+        .collect();
+    // Only a count that was typed ends the run: the default is forever
+    let count = match matches
+        .subcommand_matches("ping")
+        .and_then(|m| m.value_source("number"))
+        .or_else(|| matches.value_source("number"))
+    {
+        Some(clap::parser::ValueSource::CommandLine) => Some(u64::from(args.number)),
+        _ => None,
+    };
+    let headers = {
+        let mut map = reqwest::header::HeaderMap::new();
+        for header in &args.headers {
+            let (name, value) = request::parse_header(header).unwrap_or_else(|e| fail(e));
+            map.append(name, value);
+        }
+        map
+    };
+    let settings = ping::Settings {
+        every,
+        timeout: std::time::Duration::from_secs(u64::from(args.timeout)),
+        family,
+        bind,
+        insecure: args.insecure,
+        keep_alive: what.keep_alive,
+        follow_redirects: !args.disable_redirects,
+        refused_is_pong: what.tcp_rst == cli::Refused::Pong,
+        slo,
+        keep_body: if what.save_body.is_some() {
+            ping::BODY_SAVED
+        } else if what.show_body {
+            ping::BODY_PREVIEW
+        } else {
+            0
+        },
+        proxy: args.proxy.clone(),
+        user_agent: args.user_agent.clone(),
+        headers,
+        method: reqwest::Method::from_bytes(args.method.as_bytes()).unwrap_or(reqwest::Method::GET),
+        body: args.body().map(bytes::Bytes::from).unwrap_or_default(),
+        count,
+        duration: args.run_duration(),
+        compression: !args.disable_compression,
+    };
+    let targets = ping::targets(ping::Words {
+        words: &what.targets,
+        names: &what.name,
+        tcp: what.tcp,
+        port: what.port,
+        cmd: what.cmd,
+        all_ips: what.all_ips,
+        family,
+    })
+    .await
+    .unwrap_or_else(|e| fail(e));
+
+    let screen =
+        !args.json && !what.jsonl && !what.csv && stdout().is_terminal() && stdin().is_terminal();
+    let shared = ping::start(targets, settings.clone());
+    let mut interrupted = false;
+    if screen {
+        let check = update::Check::start();
+        let outcome = {
+            let _watchdog = CtrlCWatchdog::arm();
+            let _terminal = TerminalGuard::enter()?;
+            ui::PingScreen::new(
+                shared.clone(),
+                ui::Look {
+                    window: window.as_secs_f32(),
+                    ymin: if what.ymin_zero {
+                        Some(0)
+                    } else {
+                        what.ymin.map(|ms| ms * 1000)
+                    },
+                    ymax: what.ymax.map(|ms| ms * 1000),
+                    simple: what.simple_graphics,
+                    colors,
+                    bell: what.bell,
+                },
+            )
+            .run()
+            .await
+        };
+        shared.stop();
+        outcome?;
+        {
+            let state = shared.lock();
+            interrupted = !state.done;
+            print_report(&ping::report(&state, &settings));
+        }
+        say_if_newer(check).await;
+    } else {
+        // No screen: each ping as a line, as it happens, and the summary
+        // at the end; JSON goes to stdout alone, the summary to stderr
+        let (jsonl, csv, json) = (what.jsonl, what.csv, args.json);
+        if csv {
+            println!("{}", ping::CSV_HEADER);
+        }
+        let mut printed: Vec<usize> = vec![0; shared.lock().targets.len()];
+        let mut pump = tokio::time::interval(std::time::Duration::from_millis(50));
+        let bell = what.bell;
+        loop {
+            tokio::select! {
+                _ = pump.tick() => {}
+                _ = tokio::signal::ctrl_c() => {
+                    interrupted = true;
+                    shared.stop();
+                }
+            }
+            let mut state = shared.lock();
+            let mut lines = Vec::new();
+            for (index, t) in state.targets.iter().enumerate() {
+                let seen = t.recent.len();
+                let dropped = (t.sent as usize).saturating_sub(seen);
+                let from = printed[index].saturating_sub(dropped).min(seen);
+                for sample in t.recent.iter().skip(from) {
+                    let line = if jsonl {
+                        ping::sample_json(sample, &t.target).to_string()
+                    } else if csv {
+                        ping::sample_csv(sample, &t.target)
+                    } else if json {
+                        continue;
+                    } else {
+                        ping::sample_line(sample, &t.target)
+                    };
+                    lines.push((sample.at, line));
+                }
+                printed[index] = seen + dropped;
+            }
+            let rang = std::mem::take(&mut state.bells);
+            let done = state.done || shared.stopped();
+            drop(state);
+            lines.sort_by_key(|l| l.0);
+            for (_, line) in lines {
+                println!("{line}");
+            }
+            if bell && rang > 0 {
+                eprint!("\x07");
+            }
+            if done {
+                break;
+            }
+        }
+        let state = shared.lock();
+        if json {
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&ping::json_report(&state, &settings, interrupted))?
+            );
+        } else if jsonl || csv {
+            eprint!("{}", ping::report(&state, &settings));
+        } else {
+            print_report(&ping::report(&state, &settings));
+        }
+    }
+    let state = shared.lock();
+    if let Some(path) = &what.save {
+        let report =
+            serde_json::to_string_pretty(&ping::json_report(&state, &settings, interrupted))?;
+        if let Err(e) = std::fs::write(path, report) {
+            eprintln!("couldn't write {}: {e}", path.display());
+        }
+    }
+    if let Some(path) = &what.save_body {
+        match state.targets.iter().find_map(|t| t.last_body.as_ref()) {
+            Some(body) => {
+                if let Err(e) = std::fs::write(path, body) {
+                    eprintln!("couldn't write {}: {e}", path.display());
+                }
+            }
+            None => eprintln!("no body to write to {}", path.display()),
+        }
+    }
+    // Like ping: 1 when nothing ever answered; 4 when the SLO was broken
+    let code = if state.any_violation() {
+        4
+    } else if state.nothing_answered() {
+        1
+    } else {
+        0
+    };
+    drop(state);
+    if code != 0 {
+        std::process::exit(code);
+    }
+    Ok(())
+}
+
 /// `pepe compare before.json after.json`: what moved, as a report or as
 /// JSON; with --gate, exit 1 when it is a regression
 fn run_compare(args: &Cli, what: &cli::CompareArgs) -> Result<(), Box<dyn std::error::Error>> {
@@ -1195,6 +1421,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     if let Some(cli::Command::Logs(what)) = args.command.clone() {
         return run_logs(&args, &what).await;
+    }
+    if let Some(cli::Command::Ping(what)) = args.command.clone() {
+        if let Err(e) = args.validate() {
+            eprintln!("{}", e);
+            std::process::exit(1);
+        }
+        return run_ping(&args, &what, &matches).await;
     }
     if let Some(cli::Command::Compare(what)) = args.command.clone() {
         return run_compare(&args, &what);

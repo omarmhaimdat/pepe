@@ -75,6 +75,23 @@ Say more about what the numbers mean.
       and day they go back, with the paths, the clients, the error log's
       messages by cause and the lines themselves — next release
 
+## 3b. Every day
+
+A load test is run now and then; a latency check is run all day. The
+same engine at one request a second is the reason to have pepe open.
+
+- [x] **`pepe ping`** (M): ping, with HTTP instead of ICMP, and a graph.
+      One or several targets, each request split into DNS, connect, TLS,
+      first byte and download; loss, jitter and percentiles over the
+      window or the run; the TLS session (full or resumed) and the
+      certificate's expiry; SLO limits that mark pings and set the exit
+      code; TCP pings, commands, cloud regions and address ranges as
+      targets; JSON, JSON Lines or CSV when there's no terminal — next
+      release
+- [ ] **A ping in the background** (S). `pepe ping --daemon` keeps the
+      JSON Lines going to a file, so the screen can be opened on a run
+      that started yesterday.
+
 ## 4. Scenarios and realism
 
 Load that looks like production.
