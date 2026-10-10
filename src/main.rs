@@ -1543,6 +1543,7 @@ async fn run_ping(
         count,
         duration: args.run_duration(),
         compression: !args.disable_compression,
+        http1: what.http1,
     };
     let targets = ping::targets(ping::Words {
         words: &what.targets,

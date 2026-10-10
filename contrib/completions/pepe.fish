@@ -350,6 +350,7 @@ complete -c pepe -n "__fish_pepe_using_subcommand ping" -s s -l simple-graphics 
 complete -c pepe -n "__fish_pepe_using_subcommand ping" -l jsonl -d 'No screen: one JSON object per ping on stdout, as it happens'
 complete -c pepe -n "__fish_pepe_using_subcommand ping" -l csv -d 'No screen: one CSV line per ping on stdout, under a header'
 complete -c pepe -n "__fish_pepe_using_subcommand ping" -l show-body -d 'Keep the first kilobyte of each body for the inspector'
+complete -c pepe -n "__fish_pepe_using_subcommand ping" -l http1 -d 'Speak HTTP/1.1 even when the server offers HTTP/2; without it a ping takes h2 when the server offers it through ALPN'
 complete -c pepe -n "__fish_pepe_using_subcommand ping" -l once -d 'One diagnosis and out: three quick pings, then the last one\'s phases, what answered, and what to look at; no screen'
 complete -c pepe -n "__fish_pepe_using_subcommand ping" -s h -l help -d 'Print help'
 complete -c pepe -n "__fish_pepe_using_subcommand ping" -s k -l insecure -d 'Accept invalid TLS certificates (self-signed, expired, wrong host)'

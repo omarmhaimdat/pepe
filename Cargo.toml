@@ -1,6 +1,6 @@
 [package]
 name = "pepe"
-version = "0.31.0"
+version = "0.32.0"
 authors = ["Omar MHAIMDAT"]
 edition = "2021"
 rust-version = "1.85"
@@ -28,6 +28,10 @@ reqwest = { version = "0.12.12", default-features = false, features = [
 httparse = "1"
 tokio-rustls = { version = "0.26", default-features = false, features = ["ring", "tls12"] }
 webpki-roots = "1"
+# HTTP/2 for `pepe ping` (src/ping.rs), when the server offers it through
+# ALPN: hyper's own implementation, over the same rustls stream
+h2 = "0.4"
+http = "1"
 # Finding the ends of lines and fields in logs (src/logs.rs); in the tree
 # already, under httparse's neighbours and regex-lite's
 memchr = "2"

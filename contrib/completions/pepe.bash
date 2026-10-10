@@ -1287,7 +1287,7 @@ _pepe() {
             return 0
             ;;
         pepe__subcmd__ping)
-            opts="-4 -6 -0 -s -h -n -z -m -H -t -d -p -k -i -c -u --every --window --name --color --all-ips --interface --tcp --port --tcp-rst --cmd --keep-alive --slo --bell --ymin --ymax --simple-graphics --jsonl --csv --save --show-body --save-body --once --help --number --duration --method --headers --timeout --warmup --threads --rate --body --proxy --insecure --disable-compression --disable-keepalive --disable-redirects --json --trace-header --snapshot --allow-host --max-requests --max-rate --max-concurrency --dry-run --fail-if --metrics --setup --config --write-config --concurrency --user-agent"
+            opts="-4 -6 -0 -s -h -n -z -m -H -t -d -p -k -i -c -u --every --window --name --color --all-ips --interface --tcp --port --tcp-rst --cmd --keep-alive --slo --bell --ymin --ymax --simple-graphics --jsonl --csv --save --show-body --save-body --http1 --once --help --number --duration --method --headers --timeout --warmup --threads --rate --body --proxy --insecure --disable-compression --disable-keepalive --disable-redirects --json --trace-header --snapshot --allow-host --max-requests --max-rate --max-concurrency --dry-run --fail-if --metrics --setup --config --write-config --concurrency --user-agent"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0

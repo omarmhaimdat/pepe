@@ -6,6 +6,62 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+## [0.32.0](https://github.com/omarmhaimdat/pepe/compare/v0.31.0...v0.32.0) - 2026-10-10
+
+### Added
+
+- *(ping)* HTTP/2 when the server offers it ([#142](https://github.com/omarmhaimdat/pepe/pull/142))
+
+  ## What
+
+  A ping takes HTTP/2 when the server offers it through ALPN, which most
+  do over TLS, and says so: `HTTP/2 200` in the `--once` line and the
+  pings list, `"http_version": "HTTP/2"` in the report, `h2` under the TLS
+  details. The phases are the same, the first byte being the response's
+  headers. `--http1` stays on HTTP/1.1, to compare the two. A server that
+  offers only HTTP/1.1 is noted among the findings. `--keep-alive` keeps
+  the HTTP/2 connection, and the pings after the first reuse it.
+
+  ```
+  $ pepe ping https://example.com --once
+    dns 2.02ms → connect 58.16ms → tls 60.32ms → first byte 67.05ms → download 3.04ms · 190.8ms in all
+    HTTP/2 200 · text/html · 334 B · 104.20.23.154:443 from 192.168.0.164 · TLS 1.3 TLS13_AES_256_GCM_SHA384
+  ```
+
+  ## Why
+
+  Ping makes the protocol gap visible: curl and httpstat show `HTTP/2 200`
+  where pepe showed `HTTP/1.1`, and the phase breakdown is the most useful
+  thing pepe has for a single request, so it should see what the server
+  actually speaks.
+
+  ## How
+
+  - The ping's TLS config offers `h2` then `http/1.1` (unless `--http1`);
+  after the handshake, if `h2` was negotiated, `h2::client::handshake`
+  takes the stream and its connection is driven by a task of its own. The
+  kept connection has a third kind, the h2 sender, so `--keep-alive` works
+  as it does over HTTP/1.1.
+  - `h2_exchange` builds the request from the run's headers less `Host`
+  and `Connection` (HTTP/2 has `:authority` and no connection headers),
+  times the first byte at the response's headers and the download to the
+  end of the body, releasing flow-control capacity as it reads. Redirects
+  go through the same loop as before.
+  - The dependency is hyper's `h2` crate (and `http`, already in the
+  tree); only `h2` and `tokio-util` are new in the lock file. The
+  load-testing modes still speak HTTP/1.1, where pepe's engine is fastest;
+  the roadmap's "not now" entry says so.
+
+  ## Checked
+
+  - `cargo test --locked`: 296 passed, including an in-process h2 server
+  the exchange runs against twice on one connection; clippy with `-D
+  warnings` and `cargo fmt --check` clean
+  - By hand against example.com: `--once` over HTTP/2 and with `--http1`,
+  and a `--keep-alive --json` ping showing `HTTP/2`, `h2`, and two of
+  three pings on the kept connection
+
+
 ## [0.31.0](https://github.com/omarmhaimdat/pepe/compare/v0.30.0...v0.31.0) - 2026-10-10
 
 ### Added

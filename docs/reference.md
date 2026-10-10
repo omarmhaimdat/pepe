@@ -282,14 +282,17 @@ Options:
   -u, --user-agent <USER_AGENT>
           User-Agent string, default is pepe/{version}
 
-      --once
-          One diagnosis and out: three quick pings, then the last one's phases, what answered, and what to look at; no screen
+      --http1
+          Speak HTTP/1.1 even when the server offers HTTP/2; without it a ping takes h2 when the server offers it through ALPN
 
   -p, --proxy <PROXY>
           Proxy server URL: http://user:pass@host:port or socks5://host:port
 
   -k, --insecure
           Accept invalid TLS certificates (self-signed, expired, wrong host)
+
+      --once
+          One diagnosis and out: three quick pings, then the last one's phases, what answered, and what to look at; no screen
 
       --disable-compression
           Disable HTTP compression, e.g. gzip
