@@ -210,7 +210,7 @@ Keys are the long flags' names; the on/off ones are said the positive way. A key
 
 ```bash
 pepe -n 1000 -c 20 -H 'Accept: application/json' -H 'X-Request-Id: load' https://example.com
-pepe -n 1000 -c 10 -m PUT -d @payload.json -H 'Content-Type: application/json' https://example.com/items/1
+pepe -n 1000 -c 10 -m PUT -d "$(cat payload.json)" -H 'Content-Type: application/json' https://example.com/items/1
 ```
 
 Repeated headers are kept (several `Cookie` headers are sent as several), and a `User-Agent` given with `-H` wins over the default.
