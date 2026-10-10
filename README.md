@@ -444,7 +444,7 @@ pepe ping · https://example.com/ · 3 pings
   · answered by a cache (cf-cache-status: HIT): the server itself wasn't measured
 ```
 
-`--slo total=500,ttfb=200,connect=100,dns=50,tls=150,download=100`, in milliseconds, marks a ping that goes over any of them, counts them in the report, and makes the exit code 4. The exit code is 1 when nothing ever answered. `--bell` rings the terminal on a failed or slow ping. `--interface en0` sends from that interface, `-4` and `-6` pick the address family, `--tcp-rst fail` makes a refused connection a failure in `--tcp` mode rather than the answer it is by default, `--color red,#8cb8ff` colours the lines, and `--ymin` and `--ymax` fix the graph's range. Piped, or with `--jsonl`, `--csv` or `--json`, there is no screen: a line per ping as it happens, then the summary on stderr, or the JSON report on stdout.
+Two ping reports can be held against each other with `pepe compare before.json after.json`, phase by phase (see [Comparing two runs](#comparing-two-runs)). `--slo total=500,ttfb=200,connect=100,dns=50,tls=150,download=100`, in milliseconds, marks a ping that goes over any of them, counts them in the report, and makes the exit code 4. The exit code is 1 when nothing ever answered. `--bell` rings the terminal on a failed or slow ping. `--interface en0` sends from that interface, `-4` and `-6` pick the address family, `--tcp-rst fail` makes a refused connection a failure in `--tcp` mode rather than the answer it is by default, `--color red,#8cb8ff` colours the lines, and `--ymin` and `--ymax` fix the graph's range. Piped, or with `--jsonl`, `--csv` or `--json`, there is no screen: a line per ping as it happens, then the summary on stderr, or the JSON report on stdout.
 
 ### API mode: load-testing an OpenAPI spec
 
@@ -552,7 +552,16 @@ pepe · compare before.json → after.json
   ▲ A long tail is new: p99 is 5.4× the median, was 4.0×
 ```
 
-The verdict is one of **Faster**, **About the same**, **Slower**, and, when failures appeared or rose, **Worse** (or **Better** when they fell): failures outrank speed. Two reports of different targets or concurrency are compared all the same, with that said first. Ramp reports compare their capacity estimate and the level that held. `--gate` exits 1 on Slower or Worse, for CI, and `--json` prints the verdict, each number before and after with its change and the spread it was held against, the findings, and the verdict as a badge's three parts (`pepe | slower · p99 +38%`, in a colour) for shields.io and the like.
+The verdict is one of **Faster**, **About the same**, **Slower**, and, when failures appeared or rose, **Worse** (or **Better** when they fell): failures outrank speed. Two reports of different targets or concurrency are compared all the same, with that said first. Ramp reports compare their capacity estimate and the level that held. Ping reports (`pepe ping --json`, or `--save`) compare the median, the p99, the pings lost, and each phase's median, so a slower connect or a slower handshake is told from a slower server:
+
+```
+pepe · compare before.json → after.json
+▲ Slower · 600 → 600 requests · p99 50.00ms → 72.00ms
+  ▲ Median up 50%: 40.00ms → 60.00ms
+  ▲ Connect up 150%: 10.00ms → 25.00ms
+  ▲ TLS handshake up 60%: 25.00ms → 40.00ms
+  ✔ First byte within the usual spread: 6.00ms → 6.00ms (±5%)
+``` `--gate` exits 1 on Slower or Worse, for CI, and `--json` prints the verdict, each number before and after with its change and the spread it was held against, the findings, and the verdict as a badge's three parts (`pepe | slower · p99 +38%`, in a colour) for shields.io and the like.
 
 `--svg card.svg` also draws the verdict as a card, the way the dashboard draws, for a README, a site or a report:
 

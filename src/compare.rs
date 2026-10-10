@@ -137,6 +137,22 @@ pub struct Side {
     pub capacity_per_second: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub holds_concurrency: Option<u64>,
+    /// A ping's interval, when the report is a ping's
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub every_s: Option<f64>,
+    /// A ping's phases, their medians
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub dns_ms: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub connect_ms: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tls_ms: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tls_resumed_ms: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ttfb_ms: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub download_ms: Option<f64>,
     /// Relative spread of one request's latency: std dev over the mean
     #[serde(skip)]
     cv: f64,
@@ -147,13 +163,16 @@ pub struct Side {
 
 impl Side {
     /// A run report (`pepe --json`, `--snapshot`, API, flow or replay),
-    /// or a ramp's
+    /// a ramp's, or a ping's
     pub fn read(path: &Path) -> Result<Self, String> {
         let text = std::fs::read_to_string(path)
             .map_err(|e| format!("can't read {}: {e}", path.display()))?;
         let doc: Value = serde_json::from_str(&text)
             .map_err(|e| format!("{} is not a JSON report: {e}", path.display()))?;
         let file = path.display().to_string();
+        if doc.get("mode").and_then(Value::as_str) == Some("ping") {
+            return Self::of_ping(file, &doc);
+        }
         if let Some(summary) = doc.get("summary") {
             return Ok(Self::of_run(file, &doc, summary));
         }
@@ -161,8 +180,62 @@ impl Side {
             return Ok(Self::of_ramp(file, &doc));
         }
         Err(format!(
-            "{file} is not a pepe report: no `summary` (a run) and no `steps` (a ramp)"
+            "{file} is not a pepe report: no `summary` (a run), no `steps` (a ramp) and no `targets` (a ping)"
         ))
+    }
+
+    /// A ping's report (`pepe ping --json`, `--save`): its first target.
+    /// A lost ping is a failed request; the jitter stands in for the
+    /// latency's spread, which a ping report doesn't have
+    fn of_ping(file: String, doc: &Value) -> Result<Self, String> {
+        let targets = doc
+            .get("targets")
+            .and_then(Value::as_array)
+            .filter(|t| !t.is_empty())
+            .ok_or_else(|| format!("{file} is a ping report with no target in it"))?;
+        let t = &targets[0];
+        let num = |v: &Value, key: &str| v.get(key).and_then(Value::as_f64);
+        let sent = num(t, "sent").unwrap_or(0.0);
+        let lost = num(t, "lost").unwrap_or(0.0);
+        let latency = t.get("latency_ms");
+        let avg = latency.and_then(|l| num(l, "avg")).unwrap_or(0.0);
+        let jitter = latency.and_then(|l| num(l, "jitter")).unwrap_or(0.0);
+        let phase = |name: &str| {
+            t.get("phases_ms")
+                .and_then(|p| p.get(name))
+                .and_then(|p| num(p, "median_ms"))
+        };
+        let main_failure = t
+            .get("failures")
+            .and_then(Value::as_object)
+            .and_then(|f| f.iter().max_by_key(|(_, n)| n.as_u64().unwrap_or(0)))
+            .map(|(cause, _)| cause.clone());
+        Ok(Side {
+            file,
+            target: t
+                .get("target")
+                .and_then(Value::as_str)
+                .map(|url| format!("ping {url}")),
+            concurrency: None,
+            requests: sent as u64,
+            failed_percent: if sent > 0.0 { lost / sent * 100.0 } else { 0.0 },
+            median_ms: latency.and_then(|l| num(l, "p50")),
+            p99_ms: latency.and_then(|l| num(l, "p99")),
+            requests_per_second: None,
+            capacity_per_second: None,
+            holds_concurrency: None,
+            every_s: num(doc, "every_s"),
+            dns_ms: phase("dns"),
+            connect_ms: phase("connect"),
+            tls_ms: phase("tls_full"),
+            tls_resumed_ms: phase("tls_resumed"),
+            ttfb_ms: phase("ttfb"),
+            download_ms: phase("download"),
+            // The mean difference between one ping and the next is about
+            // 1.1 standard deviations of a steady series
+            cv: if avg > 0.0 { jitter / avg / 1.13 } else { 0.0 },
+            main_failure,
+        })
     }
 
     fn of_run(file: String, doc: &Value, summary: &Value) -> Self {
@@ -203,6 +276,13 @@ impl Side {
             requests_per_second: num(summary, "requests_per_second"),
             capacity_per_second: None,
             holds_concurrency: None,
+            every_s: None,
+            dns_ms: None,
+            connect_ms: None,
+            tls_ms: None,
+            tls_resumed_ms: None,
+            ttfb_ms: None,
+            download_ms: None,
             cv: if avg > 0.0 { sd / avg } else { 0.0 },
             main_failure,
         }
@@ -228,6 +308,13 @@ impl Side {
             requests_per_second: None,
             capacity_per_second: capacity.and_then(|c| num(c, "requests_per_second")),
             holds_concurrency: doc.get("holds_concurrency").and_then(Value::as_u64),
+            every_s: None,
+            dns_ms: None,
+            connect_ms: None,
+            tls_ms: None,
+            tls_resumed_ms: None,
+            ttfb_ms: None,
+            download_ms: None,
             cv: 0.0,
             main_failure: None,
         }
@@ -265,6 +352,14 @@ pub fn compare(before: &Side, after: &Side) -> Comparison {
             findings.push(note(
                 Level::Degraded,
                 format!("Different concurrency: {a}, then {b}"),
+            ));
+        }
+    }
+    if let (Some(a), Some(b)) = (before.every_s, after.every_s) {
+        if a != b {
+            findings.push(note(
+                Level::Degraded,
+                format!("Different intervals: a ping every {a}s, then every {b}s"),
             ));
         }
     }
@@ -391,6 +486,27 @@ pub fn compare(before: &Side, after: &Side) -> Comparison {
         true,
         &ms,
     );
+    // A ping's phases: each wobbles about as much as the whole does
+    for (metric, what, a, b) in [
+        ("dns_ms", "DNS lookup", before.dns_ms, after.dns_ms),
+        ("connect_ms", "Connect", before.connect_ms, after.connect_ms),
+        ("tls_ms", "TLS handshake", before.tls_ms, after.tls_ms),
+        (
+            "tls_resumed_ms",
+            "Resumed TLS handshake",
+            before.tls_resumed_ms,
+            after.tls_resumed_ms,
+        ),
+        ("ttfb_ms", "First byte", before.ttfb_ms, after.ttfb_ms),
+        (
+            "download_ms",
+            "Download",
+            before.download_ms,
+            after.download_ms,
+        ),
+    ] {
+        speed(metric, what, a, b, latency_noise(0.5), true, &ms);
+    }
     // With fixed concurrency the rate follows the median, and wobbles as
     // much as it does
     speed(
@@ -494,6 +610,12 @@ fn badge(outcome: Outcome, changes: &[Change], before: &Side, after: &Side) -> B
                     "median_ms" => "median",
                     "requests_per_second" => "req/s",
                     "capacity_per_second" => "capacity",
+                    "dns_ms" => "dns",
+                    "connect_ms" => "connect",
+                    "tls_ms" => "tls",
+                    "tls_resumed_ms" => "tls resumed",
+                    "ttfb_ms" => "first byte",
+                    "download_ms" => "download",
                     other => other,
                 };
                 Some(format!(
@@ -545,9 +667,14 @@ impl Comparison {
         }
         if self.before.failed_percent > 0.0 || self.after.failed_percent > 0.0 {
             head.push(format!(
-                "{} → {} failed",
+                "{} → {} {}",
                 pct(self.before.failed_percent),
-                pct(self.after.failed_percent)
+                pct(self.after.failed_percent),
+                if self.before.every_s.is_some() {
+                    "lost"
+                } else {
+                    "failed"
+                }
             ));
         }
         let mut out = format!(
@@ -600,6 +727,12 @@ impl Comparison {
                     "median_ms" => ("median", &ms, true),
                     "requests_per_second" => ("throughput", &rate, false),
                     "capacity_per_second" => ("capacity", &rate, false),
+                    "dns_ms" => ("dns", &ms, true),
+                    "connect_ms" => ("connect", &ms, true),
+                    "tls_ms" => ("tls", &ms, true),
+                    "tls_resumed_ms" => ("tls resumed", &ms, true),
+                    "ttfb_ms" => ("first byte", &ms, true),
+                    "download_ms" => ("download", &ms, true),
                     _ => continue,
                 };
             let (word, tone) = match (change.significant, change.change_percent) {
@@ -889,7 +1022,128 @@ mod tests {
             (side.requests, side.p99_ms, side.target),
             (10, Some(2.0), None)
         );
+        std::fs::write(
+            &path,
+            ping(60, 3, 40.0, 44.0, 61.0, 2.0, 10.0, 25.0, 6.0).to_string(),
+        )
+        .unwrap();
+        let side = Side::read(&path).unwrap();
+        assert_eq!(side.target.as_deref(), Some("ping https://api.test/"));
+        assert_eq!((side.requests, side.failed_percent), (60, 5.0));
+        assert_eq!((side.median_ms, side.p99_ms), (Some(44.0), Some(61.0)));
+        assert_eq!(
+            (side.connect_ms, side.tls_ms, side.ttfb_ms),
+            (Some(10.0), Some(25.0), Some(6.0))
+        );
+        assert_eq!(side.every_s, Some(1.0));
+        std::fs::write(&path, r#"{"mode": "ping", "targets": []}"#).unwrap();
+        assert!(Side::read(&path).unwrap_err().contains("no target"));
         std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    /// A ping report of one target: `sent` pings, `lost` of them, with
+    /// the latencies and the medians of its phases
+    #[allow(clippy::too_many_arguments)]
+    fn ping(
+        sent: u64,
+        lost: u64,
+        avg: f64,
+        p50: f64,
+        p99: f64,
+        dns: f64,
+        connect: f64,
+        tls: f64,
+        ttfb: f64,
+    ) -> Value {
+        let phase = |median: f64| serde_json::json!({"count": sent - lost, "median_ms": median, "p99_ms": median * 2.0, "max_ms": median * 3.0});
+        serde_json::json!({
+            "schema_version": 1,
+            "mode": "ping",
+            "every_s": 1.0,
+            "targets": [{
+                "name": "api",
+                "target": "https://api.test/",
+                "sent": sent,
+                "answered": sent - lost,
+                "lost": lost,
+                "timeouts": lost,
+                "latency_ms": {"avg": avg, "jitter": 2.0, "p50": p50, "p99": p99, "min": p50 * 0.9, "max": p99},
+                "phases_ms": {"dns": phase(dns), "connect": phase(connect), "tls_full": phase(tls), "tls_resumed": null, "ttfb": phase(ttfb), "download": phase(0.5)},
+                "failures": if lost > 0 { serde_json::json!({"no answer in 5s": lost}) } else { serde_json::json!({}) }
+            }]
+        })
+    }
+
+    #[test]
+    fn two_ping_reports_compare_their_phases() {
+        let a = Side::of_ping(
+            "before.json".into(),
+            &ping(600, 0, 40.0, 40.0, 50.0, 2.0, 10.0, 25.0, 6.0),
+        )
+        .unwrap();
+        // The server moved further away: connecting and the handshake
+        // both take longer, the server itself is as it was
+        let b = Side::of_ping(
+            "after.json".into(),
+            &ping(600, 0, 60.0, 60.0, 72.0, 2.0, 25.0, 40.0, 6.0),
+        )
+        .unwrap();
+        let c = compare(&a, &b);
+        assert_eq!(c.verdict, Outcome::Slower);
+        let texts: Vec<&str> = c.findings.iter().map(|f| f.text.as_str()).collect();
+        assert!(
+            texts
+                .iter()
+                .any(|t| t.starts_with("Connect up 150%: 10.00ms → 25.00ms")),
+            "{texts:?}"
+        );
+        assert!(
+            texts.iter().any(|t| t.starts_with("TLS handshake up 60%")),
+            "{texts:?}"
+        );
+        assert!(
+            texts
+                .iter()
+                .any(|t| t.starts_with("First byte within the usual spread")),
+            "{texts:?}"
+        );
+        assert!(
+            texts.iter().any(|t| t.starts_with("Median up 50%")),
+            "{texts:?}"
+        );
+        assert!(!texts.iter().any(|t| t.contains("Throughput")), "{texts:?}");
+        assert_eq!(c.badge.message, "slower · connect +150%");
+        assert!(
+            c.report()
+                .contains("pepe · compare before.json → after.json"),
+            "{}",
+            c.report()
+        );
+        // Lost pings are failures, said as lost
+        let lossy = Side::of_ping(
+            "lossy.json".into(),
+            &ping(600, 30, 40.0, 40.0, 50.0, 2.0, 10.0, 25.0, 6.0),
+        )
+        .unwrap();
+        let c = compare(&a, &lossy);
+        assert_eq!(c.verdict, Outcome::Worse);
+        assert!(c.report().contains("0% → 5.0% lost"), "{}", c.report());
+        assert!(
+            c.findings[0]
+                .text
+                .starts_with("Failures appeared: 5.0% of requests, mostly no answer in 5s"),
+            "{}",
+            c.findings[0].text
+        );
+        // Different intervals are said first
+        let mut faster = ping(600, 0, 40.0, 40.0, 50.0, 2.0, 10.0, 25.0, 6.0);
+        faster["every_s"] = serde_json::json!(0.2);
+        let f = Side::of_ping("fast.json".into(), &faster).unwrap();
+        let c = compare(&a, &f);
+        assert_eq!(
+            c.findings[0].text,
+            "Different intervals: a ping every 1s, then every 0.2s"
+        );
     }
 
     #[test]
