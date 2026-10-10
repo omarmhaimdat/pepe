@@ -1,0 +1,46 @@
+name: Bug
+description: Something pepe does wrong
+labels: [bug]
+body:
+  - type: input
+    id: version
+    attributes:
+      label: pepe version
+      description: What `pepe --version` prints. `pepe self-update` installs the latest; please check the bug is still there on it.
+      placeholder: pepe 0.33.0
+    validations:
+      required: true
+  - type: input
+    id: platform
+    attributes:
+      label: Platform
+      description: OS and version, the terminal, and how pepe was installed (installer, Homebrew, Nix, Docker, source).
+      placeholder: macOS 15.1, iTerm2, installer
+    validations:
+      required: true
+  - type: textarea
+    id: command
+    attributes:
+      label: The command
+      description: The exact command, with the target replaced if it is private. `--dry-run` prints what pepe would send, with secrets masked, and is safe to paste.
+      render: shell
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: What happened
+      description: The output, the report, or a screenshot of the screen. For a screen, the terminal's size helps (`tput cols; tput lines`).
+    validations:
+      required: true
+  - type: textarea
+    id: more
+    attributes:
+      label: Anything else
+      description: A `pepe.toml`, a flow file, a spec, a log line, or what the target is (nginx, a framework, a CDN) when it matters.
