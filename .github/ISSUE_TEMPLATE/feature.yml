@@ -22,4 +22,4 @@ body:
     id: proposal
     attributes:
       label: What pepe could do
-      description: If you have a shape in mind: a flag, a view, a field in the report, an example of the output.
+      description: "If you have a shape in mind: a flag, a view, a field in the report, an example of the output."
