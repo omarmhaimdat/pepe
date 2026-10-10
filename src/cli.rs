@@ -226,7 +226,12 @@ pub enum Command {
     Compare(CompareArgs),
     /// Print the JSON Schema of a report: run (the default), ramp, ping or compare
     Schema(SchemaArgs),
+    /// Serve pepe's modes as tools for an agent over stdio (the Model Context Protocol); the guardrail flags given here hold for every call
+    Mcp(McpArgs),
 }
+
+#[derive(clap::Args, Debug, Clone, PartialEq, Default)]
+pub struct McpArgs {}
 
 #[derive(clap::Args, Debug, Clone, PartialEq, Default)]
 pub struct SchemaArgs {
