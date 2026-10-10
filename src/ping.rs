@@ -201,6 +201,8 @@ pub struct Settings {
     pub count: Option<u64>,
     pub duration: Option<Duration>,
     pub compression: bool,
+    /// Speak HTTP/1.1 even when the server offers HTTP/2 through ALPN
+    pub http1: bool,
 }
 
 /// Where a target's pings go
@@ -973,9 +975,12 @@ async fn pinger(shared: Arc<Shared>, index: usize) {
         (state.targets[index].target.clone(), state.started)
     };
     let settings = shared.settings.clone();
-    let tls = Arc::new(TlsConnector::from(Arc::new(crate::direct::tls_config(
-        settings.insecure,
-    ))));
+    // HTTP/2 when the server offers it, unless told to stay on HTTP/1.1
+    let mut config = crate::direct::tls_config(settings.insecure);
+    if !settings.http1 {
+        config.alpn_protocols = vec![b"h2".to_vec(), b"http/1.1".to_vec()];
+    }
+    let tls = Arc::new(TlsConnector::from(Arc::new(config)));
     let mut pinger = Pinger {
         shared: shared.clone(),
         index,
@@ -1200,7 +1205,19 @@ impl Pinger {
                         .map_err(|e| format!("TLS: {}", root_cause(&e)))?;
                     phases.tls = Some(began.elapsed());
                     let tls = tls_details(&stream);
-                    (Stream::Tls(Box::new(stream)), Some(tls))
+                    if tls.alpn.as_deref() == Some("h2") {
+                        let (send, connection) = h2::client::handshake(stream)
+                            .await
+                            .map_err(|e| format!("HTTP/2: {e}"))?;
+                        // The connection is driven by its own task for as
+                        // long as something holds its sender
+                        tokio::spawn(async move {
+                            let _ = connection.await;
+                        });
+                        (Stream::H2(send), Some(tls))
+                    } else {
+                        (Stream::Tls(Box::new(stream)), Some(tls))
+                    }
                 } else {
                     (Stream::Plain(stream), None)
                 };
@@ -1217,6 +1234,26 @@ impl Pinger {
         sample.remote = kept.remote;
         sample.local = kept.local;
         sample.tls = kept.tls.clone();
+        if let Stream::H2(send) = &kept.stream {
+            let send = send.clone();
+            let answered = h2_exchange(
+                send,
+                url,
+                method,
+                &settings.headers,
+                body,
+                settings,
+                sample,
+                &mut phases,
+                saved,
+            )
+            .await?;
+            sample.phases.add(&phases);
+            if settings.keep_alive {
+                self.kept = Some(kept);
+            }
+            return Ok(answered);
+        }
 
         // The request: the run's headers, Host, User-Agent and Accept
         let mut headers = settings.headers.clone();
@@ -1404,10 +1441,103 @@ impl Pinger {
     }
 }
 
-/// A connection's two kinds of stream
+/// A connection's kinds of stream: plain, TLS, or TLS carrying HTTP/2,
+/// which h2 reads and writes on its own
 enum Stream {
     Plain(TcpStream),
     Tls(Box<TlsStream<TcpStream>>),
+    H2(h2::client::SendRequest<Bytes>),
+}
+
+/// A request and its response over HTTP/2, on a connection h2 drives.
+/// The first byte is the response's headers; the download is the rest.
+#[allow(clippy::too_many_arguments)]
+async fn h2_exchange(
+    send: h2::client::SendRequest<Bytes>,
+    url: &Url,
+    method: &Method,
+    run_headers: &HeaderMap,
+    body: &Bytes,
+    settings: &Settings,
+    sample: &mut Sample,
+    phases: &mut Phases,
+    saved: &mut Option<Vec<u8>>,
+) -> Result<(u16, Option<String>), String> {
+    let mut request = http::Request::builder()
+        .method(method.clone())
+        .uri(url.as_str());
+    for (name, value) in run_headers {
+        // HTTP/2 has :authority for the host and no connection headers
+        if name == HOST || name.as_str().eq_ignore_ascii_case("connection") {
+            continue;
+        }
+        request = request.header(name.clone(), value.clone());
+    }
+    if !run_headers.contains_key(USER_AGENT) {
+        request = request.header(USER_AGENT, settings.user_agent.as_str());
+    }
+    if !run_headers.contains_key(ACCEPT) {
+        request = request.header(ACCEPT, "*/*");
+    }
+    if settings.compression && !run_headers.contains_key("accept-encoding") {
+        request = request.header("accept-encoding", "gzip, br");
+    }
+    let request = request
+        .body(())
+        .map_err(|e| format!("HTTP/2 request: {e}"))?;
+    let sent_at = Instant::now();
+    let mut send = send.ready().await.map_err(|e| format!("HTTP/2: {e}"))?;
+    let (response, mut stream) = send
+        .send_request(request, body.is_empty())
+        .map_err(|e| format!("HTTP/2: {e}"))?;
+    if !body.is_empty() {
+        stream
+            .send_data(body.clone(), true)
+            .map_err(|e| format!("HTTP/2 body: {e}"))?;
+    }
+    let response = response.await.map_err(|e| format!("HTTP/2: {e}"))?;
+    phases.ttfb = Some(sent_at.elapsed());
+    let body_began = Instant::now();
+    let status = response.status().as_u16();
+    sample.status = Some(status);
+    sample.version = Some("HTTP/2".into());
+    sample.headers = response
+        .headers()
+        .iter()
+        .map(|(k, v)| {
+            (
+                k.to_string(),
+                String::from_utf8_lossy(v.as_bytes()).into_owned(),
+            )
+        })
+        .collect();
+    let location = sample
+        .headers
+        .iter()
+        .find(|(name, _)| name.eq_ignore_ascii_case("location"))
+        .map(|(_, value)| value.clone());
+    let keep_body = settings.keep_body;
+    let mut kept_body: Vec<u8> = Vec::new();
+    let mut bytes = 0u64;
+    let mut incoming = response.into_body();
+    while let Some(chunk) = incoming.data().await {
+        let chunk = chunk.map_err(|e| format!("HTTP/2 body: {e}"))?;
+        bytes += chunk.len() as u64;
+        if kept_body.len() < keep_body {
+            let want = (keep_body - kept_body.len()).min(chunk.len());
+            kept_body.extend_from_slice(&chunk[..want]);
+        }
+        let _ = incoming.flow_control().release_capacity(chunk.len());
+    }
+    phases.download = Some(body_began.elapsed());
+    sample.bytes = bytes;
+    sample.answered = true;
+    if keep_body > BODY_PREVIEW {
+        *saved = Some(kept_body.clone());
+    }
+    kept_body.truncate(BODY_PREVIEW);
+    sample.body = kept_body;
+    Ok((status, location))
 }
 
 impl Stream {
@@ -1418,6 +1548,9 @@ impl Stream {
                 s.write_all(bytes).await?;
                 s.flush().await
             }
+            Stream::H2(_) => Err(std::io::Error::other(
+                "an HTTP/2 connection is h2's to write",
+            )),
         }
     }
 
@@ -1428,6 +1561,9 @@ impl Stream {
         match self {
             Stream::Plain(s) => s.read_buf(buf).await,
             Stream::Tls(s) => s.read_buf(buf).await,
+            Stream::H2(_) => Err(std::io::Error::other(
+                "an HTTP/2 connection is h2's to read",
+            )),
         }
     }
 }
@@ -2278,6 +2414,7 @@ mod tests {
             count: None,
             duration: None,
             compression: false,
+            http1: false,
         }
     }
 
@@ -2445,6 +2582,85 @@ mod tests {
         assert_eq!((t.sent, t.answered), (2, 2));
         assert!(t.recent.back().unwrap().status.is_none());
         assert_eq!(t.recent.back().unwrap().outcome(), "connected");
+    }
+
+    #[tokio::test]
+    async fn speaks_http2_on_a_connection_that_negotiated_it() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        tokio::spawn(async move {
+            let (socket, _) = listener.accept().await.unwrap();
+            let mut connection = h2::server::handshake(socket).await.unwrap();
+            while let Some(next) = connection.accept().await {
+                let (request, mut respond) = next.unwrap();
+                let location = request.uri().path() == "/moved";
+                let response = http::Response::builder()
+                    .status(if location { 302 } else { 200 })
+                    .header("content-type", "text/plain")
+                    .header("location", "/")
+                    .body(())
+                    .unwrap();
+                let mut stream = respond.send_response(response, false).unwrap();
+                stream
+                    .send_data(Bytes::from_static(b"hello h2"), true)
+                    .unwrap();
+            }
+        });
+        let stream = tokio::net::TcpStream::connect(addr).await.unwrap();
+        let (send, connection) = h2::client::handshake(stream).await.unwrap();
+        tokio::spawn(async move {
+            let _ = connection.await;
+        });
+        let settings = settings();
+        let mut sample = Sample::new(0, 1, Duration::ZERO);
+        let mut phases = Phases::default();
+        let mut saved = None;
+        let url = Url::parse(&format!("http://{addr}/x")).unwrap();
+        let mut headers = HeaderMap::new();
+        headers.insert("x-run", HeaderValue::from_static("1"));
+        let (status, location) = h2_exchange(
+            send.clone(),
+            &url,
+            &Method::GET,
+            &headers,
+            &Bytes::new(),
+            &settings,
+            &mut sample,
+            &mut phases,
+            &mut saved,
+        )
+        .await
+        .unwrap();
+        assert_eq!(status, 200);
+        assert!(
+            location.is_some(),
+            "the test server sends one on every answer"
+        );
+        assert_eq!(sample.version.as_deref(), Some("HTTP/2"));
+        assert_eq!(sample.bytes, 8);
+        assert!(sample.answered);
+        assert!(phases.ttfb.is_some() && phases.download.is_some());
+        assert!(sample
+            .headers
+            .iter()
+            .any(|(n, v)| n == "content-type" && v == "text/plain"));
+        // The same sender carries the next request: that is keep-alive
+        let moved = Url::parse(&format!("http://{addr}/moved")).unwrap();
+        let mut again = Sample::new(0, 2, Duration::ZERO);
+        let (status, _) = h2_exchange(
+            send,
+            &moved,
+            &Method::GET,
+            &headers,
+            &Bytes::new(),
+            &settings,
+            &mut again,
+            &mut Phases::default(),
+            &mut None,
+        )
+        .await
+        .unwrap();
+        assert_eq!(status, 302);
     }
 
     #[tokio::test]

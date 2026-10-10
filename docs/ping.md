@@ -33,6 +33,10 @@ A host without a scheme is `https://`, unless it has a port or is this machine (
 
 `--name api,cdn` names the targets in order, `--color red,#8cb8ff` colours their lines, `-4` and `-6` pick the address family, and `--interface en0` (or an address) sends from that interface. At most 256 targets.
 
+## HTTP/2
+
+A ping takes HTTP/2 when the server offers it through ALPN, which most do over TLS, and says so: `HTTP/2 200` in the once line and the pings list, `"http_version": "HTTP/2"` in the report, `h2` under the TLS details. The phases are the same, the first byte being the response's headers. `--http1` stays on HTTP/1.1, to compare the two. A server that offers only HTTP/1.1 is noted among the findings. The load-testing modes still speak HTTP/1.1, where pepe's engine is fastest.
+
 ## Each phase, every ping
 
 Each ping opens its own connection, so every phase is measured every time, and the TLS session is still resumed when the server allows it: the first handshake is full, the next ones resumed, and the report says how long each kind takes. `--keep-alive` keeps the connection instead, as a browser would, and the pings after the first measure only the server (`dns`, `connect` and `tls` are then `kept`). Redirects are followed (unless `--disable-redirects`), each hop listed with its status and time, and the phases of the whole chain added up. Through a proxy (`-p`), the connection is the proxy's and only the first byte and the download are measured.
@@ -103,6 +107,7 @@ pepe ping · https://example.com/ · 3 pings
 | `--tcp`, `--port`, `--tcp-rst` | 80, pong | A TCP ping of the port; what a refused connection means |
 | `--cmd` | | The targets are commands |
 | `--keep-alive` | | Keep the connection between pings |
+| `--http1` | | HTTP/1.1 even when the server offers HTTP/2 |
 | `--slo <KEY=MS,...>` | | Limits a ping must meet |
 | `--bell` | | Ring the terminal on a failed or slow ping |
 | `--ymin`, `--ymax <MS>`, `-0` | | The graph's floor and ceiling; `-0` starts at zero |
