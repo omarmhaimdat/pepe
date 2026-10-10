@@ -27,6 +27,22 @@ pub struct JsonReport {
     /// it every minute while the run goes and once more when it ends
     #[serde(skip_serializing_if = "Option::is_none")]
     pub snapshot: Option<Snapshot>,
+    /// What the dashboard would have said: the level and its findings
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub verdict: Option<VerdictJson>,
+}
+
+#[derive(Serialize, Clone, PartialEq, Debug)]
+pub struct VerdictJson {
+    /// healthy, degraded or failing
+    pub level: String,
+    pub findings: Vec<FindingJson>,
+}
+
+#[derive(Serialize, Clone, PartialEq, Debug)]
+pub struct FindingJson {
+    pub level: String,
+    pub text: String,
 }
 
 #[derive(Serialize, Clone, PartialEq, Debug)]
@@ -316,6 +332,22 @@ impl JsonReport {
         self
     }
 
+    /// The verdict, as the dashboard would have said it
+    pub fn with_verdict(mut self, verdict: &crate::insights::Verdict) -> Self {
+        self.verdict = Some(VerdictJson {
+            level: verdict.level.headline().to_lowercase(),
+            findings: verdict
+                .notes
+                .iter()
+                .map(|n| FindingJson {
+                    level: n.level.headline().to_lowercase(),
+                    text: n.text.clone(),
+                })
+                .collect(),
+        });
+        self
+    }
+
     /// What the watch noticed during the run
     pub fn with_anomalies(mut self, anomalies: &[crate::insights::Anomaly]) -> Self {
         self.summary.anomalies = anomalies
@@ -385,6 +417,7 @@ impl JsonReport {
     pub fn generate(metrics: &Metrics, elapsed: Duration, interrupted: bool) -> Self {
         Self {
             schema_version: 1,
+            verdict: None,
             target: None,
             generator: None,
             timeline: Vec::new(),
