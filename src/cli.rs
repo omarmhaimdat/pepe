@@ -112,6 +112,12 @@ pub struct Cli {
     #[arg(long, global = true, value_name = "FILE")]
     pub snapshot: Option<std::path::PathBuf>,
 
+    /// Serve the live numbers for Prometheus at http://ADDR/metrics while
+    /// the run goes, e.g. :9100 or 127.0.0.1:9100, so a soak run or a long
+    /// ping shows up in Grafana next to the server's own
+    #[arg(long, global = true, value_name = "ADDR")]
+    pub metrics: Option<String>,
+
     /// Open the setup screen to review or change the settings before
     /// starting (it opens by itself when no URL is given)
     #[arg(short = 'i', long, global = true)]
@@ -806,6 +812,11 @@ impl Cli {
         }
         parts.push(shell_quote(&target));
         parts.join(" ")
+    }
+
+    /// `GET https://example.com/`: what the metrics call the run
+    pub fn target_label(&self) -> String {
+        format!("{} {}", self.method, self.url)
     }
 
     /// The request body, from -d or a curl command

@@ -1,6 +1,6 @@
 # Print an optspec for argparse to handle cmd's options that are independent of any subcommand.
 function __fish_pepe_global_optspecs
-    string join \n h/help n/number= z/duration= curl m/method= H/headers= t/timeout= warmup= threads= rate= d/body= p/proxy= k/insecure disable-compression disable-keepalive disable-redirects json trace-header= snapshot= i/setup config= write-config= c/concurrency= u/user-agent= V/version
+    string join \n h/help n/number= z/duration= curl m/method= H/headers= t/timeout= warmup= threads= rate= d/body= p/proxy= k/insecure disable-compression disable-keepalive disable-redirects json trace-header= snapshot= metrics= i/setup config= write-config= c/concurrency= u/user-agent= V/version
 end
 
 function __fish_pepe_needs_command
@@ -36,6 +36,7 @@ complete -c pepe -n "__fish_pepe_needs_command" -s d -l body -d 'HTTP request bo
 complete -c pepe -n "__fish_pepe_needs_command" -s p -l proxy -d 'Proxy server URL: http://user:pass@host:port or socks5://host:port' -r
 complete -c pepe -n "__fish_pepe_needs_command" -l trace-header -d 'Response header holding the request id to show for the slowest requests and in the inspector, so they can be found in the server\'s logs; without it, X-Request-Id, traceparent, CF-Ray, X-Amzn-Trace-Id and other common ones are looked for' -r
 complete -c pepe -n "__fish_pepe_needs_command" -l snapshot -d 'Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run\'s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run' -r -F
+complete -c pepe -n "__fish_pepe_needs_command" -l metrics -d 'Serve the live numbers for Prometheus at http://ADDR/metrics while the run goes, e.g. :9100 or 127.0.0.1:9100, so a soak run or a long ping shows up in Grafana next to the server\'s own' -r
 complete -c pepe -n "__fish_pepe_needs_command" -l config -d 'Read settings from this file instead of ./pepe.toml; flags on the command line win over it' -r -F
 complete -c pepe -n "__fish_pepe_needs_command" -l write-config -d 'Write the settings as they stand to this file, as a pepe.toml, and exit' -r -F
 complete -c pepe -n "__fish_pepe_needs_command" -s c -l concurrency -d 'Number of concurrent requests at a time' -r
@@ -71,6 +72,7 @@ complete -c pepe -n "__fish_pepe_using_subcommand self-update" -s d -l body -d '
 complete -c pepe -n "__fish_pepe_using_subcommand self-update" -s p -l proxy -d 'Proxy server URL: http://user:pass@host:port or socks5://host:port' -r
 complete -c pepe -n "__fish_pepe_using_subcommand self-update" -l trace-header -d 'Response header holding the request id to show for the slowest requests and in the inspector, so they can be found in the server\'s logs; without it, X-Request-Id, traceparent, CF-Ray, X-Amzn-Trace-Id and other common ones are looked for' -r
 complete -c pepe -n "__fish_pepe_using_subcommand self-update" -l snapshot -d 'Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run\'s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run' -r -F
+complete -c pepe -n "__fish_pepe_using_subcommand self-update" -l metrics -d 'Serve the live numbers for Prometheus at http://ADDR/metrics while the run goes, e.g. :9100 or 127.0.0.1:9100, so a soak run or a long ping shows up in Grafana next to the server\'s own' -r
 complete -c pepe -n "__fish_pepe_using_subcommand self-update" -l config -d 'Read settings from this file instead of ./pepe.toml; flags on the command line win over it' -r -F
 complete -c pepe -n "__fish_pepe_using_subcommand self-update" -l write-config -d 'Write the settings as they stand to this file, as a pepe.toml, and exit' -r -F
 complete -c pepe -n "__fish_pepe_using_subcommand self-update" -s c -l concurrency -d 'Number of concurrent requests at a time' -r
@@ -96,6 +98,7 @@ complete -c pepe -n "__fish_pepe_using_subcommand completions" -s d -l body -d '
 complete -c pepe -n "__fish_pepe_using_subcommand completions" -s p -l proxy -d 'Proxy server URL: http://user:pass@host:port or socks5://host:port' -r
 complete -c pepe -n "__fish_pepe_using_subcommand completions" -l trace-header -d 'Response header holding the request id to show for the slowest requests and in the inspector, so they can be found in the server\'s logs; without it, X-Request-Id, traceparent, CF-Ray, X-Amzn-Trace-Id and other common ones are looked for' -r
 complete -c pepe -n "__fish_pepe_using_subcommand completions" -l snapshot -d 'Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run\'s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run' -r -F
+complete -c pepe -n "__fish_pepe_using_subcommand completions" -l metrics -d 'Serve the live numbers for Prometheus at http://ADDR/metrics while the run goes, e.g. :9100 or 127.0.0.1:9100, so a soak run or a long ping shows up in Grafana next to the server\'s own' -r
 complete -c pepe -n "__fish_pepe_using_subcommand completions" -l config -d 'Read settings from this file instead of ./pepe.toml; flags on the command line win over it' -r -F
 complete -c pepe -n "__fish_pepe_using_subcommand completions" -l write-config -d 'Write the settings as they stand to this file, as a pepe.toml, and exit' -r -F
 complete -c pepe -n "__fish_pepe_using_subcommand completions" -s c -l concurrency -d 'Number of concurrent requests at a time' -r
@@ -127,6 +130,7 @@ complete -c pepe -n "__fish_pepe_using_subcommand api" -s d -l body -d 'HTTP req
 complete -c pepe -n "__fish_pepe_using_subcommand api" -s p -l proxy -d 'Proxy server URL: http://user:pass@host:port or socks5://host:port' -r
 complete -c pepe -n "__fish_pepe_using_subcommand api" -l trace-header -d 'Response header holding the request id to show for the slowest requests and in the inspector, so they can be found in the server\'s logs; without it, X-Request-Id, traceparent, CF-Ray, X-Amzn-Trace-Id and other common ones are looked for' -r
 complete -c pepe -n "__fish_pepe_using_subcommand api" -l snapshot -d 'Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run\'s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run' -r -F
+complete -c pepe -n "__fish_pepe_using_subcommand api" -l metrics -d 'Serve the live numbers for Prometheus at http://ADDR/metrics while the run goes, e.g. :9100 or 127.0.0.1:9100, so a soak run or a long ping shows up in Grafana next to the server\'s own' -r
 complete -c pepe -n "__fish_pepe_using_subcommand api" -l config -d 'Read settings from this file instead of ./pepe.toml; flags on the command line win over it' -r -F
 complete -c pepe -n "__fish_pepe_using_subcommand api" -l write-config -d 'Write the settings as they stand to this file, as a pepe.toml, and exit' -r -F
 complete -c pepe -n "__fish_pepe_using_subcommand api" -s c -l concurrency -d 'Number of concurrent requests at a time' -r
@@ -157,6 +161,7 @@ complete -c pepe -n "__fish_pepe_using_subcommand ramp" -s d -l body -d 'HTTP re
 complete -c pepe -n "__fish_pepe_using_subcommand ramp" -s p -l proxy -d 'Proxy server URL: http://user:pass@host:port or socks5://host:port' -r
 complete -c pepe -n "__fish_pepe_using_subcommand ramp" -l trace-header -d 'Response header holding the request id to show for the slowest requests and in the inspector, so they can be found in the server\'s logs; without it, X-Request-Id, traceparent, CF-Ray, X-Amzn-Trace-Id and other common ones are looked for' -r
 complete -c pepe -n "__fish_pepe_using_subcommand ramp" -l snapshot -d 'Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run\'s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run' -r -F
+complete -c pepe -n "__fish_pepe_using_subcommand ramp" -l metrics -d 'Serve the live numbers for Prometheus at http://ADDR/metrics while the run goes, e.g. :9100 or 127.0.0.1:9100, so a soak run or a long ping shows up in Grafana next to the server\'s own' -r
 complete -c pepe -n "__fish_pepe_using_subcommand ramp" -l config -d 'Read settings from this file instead of ./pepe.toml; flags on the command line win over it' -r -F
 complete -c pepe -n "__fish_pepe_using_subcommand ramp" -l write-config -d 'Write the settings as they stand to this file, as a pepe.toml, and exit' -r -F
 complete -c pepe -n "__fish_pepe_using_subcommand ramp" -s c -l concurrency -d 'Number of concurrent requests at a time' -r
@@ -182,6 +187,7 @@ complete -c pepe -n "__fish_pepe_using_subcommand replay" -s d -l body -d 'HTTP 
 complete -c pepe -n "__fish_pepe_using_subcommand replay" -s p -l proxy -d 'Proxy server URL: http://user:pass@host:port or socks5://host:port' -r
 complete -c pepe -n "__fish_pepe_using_subcommand replay" -l trace-header -d 'Response header holding the request id to show for the slowest requests and in the inspector, so they can be found in the server\'s logs; without it, X-Request-Id, traceparent, CF-Ray, X-Amzn-Trace-Id and other common ones are looked for' -r
 complete -c pepe -n "__fish_pepe_using_subcommand replay" -l snapshot -d 'Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run\'s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run' -r -F
+complete -c pepe -n "__fish_pepe_using_subcommand replay" -l metrics -d 'Serve the live numbers for Prometheus at http://ADDR/metrics while the run goes, e.g. :9100 or 127.0.0.1:9100, so a soak run or a long ping shows up in Grafana next to the server\'s own' -r
 complete -c pepe -n "__fish_pepe_using_subcommand replay" -l config -d 'Read settings from this file instead of ./pepe.toml; flags on the command line win over it' -r -F
 complete -c pepe -n "__fish_pepe_using_subcommand replay" -l write-config -d 'Write the settings as they stand to this file, as a pepe.toml, and exit' -r -F
 complete -c pepe -n "__fish_pepe_using_subcommand replay" -s c -l concurrency -d 'Number of concurrent requests at a time' -r
@@ -206,6 +212,7 @@ complete -c pepe -n "__fish_pepe_using_subcommand flow" -s d -l body -d 'HTTP re
 complete -c pepe -n "__fish_pepe_using_subcommand flow" -s p -l proxy -d 'Proxy server URL: http://user:pass@host:port or socks5://host:port' -r
 complete -c pepe -n "__fish_pepe_using_subcommand flow" -l trace-header -d 'Response header holding the request id to show for the slowest requests and in the inspector, so they can be found in the server\'s logs; without it, X-Request-Id, traceparent, CF-Ray, X-Amzn-Trace-Id and other common ones are looked for' -r
 complete -c pepe -n "__fish_pepe_using_subcommand flow" -l snapshot -d 'Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run\'s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run' -r -F
+complete -c pepe -n "__fish_pepe_using_subcommand flow" -l metrics -d 'Serve the live numbers for Prometheus at http://ADDR/metrics while the run goes, e.g. :9100 or 127.0.0.1:9100, so a soak run or a long ping shows up in Grafana next to the server\'s own' -r
 complete -c pepe -n "__fish_pepe_using_subcommand flow" -l config -d 'Read settings from this file instead of ./pepe.toml; flags on the command line win over it' -r -F
 complete -c pepe -n "__fish_pepe_using_subcommand flow" -l write-config -d 'Write the settings as they stand to this file, as a pepe.toml, and exit' -r -F
 complete -c pepe -n "__fish_pepe_using_subcommand flow" -s c -l concurrency -d 'Number of concurrent requests at a time' -r
@@ -233,6 +240,7 @@ complete -c pepe -n "__fish_pepe_using_subcommand logs" -s d -l body -d 'HTTP re
 complete -c pepe -n "__fish_pepe_using_subcommand logs" -s p -l proxy -d 'Proxy server URL: http://user:pass@host:port or socks5://host:port' -r
 complete -c pepe -n "__fish_pepe_using_subcommand logs" -l trace-header -d 'Response header holding the request id to show for the slowest requests and in the inspector, so they can be found in the server\'s logs; without it, X-Request-Id, traceparent, CF-Ray, X-Amzn-Trace-Id and other common ones are looked for' -r
 complete -c pepe -n "__fish_pepe_using_subcommand logs" -l snapshot -d 'Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run\'s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run' -r -F
+complete -c pepe -n "__fish_pepe_using_subcommand logs" -l metrics -d 'Serve the live numbers for Prometheus at http://ADDR/metrics while the run goes, e.g. :9100 or 127.0.0.1:9100, so a soak run or a long ping shows up in Grafana next to the server\'s own' -r
 complete -c pepe -n "__fish_pepe_using_subcommand logs" -l config -d 'Read settings from this file instead of ./pepe.toml; flags on the command line win over it' -r -F
 complete -c pepe -n "__fish_pepe_using_subcommand logs" -l write-config -d 'Write the settings as they stand to this file, as a pepe.toml, and exit' -r -F
 complete -c pepe -n "__fish_pepe_using_subcommand logs" -s c -l concurrency -d 'Number of concurrent requests at a time' -r
@@ -271,6 +279,7 @@ complete -c pepe -n "__fish_pepe_using_subcommand ping" -s d -l body -d 'HTTP re
 complete -c pepe -n "__fish_pepe_using_subcommand ping" -s p -l proxy -d 'Proxy server URL: http://user:pass@host:port or socks5://host:port' -r
 complete -c pepe -n "__fish_pepe_using_subcommand ping" -l trace-header -d 'Response header holding the request id to show for the slowest requests and in the inspector, so they can be found in the server\'s logs; without it, X-Request-Id, traceparent, CF-Ray, X-Amzn-Trace-Id and other common ones are looked for' -r
 complete -c pepe -n "__fish_pepe_using_subcommand ping" -l snapshot -d 'Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run\'s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run' -r -F
+complete -c pepe -n "__fish_pepe_using_subcommand ping" -l metrics -d 'Serve the live numbers for Prometheus at http://ADDR/metrics while the run goes, e.g. :9100 or 127.0.0.1:9100, so a soak run or a long ping shows up in Grafana next to the server\'s own' -r
 complete -c pepe -n "__fish_pepe_using_subcommand ping" -l config -d 'Read settings from this file instead of ./pepe.toml; flags on the command line win over it' -r -F
 complete -c pepe -n "__fish_pepe_using_subcommand ping" -l write-config -d 'Write the settings as they stand to this file, as a pepe.toml, and exit' -r -F
 complete -c pepe -n "__fish_pepe_using_subcommand ping" -s c -l concurrency -d 'Number of concurrent requests at a time' -r
@@ -308,6 +317,7 @@ complete -c pepe -n "__fish_pepe_using_subcommand compare" -s d -l body -d 'HTTP
 complete -c pepe -n "__fish_pepe_using_subcommand compare" -s p -l proxy -d 'Proxy server URL: http://user:pass@host:port or socks5://host:port' -r
 complete -c pepe -n "__fish_pepe_using_subcommand compare" -l trace-header -d 'Response header holding the request id to show for the slowest requests and in the inspector, so they can be found in the server\'s logs; without it, X-Request-Id, traceparent, CF-Ray, X-Amzn-Trace-Id and other common ones are looked for' -r
 complete -c pepe -n "__fish_pepe_using_subcommand compare" -l snapshot -d 'Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run\'s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run' -r -F
+complete -c pepe -n "__fish_pepe_using_subcommand compare" -l metrics -d 'Serve the live numbers for Prometheus at http://ADDR/metrics while the run goes, e.g. :9100 or 127.0.0.1:9100, so a soak run or a long ping shows up in Grafana next to the server\'s own' -r
 complete -c pepe -n "__fish_pepe_using_subcommand compare" -l config -d 'Read settings from this file instead of ./pepe.toml; flags on the command line win over it' -r -F
 complete -c pepe -n "__fish_pepe_using_subcommand compare" -l write-config -d 'Write the settings as they stand to this file, as a pepe.toml, and exit' -r -F
 complete -c pepe -n "__fish_pepe_using_subcommand compare" -s c -l concurrency -d 'Number of concurrent requests at a time' -r

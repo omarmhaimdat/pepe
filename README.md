@@ -175,6 +175,7 @@ pepe self-update [--check]     update pepe
 | `--config <FILE>` | `./pepe.toml` if present | Read settings from a file (see [Config file](#config-file)) |
 | `--write-config <FILE>` | | Write the settings as given to a file and exit |
 | `--trace-header <NAME>` | | Response header holding the request id, if not one of the usual ones |
+| `--metrics <ADDR>` | | Serve the live numbers for Prometheus at `http://ADDR/metrics`, e.g. `:9100` (see [Prometheus metrics](#prometheus-metrics)) |
 
 ### Config file
 
@@ -247,6 +248,18 @@ For a run that lasts hours, `--snapshot` writes the JSON report so far to a file
 pepe -z 6h -c 50 --snapshot soak.json https://example.com
 jq '.timeline[-1], .snapshot' soak.json       # the last minute, and whether it is still running
 ```
+
+### Prometheus metrics
+
+`--metrics :9100` serves the live numbers at `http://localhost:9100/metrics` while the run goes, in Prometheus's text form, so a soak run or a long ping shows up in Grafana next to the server's own metrics. It works with the dashboard and with `--json`, for plain runs, API mode, flows, replays and `pepe ping`; a ramp isn't served, its steps being the point of it.
+
+```bash
+pepe -z 6h -c 50 --metrics :9100 https://example.com
+pepe ping https://example.com --metrics 127.0.0.1:9100
+curl -s localhost:9100/metrics
+```
+
+A load run has `pepe_requests_total`, `pepe_requests_succeeded_total`, `pepe_requests_timed_out_total`, `pepe_requests_errored_total`, `pepe_responses_total{status}`, `pepe_failures_total{cause}`, `pepe_response_bytes_total`, `pepe_cache_hits_total`, `pepe_requests_per_second` and `pepe_errors_per_second` over the last second, `pepe_latency_seconds{quantile}` (0.5, 0.9, 0.95, 0.99) and `pepe_first_byte_seconds{quantile}` so far, the histogram `pepe_request_duration_seconds` with fixed buckets from 1 ms to 30 s, `pepe_concurrency` and `pepe_run_elapsed_seconds`. Every line carries `target="GET https://…"`, and in API mode, a flow or a replay the same again per row, with `row="GET /pets/{id}"`. A ping has `pepe_ping_sent_total`, `pepe_ping_answered_total`, `pepe_ping_lost_total`, `pepe_ping_timed_out_total`, `pepe_ping_slo_broken_total`, `pepe_ping_up`, `pepe_ping_last_seconds`, `pepe_ping_loss_ratio`, `pepe_ping_latency_seconds{quantile}`, `pepe_ping_jitter_seconds`, `pepe_ping_phase_seconds{phase}` (the median of dns, connect, tls, tls_resumed, ttfb and download), `pepe_ping_responses_total{status}`, `pepe_ping_tls_resumed_total`, `pepe_ping_cert_not_after_seconds` and the histogram `pepe_ping_duration_seconds`, each per `target`. The page is rendered once a second at most, whatever scrapes it.
 
 ### Load-testing a curl command
 

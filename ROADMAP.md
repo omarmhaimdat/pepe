@@ -126,8 +126,10 @@ Get the results where they're needed.
 - [ ] **CSV and per-request export** (S). One line per request for
       spreadsheets and notebooks.
 - [ ] **JUnit XML** (S). So CI systems show thresholds as test results.
-- [ ] **Prometheus metrics** (M). `--metrics :9100` exposes the live
-      numbers, so a soak run shows up in Grafana next to the server's own.
+- [x] **Prometheus metrics** (M): `--metrics :9100` serves the live
+      numbers at `/metrics`, for runs, API mode, flows, replays and pings,
+      so a soak run shows up in Grafana next to the server's own — next
+      release
 - [ ] **Webhook summary** (S). Post the verdict when a run ends.
 - [ ] **HTML report** (M). One self-contained file with the charts, for
       people who weren't at the terminal.

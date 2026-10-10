@@ -489,7 +489,28 @@ impl Dashboard {
     }
 
     /// Pull everything the load generator produced since the last frame
+    /// The page `--metrics` serves, once a second at most
+    fn publish_metrics(&self) {
+        crate::exporter::publish(|| {
+            let rows: Vec<(String, &Metrics)> = self
+                .endpoints
+                .iter()
+                .zip(&self.endpoint_metrics)
+                .map(|(e, m)| (e.label.clone(), m))
+                .collect();
+            crate::exporter::run_page(
+                &self.args.target_label(),
+                &self.metrics,
+                &self.timeline,
+                self.elapsed(),
+                self.concurrency,
+                &rows,
+            )
+        });
+    }
+
     fn drain(&mut self, load: &mut LoadHandle) {
+        self.publish_metrics();
         loop {
             match load.try_recv() {
                 Ok(stat) => self.record(stat),
