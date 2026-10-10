@@ -112,6 +112,31 @@ pub struct Cli {
     #[arg(long, global = true, value_name = "FILE")]
     pub snapshot: Option<std::path::PathBuf>,
 
+    /// Refuse to send anywhere but these hosts: api.example.com exactly,
+    /// or .example.com for it and its subdomains; repeat for more. Every
+    /// target is checked before anything is sent.
+    #[arg(long, global = true, value_name = "HOST")]
+    pub allow_host: Vec<String>,
+
+    /// Refuse a run that would send more requests than this: -n above
+    /// it, or -z without a --rate that bounds it
+    #[arg(long, global = true, value_name = "N")]
+    pub max_requests: Option<u64>,
+
+    /// Refuse a --rate above this, and a run with no --rate at all,
+    /// which sends as fast as the target answers
+    #[arg(long, global = true, value_name = "PER_SECOND")]
+    pub max_rate: Option<f64>,
+
+    /// Refuse a concurrency above this
+    #[arg(long, global = true, value_name = "N")]
+    pub max_concurrency: Option<u32>,
+
+    /// Say what would be sent, to where and how much, and send nothing;
+    /// as JSON with --json
+    #[arg(long, global = true)]
+    pub dry_run: bool,
+
     /// End with exit code 4 when the run crosses this, for CI and scripts:
     /// 'p99 > 300ms', 'errors > 1%'; repeat for more. The report is still
     /// printed. (pepe ping has --slo for the same.)
@@ -511,6 +536,14 @@ impl Cli {
                 return Err(Error::raw(
                     clap::error::ErrorKind::ValueValidation,
                     format!("--rate {rate} is not a number of requests per second"),
+                ));
+            }
+        }
+        if let Some(max) = self.max_rate {
+            if !(max > 0.0 && max.is_finite()) {
+                return Err(Error::raw(
+                    clap::error::ErrorKind::ValueValidation,
+                    format!("--max-rate {max} is not a number of requests per second"),
                 ));
             }
         }

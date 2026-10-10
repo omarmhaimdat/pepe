@@ -28,6 +28,7 @@ mod diagnose;
 mod direct;
 mod exporter;
 mod flow;
+mod guard;
 mod insights;
 mod json_report;
 mod load;
@@ -504,6 +505,16 @@ async fn run_ramp_json(args: &Cli, plan: RampPlan) -> Result<(), Box<dyn std::er
     Ok(())
 }
 
+/// `--dry-run`: the plan, as text or as JSON, and nothing sent
+fn print_plan(args: &Cli, plan: &guard::Plan) -> Result<(), Box<dyn std::error::Error>> {
+    if args.json {
+        println!("{}", serde_json::to_string_pretty(&plan.json())?);
+    } else {
+        print!("{}", plan.text());
+    }
+    Ok(())
+}
+
 /// No terminal to draw on, and no `--json`: the run goes to its end and
 /// the report the dashboard would have left is printed, so a forgotten
 /// flag in a script costs nothing
@@ -780,6 +791,60 @@ async fn run_flow(args: &Cli, what: &cli::FlowArgs) -> Result<(), Box<dyn std::e
             std::process::exit(1);
         }
     };
+    // The guardrails: each step's host, as its URL stands before the run
+    // (a host filled in by a capture can't be checked, and is refused
+    // when hosts are named)
+    let guard = guard::Guard::of(args);
+    let vars: std::collections::HashMap<String, String> = flow.vars.iter().cloned().collect();
+    let mut urls = Vec::new();
+    for step in &flow.steps {
+        match step.url.render(&vars) {
+            Ok(url) => {
+                if let Err(e) = guard.check_url(&url) {
+                    eprintln!("error: step {:?}: {e}", step.name);
+                    std::process::exit(2);
+                }
+                urls.push(format!("{} {} {url}", step.name, step.method));
+            }
+            Err(var) if guard.hosts.is_empty() => {
+                urls.push(format!(
+                    "{} {} {}",
+                    step.name,
+                    step.method,
+                    step.url.source()
+                ));
+                let _ = var;
+            }
+            Err(var) => {
+                eprintln!(
+                    "error: step {:?}: its URL is filled in at run time ({{{{{var}}}}}), so --allow-host can't check it",
+                    step.name
+                );
+                std::process::exit(2);
+            }
+        }
+    }
+    if let Err(e) = guard.check_run(args) {
+        eprintln!("error: {e}");
+        std::process::exit(2);
+    }
+    if args.dry_run {
+        let plan = guard::Plan {
+            mode: "flow",
+            targets: urls,
+            headers: guard::Plan::headers_of(&args.headers),
+            load: format!(
+                "{} step{} a chain; {}",
+                flow.steps.len(),
+                if flow.steps.len() == 1 { "" } else { "s" },
+                guard::Plan::load_of(args, "chains")
+            ),
+            settings: guard::Plan::settings_of(args),
+            guard: guard.describe(),
+            ..Default::default()
+        };
+        return print_plan(args, &plan);
+    }
     // The dashboard's title shows the flow rather than one URL
     let mut shown = args.clone();
     shown.method = "FLOW".into();
@@ -975,6 +1040,41 @@ async fn run_replay(args: &Cli, what: &cli::ReplayArgs) -> Result<(), Box<dyn st
             std::process::exit(1);
         }
     };
+    // The guardrails: every URL the log would be sent to
+    let guard = guard::Guard::of(args);
+    for entry in &replay.urls {
+        if let Err(e) = guard.check_url(&entry.url) {
+            eprintln!("error: {e}");
+            std::process::exit(2);
+        }
+    }
+    if let Err(e) = guard.check_run(args) {
+        eprintln!("error: {e}");
+        std::process::exit(2);
+    }
+    if args.dry_run {
+        let plan = guard::Plan {
+            mode: "replay",
+            targets: replay.urls.iter().take(20).map(|e| e.url.clone()).collect(),
+            more_targets: replay.urls.len().saturating_sub(20),
+            headers: guard::Plan::headers_of(&args.headers),
+            load: format!(
+                "{} distinct URLs of {}, in the log's proportions; {}",
+                replay.urls.len(),
+                what.log.display(),
+                guard::Plan::load_of(args, "requests")
+            ),
+            settings: guard::Plan::settings_of(args),
+            guard: guard.describe(),
+            notes: if what.include_writes {
+                vec!["POST, PUT, PATCH and DELETE are replayed too, without bodies".into()]
+            } else {
+                vec!["only GET, HEAD and OPTIONS; --include-writes replays the rest".into()]
+            },
+            ..Default::default()
+        };
+        return print_plan(args, &plan);
+    }
     // The dashboard's title shows the log rather than one URL
     let mut shown = args.clone();
     shown.method = "REPLAY".into();
@@ -1404,6 +1504,50 @@ async fn run_ping(
     .await
     .unwrap_or_else(|e| fail(e));
 
+    // The guardrails: each target's host, then the pace
+    let guard = guard::Guard::of(args);
+    for target in &targets {
+        let checked = match &target.kind {
+            ping::Kind::Http { url, .. } => guard.check_url(url.as_str()),
+            ping::Kind::Tcp { host, .. } => guard.check_host(host),
+            ping::Kind::Cmd(_) if !guard.is_empty() => {
+                Err("--cmd runs programs, which the guardrails can't check; not under --allow-host or a cap".into())
+            }
+            ping::Kind::Cmd(_) => Ok(()),
+        };
+        if let Err(e) = checked {
+            fail(e);
+        }
+    }
+    if let Err(e) = guard.check_ping(targets.len(), every, count, args.run_duration()) {
+        fail(e);
+    }
+    if args.dry_run {
+        let plan = guard::Plan {
+            mode: "ping",
+            targets: targets.iter().take(20).map(|t| t.shown.clone()).collect(),
+            more_targets: targets.len().saturating_sub(20),
+            method: Some(args.method.clone()),
+            headers: guard::Plan::headers_of(&args.headers),
+            body_bytes: (!settings.body.is_empty()).then(|| settings.body.len()),
+            load: format!(
+                "one request every {} to each of {} target{}, {}",
+                ping::every_text(every),
+                targets.len(),
+                if targets.len() == 1 { "" } else { "s" },
+                match (count, args.run_duration()) {
+                    (Some(n), _) => format!("{n} times"),
+                    (None, Some(d)) => format!("for {}", ui::format::span(d)),
+                    (None, None) => "until stopped".into(),
+                }
+            ),
+            settings: guard::Plan::settings_of(args),
+            guard: guard.describe(),
+            ..Default::default()
+        };
+        return print_plan(args, &plan);
+    }
+
     let screen = !args.json
         && !what.jsonl
         && !what.csv
@@ -1591,6 +1735,44 @@ async fn run_api(args: &Cli, api: &cli::ApiArgs) -> Result<(), Box<dyn std::erro
             std::process::exit(1);
         }
     };
+    let guard = guard::Guard::of(args);
+    if let Err(e) = guard
+        .check_url(&run.spec.base_url)
+        .and_then(|_| guard.check_run(args))
+    {
+        eprintln!("error: {e}");
+        std::process::exit(2);
+    }
+    if args.dry_run {
+        let which = run.enabled();
+        let labels: Vec<String> = which
+            .iter()
+            .map(|&i| run.endpoints[i].label.clone())
+            .collect();
+        let plan = guard::Plan {
+            mode: "api",
+            targets: std::iter::once(run.spec.base_url.clone())
+                .chain(labels.iter().take(20).cloned())
+                .collect(),
+            more_targets: labels.len().saturating_sub(20),
+            headers: guard::Plan::headers_of(&args.headers),
+            load: format!(
+                "{} endpoint{} on; {}",
+                labels.len(),
+                if labels.len() == 1 { "" } else { "s" },
+                guard::Plan::load_of(args, "requests")
+            ),
+            settings: guard::Plan::settings_of(args),
+            guard: guard.describe(),
+            notes: if labels.is_empty() {
+                vec!["no endpoint is on: --all, --tag or --only pick some".into()]
+            } else {
+                Vec::new()
+            },
+            ..Default::default()
+        };
+        return print_plan(args, &plan);
+    }
     if args.json {
         return run_api_json(args, &run).await;
     }
@@ -1772,6 +1954,50 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         if let Err(e) = args.validate() {
             eprintln!("{}", e);
             std::process::exit(1);
+        }
+    }
+
+    // The guardrails, then the dry run, before anything is sent
+    if !nothing_to_run {
+        let guard = guard::Guard::of(&args);
+        let checked = guard.check_url(&args.url).and_then(|_| match &ramp {
+            Some(ramp) => RampPlan::from_args(ramp)
+                .map_err(|e| e.to_string())
+                .and_then(|plan| guard.check_ramp(plan.peak())),
+            None => guard.check_run(&args),
+        });
+        if let Err(e) = checked {
+            eprintln!("error: {e}");
+            std::process::exit(2);
+        }
+        if args.dry_run {
+            let plan = guard::Plan {
+                mode: if ramp.is_some() { "ramp" } else { "run" },
+                targets: vec![args.url.clone()],
+                method: Some(args.method.clone()),
+                headers: guard::Plan::headers_of(&args.headers),
+                body_bytes: args.body().map(|b| b.len()),
+                load: match &ramp {
+                    Some(r) => format!(
+                        "concurrency {} to {} by {}, each step held {}{}",
+                        r.from,
+                        r.to,
+                        r.step,
+                        r.every,
+                        if r.until.is_empty() {
+                            String::new()
+                        } else {
+                            format!(", until {}", r.until.join(" or "))
+                        }
+                    ),
+                    None => guard::Plan::load_of(&args, "requests"),
+                },
+                settings: guard::Plan::settings_of(&args),
+                guard: guard.describe(),
+                ..Default::default()
+            };
+            print_plan(&args, &plan)?;
+            return Ok(());
         }
     }
 
