@@ -29,6 +29,7 @@
   <main class="main">
     <article class="prose">
 <h1>Comparing two runs</h1>
+<p><img src="../assets/compare.gif" alt="pepe compare: two reports of the same target, then what moved between them" loading="lazy"></p>
 <p><code>pepe compare</code> holds a report against an earlier one of the same test and says what moved, in the verdict's words. A number is only called a change when it moved more than two runs like these wobble on their own: the run's own latency spread, scaled by how many requests back the number, so a p99 from 200 requests is given more room than one from 20,000.</p>
 <figure class="code"><div class="bar"><span>bash</span><button type="button" class="copy" aria-label="Copy">copy</button></div><pre><code>pepe --json -n 5000 -c 20 https://staging.example.com/api &gt; before.json
 # ... deploy ...

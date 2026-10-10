@@ -419,6 +419,8 @@ pepe logs access.log --format '$remote_addr [$time_local] "$request" $status $bo
 
 ### Pinging a URL
 
+![pepe ping: two targets on the graph, then the phases of one, then the pings themselves with one opened](assets/ping.gif)
+
 Ping, with HTTP instead of ICMP, and a graph. `pepe ping` sends one request every second to each target and draws its latency over time, with each ping split into where its time went: the DNS lookup, the TCP connect, the TLS handshake, the wait for the first byte and the download. It is what to leave open in a corner of the screen while something is deployed, and the on-ramp to a load test: the same `-H`, `-m`, `-d`, `-k`, `-p` and `-t` apply.
 
 ```bash

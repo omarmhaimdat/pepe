@@ -1,0 +1,48 @@
+# The site on its own: whenever the install page, the documentation, the
+# recordings or the schemas change on master, they go up to the R2 bucket
+# behind pepe.mhaimdat.com without waiting for a release. A release
+# publishes the same files again, with its artifacts (publish-r2.yml).
+name: Publish site
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - "site/**"
+      - "docs/**"
+      - "assets/**"
+      - "schema/**"
+      - ".github/workflows/publish-site.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: publish-site
+  cancel-in-progress: false
+
+jobs:
+  publish-site:
+    if: ${{ vars.R2_ENABLED == 'true' }}
+    runs-on: ubuntu-latest
+    env:
+      AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+      AWS_DEFAULT_REGION: ${{ vars.R2_REGION }}
+      R2_BUCKET: ${{ vars.R2_BUCKET }}
+      R2_ENDPOINT: ${{ vars.R2_ENDPOINT }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: The built site must match its sources
+        run: python3 site/build-docs.py --check
+      - name: Upload to R2
+        run: site/publish.sh .
+      - name: Verify public URLs
+        shell: bash
+        run: |
+          set -euo pipefail
+          for path in index.html docs/index.html docs/ping.html docs/docs.css docs/docs.js docs/search.json schema/run.schema.json assets/home.gif; do
+            code=$(curl -s -o /dev/null -w '%{http_code}' "https://pepe.mhaimdat.com/$path?t=$(date +%s)")
+            echo "$path -> $code"
+            [ "$code" = "200" ]
+          done

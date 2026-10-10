@@ -1,0 +1,25 @@
+# A flow for the recordings, against bench/server (assets/record.sh):
+# a request id taken from one response, an item from the next, both
+# sent with the last
+name = "checkout"
+
+[vars]
+host = "http://127.0.0.1:8099"
+
+[[step]]
+name = "login"
+url = "{{host}}/timed"
+capture = { session = "header:X-Request-Id" }
+
+[[step]]
+name = "cart"
+url = "{{host}}/json"
+headers = ["X-Session: {{session}}"]
+capture = { item = "json:$.id", tag = "json:$.tags[0]" }
+
+[[step]]
+name = "checkout"
+method = "POST"
+url = "{{host}}/slow?ms=8&item={{item}}&tag={{tag}}"
+headers = ["Content-Type: application/json", "X-Session: {{session}}"]
+body = '{"item": {{item}}, "tag": "{{tag}}"}'

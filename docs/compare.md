@@ -1,5 +1,7 @@
 # Comparing two runs
 
+![pepe compare: two reports of the same target, then what moved between them](assets/compare.gif)
+
 `pepe compare` holds a report against an earlier one of the same test and says what moved, in the verdict's words. A number is only called a change when it moved more than two runs like these wobble on their own: the run's own latency spread, scaled by how many requests back the number, so a p99 from 200 requests is given more room than one from 20,000.
 
 ```bash

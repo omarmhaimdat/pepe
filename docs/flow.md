@@ -1,5 +1,7 @@
 # Flows: a sequence of requests
 
+![pepe flow: a chain of three steps, each a row on the dashboard](assets/flow.gif)
+
 `pepe flow` runs a chain of requests where a value from one response feeds the next: log in, take the token, use it. Each unit of concurrency is one user walking the steps in order with its own values, over and over; each step is a row on the dashboard, as endpoints are in API mode, with its own throughput, latency and statuses.
 
 ```bash

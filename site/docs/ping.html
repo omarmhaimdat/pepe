@@ -29,6 +29,7 @@
   <main class="main">
     <article class="prose">
 <h1>Ping</h1>
+<p><img src="../assets/ping.gif" alt="pepe ping: two targets on the graph, then the phases of one, then the pings themselves with one opened" loading="lazy"></p>
 <p>Ping, with HTTP instead of ICMP, and a graph. <code>pepe ping</code> sends one request every second to each target and draws its latency over time, with each ping split into where its time went: the DNS lookup, the TCP connect, the TLS handshake, the wait for the first byte and the download. It is what to leave open in a corner of the screen while something is deployed, and the on-ramp to a load test: the same <code>-H</code>, <code>-m</code>, <code>-d</code>, <code>-k</code>, <code>-p</code> and <code>-t</code> apply.</p>
 <figure class="code"><div class="bar"><span>bash</span><button type="button" class="copy" aria-label="Copy">copy</button></div><pre><code>pepe ping https://example.com                       # a request a second, forever; q leaves the summary
 pepe ping api.example.com cdn.example.com --name api,cdn   # several, each a line on the graph

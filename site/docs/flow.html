@@ -29,6 +29,7 @@
   <main class="main">
     <article class="prose">
 <h1>Flows: a sequence of requests</h1>
+<p><img src="../assets/flow.gif" alt="pepe flow: a chain of three steps, each a row on the dashboard" loading="lazy"></p>
 <p><code>pepe flow</code> runs a chain of requests where a value from one response feeds the next: log in, take the token, use it. Each unit of concurrency is one user walking the steps in order with its own values, over and over; each step is a row on the dashboard, as endpoints are in API mode, with its own throughput, latency and statuses.</p>
 <figure class="code"><div class="bar"><span>bash</span><button type="button" class="copy" aria-label="Copy">copy</button></div><pre><code>pepe flow checkout.toml -c 20 -z 1m
 pepe flow checkout.toml -n 500 --json &gt; checkout.json</code></pre></figure>

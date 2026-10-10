@@ -7,7 +7,7 @@ curl -LsSf https://pepe.mhaimdat.com/install.sh | sh
 pepe https://example.com
 ```
 
-![pepe load-testing a server: the live dashboard, the request log, and the verdict](assets/run.gif)
+![pepe: a ping that says where the time goes, then a run with the live dashboard and the verdict it leaves](assets/home.gif)
 
 ## Pick a page
 
