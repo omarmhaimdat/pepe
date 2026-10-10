@@ -108,9 +108,25 @@ pub struct Spec {
     pub operations: Vec<Operation>,
 }
 
-/// Read a spec from a file or an http(s) URL; JSON or YAML
+/// The text is the spec itself, not where to find it: a path or a URL
+/// has no line breaks and doesn't open a JSON object
+pub fn is_document(source: &str) -> bool {
+    let text = source.trim();
+    text.starts_with('{') || text.contains('\n')
+}
+
+/// Where a spec was read from, when that was a URL: a spec fetched over
+/// http says where the API is when it names no server
+pub fn origin(source: &str) -> Option<&str> {
+    (source.starts_with("http://") || source.starts_with("https://")).then_some(source)
+}
+
+/// Read a spec from a file, an http(s) URL, or the document itself; JSON
+/// or YAML
 pub async fn load(source: &str) -> Result<Value, String> {
-    let text = if source.starts_with("http://") || source.starts_with("https://") {
+    let text = if is_document(source) {
+        source.to_string()
+    } else if origin(source).is_some() {
         let response = reqwest::Client::new()
             .get(source)
             .timeout(std::time::Duration::from_secs(20))
@@ -1459,6 +1475,37 @@ paths:
         let spec = Spec::parse(&doc, None, None).unwrap();
         assert_eq!(spec.base_url, "http://h.io/v1");
         assert_eq!(spec.operations[0].body.as_ref().unwrap().1, br#"{"n":1}"#);
+    }
+
+    #[test]
+    fn the_document_itself_is_a_source() {
+        // A path or a URL is one line; the spec has many, or opens an object
+        assert!(!is_document("openapi.yaml"));
+        assert!(!is_document("https://api.x.io/openapi.json"));
+        assert!(!is_document("  specs/petstore.yml\n"));
+        assert!(is_document(PETSTORE));
+        assert!(is_document(r#"{"openapi": "3.0.0", "paths": {}}"#));
+        assert_eq!(
+            origin("https://api.x.io/openapi.json"),
+            Some("https://api.x.io/openapi.json")
+        );
+        assert_eq!(
+            origin(PETSTORE),
+            None,
+            "a pasted spec has server URLs in it, but came from nowhere"
+        );
+        assert_eq!(origin("openapi.yaml"), None);
+
+        let doc = tokio::runtime::Runtime::new()
+            .unwrap()
+            .block_on(load(PETSTORE))
+            .unwrap();
+        assert_eq!(Spec::parse(&doc, None, None).unwrap().title, "Petstore");
+        let err = tokio::runtime::Runtime::new()
+            .unwrap()
+            .block_on(load("not: [a spec\nat: all"))
+            .unwrap_err();
+        assert!(err.contains("not valid JSON or YAML"), "{err}");
     }
 
     #[test]

@@ -19,6 +19,7 @@ mod api;
 mod cache;
 mod cert;
 mod cli;
+mod compare;
 mod completions;
 mod config;
 mod contrib;
@@ -248,6 +249,7 @@ async fn run_json(args: &Cli) -> Result<(), Box<dyn std::error::Error>> {
                 load.peak_busy(),
                 load.rate().map(|r| (r, load.missed())),
             )
+            .with_target("run", Some(&args.method), &args.url, args.concurrency)
             .with_warmup(args.warmup(), warmup_requests)
             .with_timeline(timeline)
             .with_slowest(slowest)
@@ -551,6 +553,7 @@ async fn run_api_json(args: &Cli, run: &api::ApiRun) -> Result<(), Box<dyn std::
             load.peak_busy(),
             load.rate().map(|r| (r, load.missed())),
         )
+        .with_target("api", None, &run.spec.base_url, args.concurrency)
         .with_warmup(args.warmup(), warmup_requests)
         .with_connects(&connects);
     let mut report = serde_json::to_value(&report)?;
@@ -701,6 +704,7 @@ async fn flow_session(
 }
 
 async fn run_flow_json(args: &Cli, flow: flow::Flow) -> Result<(), Box<dyn std::error::Error>> {
+    let name = flow.name.clone();
     let views = flow.views();
     let (clients, connects) = flow_clients(args, &flow, args.concurrency as usize)?;
     let mut load = load::start_flow(clients, flow, args.concurrency as usize, plan(args), false);
@@ -749,6 +753,7 @@ async fn run_flow_json(args: &Cli, flow: flow::Flow) -> Result<(), Box<dyn std::
             load.peak_busy(),
             load.rate().map(|r| (r, load.missed())),
         )
+        .with_target("flow", None, &name, args.concurrency)
         .with_warmup(args.warmup(), warmup_requests)
         .with_connects(&connects);
     let mut report = serde_json::to_value(&report)?;
@@ -919,6 +924,12 @@ async fn run_replay_json(
             load.peak_busy(),
             load.rate().map(|r| (r, load.missed())),
         )
+        .with_target(
+            "replay",
+            None,
+            &what.log.display().to_string(),
+            args.concurrency,
+        )
         .with_warmup(args.warmup(), warmup_requests)
         .with_connects(&connects);
     let mut report = serde_json::to_value(&report)?;
@@ -1005,6 +1016,17 @@ async fn run_logs(args: &Cli, what: &cli::LogsArgs) -> Result<(), Box<dyn std::e
     if screen && files.is_empty() {
         aside = logs::piped_aside();
         screen = aside.is_some();
+    }
+    // At a terminal a log that is being written is watched, not read: the
+    // screen starts a few minutes back, enough for "now" to be right at
+    // once and for the chart to have something in it. A log nobody is
+    // writing has no now, and is read whole.
+    let mut since = since;
+    if screen && since.is_none() && !what.all && !files.is_empty() {
+        let wall = logs::wall();
+        if logs::being_written(&files, &parser, wall) {
+            since = Some(wall - window.max(logs::LOOKBACK));
+        }
     }
     let mut job = logs::Job {
         files,
@@ -1280,6 +1302,32 @@ async fn run_ping(
     Ok(())
 }
 
+/// `pepe compare before.json after.json`: what moved, as a report or as
+/// JSON; with --gate, exit 1 when it is a regression
+fn run_compare(args: &Cli, what: &cli::CompareArgs) -> Result<(), Box<dyn std::error::Error>> {
+    let sides = (
+        compare::Side::read(&what.before),
+        compare::Side::read(&what.after),
+    );
+    let (before, after) = match sides {
+        (Ok(before), Ok(after)) => (before, after),
+        (Err(e), _) | (_, Err(e)) => {
+            eprintln!("error: {e}");
+            std::process::exit(2);
+        }
+    };
+    let comparison = compare::compare(&before, &after);
+    if args.json {
+        println!("{}", comparison.to_json()?);
+    } else {
+        print_report(&comparison.report());
+    }
+    if what.gate && comparison.regression {
+        std::process::exit(1);
+    }
+    Ok(())
+}
+
 async fn run_api(args: &Cli, api: &cli::ApiArgs) -> Result<(), Box<dyn std::error::Error>> {
     let mut run = match api::ApiRun::load(api).await {
         Ok(run) => run,
@@ -1377,6 +1425,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         return run_ping(&args, &what, &matches).await;
     }
+    if let Some(cli::Command::Compare(what)) = args.command.clone() {
+        return run_compare(&args, &what);
+    }
     if let Some(cli::Command::Flow(what)) = args.command.clone() {
         if let Err(e) = args.validate() {
             eprintln!("{}", e);
@@ -1386,8 +1437,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     if let Some(cli::Command::Api(api)) = args.command.clone() {
         if api.spec.is_empty() {
-            eprintln!("error: api needs a spec: pepe api openapi.yaml, or `spec` under [api] in pepe.toml");
-            std::process::exit(2);
+            // With nothing to load yet, the setup screen asks for the spec:
+            // a file, a URL, or the document pasted in
+            let interactive = !args.json && stdin().is_terminal() && stdout().is_terminal();
+            if !interactive {
+                eprintln!("error: api needs a spec: pepe api openapi.yaml, or `spec` under [api] in pepe.toml");
+                std::process::exit(2);
+            }
+            return run_screens(&args, true).await;
         }
         if let Err(e) = args.validate() {
             eprintln!("{}", e);
@@ -1436,9 +1493,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     if args.json {
         return run_json(&args).await;
     }
+    run_screens(&args, setup).await
+}
 
+/// The screens (the setup form when `setup`, then the run), and what they
+/// leave in the shell
+async fn run_screens(args: &Cli, setup: bool) -> Result<(), Box<dyn std::error::Error>> {
     let check = update::Check::start();
-    let farewell = run_interactive(&args, setup).await?;
+    let farewell = run_interactive(args, setup).await?;
     if let Some(report) = farewell.report {
         print_report(&report);
     }

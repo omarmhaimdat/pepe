@@ -495,7 +495,7 @@ const HEAT_SCALE: [(&str, f64); 4] = [
 ];
 
 /// A panel: the area filled with the panel surface
-fn panel(f: &mut Frame, area: Rect) {
+pub(super) fn panel(f: &mut Frame, area: Rect) {
     f.render_widget(
         Paragraph::new("").style(Style::new().bg(super::theme::PANEL)),
         area,
@@ -503,7 +503,7 @@ fn panel(f: &mut Frame, area: Rect) {
 }
 
 /// Inside a panel, `x` cells in from the sides and `y` rows from the edges
-fn inset(area: Rect, x: u16, y: u16) -> Rect {
+pub(super) fn inset(area: Rect, x: u16, y: u16) -> Rect {
     Rect {
         x: area.x + x,
         y: area.y + y,
@@ -586,32 +586,31 @@ fn render_cards(d: &Dashboard, f: &mut Frame, area: Rect) {
     let cards = [
         (
             "requests / s",
-            format!(
-                "avg {} · peak {}",
-                format::compact(m.rps(d.elapsed())),
-                format::compact(peak)
-            ),
+            vec![
+                format!("avg {}", format::compact(m.rps(d.elapsed()))),
+                format!("peak {}", format::compact(peak)),
+            ],
             format::compact(now),
             ACCENT,
         ),
         (
             "median",
-            format!("p90 {}", format::latency(m.percentile(90.0))),
+            vec![format!("p90 {}", format::latency(m.percentile(90.0)))],
             format::latency(m.percentile(50.0)),
             Color::Reset,
         ),
         (
             "p99",
-            format!("max {}", format::latency(m.max())),
+            vec![format!("max {}", format::latency(m.max()))],
             format::latency(p99),
             latency_color(p99, m.percentile(50.0)),
         ),
         (
             "success",
-            match failed {
+            vec![match failed {
                 0 => "none failed".to_string(),
                 n => format!("{} failed", format::count(n)),
-            },
+            }],
             success_text,
             success_color,
         ),
@@ -631,6 +630,11 @@ fn render_cards(d: &Dashboard, f: &mut Frame, area: Rect) {
             ..inset(card, 2, 0)
         };
         f.render_widget(Paragraph::new(label(name)), inner);
+        // What is said beside the name has the room the name leaves, less
+        // a gap: "requests / s" and "avg 249 · peak 268" are exactly a
+        // card wide together, and read as one word when they touch
+        let room = (inner.width as usize).saturating_sub(name.chars().count() + 2);
+        let sub = fit_parts(&sub, room);
         f.render_widget(
             Paragraph::new(Span::styled(sub, Style::new().fg(super::kit::FAINT)))
                 .alignment(Alignment::Right),
@@ -3082,6 +3086,57 @@ mod tests {
         // No median yet: nothing to judge against
         assert_eq!(latency_color(ms(50), ms(0)), Color::Reset);
         assert_eq!(status_color(301), Color::Reset);
+    }
+
+    #[test]
+    fn a_card_keeps_a_gap_between_its_name_and_what_is_beside_it() {
+        let card = |per_second: u64| {
+            let args = Cli::parse_from(["pepe", "-z", "60s", "http://example.com/"]);
+            let mut d = Dashboard::new(args, Plan::Duration(Duration::from_secs(60)));
+            d.started = std::time::Instant::now() - Duration::from_millis(4_100);
+            for s in 0..4 {
+                for i in 0..per_second + s * per_second / 10 {
+                    d.record(ResponseStats {
+                        duration: Duration::from_millis(5 + i % 7),
+                        status_code: Some(StatusCode::OK),
+                        ..Default::default()
+                    });
+                }
+                d.timeline.advance(Duration::from_secs(s + 1));
+            }
+            let mut terminal = Terminal::new(TestBackend::new(180, 50)).unwrap();
+            terminal.draw(|f| render(&d, f)).unwrap();
+            let buffer = terminal.backend().buffer().clone();
+            (0..50)
+                .map(|y| {
+                    (0..180)
+                        .map(|x| buffer[(x, y)].symbol())
+                        .collect::<String>()
+                })
+                .find(|row| row.contains("requests / s"))
+                .expect("the big header, with its cards")
+        };
+        // Two digits: both fit, as before
+        let row = card(40);
+        assert!(
+            row.contains("requests / s  avg 4") && row.contains(" · peak 5"),
+            "{row}"
+        );
+        // Three digits were exactly a card wide with the name, and touched
+        let row = card(240);
+        assert!(!row.contains("savg"), "{row}");
+        assert!(
+            row.contains("requests / s  ") && row.contains("avg 2"),
+            "{row}"
+        );
+        assert!(!row.contains("peak"), "the peak gives way: {row}");
+        // Thousands: still a gap
+        let row = card(12_000);
+        assert!(
+            row.contains("requests / s  ") && row.contains("avg 1"),
+            "{row}"
+        );
+        assert!(!row.contains("savg"), "{row}");
     }
 
     #[test]

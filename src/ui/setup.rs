@@ -21,6 +21,7 @@ use super::{body, format, mascot, theme};
 use crate::cli::{ApiArgs, Command, RampArgs};
 use crate::curl;
 use crate::load::Plan;
+use crate::openapi;
 use crate::ramp::RampPlan;
 use crate::response::ResponseStats;
 use crate::Cli;
@@ -73,7 +74,7 @@ impl Mode {
 enum Field {
     Url,
     Method,
-    /// API mode: the OpenAPI spec, a file or a URL
+    /// API mode: the OpenAPI spec, a file, a URL or the document itself
     Spec,
     /// API mode: where requests go instead of the spec's server
     Server,
@@ -369,6 +370,7 @@ impl Setup {
     }
 
     fn insert(&mut self, text: &str) {
+        self.clear_pasted_spec();
         let field = self.focused();
         let numeric = self.numeric(field);
         // The new header or condition takes this row; "add" moves down one
@@ -401,6 +403,9 @@ impl Setup {
 
     /// Delete the character before the caret (`back`) or under it
     fn delete(&mut self, back: bool) {
+        if self.clear_pasted_spec() {
+            return;
+        }
         let field = self.focused();
         let cursor = self.cursor;
         let Some(target) = self.text(field) else {
@@ -490,14 +495,37 @@ impl Setup {
         None
     }
 
-    /// Pasted text: a curl command fills the whole form, anything else goes
-    /// into the focused field
+    /// Pasted text: a curl command fills the whole form, an OpenAPI
+    /// document is the spec, anything else goes into the focused field
     fn paste(&mut self, text: &str) {
-        if looks_like_curl(text) && self.mode != Mode::Api {
+        if self.mode == Mode::Api && openapi::is_document(text) {
+            self.spec = text.trim().to_string();
+            self.focus = 0;
+            self.cursor = 0;
+            self.tried = None;
+            self.message = Some((
+                format!(
+                    "the spec is the {} lines pasted · enter loads it",
+                    self.spec.lines().count()
+                ),
+                false,
+            ));
+        } else if looks_like_curl(text) && self.mode != Mode::Api {
             self.fill_from_curl(text);
         } else {
             self.insert(text.trim());
         }
+    }
+
+    /// A pasted spec is one value: typing or deleting in its field starts
+    /// over with an empty one
+    fn clear_pasted_spec(&mut self) -> bool {
+        if self.focused() == Field::Spec && openapi::is_document(&self.spec) {
+            self.spec.clear();
+            self.cursor = 0;
+            return true;
+        }
+        false
     }
 
     fn fill_from_curl(&mut self, command: &str) {
@@ -584,7 +612,7 @@ impl Setup {
         if self.mode == Mode::Api {
             let spec = self.spec.trim();
             if spec.is_empty() {
-                return Err("enter the OpenAPI spec: a file or a URL".into());
+                return Err("enter the OpenAPI spec: a file or a URL, or paste it".into());
             }
             let server = self.server.trim();
             cli.url = String::new();
@@ -798,7 +826,9 @@ impl Setup {
                 label(format!("pepe {fresher} is out · pepe self-update")),
             ])
         } else if self.mode == Mode::Api {
-            Line::from(label(" enter loads the spec and shows its endpoints"))
+            Line::from(label(
+                " enter loads the spec and shows its endpoints · the spec itself can be pasted",
+            ))
         } else {
             Line::from(label(
                 " paste a curl command anywhere to fill everything in from it",
@@ -842,7 +872,8 @@ impl Setup {
                 ],
                 &[
                     "Paste a curl command anywhere, from a browser's".into(),
-                    "\"Copy as cURL\", to fill in the whole form.".into(),
+                    "\"Copy as cURL\", to fill in the whole form. In API".into(),
+                    "mode, paste the OpenAPI document itself as the spec.".into(),
                     String::new(),
                     about_line(),
                 ],
@@ -1010,12 +1041,27 @@ impl Setup {
                 &mut target,
                 Field::Spec,
                 "Spec",
-                self.typed(
-                    Field::Spec,
-                    &self.spec,
-                    "openapi.yaml, or https://…/openapi.json",
-                    target_room,
-                ),
+                if openapi::is_document(&self.spec) {
+                    // The document itself, not a name: say so instead
+                    vec![Span::styled(
+                        format!(
+                            "the pasted spec, {} lines · backspace clears it",
+                            self.spec.lines().count()
+                        ),
+                        if focused == Field::Spec {
+                            Style::new().bold()
+                        } else {
+                            Style::new()
+                        },
+                    )]
+                } else {
+                    self.typed(
+                        Field::Spec,
+                        &self.spec,
+                        "openapi.yaml, https://…/openapi.json, or paste the spec",
+                        target_room,
+                    )
+                },
                 target_width,
             );
             self.row(
@@ -1582,6 +1628,40 @@ mod tests {
         );
         assert_eq!((cli.method.as_str(), cli.concurrency), ("OPTIONS", 89));
         assert_eq!(cli.headers, ["X-Id: 7"]);
+    }
+
+    #[test]
+    fn in_api_mode_a_pasted_document_is_the_spec() {
+        let mut s = setup(&["pepe", "api"]);
+        assert_eq!((s.mode, s.focused()), (Mode::Api, Field::Spec));
+        assert!(s.to_cli().unwrap_err().contains("paste"));
+        // Pasted onto another field, it still lands as the spec
+        press(&mut s, KeyCode::Down);
+        let doc = "openapi: 3.0.0\ninfo: { title: T, version: 1 }\npaths: {}\n";
+        s.paste(doc);
+        assert_eq!((s.focused(), s.spec.as_str()), (Field::Spec, doc.trim()));
+        assert!(matches!(&s.message, Some((m, false)) if m.contains("3 lines")));
+        let cli = s.to_cli().unwrap();
+        let Some(Command::Api(api)) = &cli.command else {
+            panic!("API mode");
+        };
+        assert_eq!(api.spec, doc.trim());
+        assert!(cli.command_line().contains("api '<the pasted spec>'"));
+
+        // Typing or deleting starts over with a name instead
+        press(&mut s, KeyCode::Backspace);
+        assert_eq!(s.spec, "");
+        s.paste(doc);
+        type_text(&mut s, "a.yml");
+        assert_eq!(s.spec, "a.yml");
+
+        // A one-line paste is a name, and a curl command is not a spec here
+        s.spec.clear();
+        s.paste("  specs/openapi.json\n");
+        assert_eq!(s.spec, "specs/openapi.json");
+        s.spec.clear();
+        s.paste("curl https://x.io");
+        assert_eq!(s.spec, "curl https://x.io");
     }
 
     #[test]

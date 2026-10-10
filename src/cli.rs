@@ -1,4 +1,4 @@
-use clap::{ArgAction::HelpLong, Args, Error, Parser, Subcommand};
+use clap::{ArgAction::HelpLong, Args, CommandFactory, Error, Parser, Subcommand};
 use reqwest::Proxy;
 
 use crate::curl;
@@ -185,6 +185,8 @@ pub enum Command {
     Logs(LogsArgs),
     /// Ping a URL: a request a second, each split into DNS, connect, TLS, first byte and download, on a graph
     Ping(PingArgs),
+    /// Hold a run's JSON report against an earlier one and say what moved
+    Compare(CompareArgs),
 }
 
 #[derive(clap::Args, Debug, Clone, PartialEq, Default)]
@@ -314,6 +316,18 @@ pub enum Refused {
 }
 
 #[derive(clap::Args, Debug, Clone, PartialEq)]
+pub struct CompareArgs {
+    /// The earlier report (`pepe --json`, `--snapshot`, or a ramp's)
+    pub before: std::path::PathBuf,
+    /// The later one, of the same test
+    pub after: std::path::PathBuf,
+
+    /// Exit 1 when the verdict is Slower or Worse, for CI
+    #[arg(long)]
+    pub gate: bool,
+}
+
+#[derive(clap::Args, Debug, Clone, PartialEq)]
 pub struct LogsArgs {
     /// Access and error logs, rotated ones too; `-` or nothing reads what
     /// is piped in, and with nothing at all nginx's own in /var/log/nginx
@@ -328,9 +342,14 @@ pub struct LogsArgs {
     #[arg(long, default_value = "60s", value_name = "TIME")]
     pub window: String,
 
-    /// Leave out what is older than this, e.g. 90m, 24h, 7d
+    /// How far back to start, e.g. 90m, 24h, 7d. At a terminal a log that
+    /// is being written is shown live, from five minutes back, without it
     #[arg(long, value_name = "TIME")]
     pub since: Option<String>,
+
+    /// Read all of the log before following it, however far back it goes
+    #[arg(long, conflicts_with = "since")]
+    pub all: bool,
 
     /// Count /items/1 and /items/2 apart. Without it the numbers and ids
     /// in a path count as one, /items/*
@@ -412,7 +431,8 @@ impl Default for RampArgs {
 
 #[derive(clap::Args, Debug, Clone, Default)]
 pub struct ApiArgs {
-    /// The OpenAPI spec: a file or URL, JSON or YAML (or `spec` in pepe.toml)
+    /// The OpenAPI spec: a file, a URL or the document itself, JSON or
+    /// YAML (or `spec` in pepe.toml). Without it, the setup screen asks
     #[arg(default_value_t = String::new(), hide_default_value = true)]
     pub spec: String,
 
@@ -555,11 +575,38 @@ impl Cli {
             if let Err(e) = reqwest::Url::parse(&self.url) {
                 return Err(Error::raw(
                     clap::error::ErrorKind::ValueValidation,
-                    format!("Invalid URL {:?}: {e}", self.url),
+                    Self::url_trouble(&self.url, e),
                 ));
             }
         }
         Ok(())
+    }
+
+    /// What's wrong with a URL that didn't parse, and what to do: a host
+    /// without its scheme is given one, and a bare word is told apart from
+    /// the commands, which a pepe older than the word may not have
+    fn url_trouble(url: &str, e: impl std::fmt::Display) -> String {
+        let bare = !url.is_empty()
+            && url
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_'));
+        if url.contains("://") {
+            format!("Invalid URL {url:?}: {e}")
+        } else if bare {
+            let commands: Vec<String> = Cli::command()
+                .get_subcommands()
+                .map(|c| c.get_name().to_string())
+                .collect();
+            format!(
+                "{url:?} isn't a URL, nor a command this pepe ({}) has.\n\
+                 A URL starts with http:// or https://, as in pepe https://example.com\n\
+                 The commands are {}; `pepe self-update` gets the newest ones",
+                version(),
+                commands.join(", ")
+            )
+        } else {
+            format!("{url:?} has no scheme: a URL starts with http:// or https://, as in pepe https://{url}")
+        }
     }
 
     /// Parse duration string like "10s", "5m", "2h" into milliseconds
@@ -674,7 +721,12 @@ impl Cli {
                 }
             }
             Some(Command::Api(api)) => {
-                target = api.spec.clone();
+                // A spec pasted on the setup screen has no name to give
+                target = if crate::openapi::is_document(&api.spec) {
+                    "<the pasted spec>".into()
+                } else {
+                    api.spec.clone()
+                };
                 if let Some(server) = &api.server {
                     flag("--server", server);
                 }
@@ -1049,6 +1101,32 @@ mod tests {
     fn the_cli_definition_is_consistent() {
         use clap::CommandFactory;
         Cli::command().debug_assert();
+    }
+
+    #[test]
+    fn a_url_that_isnt_one_is_told_what_it_needs() {
+        let trouble = |word: &str| {
+            let mut args = Cli::parse_from(["pepe", word]);
+            args.validate().unwrap_err().to_string()
+        };
+        let bare = trouble("foo");
+        assert!(
+            bare.contains("\"foo\" isn't a URL, nor a command"),
+            "{bare}"
+        );
+        assert!(bare.contains("api, ramp, replay, flow, logs"), "{bare}");
+        assert!(bare.contains("pepe self-update"), "{bare}");
+        let host = trouble("example.com/x");
+        assert!(host.contains("has no scheme"), "{host}");
+        assert!(host.contains("pepe https://example.com/x"), "{host}");
+        let odd = trouble("http://exa mple.com");
+        assert!(
+            odd.starts_with("error: Invalid URL \"http://exa mple.com\""),
+            "{odd}"
+        );
+        assert!(Cli::parse_from(["pepe", "https://example.com"])
+            .validate()
+            .is_ok());
     }
 
     #[test]

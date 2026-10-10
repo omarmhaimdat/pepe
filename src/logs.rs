@@ -1475,6 +1475,8 @@ pub struct Stats {
     pub undated: u64,
     /// Lines older than `--since`
     pub skipped: u64,
+    /// The second nothing older than is counted
+    pub since: Option<i64>,
     pub first: Option<Stamp>,
     pub last: Option<Stamp>,
     /// A line as recent as the clock was read: the log is being written
@@ -1534,6 +1536,7 @@ impl Default for Stats {
             stitched: HashMap::new(),
             undated: 0,
             skipped: 0,
+            since: None,
             first: None,
             last: None,
             live: false,
@@ -1662,6 +1665,44 @@ fn cut(line: &str) -> String {
         end if end == line.len() => line.to_string(),
         end => format!("{}…", &line[..end]),
     }
+}
+
+/// The line without the colour codes `docker compose logs` writes into a
+/// pipe, and without the control characters that would move the cursor
+/// when the line is drawn: a tab is a space, the rest are left out
+pub fn clean(text: &str) -> Cow<'_, str> {
+    if !text.bytes().any(|b| b < 0x20 || b == 0x7f) {
+        return Cow::Borrowed(text);
+    }
+    let mut out = String::with_capacity(text.len());
+    let mut chars = text.chars().peekable();
+    while let Some(c) = chars.next() {
+        match c {
+            '\x1b' => match chars.next() {
+                // ESC [ parameters, then one final byte: a colour, most often
+                Some('[') => {
+                    for n in chars.by_ref() {
+                        if ('@'..='~').contains(&n) {
+                            break;
+                        }
+                    }
+                }
+                // ESC ] text, to a BEL or an ESC \: a title, a link
+                Some(']') => {
+                    while let Some(n) = chars.next() {
+                        if n == '\x07' || (n == '\x1b' && chars.next().is_some()) {
+                            break;
+                        }
+                    }
+                }
+                _ => {}
+            },
+            '\t' => out.push(' '),
+            c if c.is_control() => {}
+            c => out.push(c),
+        }
+    }
+    Cow::Owned(out)
 }
 
 impl Stats {
@@ -2092,6 +2133,16 @@ impl Stats {
         out
     }
 
+    /// (requests, 4xx, 5xx) of each of the `n` seconds up to now, oldest first
+    pub fn seconds_back(&self, clock: Clock, n: usize) -> Vec<[u32; 3]> {
+        let from = clock.now - n as i64 + 1;
+        let mut out = vec![[0; 3]; n];
+        for (at, second) in self.seconds.range(from, clock.now) {
+            out[(at - from) as usize] = *second;
+        }
+        out
+    }
+
     /// A grain's slots, oldest first, each with its rate over the part of
     /// it the log covers
     pub fn rows(&self, grain: Grain, clock: Clock) -> Vec<Row> {
@@ -2296,6 +2347,7 @@ fn fold_lines(chunk: &[u8], job: &Job, stats: &mut Stats, wall: i64) {
         } else {
             String::from_utf8_lossy(line)
         };
+        let text = clean(text.trim());
         let text = text.trim();
         if text.is_empty() {
             continue;
@@ -2345,16 +2397,16 @@ fn read_full_at(file: &std::fs::File, buf: &mut [u8], offset: u64) -> usize {
 /// to the shared ones. A line belongs to the stretch it starts in, so no
 /// line is counted twice or missed, and since adding counts gives the
 /// same sum in any order, the result is what one thread reading from the
-/// top would have had. Returns where the reading got to, which is the
-/// start of a line; the rest, and what is appended, is the tail's.
-fn sprint(path: &Path, job: &Job, shared: &Shared, chunk: u64, threads: usize) -> u64 {
+/// top would have had. `origin` is the start of the line to begin at.
+/// Returns where the reading got to, which is the start of a line; the rest, and what is appended, is the tail's.
+fn sprint(path: &Path, job: &Job, shared: &Shared, origin: u64, chunk: u64, threads: usize) -> u64 {
     let Ok(file) = std::fs::File::open(path) else {
-        return 0;
+        return origin;
     };
     let len = file.metadata().map_or(0, |meta| meta.len());
-    let chunks = len / chunk;
+    let chunks = len.saturating_sub(origin) / chunk;
     if chunks < 2 || threads < 2 {
-        return 0;
+        return origin;
     }
     let base = shared.lock().order;
     let next = std::sync::atomic::AtomicU64::new(0);
@@ -2377,8 +2429,8 @@ fn sprint(path: &Path, job: &Job, shared: &Shared, chunk: u64, threads: usize) -
                     }
                     // One byte before the stretch says whether a line
                     // starts at its first byte
-                    let from = (i * chunk).saturating_sub(1);
-                    buf.resize(((i + 1) * chunk - from) as usize, 0);
+                    let from = origin + (i * chunk).saturating_sub(1);
+                    buf.resize((origin + (i + 1) * chunk - from) as usize, 0);
                     let filled = read_full_at(&file, &mut buf, from);
                     buf.truncate(filled);
                     let start = match i {
@@ -2410,7 +2462,7 @@ fn sprint(path: &Path, job: &Job, shared: &Shared, chunk: u64, threads: usize) -
                     }
                     if start < end {
                         local.order = base + from + start as u64;
-                        local.keeping = (i + 1) * chunk + SPRINT_KEEP >= len;
+                        local.keeping = origin + (i + 1) * chunk + SPRINT_KEEP >= len;
                         fold_lines(&buf[start..end], job, &mut local, wall);
                         local.end_stretch();
                         local.read_bytes += (end - start) as u64;
@@ -2427,10 +2479,89 @@ fn sprint(path: &Path, job: &Job, shared: &Shared, chunk: u64, threads: usize) -
     });
     let mut stats = shared.lock();
     stats.stitched = HashMap::new();
-    if shared.stop.load(Ordering::Relaxed) {
+    reached.load(Ordering::Relaxed).max(origin)
+}
+
+/// The time of the first line that has one among those starting in the
+/// 64 KB from `offset` on
+fn stamp_after(file: &std::fs::File, offset: u64, parser: &Parser) -> Option<i64> {
+    let mut buf = vec![0; 64 * 1024];
+    let filled = read_full_at(file, &mut buf, offset.saturating_sub(1));
+    buf.truncate(filled);
+    // Lines that start here: after the first newline, unless at the top
+    let start = match offset {
+        0 => 0,
+        _ => memchr::memchr(b'\n', &buf)? + 1,
+    };
+    buf[start..].split(|&c| c == b'\n').find_map(|line| {
+        match parser.read(&String::from_utf8_lossy(line)) {
+            Line::Request(r) => r.at,
+            Line::Fault(f) => f.at,
+            Line::Unread => None,
+        }
+        .map(|at| at.at)
+    })
+}
+
+/// Where in a file to start for lines from `since` on: the start of a
+/// line with every such line after it, found by halving, since a log is
+/// written in order of time. A day of a year's log is read without the
+/// rest of the year being looked at. What isn't known is settled toward
+/// the top of the file: more is read then, never less.
+fn seek_since(path: &Path, parser: &Parser, since: i64) -> u64 {
+    let Ok(file) = std::fs::File::open(path) else {
+        return 0;
+    };
+    let len = file.metadata().map_or(0, |meta| meta.len());
+    let (mut low, mut high) = (0u64, len);
+    while high - low > 64 * 1024 {
+        let middle = low + (high - low) / 2;
+        match stamp_after(&file, middle, parser) {
+            Some(at) if at < since => low = middle,
+            _ => high = middle,
+        }
+    }
+    if low == 0 {
         return 0;
     }
-    reached.load(Ordering::Relaxed)
+    // The line that starts at or after `low`
+    let mut buf = vec![0; 64 * 1024];
+    let filled = read_full_at(&file, &mut buf, low - 1);
+    match memchr::memchr(b'\n', &buf[..filled]) {
+        Some(newline) => low + newline as u64,
+        None => 0,
+    }
+}
+
+/// The time of a file's last line that has one
+fn last_stamp(path: &Path, parser: &Parser) -> Option<i64> {
+    let file = std::fs::File::open(path).ok()?;
+    let len = file.metadata().ok()?.len();
+    let mut buf = vec![0; 64 * 1024];
+    let from = len.saturating_sub(buf.len() as u64);
+    let filled = read_full_at(&file, &mut buf, from);
+    buf[..filled]
+        .rsplit(|&c| c == b'\n')
+        .take(50)
+        .find_map(|line| {
+            match parser.read(&String::from_utf8_lossy(line)) {
+                Line::Request(r) => r.at,
+                Line::Fault(f) => f.at,
+                Line::Unread => None,
+            }
+            .map(|at| at.at)
+        })
+}
+
+/// How far back the screen starts in a log that is being written
+pub const LOOKBACK: i64 = 300;
+
+/// One of the files has a line from the last minutes: it is being written
+pub fn being_written(files: &[PathBuf], parser: &Parser, wall: i64) -> bool {
+    files
+        .iter()
+        .filter_map(|path| last_stamp(path, parser))
+        .any(|at| at >= wall - LIVE)
 }
 
 /// One file being read
@@ -2534,6 +2665,11 @@ impl Tail {
                 let wall = wall();
                 stats.read_bytes += whole as u64;
                 fold_lines(&self.pending[..whole], job, &mut stats, wall);
+                // A pipe has no end to be short of: once read from, it is
+                // caught up with, and the screen is live from its first line
+                if self.path.is_none() {
+                    stats.caught_up = true;
+                }
                 drop(stats);
                 self.pending.drain(..whole);
             }
@@ -2588,17 +2724,26 @@ pub fn read(job: &Job, shared: &Shared) {
     // Stdin ends when its writer does; a file being followed never does
     let following = job.follow && !files.is_empty();
     let threads = std::thread::available_parallelism().map_or(1, usize::from);
+    shared.lock().since = job.since;
     for tail in &mut tails {
-        // A file of any size is first read by every core, as far as it
-        // goes now; its last lines and what comes after, by this thread
-        let path = tail
-            .path
-            .clone()
-            .filter(|path| std::fs::metadata(path).is_ok_and(|meta| meta.len() >= SPRINT_MIN));
-        if let Some(path) = path {
-            let reached = sprint(&path, job, shared, SPRINT_CHUNK, threads);
-            if let Ok(rest) = Tail::open_at(&path, reached) {
-                *tail = rest;
+        // With a time to start from, the file is taken up where that
+        // time is. What it has from there is first read by every core,
+        // when that is worth it; its last lines and what comes after,
+        // by this thread.
+        if let Some(path) = tail.path.clone() {
+            let origin = job
+                .since
+                .map_or(0, |since| seek_since(&path, &job.parser, since));
+            shared.lock().read_bytes += origin;
+            let rest = std::fs::metadata(&path).map_or(0, |meta| meta.len().saturating_sub(origin));
+            let reached = match rest >= SPRINT_MIN {
+                true => sprint(&path, job, shared, origin, SPRINT_CHUNK, threads),
+                false => origin,
+            };
+            if reached > 0 {
+                if let Ok(rest) = Tail::open_at(&path, reached) {
+                    *tail = rest;
+                }
             }
         }
         tail.drain(job, shared, !following);
@@ -3134,6 +3279,18 @@ mod tests {
             })
         ));
         assert_eq!(unprefixed("GET /a | b"), "GET /a | b");
+        // Into a pipe, compose colours the name; a tab in a line is a space
+        // and the other control characters are left out, so no line read
+        // can move the cursor when it is drawn
+        let coloured = "\x1b[36mnginx_twitter  |\x1b[0m 172.18.0.1 - - [08/Oct/2026:13:55:36 +0200] \"GET /\tHTTP/1.1\" 200 5 \"-\" \"curl/8\"\r\x07";
+        let cleaned = clean(coloured);
+        assert_eq!(
+            &*cleaned,
+            "nginx_twitter  | 172.18.0.1 - - [08/Oct/2026:13:55:36 +0200] \"GET / HTTP/1.1\" 200 5 \"-\" \"curl/8\""
+        );
+        assert_eq!(&*request(&parser, &cleaned).client, "172.18.0.1");
+        assert!(matches!(clean("plain"), Cow::Borrowed("plain")));
+        assert_eq!(&*clean("\x1b]8;;http://x\x1b\\link\x1b]8;;\x07"), "link");
         for not in [
             "",
             "hello world",
@@ -3544,6 +3701,23 @@ mod tests {
             exact_paths: false,
         };
         assert_eq!(job.name(), "access.log +1");
+        // Piped in, a log is caught up with from its first chunk: there is
+        // no end to be short of, and its colour is left out
+        let piped = dir.join("piped");
+        std::fs::write(
+            &piped,
+            format!("\x1b[36mweb-1  |\x1b[0m {}\n", hit(200, "/piped", 200)),
+        )
+        .unwrap();
+        let shared = Shared::default();
+        let mut tail = Tail::stdin(Some(&std::fs::File::open(&piped).unwrap()));
+        tail.drain(&job, &shared, false);
+        {
+            let stats = shared.lock();
+            assert!(stats.caught_up);
+            assert_eq!(stats.requests, 1);
+            assert_eq!(stats.paths.top(1, |p| p.requests)[0].0, "/piped");
+        }
         let shared = Shared::default();
         read(&job, &shared);
         {
@@ -3688,7 +3862,7 @@ mod tests {
 
         for (chunk, threads) in [(1_024, 4), (3_000, 3), (64 * 1024, 8), (1 << 20, 2)] {
             let many = Shared::default();
-            let reached = sprint(&path, &job, &many, chunk, threads);
+            let reached = sprint(&path, &job, &many, 0, chunk, threads);
             assert!(
                 reached > 0 && reached <= bytes.len() as u64,
                 "{chunk}: {reached}"
@@ -3715,8 +3889,8 @@ mod tests {
             assert!(many.stitched.is_empty());
         }
         // Too small to be worth a second thread
-        assert_eq!(sprint(&path, &job, &Shared::default(), 1 << 30, 8), 0);
-        assert_eq!(sprint(&path, &job, &Shared::default(), 1_024, 1), 0);
+        assert_eq!(sprint(&path, &job, &Shared::default(), 0, 1 << 30, 8), 0);
+        assert_eq!(sprint(&path, &job, &Shared::default(), 0, 1_024, 1), 0);
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -3760,5 +3934,86 @@ mod tests {
                 }
             )
         );
+    }
+
+    #[test]
+    fn a_log_is_taken_up_at_a_time_without_reading_what_is_before() {
+        let dir = std::env::temp_dir().join(format!("pepe-seek-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("access.log");
+        // Six hours, three requests a second, with lines that have no
+        // time and an error log's among them
+        let mut log = String::new();
+        for s in 0..21_600i64 {
+            for i in 0..3 {
+                log.push_str(&hit(s, &format!("/p{i}"), 200));
+                log.push('\n');
+            }
+            if s % 500 == 0 {
+                log.push_str("no time on this one\n");
+            }
+        }
+        std::fs::write(&path, &log).unwrap();
+        let parser = Parser::default();
+        assert_eq!(last_stamp(&path, &parser), Some(AT + 21_599));
+        assert!(being_written(
+            std::slice::from_ref(&path),
+            &parser,
+            AT + 21_599 + LIVE
+        ));
+        assert!(!being_written(
+            std::slice::from_ref(&path),
+            &parser,
+            AT + 21_600 + LIVE
+        ));
+        assert!(!being_written(&[dir.join("none.log")], &parser, AT));
+
+        for back in [1, 300, 3_600, 21_000] {
+            let since = AT + 21_600 - back;
+            let origin = seek_since(&path, &parser, since) as usize;
+            assert!(
+                origin == 0 || log.as_bytes()[origin - 1] == b'\n',
+                "{back}: a line's start"
+            );
+            // Every line from `since` on is after it, and little else is
+            let first = log.find(&hit(21_600 - back, "/p0", 200)).unwrap();
+            assert!(origin <= first, "{back}: {origin} > {first}");
+            assert!(
+                first - origin <= 2 * 64 * 1024,
+                "{back}: {} before",
+                first - origin
+            );
+
+            let job = Job {
+                files: vec![path.clone()],
+                piped: None,
+                parser: parser.clone(),
+                since: Some(since),
+                follow: false,
+                exact_paths: false,
+            };
+            let shared = Shared::default();
+            read(&job, &shared);
+            let stats = shared.lock();
+            assert_eq!(stats.requests, back as u64 * 3, "{back}");
+            assert_eq!(stats.first.unwrap().at, since, "{back}");
+            assert_eq!(stats.since, Some(since));
+            assert!(
+                stats.skipped < 2_000,
+                "{back}: {} read to be left out",
+                stats.skipped
+            );
+            assert_eq!(
+                stats.read_bytes,
+                log.len() as u64,
+                "{back}: all accounted for"
+            );
+        }
+        // Before the log starts, and after it ends
+        assert_eq!(seek_since(&path, &parser, AT - 5), 0);
+        let end = seek_since(&path, &parser, AT + 99_999) as usize;
+        assert!(log.len() - end <= 2 * 64 * 1024, "{}", log.len() - end);
+        assert_eq!(seek_since(&dir.join("none.log"), &parser, AT), 0);
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

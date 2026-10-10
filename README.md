@@ -279,7 +279,7 @@ pepe
 pepe -i -c 50 -z 30s https://example.com
 ```
 
-- `tab` switches mode: **Single URL**, **Ramp** or **API**. What the modes share is kept.
+- `tab` switches mode: **Single URL**, **Ramp** or **API**. What the modes share is kept. In API mode the spec is a file, a URL, or the OpenAPI document itself, pasted in.
 - `↑` `↓` move between fields, `←` `→` change a choice, `enter` starts.
 - Paste a curl command anywhere and the form is filled in from it.
 - `ctrl-t` sends the request once and shows the response, to check it before the run.
@@ -372,6 +372,8 @@ The dashboard's first tab lists the most frequent URLs (`--rows`, 20 by default)
 
 ### Reading nginx logs
 
+![Reading nginx logs: the dashboard with the rate now and a verdict, then traffic by the hour, paths, errors and the log](assets/logs.gif)
+
 What the server already knows about its traffic: `pepe logs` reads nginx's access and error logs and says how busy the server is now against how busy it has been.
 
 ```bash
@@ -381,12 +383,13 @@ docker compose logs -f -n 1000 nginx | pepe logs
 pepe logs access.log --since 24h --json > traffic.json
 ```
 
-At a terminal the files are followed as they are written, through rotation; piped, or with `--json`, they are read to the end and a report is printed. Lines are counted as a stream, so memory doesn't grow with the log: every second of the last hour, a day of minutes, ninety days of hours and ten years of days are kept. What a file already has is read by every core at once, some gigabytes a second, and what is appended after that by one. Rotated files can be given in any order. What is piped in is followed too, until its writer ends, and the `nginx-1  | ` that `docker compose logs` puts in front of each line is left out.
+At a terminal a log that is being written is shown live: the screen starts five minutes back, so that now is right at once, and follows the files as they are written, through rotation. `--since 24h` starts further back and `--all` reads everything first; either way the place to start is found in the file without reading what is before it. A log whose last line is older than five minutes has no now, and is read whole. Piped out, or with `--json`, the files are read to the end and a report is printed. Lines are counted as a stream, so memory doesn't grow with the log: every second of the last hour, a day of minutes, ninety days of hours and ten years of days are kept. What a file already has is read by every core at once, some gigabytes a second, and what is appended after that by one. Rotated files can be given in any order. What is piped in is followed too, until its writer ends, and the `nginx-1  | ` that `docker compose logs` puts in front of each line is left out, with the colour it writes into a pipe.
 
 **Now** is the request rate over the last minute (`--window`) of the log's own timestamps. A log whose last line is older than five minutes isn't being written, and is held at its last line instead of the clock. Each minute, hour and day has its requests, its rate, its busiest second, its 4xx and 5xx shares, its mean request time and its error log lines, and how now compares: `+12%`, `×3.4`, `÷2.5`. The cards on top say what a usual slot sees (the median), which was the busiest, and what the same minute an hour ago, the same hour a day ago or the same day a week ago saw.
 
 | View | Shows |
 | --- | --- |
+| **Dashboard** | Opens first. The rate now, the share answering 5xx and the request time drawn large; a verdict in a word (Steady, Busy, Quiet, Degraded, Failing) with what fails and what the error log says of it; traffic as a bar for every few seconds of the last minutes or hour, 4xx and 5xx in their colours; the top paths, the status codes, the error log's messages and the newest lines |
 | **Traffic** | A bar per slot with the rate now drawn across them, and the table of slots; `m`, `h`, `d` switch between minutes, hours and days |
 | **Paths** | The paths by requests, 5xx, 4xx or mean time (`s`), with status codes, clients, user agents, methods and query parameter names beside them |
 | **Errors** | The error log's messages grouped by cause, most frequent first, each with the first line that said it; the paths answering 5xx and 4xx |
@@ -435,14 +438,15 @@ The table above the views has each target's last, min, avg, max, jitter, p95, p9
 
 ![API mode: the endpoints of a spec picked on screen, then a dashboard with a row per endpoint](assets/api.gif)
 
-`pepe api` reads an OpenAPI 3 (or Swagger 2) spec, from a file or a URL, in JSON or YAML, and turns its operations into requests.
+`pepe api` reads an OpenAPI 3 (or Swagger 2) spec, from a file or a URL, in JSON or YAML, and turns its operations into requests. With nothing after it, it opens the setup screen and asks for the spec: type a path or a URL, or paste the whole document.
 
 ```bash
+pepe api
 pepe api openapi.yaml
 pepe api https://api.example.com/openapi.json --auth bearer:$TOKEN -c 20 -z 1m
 ```
 
-It opens on a plan screen. Nothing is sent, and no endpoint is switched on, until you say so.
+Once the spec is loaded, it opens on a plan screen. Nothing is sent, and no endpoint is switched on, until you say so.
 
 - Endpoints are listed under the spec's tags. `space` switches an endpoint on or off, or a whole tag; `/` filters the list.
 - `enter` on an endpoint goes to its parameters: path, query, header and cookie parameters with their type, description and the values the spec allows, then the body and the endpoint's share of the traffic. `enter` edits one, `space` steps through the spec's values, `del` leaves it out. Several values (`a, b`) are sent in turn, or together for array parameters.
@@ -489,6 +493,7 @@ jq '.summary.latency.p99_ms' results.json
 
 ```json
 {
+  "target": { "mode": "run", "method": "GET", "url": "https://example.com", "concurrency": 20 },
   "summary": {
     "total_requests": 1000,
     "successful_requests": 1000,
@@ -515,12 +520,34 @@ jq '.summary.latency.p99_ms' results.json
 
 `server_timing` is there when the target sends `Server-Timing` headers, and `slowest_requests` lists the five slowest responses with the request id their backend gave them, so they can be found in its logs.
 
+### Comparing two runs
+
+`pepe compare` holds a report against an earlier one of the same test and says what moved, in the verdict's words. A number is only called a change when it moved more than two runs like these wobble on their own: the run's own latency spread, scaled by how many requests back the number, so a p99 from 200 requests is given more room than one from 20,000.
+
+```bash
+pepe --json -n 5000 -c 20 https://staging.example.com/api > before.json
+# ... deploy ...
+pepe --json -n 5000 -c 20 https://staging.example.com/api > after.json
+pepe compare before.json after.json
+```
+
+```
+pepe · compare before.json → after.json
+▲ Slower · 5,000 → 5,000 requests · p99 120.0ms → 166.0ms · 260 req/s → 252 req/s
+  ▲ p99 up 38%: 120.0ms → 166.0ms
+  ✔ Median within the usual spread: 30.00ms → 31.00ms (±5%)
+  ✔ Throughput within the usual spread: 260 req/s → 252 req/s (±5%)
+  ▲ A long tail is new: p99 is 5.4× the median, was 4.0×
+```
+
+The verdict is one of **Faster**, **About the same**, **Slower**, and, when failures appeared or rose, **Worse** (or **Better** when they fell): failures outrank speed. Two reports of different targets or concurrency are compared all the same, with that said first. Ramp reports compare their capacity estimate and the level that held. `--gate` exits 1 on Slower or Worse, for CI, and `--json` prints the verdict, each number before and after with its change and the spread it was held against, and the findings.
+
 ### In GitHub Actions
 
 The repository is also an action: it installs a pinned release, runs `pepe --json`, puts the numbers in the job summary and in outputs, and can fail the job on a condition over the report.
 
 ```yaml
-- uses: omarmhaimdat/pepe@master
+- uses: omarmhaimdat/pepe@v0
   id: load
   with:
     url: https://staging.example.com/api/health
@@ -530,6 +557,34 @@ The repository is also an action: it installs a pinned release, runs `pepe --jso
 ```
 
 Outputs: `total_requests`, `failed_requests`, `requests_per_second`, `p50_ms`, `p99_ms`, and `report`, the path of the JSON. `version` pins a release (`0.9.0`); the default is the latest. Linux and macOS runners.
+
+**Against the base branch.** With `baseline: auto`, every run on a branch keeps its report in the Actions cache, and a pull request is held against its base branch's last one with `pepe compare`. `comment: true` posts the result on the pull request, one comment updated on every push, and `gate: true` fails the step when it says Slower or Worse. The first run on the base branch after this is added makes the baseline; until then a pull request's comment says so.
+
+```yaml
+permissions:
+  pull-requests: write
+steps:
+  - uses: omarmhaimdat/pepe@v0
+    with:
+      url: https://staging.example.com/api/health
+      args: -n 5000 -c 20
+      baseline: auto
+      comment: true
+      gate: true
+```
+
+> ### pepe · ▲ Slower than `main` · https://staging.example.com/api/health
+> | | `main` | this PR | |
+> |---|---|---|---|
+> | p99 | 120.0 ms | 166.0 ms | ▲ up 38% |
+> | median | 30.0 ms | 31.0 ms | within the usual spread (±5%) |
+> | throughput | 260 req/s | 252 req/s | within the usual spread (±5%) |
+> | failed | 0% | 0% | |
+>
+> - ▲ p99 up 38%: 120.0ms → 166.0ms
+> - ▲ A long tail is new: p99 is 5.4× the median, was 4.0×
+
+`baseline` can also name a report file, for a baseline kept in the repository or fetched from elsewhere. The comparison is in the job summary too, and in two more outputs: `verdict` (`faster`, `same`, `slower`, `better`, `worse`) and `compare`, the path of `pepe compare --json`'s output.
 
 ### Proxies
 

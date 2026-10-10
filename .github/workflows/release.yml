@@ -332,6 +332,19 @@ jobs:
       "id-token": "write"
       "packages": "write"
 
+  custom-publish-action:
+    needs:
+      - plan
+      - host
+    if: ${{ !fromJson(needs.plan.outputs.val).announcement_is_prerelease || fromJson(needs.plan.outputs.val).publish_prereleases }}
+    uses: ./.github/workflows/publish-action.yml
+    with:
+      plan: ${{ needs.plan.outputs.val }}
+    secrets: inherit
+    # publish jobs get escalated permissions
+    permissions:
+      "contents": "write"
+
   announce:
     needs:
       - plan
@@ -339,10 +352,11 @@ jobs:
       - custom-publish-homebrew
       - custom-publish-r2
       - custom-publish-docker
+      - custom-publish-action
     # use "always() && ..." to allow us to wait for all publish jobs while
     # still allowing individual publish jobs to skip themselves (for prereleases).
     # "host" however must run to completion, no skipping allowed!
-    if: ${{ always() && needs.host.result == 'success' && (needs.custom-publish-homebrew.result == 'skipped' || needs.custom-publish-homebrew.result == 'success') && (needs.custom-publish-r2.result == 'skipped' || needs.custom-publish-r2.result == 'success') && (needs.custom-publish-docker.result == 'skipped' || needs.custom-publish-docker.result == 'success') }}
+    if: ${{ always() && needs.host.result == 'success' && (needs.custom-publish-homebrew.result == 'skipped' || needs.custom-publish-homebrew.result == 'success') && (needs.custom-publish-r2.result == 'skipped' || needs.custom-publish-r2.result == 'success') && (needs.custom-publish-docker.result == 'skipped' || needs.custom-publish-docker.result == 'success') && (needs.custom-publish-action.result == 'skipped' || needs.custom-publish-action.result == 'success') }}
     runs-on: "ubuntu-22.04"
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

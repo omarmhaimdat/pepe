@@ -8,8 +8,9 @@ use std::time::Duration;
 use crossterm::event::{Event, EventStream, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 use futures::StreamExt;
 use ratatui::{
-    backend::CrosstermBackend,
-    layout::{Constraint, Flex, Layout, Rect},
+    backend::{Backend, CrosstermBackend},
+    buffer::Buffer,
+    layout::{Constraint, Flex, Layout, Position, Rect},
     style::{Color, Style, Stylize},
     text::{Line, Span},
     widgets::{Block, BorderType, Clear, Paragraph},
@@ -19,9 +20,10 @@ use tokio::time::MissedTickBehavior;
 
 use super::kit::{about_line, chips_fit, help, marker, tabs, wrap, FAINT, FIELD, SELECTED};
 use super::view::{
-    bar, label, section, status_color, truncate, value, ACCENT, BAD, GOOD, LABEL, RULE, WARN,
+    bar, inset, label, panel, section, status_color, truncate, value, ACCENT, BAD, GOOD, LABEL,
+    RULE, WARN,
 };
-use super::{format, theme};
+use super::{bigtext, format, theme};
 use crate::logs::{
     self, ago, busiest, day_and_time, echo, offset_label, percent, rate, time_of_day, typical,
     versus, Clock, Grain, Now, Parser, Recent, Row, Shared, Stats,
@@ -29,23 +31,41 @@ use crate::logs::{
 
 /// How often the screen is drawn again while nothing is pressed
 const FRAME: Duration = Duration::from_millis(200);
+/// How often the whole frame is written out again, over whatever else was
+/// written to the terminal meanwhile
+const REPAINT: Duration = Duration::from_secs(1);
 const MIN_WIDTH: u16 = 60;
 const MIN_HEIGHT: u16 = 16;
 const BLOCKS: [char; 8] = ['▁', '▂', '▃', '▄', '▅', '▆', '▇', '█'];
+/// Width of a number card on the dashboard
+const HERO: u16 = 30;
+/// A bar that says how much, and nothing of health: a banked ember in
+/// pepe's colours, a slate on the terminal's
+const BAR: Color = Color::Indexed(67);
 /// Width of a number card
-const CARD: u16 = 22;
+const CARD: u16 = 24;
+const CARD_H: u16 = 4;
+/// Bars of a few slots are this wide at most
+const BAR_MAX: u16 = 4;
 /// The chart's axis labels
 const AXIS: u16 = 7;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Tab {
+    Dashboard,
     Traffic,
     Paths,
     Errors,
     Log,
 }
 
-const TABS: [Tab; 4] = [Tab::Traffic, Tab::Paths, Tab::Errors, Tab::Log];
+const TABS: [Tab; 5] = [
+    Tab::Dashboard,
+    Tab::Traffic,
+    Tab::Paths,
+    Tab::Errors,
+    Tab::Log,
+];
 
 /// What the paths are listed by
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -149,7 +169,7 @@ impl LogsScreen {
             parser,
             name,
             window,
-            tab: Tab::Traffic,
+            tab: Tab::Dashboard,
             grain: Grain::Minute,
             slot: 0,
             sort: Sort::Requests,
@@ -200,7 +220,7 @@ impl LogsScreen {
             Tab::Traffic => self.slot = step(self.slot),
             Tab::Errors => self.cause = step(self.cause),
             Tab::Log => self.move_line(by),
-            Tab::Paths => {}
+            Tab::Dashboard | Tab::Paths => {}
         }
     }
 
@@ -238,7 +258,7 @@ impl LogsScreen {
             KeyCode::Char('?') | KeyCode::F(1) => self.show_help = true,
             KeyCode::Tab | KeyCode::Right => self.tab = TABS[(at + 1) % TABS.len()],
             KeyCode::BackTab | KeyCode::Left => self.tab = TABS[(at + TABS.len() - 1) % TABS.len()],
-            KeyCode::Char(c @ '1'..='4') => self.tab = TABS[c as usize - '1' as usize],
+            KeyCode::Char(c @ '1'..='5') => self.tab = TABS[c as usize - '1' as usize],
             KeyCode::Up | KeyCode::Char('k') => self.move_by(-1),
             KeyCode::Down | KeyCode::Char('j') => self.move_by(1),
             KeyCode::PageUp => self.move_by(-10),
@@ -294,13 +314,38 @@ impl LogsScreen {
         let mut events = EventStream::new();
         let mut frame = tokio::time::interval(FRAME);
         frame.set_missed_tick_behavior(MissedTickBehavior::Skip);
+        let mut repaint = tokio::time::interval(REPAINT);
+        repaint.set_missed_tick_behavior(MissedTickBehavior::Skip);
         let ctrl_c = tokio::signal::ctrl_c();
         tokio::pin!(ctrl_c);
+        let mut drawn = Buffer::empty(Rect::ZERO);
         loop {
-            terminal.draw(|f| theme::draw(f, |f| self.render(f, logs::wall())))?;
+            terminal.draw(|f| {
+                theme::draw(f, |f| self.render(f, logs::wall()));
+                drawn = f.buffer_mut().clone();
+            })?;
+            // Whatever else writes to the terminal — the stderr of a
+            // `docker compose logs` piped in, say — lands at the cursor.
+            // Parked at the top, it overwrites a row; at the bottom, it
+            // would scroll the screen, which only draws what changed
+            terminal.set_cursor_position(Position::ORIGIN)?;
             tokio::select! {
                 _ = &mut ctrl_c => return Ok(()),
                 _ = frame.tick() => {}
+                _ = repaint.tick() => {
+                    // And what it overwrote is written again, every cell
+                    let width = drawn.area.width.max(1) as usize;
+                    let cells = drawn.content.iter().enumerate().map(|(i, cell)| {
+                        (
+                            drawn.area.x + (i % width) as u16,
+                            drawn.area.y + (i / width) as u16,
+                            cell,
+                        )
+                    });
+                    terminal.backend_mut().draw(cells)?;
+                    terminal.backend_mut().flush()?;
+                    terminal.set_cursor_position(Position::ORIGIN)?;
+                }
                 event = events.next() => match event {
                     Some(Ok(Event::Key(key))) if key.kind == KeyEventKind::Press => {
                         if self.key(key) {
@@ -336,44 +381,89 @@ impl LogsScreen {
         let rows = stats.rows(self.grain, clock);
         let notes = self.notes(&stats);
 
-        let [title, _, cards, _, notes_area, tab_bar, _, body, footer] = Layout::vertical([
+        // The title, the views, then what the view needs above itself: the
+        // comparisons for traffic, a line of the numbers for the others,
+        // nothing for the dashboard, which is those numbers
+        let above = match self.tab {
+            Tab::Dashboard => 0,
+            Tab::Traffic => CARD_H + 1,
+            _ => 2,
+        };
+        let [title, _, tab_bar, _, above_area, notes_area, body, footer] = Layout::vertical([
             Constraint::Length(1),
             Constraint::Length(1),
-            Constraint::Length(3),
-            Constraint::Length(1),
-            Constraint::Length(notes.len() as u16),
             Constraint::Length(1),
             Constraint::Length(1),
+            Constraint::Length(above),
+            Constraint::Length(match notes.len() as u16 {
+                0 => 0,
+                notes => notes + 1,
+            }),
             Constraint::Min(4),
             Constraint::Length(1),
         ])
         .areas(area);
 
         self.render_title(f, title, &stats, clock, wall);
-        self.render_cards(f, cards, &stats, clock, &now, &rows);
-        f.render_widget(Paragraph::new(notes), notes_area);
         let titles: Vec<String> = [
-            "1 Traffic".to_string(),
-            "2 Paths".to_string(),
+            "1 Dashboard".to_string(),
+            "2 Traffic".to_string(),
+            "3 Paths".to_string(),
             match stats.faults {
-                0 => "3 Errors".to_string(),
-                n => format!("3 Errors {}", format::compact(n as f64)),
+                0 => "4 Errors".to_string(),
+                n => format!("4 Errors {}", format::compact(n as f64)),
             },
-            "4 Log".to_string(),
+            "5 Log".to_string(),
         ]
         .into();
         let at = TABS.iter().position(|t| *t == self.tab).unwrap_or(0);
         f.render_widget(Paragraph::new(tabs(&titles, at)), tab_bar);
-
+        f.render_widget(Paragraph::new(notes), notes_area);
         match self.tab {
-            Tab::Traffic => self.render_traffic(f, body, &stats, &now, &rows),
-            Tab::Paths => self.render_paths(f, body, &stats),
-            Tab::Errors => self.render_errors(f, body, &stats, clock),
-            Tab::Log => self.render_log(f, body, &stats, clock),
+            Tab::Dashboard => {}
+            Tab::Traffic => {
+                let cards = Rect {
+                    height: CARD_H,
+                    ..above_area
+                };
+                self.render_cards(f, cards, &stats, clock, &now, &rows);
+            }
+            _ => self.render_strip(f, above_area, &stats, clock, &now),
+        }
+
+        // Every view but the dashboard, which is panels itself, is one panel
+        let on_panel = |f: &mut Frame| {
+            panel(f, body);
+            inset(body, 2, 1)
+        };
+        match self.tab {
+            Tab::Dashboard => self.render_dashboard(f, body, &stats, clock, &now),
+            Tab::Traffic => {
+                let inner = on_panel(f);
+                self.render_traffic(f, inner, &stats, &now, &rows)
+            }
+            Tab::Paths => {
+                let inner = on_panel(f);
+                self.render_paths(f, inner, &stats)
+            }
+            Tab::Errors => {
+                let inner = on_panel(f);
+                self.render_errors(f, inner, &stats, clock)
+            }
+            Tab::Log => {
+                let inner = on_panel(f);
+                self.render_log(f, inner, &stats, clock)
+            }
         }
 
         let keys: Vec<(&str, &str)> = match self.tab {
             _ if self.searching => vec![("enter", "keep"), ("esc", "clear")],
+            Tab::Dashboard => vec![
+                ("tab", "next view"),
+                ("2-5", "traffic, paths, errors, log"),
+                ("?", "keys"),
+                ("q", "quit"),
+            ],
             Tab::Traffic => vec![
                 ("m h d", "per minute, hour, day"),
                 ("↑↓", "pick a slot"),
@@ -408,7 +498,7 @@ impl LogsScreen {
                 f,
                 area,
                 &[
-                    ("tab ← →", "next or previous view; 1-4 pick one"),
+                    ("tab ← →", "next or previous view; 1-5 pick one"),
                     ("m h d", "traffic per minute, hour or day; g goes round"),
                     ("↑ ↓ / j k", "pick a slot, a message or a line"),
                     ("PgUp PgDn", "ten at a time; home and end, the ends"),
@@ -458,6 +548,704 @@ impl LogsScreen {
         notes
     }
 
+    /// The numbers every view but the dashboard has above it, on one line
+    fn render_strip(&self, f: &mut Frame, area: Rect, stats: &Stats, clock: Clock, now: &Now) {
+        let minutes = stats.rows(Grain::Minute, clock);
+        let dot = || label("  ·  ");
+        let mut spans = vec![
+            label(if clock.live { "now " } else { "at the end " }),
+            value(format!("{} req/s", rate(now.rate)), Color::Reset),
+        ];
+        if let Some(usual) = typical(&minutes) {
+            spans.push(label(match versus(now.rate, usual).as_str() {
+                "=" => "  as in a usual minute".to_string(),
+                against => format!("  {against} on a usual minute"),
+            }));
+        }
+        spans.extend([
+            dot(),
+            label("5xx "),
+            value(percent(now.share_5xx()), failing_color(now.share_5xx())),
+            label("  4xx "),
+            value(percent(now.share_4xx()), Color::Reset),
+        ]);
+        if stats.time.count() > 0 {
+            let at = |q: f64| format::latency(Duration::from_micros(stats.time.percentile(q)));
+            spans.extend([
+                dot(),
+                label("p50 "),
+                value(at(50.0), Color::Reset),
+                label("  p99 "),
+                value(at(99.0), Color::Reset),
+            ]);
+        }
+        spans.extend([
+            dot(),
+            value(format::count(stats.requests), Color::Reset),
+            label(" requests"),
+        ]);
+        f.render_widget(Paragraph::new(Line::from(spans)), inset(area, 1, 0));
+    }
+
+    /// What the logs add up to, in a word and a few lines: the word's
+    /// colour is the server's health, never how busy it is
+    fn verdict(
+        &self,
+        stats: &Stats,
+        clock: Clock,
+        now: &Now,
+        minutes: &[Row],
+    ) -> (Color, Vec<Line<'static>>) {
+        let usual = typical(minutes);
+        let (glyph, word, color) = match (now.share_5xx(), usual) {
+            _ if !stats.caught_up => ("…", "Reading", LABEL),
+            _ if stats.last.is_none() => ("…", "Waiting", LABEL),
+            (s, _) if s >= 0.05 => ("✖", "Failing", BAD),
+            (s, _) if s >= 0.01 => ("▲", "Degraded", WARN),
+            _ if !clock.live => ("■", "Ended", LABEL),
+            (_, Some(usual)) if usual > 0.0 && now.rate >= usual * 2.0 => ("✔", "Busy", GOOD),
+            (_, Some(usual)) if now.rate <= usual * 0.5 => ("✔", "Quiet", GOOD),
+            _ => ("✔", "Steady", GOOD),
+        };
+        let mut lines = vec![Line::from(value(format!("{glyph} {word}"), color))];
+        let mut said = format!("{} req/s", rate(now.rate));
+        match usual {
+            Some(usual) if usual > 0.0 => {
+                let ratio = now.rate / usual;
+                said.push_str(&match ratio {
+                    r if r >= 2.0 => format!(", {r:.1}× a usual minute"),
+                    r if r > 1.005 => format!(", {:.0}% over a usual minute", (r - 1.0) * 100.0),
+                    r if r < 0.995 => format!(", {:.0}% under a usual minute", (1.0 - r) * 100.0),
+                    _ => ", as in a usual minute".into(),
+                });
+            }
+            _ if clock.live => said.push_str(" over the last minute"),
+            _ => said.push_str(&format!(
+                " at the end, {}",
+                day_and_time(clock.now + i64::from(clock.offset))
+            )),
+        }
+        lines.push(Line::raw(said));
+        let mut then = Vec::new();
+        if let Some(most) = busiest(minutes) {
+            then.push(format!(
+                "busiest minute {} req/s at {}",
+                rate(most.rate),
+                time_of_day(most.start)
+                    .rsplit_once(':')
+                    .map_or(String::new(), |(hm, _)| hm.to_string())
+            ));
+        }
+        if let Some(ago) = echo(minutes, Grain::Minute).filter(|r| !r.partial) {
+            then.push(format!("an hour ago {} req/s", rate(ago.rate)));
+        }
+        if !then.is_empty() {
+            lines.push(Line::from(label(then.join(" · "))));
+        }
+        // What fails, and what the server says of it
+        if let Some((path, stat)) = stats.paths.top(1, |p| p.c5xx).first() {
+            lines.push(Line::from(vec![
+                value("✖ ", BAD),
+                Span::raw(format!(
+                    "{path} answers 5xx: {} of {}",
+                    format::count(stat.c5xx),
+                    format::compact(stat.requests as f64)
+                )),
+            ]));
+        }
+        if let Some((what, cause)) = stats
+            .top_causes(1)
+            .first()
+            .filter(|(_, cause)| logs::severity(&cause.level) >= 1)
+        {
+            let message = what.split_once(' ').map_or(*what, |(_, m)| m);
+            lines.push(Line::from(vec![
+                value(
+                    if logs::severity(&cause.level) >= 2 {
+                        "✖ "
+                    } else {
+                        "▲ "
+                    },
+                    severity_color(logs::severity(&cause.level)),
+                ),
+                Span::raw(format!("{}× {message}", format::count(cause.count))),
+            ]));
+        }
+        (color, lines)
+    }
+
+    /// A number card: its name, the number drawn big where there is room
+    /// for that, and what there is to say of it
+    fn hero(
+        &self,
+        f: &mut Frame,
+        area: Rect,
+        name: &str,
+        number: (&str, &str, Color),
+        notes: Vec<Line<'static>>,
+    ) {
+        panel(f, area);
+        let inner = Rect {
+            y: area.y + 1,
+            height: area.height.saturating_sub(1),
+            ..inset(area, 2, 0)
+        };
+        let (digits, unit, color) = number;
+        let mut lines = vec![Line::from(label(name.to_uppercase()))];
+        let big = inner.height as usize >= bigtext::HEIGHT + 3
+            && bigtext::width(digits) + unit.chars().count() < inner.width as usize
+            && !digits.is_empty();
+        if big {
+            lines.extend(bigtext::lines(
+                digits,
+                unit,
+                Style::new().fg(color),
+                Style::new().fg(color).bold(),
+            ));
+        } else {
+            lines.push(Line::from(value(format!("{digits}{unit}"), color)));
+        }
+        lines.extend(notes);
+        f.render_widget(Paragraph::new(lines), inner);
+    }
+
+    /// The first view: is the server well, how busy is it, what is asked
+    /// of it and what goes wrong, without a key pressed
+    fn render_dashboard(&self, f: &mut Frame, area: Rect, stats: &Stats, clock: Clock, now: &Now) {
+        let minutes = stats.rows(Grain::Minute, clock);
+        // The numbers on top, the lists under them as tall as they need to
+        // be, the newest lines at the foot when there is height for them,
+        // and the chart with everything that is left
+        let hero_h = if area.height >= 28 && area.width >= 96 {
+            7
+        } else {
+            4
+        };
+        let rest = area.height.saturating_sub(hero_h + 1);
+        let lists_h = match rest {
+            r if r >= 30 => 12,
+            r if r >= 20 => 9,
+            r if r >= 13 => 7,
+            r => r,
+        };
+        let left = rest.saturating_sub(lists_h + 1);
+        let latest_h = match left {
+            l if l >= 22 => 9,
+            l if l >= 16 => 7,
+            _ => 0,
+        };
+        let chart_h = left.saturating_sub(latest_h + u16::from(latest_h > 0));
+        let [heroes, _, chart, _, lists, _, latest] = Layout::vertical([
+            Constraint::Length(hero_h),
+            Constraint::Length(1),
+            Constraint::Length(chart_h),
+            Constraint::Length(u16::from(chart_h > 0)),
+            Constraint::Length(lists_h),
+            Constraint::Length(u16::from(latest_h > 0)),
+            Constraint::Length(latest_h),
+        ])
+        .areas(area);
+
+        // ── The numbers, and beside them the verdict
+        let (color, said) = self.verdict(stats, clock, now, &minutes);
+        let cards = (area.width.saturating_sub(34) / (HERO + 1)).clamp(1, 3);
+        let cards_width = cards * (HERO + 1);
+        let hero_at = |i: u16| Rect {
+            x: heroes.x + i * (HERO + 1),
+            width: HERO.min(heroes.width),
+            ..heroes
+        };
+        let usual = typical(&minutes);
+        let seconds = stats.last_seconds(clock, (HERO as usize - 4).min(self.window as usize));
+        let rate_text = rate(now.rate);
+        let (digits, unit) = bigtext::split_unit(&rate_text);
+        self.hero(
+            f,
+            hero_at(0),
+            if clock.live { "now" } else { "at the end" },
+            (digits, &format!("{unit} req/s"), Color::Reset),
+            vec![
+                Line::from(Span::styled(spark(&seconds), Style::new().fg(ACCENT))),
+                Line::from(label(match usual {
+                    Some(usual) => format!("usual {} · {}", rate(usual), versus(now.rate, usual)),
+                    None => format!(
+                        "last {}",
+                        format::span(Duration::from_secs(self.window as u64))
+                    ),
+                })),
+            ],
+        );
+        if cards >= 2 {
+            let failing = percent(now.share_5xx());
+            let (digits, unit) = bigtext::split_unit(&failing);
+            let width = (HERO as usize).saturating_sub(4);
+            self.hero(
+                f,
+                hero_at(1),
+                "answering 5xx",
+                (digits, unit, failing_color(now.share_5xx())),
+                vec![
+                    Line::from(Span::styled(
+                        bar(now.share_5xx() + now.share_4xx(), width),
+                        Style::new().fg(failing_color(now.share_5xx()).max_or(WARN, now.c4xx)),
+                    )),
+                    Line::from(label(format!(
+                        "4xx {} · {} logged",
+                        percent(now.share_4xx()),
+                        format::compact(stats.faults as f64)
+                    ))),
+                ],
+            );
+        }
+        if cards >= 3 {
+            if stats.time.count() > 0 {
+                let at = |q: f64| format::latency(Duration::from_micros(stats.time.percentile(q)));
+                let p50 = at(50.0);
+                let (digits, unit) = bigtext::split_unit(&p50);
+                self.hero(
+                    f,
+                    hero_at(2),
+                    "request time, p50",
+                    (digits, unit, Color::Reset),
+                    vec![
+                        Line::from(label(format!("p90 {}", at(90.0)))),
+                        Line::from(label(format!("p99 {}", at(99.0)))),
+                    ],
+                );
+            } else {
+                let all = format::compact(stats.requests as f64);
+                let (digits, unit) = bigtext::split_unit(&all);
+                self.hero(
+                    f,
+                    hero_at(2),
+                    "requests",
+                    (digits, unit, Color::Reset),
+                    vec![
+                        Line::from(label(format!("{} sent", format::bytes(stats.bytes as f64)))),
+                        Line::from(label(format!(
+                            "{} paths",
+                            format::compact(stats.paths.len() as f64)
+                        ))),
+                    ],
+                );
+            }
+        }
+        let verdict = Rect {
+            x: heroes.x + cards_width,
+            width: heroes.width.saturating_sub(cards_width),
+            ..heroes
+        };
+        panel(f, verdict);
+        // The edge of the panel says it too
+        for y in verdict.y..verdict.y + verdict.height {
+            f.buffer_mut()
+                .set_string(verdict.x, y, "▌", Style::new().fg(color).bg(theme::PANEL));
+        }
+        let inner = Rect {
+            y: verdict.y + 1,
+            height: verdict.height.saturating_sub(1),
+            ..inset(verdict, 3, 0)
+        };
+        let said: Vec<Line> = said
+            .into_iter()
+            .take(inner.height as usize)
+            .map(|line| {
+                let width = inner.width as usize;
+                match line.width() > width {
+                    true => Line::from(truncate(&line.to_string(), width)),
+                    false => line,
+                }
+            })
+            .collect();
+        f.render_widget(Paragraph::new(said), inner);
+
+        // ── Traffic, a bar for every few seconds, coloured by what was answered
+        if chart_h >= 6 {
+            panel(f, chart);
+            self.render_live_chart(f, inset(chart, 2, 1), stats, clock);
+        }
+
+        // ── What is asked for, what is answered, what goes wrong
+        if lists.height >= 4 {
+            let columns: Vec<Rect> = match lists.width {
+                w if w >= 120 => Layout::horizontal([
+                    Constraint::Percentage(40),
+                    Constraint::Length(1),
+                    Constraint::Percentage(22),
+                    Constraint::Length(1),
+                    Constraint::Min(0),
+                ])
+                .split(lists)
+                .iter()
+                .step_by(2)
+                .copied()
+                .collect(),
+                w if w >= 80 => Layout::horizontal([
+                    Constraint::Percentage(62),
+                    Constraint::Length(1),
+                    Constraint::Min(0),
+                ])
+                .split(lists)
+                .iter()
+                .step_by(2)
+                .copied()
+                .collect(),
+                _ => vec![lists],
+            };
+            for (i, column) in columns.iter().enumerate() {
+                panel(f, *column);
+                let inner = inset(*column, 2, 1);
+                match i {
+                    0 => self.render_top_paths(f, inner, stats),
+                    1 => self.render_statuses(f, inner, stats),
+                    _ => self.render_troubles(f, inner, stats, clock),
+                }
+            }
+        }
+
+        // ── The lines as they come
+        if latest_h > 0 {
+            panel(f, latest);
+            let inner = inset(latest, 2, 1);
+            let [head, list] =
+                Layout::vertical([Constraint::Length(1), Constraint::Min(0)]).areas(inner);
+            section(
+                f,
+                head,
+                "Latest",
+                Some(Line::from(label("5 for all of them"))),
+            );
+            let width = list.width as usize;
+            let from = stats.recent.len().saturating_sub(list.height as usize);
+            let lines: Vec<Line> = stats
+                .recent
+                .iter()
+                .skip(from)
+                .map(|line| Line::from(self.log_line(line, clock, width)))
+                .collect();
+            f.render_widget(Paragraph::new(lines), list);
+        }
+    }
+
+    /// The last minutes or the last hour, as much as is known and fits: a
+    /// bar for every few seconds, its 4xx and 5xx in their colours on top
+    fn render_live_chart(&self, f: &mut Frame, area: Rect, stats: &Stats, clock: Clock) {
+        let [head, plot] =
+            Layout::vertical([Constraint::Length(1), Constraint::Min(0)]).areas(area);
+        let width = plot.width.saturating_sub(AXIS) as usize;
+        // Under the bars, a row that marks the 5xx and a row of times
+        let height = plot.height.saturating_sub(2);
+        if width < 8 || height == 0 {
+            return;
+        }
+        // As far back as the counts go, at most the hour kept by the second
+        let since = match (stats.first, stats.since) {
+            (Some(first), Some(since)) => first.at.max(since),
+            (Some(first), None) => first.at,
+            _ => clock.now,
+        };
+        let span = (clock.now - since + 1).clamp(60, 3_600) as usize;
+        // One bar a column, each over its share of the seconds: a bar
+        // holds a rate, so bars of 2 and of 3 seconds stand level. The
+        // finest round grain that fit used to be taken, and an hour at
+        // 30s a bar is 120 bars, half of a wide terminal left empty
+        let bars = span.min(width);
+        let per = span as f64 / bars as f64;
+        let seconds = stats.seconds_back(clock, span);
+        let sums: Vec<[f64; 3]> = (0..bars)
+            .map(|i| {
+                let from = (i as f64 * per).round() as usize;
+                let to = (((i + 1) as f64 * per).round() as usize).clamp(from + 1, span);
+                let slot = &seconds[from..to];
+                let mut sum = [0.0; 3];
+                for second in slot {
+                    for (sum, n) in sum.iter_mut().zip(second) {
+                        *sum += f64::from(*n);
+                    }
+                }
+                sum.map(|n| n / (to - from) as f64)
+            })
+            .collect();
+        let most = sums
+            .iter()
+            .map(|s| s[0])
+            .fold(0.0_f64, f64::max)
+            .max(f64::EPSILON);
+        section(
+            f,
+            head,
+            &format!(
+                "Traffic · last {} · {}{} a bar",
+                format::span(Duration::from_secs(span as u64)),
+                if per.fract() == 0.0 { "" } else { "~" },
+                format::span(Duration::from_secs(per.round() as u64))
+            ),
+            Some(Line::from(vec![
+                Span::styled("█", Style::new().fg(BAR)),
+                label(" answered  "),
+                Span::styled("█", Style::new().fg(WARN)),
+                label(" 4xx  "),
+                Span::styled("█", Style::new().fg(BAD)),
+                label(" 5xx  "),
+                Span::styled("·", Style::new().fg(BAD)),
+                label(" a few"),
+            ])),
+        );
+        let total = u32::from(height) * 8;
+        // Few bars are drawn wider, so the chart is as wide as its panel
+        let cell = (width / bars).clamp(1, 4);
+        let left = plot.x + AXIS + (width - bars * cell) as u16;
+        let buf = f.buffer_mut();
+        for (i, [all, c4xx, c5xx]) in sums.iter().enumerate() {
+            if *all == 0.0 {
+                continue;
+            }
+            // Eighths of a cell, from the bottom: answered, then 4xx, then
+            // 5xx, each as much of the bar as it was of the requests
+            let scale = |n: f64| (n / most * f64::from(total)).round() as u32;
+            let top = scale(*all).max(1);
+            let bad = scale(*c5xx).min(top);
+            let warn = scale(*c4xx).min(top - bad);
+            let ok = top - bad - warn;
+            let color_at = |eighth: u32| match eighth {
+                e if e < ok => BAR,
+                e if e < ok + warn => WARN,
+                _ => BAD,
+            };
+            // Too few 5xx to show in the bar are still marked under it
+            let x = left + (i * cell) as u16;
+            let failing = c5xx / all;
+            if *c5xx > 0.0 {
+                let mark = if failing >= 0.01 { "▀" } else { "·" };
+                buf.set_string(x, plot.y + height, mark.repeat(cell), Style::new().fg(BAD));
+            }
+            for row in 0..u32::from(height) {
+                let low = row * 8;
+                if low >= top {
+                    break;
+                }
+                let filled = (top - low).min(8);
+                let (below, above) = (color_at(low), color_at(low + filled - 1));
+                let (symbol, style) = match filled {
+                    // The bar's top is in this cell, which has one colour
+                    // to give: that of most of what is in it
+                    1..=7 => {
+                        let most_of = [BAR, WARN, BAD]
+                            .into_iter()
+                            .max_by_key(|color| {
+                                (low..low + filled)
+                                    .filter(|e| color_at(*e) == *color)
+                                    .count()
+                            })
+                            .unwrap_or(below);
+                        (BLOCKS[filled as usize - 1], Style::new().fg(most_of))
+                    }
+                    _ if below == above => ('█', Style::new().fg(below)),
+                    // Two colours in a whole cell: one drawn on the other
+                    _ => {
+                        let change = (low..low + 8)
+                            .find(|e| color_at(*e) != below)
+                            .unwrap_or(low + 8);
+                        (
+                            BLOCKS[(change - low).clamp(1, 8) as usize - 1],
+                            Style::new().fg(below).bg(above),
+                        )
+                    }
+                };
+                let y = plot.y + height - 1 - row as u16;
+                buf.set_string(
+                    left + (i * cell) as u16,
+                    y,
+                    symbol.to_string().repeat(cell),
+                    style,
+                );
+            }
+        }
+        let axis = AXIS as usize - 1;
+        buf.set_string(
+            plot.x,
+            plot.y,
+            format!("{:>axis$}", rate(most)),
+            Style::new().fg(LABEL),
+        );
+        buf.set_string(
+            plot.x,
+            plot.y + height - 1,
+            format!("{:>axis$}", "0"),
+            Style::new().fg(LABEL),
+        );
+        // Under the bars and their marks: when they start and end
+        let y = plot.y + height + 1;
+        let local = |at: i64| time_of_day(at + i64::from(clock.offset));
+        let from = local(clock.now - span as i64 + 1);
+        let to = if clock.live {
+            "now".to_string()
+        } else {
+            local(clock.now)
+        };
+        buf.set_string(left, y, &from, Style::new().fg(LABEL));
+        let end = plot.x + AXIS + width as u16;
+        buf.set_string(
+            end.saturating_sub(to.chars().count() as u16),
+            y,
+            &to,
+            Style::new().fg(LABEL),
+        );
+    }
+
+    fn render_top_paths(&self, f: &mut Frame, area: Rect, stats: &Stats) {
+        let [head, list] =
+            Layout::vertical([Constraint::Length(1), Constraint::Min(0)]).areas(area);
+        section(
+            f,
+            head,
+            "Top paths",
+            Some(Line::from(label(format!(
+                "{} in all",
+                format::compact(stats.paths.len() as f64)
+            )))),
+        );
+        let top = stats.paths.top(list.height as usize, |p| p.requests);
+        let most = top.first().map_or(1, |(_, p)| p.requests).max(1) as f64;
+        let total = stats.requests.max(1) as f64;
+        let bar_width = (list.width as usize / 5).clamp(4, 16);
+        let name_width = (list.width as usize).saturating_sub(bar_width + 23).max(6);
+        let lines: Vec<Line> = top
+            .iter()
+            .map(|(path, stat)| {
+                let failing = stat.c5xx as f64 / stat.requests.max(1) as f64;
+                Line::from(vec![
+                    Span::raw(format!("{:<name_width$} ", truncate(path, name_width))),
+                    Span::styled(
+                        format!(
+                            "{:<bar_width$}",
+                            bar(stat.requests as f64 / most, bar_width)
+                        ),
+                        Style::new().fg(BAR),
+                    ),
+                    Span::raw(right(format::compact(stat.requests as f64), 8)).bold(),
+                    label(right(percent(stat.requests as f64 / total), 6)),
+                    Span::styled(
+                        right(
+                            match stat.c5xx {
+                                0 => String::new(),
+                                _ => percent(failing),
+                            },
+                            7,
+                        ),
+                        Style::new().fg(failing_color(failing).max_or(WARN, stat.c5xx)),
+                    ),
+                ])
+            })
+            .collect();
+        f.render_widget(Paragraph::new(lines), list);
+    }
+
+    fn render_statuses(&self, f: &mut Frame, area: Rect, stats: &Stats) {
+        let [head, list] =
+            Layout::vertical([Constraint::Length(1), Constraint::Min(0)]).areas(area);
+        section(f, head, "Status", None);
+        let mut statuses: Vec<(&u16, &u64)> = stats.statuses.iter().collect();
+        statuses.sort_by_key(|(_, n)| std::cmp::Reverse(**n));
+        let total = stats.requests.max(1) as f64;
+        let bar_width = (list.width as usize).saturating_sub(17).clamp(3, 24);
+        let lines: Vec<Line> = statuses
+            .iter()
+            .take(list.height as usize)
+            .map(|(code, n)| {
+                let (name, color) = match **code {
+                    0 => ("  -".to_string(), FAINT),
+                    code => (code.to_string(), status_color(code)),
+                };
+                let share = **n as f64 / total;
+                Line::from(vec![
+                    value(format!("{name:<4}"), color),
+                    Span::styled(
+                        format!("{:<bar_width$}", bar(share, bar_width)),
+                        Style::new().fg(match color {
+                            Color::Reset => BAR,
+                            color => color,
+                        }),
+                    ),
+                    label(right(percent(share), 6)),
+                    Span::raw(right(format::compact(**n as f64), 7)),
+                ])
+            })
+            .collect();
+        f.render_widget(Paragraph::new(lines), list);
+    }
+
+    /// The error log's messages, most frequent first; without an error
+    /// log, the paths that answer 5xx
+    fn render_troubles(&self, f: &mut Frame, area: Rect, stats: &Stats, clock: Clock) {
+        let [head, list] =
+            Layout::vertical([Constraint::Length(1), Constraint::Min(0)]).areas(area);
+        let width = list.width as usize;
+        if stats.faults > 0 {
+            section(
+                f,
+                head,
+                "Error log",
+                Some(Line::from(label(format!(
+                    "{} lines",
+                    format::compact(stats.faults as f64)
+                )))),
+            );
+            let lines: Vec<Line> = stats
+                .top_causes(list.height as usize)
+                .iter()
+                .map(|(what, cause)| {
+                    let message = what.split_once(' ').map_or(*what, |(_, m)| m);
+                    let last = cause.last.map_or(String::new(), |at| {
+                        time_of_day(at.at + i64::from(clock.offset))
+                    });
+                    Line::from(vec![
+                        Span::styled(
+                            right(format::compact(cause.count as f64), 6),
+                            Style::new()
+                                .fg(severity_color(logs::severity(&cause.level)))
+                                .bold(),
+                        ),
+                        Span::raw(format!(
+                            "  {:<room$} ",
+                            truncate(message, width.saturating_sub(18)),
+                            room = width.saturating_sub(18)
+                        )),
+                        label(last),
+                    ])
+                })
+                .collect();
+            f.render_widget(Paragraph::new(lines), list);
+            return;
+        }
+        section(f, head, "Answering 5xx", None);
+        let failing = stats.paths.top(list.height as usize, |p| p.c5xx);
+        if failing.is_empty() {
+            f.render_widget(
+                Paragraph::new(vec![
+                    Line::from(label("Nothing has.")),
+                    Line::from(label("Name the error log too, to see what nginx says.")),
+                ]),
+                list,
+            );
+            return;
+        }
+        let lines: Vec<Line> = failing
+            .iter()
+            .map(|(path, stat)| {
+                Line::from(vec![
+                    Span::styled(
+                        right(format::compact(stat.c5xx as f64), 6),
+                        Style::new().fg(BAD).bold(),
+                    ),
+                    Span::raw(format!("  {}", truncate(path, width.saturating_sub(20)))),
+                    label(format!(" of {}", format::compact(stat.requests as f64))),
+                ])
+            })
+            .collect();
+        f.render_widget(Paragraph::new(lines), list);
+    }
+
     fn render_title(&self, f: &mut Frame, area: Rect, stats: &Stats, clock: Clock, wall: i64) {
         let state = if !stats.caught_up {
             let percent = stats.read_bytes as f64 / stats.total_bytes.max(1) as f64 * 100.0;
@@ -472,10 +1260,18 @@ impl LogsScreen {
         } else {
             label("nothing dated yet")
         };
+        // Where the counts start, when that isn't where the log does
+        let from = stats.since.map_or(String::new(), |since| {
+            let local = since + i64::from(clock.offset);
+            match wall - since {
+                0..=86_399 => format!(" · from {}", time_of_day(local)),
+                _ => format!(" · from {}", day_and_time(local)),
+            }
+        });
         let right = Line::from(vec![
             state,
             label(format!(
-                " · {} · {}",
+                "{from} · {} · {}",
                 time_of_day(clock.now + i64::from(clock.offset)),
                 offset_label(clock.offset)
             )),
@@ -568,7 +1364,7 @@ impl LogsScreen {
             label(format!("requests · {}", format::bytes(stats.bytes as f64))).into(),
         ));
 
-        let fit = ((area.width / CARD) as usize).clamp(1, cards.len());
+        let fit = (((area.width + 1) / (CARD + 1)) as usize).clamp(1, cards.len());
         // The total gives way first, then the comparisons from the right
         while cards.len() > fit {
             let last = cards.len() - 1;
@@ -578,18 +1374,29 @@ impl LogsScreen {
                 last - 1
             });
         }
-        let columns = Layout::horizontal(vec![Constraint::Ratio(1, fit as u32); fit]).split(area);
-        for ((title, number, note), column) in cards.into_iter().zip(columns.iter()) {
-            let width = column.width.saturating_sub(1) as usize;
+        // Each on a card of its own, packed from the left: a row of
+        // padding, the name, the number, and a word on it
+        for (i, (title, number, note)) in cards.into_iter().enumerate() {
+            let card = Rect {
+                x: area.x + i as u16 * (CARD + 1),
+                width: CARD.min(area.width),
+                ..area
+            };
+            panel(f, card);
+            let inner = Rect {
+                y: card.y + 1,
+                height: card.height.saturating_sub(1),
+                ..inset(card, 1, 0)
+            };
             let lines = vec![
                 Line::from(Span::styled(
-                    truncate(&title, width),
+                    truncate(&title, inner.width as usize),
                     Style::new().fg(LABEL).bold(),
                 )),
                 Line::from(number),
                 note,
             ];
-            f.render_widget(Paragraph::new(lines), *column);
+            f.render_widget(Paragraph::new(lines), inner);
         }
     }
 
@@ -602,10 +1409,12 @@ impl LogsScreen {
         rows: &[Row],
     ) {
         if rows.is_empty() {
-            let waiting = if stats.caught_up {
-                "No request with a time in the log yet"
-            } else {
+            let waiting = if !stats.caught_up {
                 "Reading…"
+            } else if stats.lines == 0 {
+                "Waiting for the first line"
+            } else {
+                "No request with a time in the log yet"
             };
             f.render_widget(Paragraph::new(label(waiting)), area);
             return;
@@ -695,7 +1504,7 @@ impl LogsScreen {
                 spans.push(label(right(versus(now.rate, row.rate), 9)));
                 spans.push(Span::styled(
                     format!("  {}", bar(row.rate / most, room)),
-                    Style::new().fg(LABEL),
+                    Style::new().fg(BAR),
                 ));
                 if row.partial {
                     spans.push(Span::styled(" partial", Style::new().fg(FAINT)));
@@ -722,7 +1531,7 @@ impl LogsScreen {
         let shown = &rows[rows.len().saturating_sub(width as usize)..];
         let first = rows.len() - shown.len();
         // A few slots get bars with some width to them
-        let per = (width / shown.len() as u16).clamp(1, 8);
+        let per = (width / shown.len() as u16).clamp(1, BAR_MAX);
         let bar_width = if per >= 3 { per - 1 } else { per } as usize;
         let most = shown.iter().map(|r| r.rate).fold(now, f64::max).max(1e-9);
         let eighths = |r: f64| ((r / most) * f64::from(height) * 8.0).round() as u16;
@@ -755,8 +1564,8 @@ impl LogsScreen {
                 };
                 let failing = slot.slot.c5xx as f64 / slot.slot.requests.max(1) as f64;
                 let color = match failing_color(failing) {
-                    Color::Reset if first + i == picked => Color::Reset,
-                    Color::Reset => LABEL,
+                    Color::Reset if first + i == picked => ACCENT,
+                    Color::Reset => BAR,
                     color => color,
                 };
                 buf.set_string(
@@ -780,13 +1589,18 @@ impl LogsScreen {
         let from = self.grain.label(shown[0].start);
         let to = self.grain.label(shown[shown.len() - 1].start);
         let end = area.x + AXIS + width;
-        let to_x = end.saturating_sub(to.chars().count() as u16);
+        let mut to_x = end.saturating_sub(to.chars().count() as u16);
+        let marker =
+            (picked >= first).then(|| left + (picked - first) as u16 * per + bar_width as u16 / 2);
+        // The label of the last slot makes way for the pick's marker
+        if let Some(x) = marker.filter(|x| *x >= to_x) {
+            to_x = x.saturating_sub(to.chars().count() as u16 + 1);
+        }
         if to_x > left + from.chars().count() as u16 + 1 {
             buf.set_string(left, y, &from, Style::new().fg(LABEL));
         }
         buf.set_string(to_x, y, &to, Style::new().fg(LABEL));
-        if picked >= first {
-            let x = left + (picked - first) as u16 * per + bar_width as u16 / 2;
+        if let Some(x) = marker {
             buf.set_string(x, y, "▲", Style::new().fg(ACCENT));
         }
     }
@@ -794,8 +1608,11 @@ impl LogsScreen {
     fn render_paths(&self, f: &mut Frame, area: Rect, stats: &Stats) {
         let wide = area.width >= 110;
         let [paths, _, side] = if wide {
+            // A path is read at a glance up to some width; past it, the
+            // numbers would be far from the names, so the rest is for the
+            // lists beside them
             Layout::horizontal([
-                Constraint::Percentage(58),
+                Constraint::Length((area.width * 58 / 100).min(96)),
                 Constraint::Length(3),
                 Constraint::Min(0),
             ])
@@ -896,7 +1713,13 @@ impl LogsScreen {
                 .map(|(name, n)| (name.to_string(), *n, Color::Reset))
                 .collect()
         };
-        let each = (side.height / if wide { 3 } else { 2 }).max(3) as usize - 2;
+        // Two lists across when each gets room for a name; one otherwise
+        let across = match (wide, side.width) {
+            (true, w) if w >= 80 => 2,
+            (true, _) => 1,
+            (false, _) => 3,
+        };
+        let each = (side.height / 5usize.div_ceil(across) as u16).max(3) as usize - 2;
         let lists: Vec<(&str, Counts)> = vec![
             ("Status", statuses),
             ("Clients", counted(&stats.clients, each)),
@@ -905,7 +1728,7 @@ impl LogsScreen {
             ("Methods", counted(&stats.methods, each)),
         ];
         let lists: Vec<_> = lists.into_iter().filter(|(_, l)| !l.is_empty()).collect();
-        let across = if wide { 2 } else { 3 }.min(lists.len().max(1));
+        let across = across.min(lists.len().max(1));
         let down = lists.len().div_ceil(across).max(1);
         let grid_rows = Layout::vertical(vec![Constraint::Ratio(1, down as u32); down]).split(side);
         for (i, (title, items)) in lists.iter().enumerate() {
@@ -1358,8 +2181,36 @@ mod tests {
     }
 
     #[test]
+    fn the_traffic_chart_fills_its_panel_at_any_width() {
+        for width in [80u16, 100, 140, 200, 240, 300] {
+            let mut s = screen();
+            let out = draw(&mut s, width, 44);
+            let lines: Vec<&str> = out.lines().collect();
+            let times = lines
+                .iter()
+                .position(|l| l.contains("11:56:") || l.contains("11:5"))
+                .expect("the row of times under the bars");
+            let bottom = lines[times - 2];
+            let first = bottom
+                .chars()
+                .position(|c| "▁▂▃▄▅▆▇█".contains(c))
+                .expect("bars");
+            let last = bottom.trim_end().chars().count();
+            let plot = usize::from(width) - 4 - usize::from(AXIS);
+            let drawn = last - first;
+            assert!(
+                drawn * 4 >= plot * 3,
+                "at {width} columns the bars cover {drawn} of {plot} cells:\n{out}"
+            );
+            let title = lines.iter().find(|l| l.contains("A BAR")).unwrap();
+            assert!(title.contains("LAST 10M"), "{title}");
+        }
+    }
+
+    #[test]
     fn traffic_holds_now_against_each_slot() {
         let mut s = screen();
+        s.tab = Tab::Traffic;
         let text = draw(&mut s, 140, 40);
         assert!(text.contains("pepe logs · access.log +1"), "{text}");
         assert!(
@@ -1374,7 +2225,7 @@ mod tests {
         assert!(text.contains("5xx 5.0%"), "{text}");
         assert!(text.contains("REQUEST TIME"), "{text}");
         assert!(text.contains("1 of 921 lines couldn't be read"), "{text}");
-        assert!(text.contains("3 Errors 10"), "{text}");
+        assert!(text.contains("4 Errors 10"), "{text}");
         assert!(text.contains("per minute"), "{text}");
         assert!(text.contains("now ┄┄┄"), "{text}");
         // The newest slot first; the first whole minute at half today's rate
@@ -1382,7 +2233,10 @@ mod tests {
             .lines()
             .find(|l| l.contains(" 08 Oct 12:05  "))
             .unwrap();
-        assert!(newest.starts_with("▌ 08 Oct 12:05"), "{newest}");
+        assert!(
+            newest.trim_start().starts_with("▌ 08 Oct 12:05"),
+            "{newest}"
+        );
         let early = text.lines().find(|l| l.contains("08 Oct 11:57")).unwrap();
         assert!(early.contains("+98%"), "{early}");
         // By hour there is one slot, and no usual hour to speak of
@@ -1403,7 +2257,8 @@ mod tests {
         let text = draw(&mut s, 140, 40);
         assert_eq!(s.slot, 9);
         assert!(
-            text.lines().any(|l| l.starts_with("▌ 08 Oct 11:56")),
+            text.lines()
+                .any(|l| l.trim_start().starts_with("▌ 08 Oct 11:56")),
             "{text}"
         );
         assert!(!press(&mut s, KeyCode::Esc), "esc lets go first");
@@ -1414,10 +2269,14 @@ mod tests {
     #[test]
     fn paths_errors_and_the_log_have_their_views() {
         let mut s = screen();
+        s.tab = Tab::Traffic;
         press(&mut s, KeyCode::Tab);
         let text = draw(&mut s, 140, 40);
         assert!(text.contains("PATHS · MOST REQUESTED"), "{text}");
-        let root = text.lines().find(|l| l.starts_with("/  ")).unwrap();
+        let root = text
+            .lines()
+            .find(|l| l.trim_start().starts_with("/  "))
+            .unwrap();
         assert!(root.contains("600") && root.contains("66%"), "{root}");
         assert!(
             text.contains("STATUS") && text.contains("CLIENTS"),
@@ -1432,11 +2291,11 @@ mod tests {
         let text = draw(&mut s, 140, 40);
         assert!(text.contains("PATHS · MOST 5XX"), "{text}");
         assert!(
-            !text.lines().any(|l| l.starts_with("/  ")),
+            !text.lines().any(|l| l.trim_start().starts_with("/  ")),
             "no 5xx there: {text}"
         );
 
-        press(&mut s, KeyCode::Char('3'));
+        press(&mut s, KeyCode::Char('4'));
         let text = draw(&mut s, 140, 40);
         assert!(
             text.contains("ERROR LOG") && text.contains("error 10"),
@@ -1458,7 +2317,7 @@ mod tests {
         );
         assert!(text.contains("/missing.png"), "{text}");
 
-        press(&mut s, KeyCode::Char('4'));
+        press(&mut s, KeyCode::Char('5'));
         let text = draw(&mut s, 140, 40);
         assert!(text.contains("LOG · FOLLOWING"), "{text}");
         assert!(text.contains("what is this"), "{text}");
@@ -1539,6 +2398,11 @@ mod tests {
             let text = draw(&mut empty, 100, 30);
             assert!(text.contains("reading"), "{text}");
         }
+        empty.tab = Tab::Traffic;
+        assert!(draw(&mut empty, 100, 30).contains("Reading…"));
+        // A pipe with nothing in it yet is caught up, and waited on
+        empty.shared.lock().caught_up = true;
+        assert!(draw(&mut empty, 100, 30).contains("Waiting for the first line"));
         press(&mut empty, KeyCode::Enter);
         press(&mut empty, KeyCode::Up);
         draw(&mut empty, 100, 30);
@@ -1548,6 +2412,104 @@ mod tests {
         assert_eq!(
             (scroll(0, 50, 10), scroll(12, 50, 10), scroll(49, 50, 10)),
             (0, 3, 40)
+        );
+    }
+
+    #[test]
+    fn the_dashboard_says_how_the_server_is_without_a_key_pressed() {
+        let mut s = screen();
+        assert_eq!(s.tab, Tab::Dashboard);
+        let text = draw(&mut s, 150, 48);
+        assert!(
+            text.contains(" 1 Dashboard   2 Traffic   3 Paths   4 Errors 10   5 Log"),
+            "{text}"
+        );
+        // The verdict: 5% of the last minute answered 5xx, and why
+        assert!(text.contains("▲ Degraded"), "{text}");
+        assert!(text.contains("2.0 req/s, as in a usual minute"), "{text}");
+        assert!(text.contains("busiest minute 2.0 req/s at 12:05"), "{text}");
+        assert!(text.contains("✖ /search answers 5xx: 30 of 300"), "{text}");
+        assert!(
+            text.contains("✖ 10× connect() failed (111: Connection refused)"),
+            "{text}"
+        );
+        // The numbers, drawn big
+        for card in ["AT THE END", "ANSWERING 5XX", "REQUEST TIME, P50"] {
+            assert!(text.contains(card), "{card}: {text}");
+        }
+        assert!(text.contains("▀▀▀ ▀ ▀▀▀  req/s"), "2.0, big: {text}");
+        assert!(text.contains("usual 2.0 · ="), "{text}");
+        assert!(text.contains("4xx 0.8% · 10 logged"), "{text}");
+        assert!(text.contains("p99 89.86ms"), "{text}");
+        // Ten minutes of traffic, which doubles halfway
+        assert!(text.contains("TRAFFIC · LAST 10M · ~4S A BAR"), "{text}");
+        assert!(text.contains("█ answered  █ 4xx  █ 5xx  · a few"), "{text}");
+        // Every tenth second /search answers 502: a mark under the bar
+        assert!(text.contains("▀▀▀"), "{text}");
+        assert!(
+            text.contains("11:56:00") && text.contains("12:05:59"),
+            "{text}"
+        );
+        // What is asked for, answered, and said in the error log
+        assert!(
+            text.contains("TOP PATHS") && text.contains("3 in all"),
+            "{text}"
+        );
+        let search = text
+            .lines()
+            .find(|l| l.trim_start().starts_with("/search "))
+            .unwrap();
+        assert!(
+            search.contains("300") && search.contains("33%") && search.contains("10%"),
+            "{search}"
+        );
+        assert!(text.contains("STATUS") && text.contains("502"), "{text}");
+        assert!(
+            text.contains("ERROR LOG") && text.contains("10 lines"),
+            "{text}"
+        );
+        assert!(
+            text.contains("LATEST") && text.contains("what is this"),
+            "{text}"
+        );
+        // The other views keep the numbers in a line above them
+        press(&mut s, KeyCode::Char('3'));
+        let text = draw(&mut s, 150, 48);
+        assert!(
+            text.contains("at the end 2.0 req/s  as in a usual minute  ·  5xx 5.0%  4xx 0.8%  ·  p50 50.05ms  p99 89.86ms  ·  910 requests"),
+            "{text}"
+        );
+        assert!(!text.contains("▲ Degraded"), "{text}");
+        // 1 is the way back, and the arrows go round
+        press(&mut s, KeyCode::Char('1'));
+        assert_eq!(s.tab, Tab::Dashboard);
+        press(&mut s, KeyCode::Left);
+        assert_eq!(s.tab, Tab::Log);
+        press(&mut s, KeyCode::Right);
+        press(&mut s, KeyCode::Down);
+        assert_eq!(s.tab, Tab::Dashboard, "nothing to pick here");
+
+        // Without the error log, the paths that fail take its place; a
+        // server answering well says so
+        let shared = Arc::new(Shared::default());
+        let parser = Parser::default();
+        {
+            let mut stats = shared.lock();
+            for second in 24..624 {
+                let line = hit(second, "/", 200);
+                stats.fold(parser.read(&line), &line, AT + 624);
+            }
+            stats.caught_up = true;
+        }
+        let mut well = LogsScreen::new(shared, parser, "access.log".into(), 60);
+        let mut terminal = Terminal::new(TestBackend::new(150, 48)).unwrap();
+        terminal.draw(|f| well.render(f, AT + 624)).unwrap();
+        let text = format!("{}", terminal.backend());
+        assert!(text.contains("✔ Steady"), "{text}");
+        assert!(text.contains("● live"), "{text}");
+        assert!(
+            text.contains("ANSWERING 5XX") && text.contains("Nothing has."),
+            "{text}"
         );
     }
 }

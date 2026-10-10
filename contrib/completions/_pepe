@@ -192,7 +192,7 @@ _arguments "${_arguments_options[@]}" : \
 '--json[Output results in JSON format]' \
 '-i[Open the setup screen to review or change the settings before starting (it opens by itself when no URL is given)]' \
 '--setup[Open the setup screen to review or change the settings before starting (it opens by itself when no URL is given)]' \
-'::spec -- The OpenAPI spec\: a file or URL, JSON or YAML (or `spec` in pepe.toml):_default' \
+'::spec -- The OpenAPI spec\: a file, a URL or the document itself, JSON or YAML (or `spec` in pepe.toml). Without it, the setup screen asks:_default' \
 && ret=0
 ;;
 (ramp)
@@ -327,7 +327,7 @@ _arguments "${_arguments_options[@]}" : \
 _arguments "${_arguments_options[@]}" : \
 '--format=[The access log'\''s log_format as nginx.conf has it, on one line, when it isn'\''t \`combined\`\: '\''\$remote_addr \[\$time_local\] "\$request" \$status \$request_time'\'']:LOG_FORMAT:_default' \
 '--window=[What "now" is measured over, e.g. 10s, 1m, 5m]:TIME:_default' \
-'--since=[Leave out what is older than this, e.g. 90m, 24h, 7d]:TIME:_default' \
+'--since=[How far back to start, e.g. 90m, 24h, 7d. At a terminal a log that is being written is shown live, from five minutes back, without it]:TIME:_default' \
 '--rows=[Rows in each table of the report]:N:_default' \
 '-n+[Number of requests to perform]:NUMBER:_default' \
 '--number=[Number of requests to perform]:NUMBER:_default' \
@@ -354,6 +354,7 @@ _arguments "${_arguments_options[@]}" : \
 '--concurrency=[Number of concurrent requests at a time]:CONCURRENCY:_default' \
 '-u+[User-Agent string, default is pepe/{version}]:USER_AGENT:_default' \
 '--user-agent=[User-Agent string, default is pepe/{version}]:USER_AGENT:_default' \
+'(--since)--all[Read all of the log before following it, however far back it goes]' \
 '--exact-paths[Count /items/1 and /items/2 apart. Without it the numbers and ids in a path count as one, /items/*]' \
 '-h[Print help]' \
 '--help[Print help]' \
@@ -434,6 +435,48 @@ fail\:"A failure"))' \
 '*::targets -- What to ping\: URLs or hosts (https unless a port is given), host\:port, aws\:REGION, a range like 10.0.0.0/29, or commands with --cmd; several are graphed together:_default' \
 && ret=0
 ;;
+(compare)
+_arguments "${_arguments_options[@]}" : \
+'-n+[Number of requests to perform]:NUMBER:_default' \
+'--number=[Number of requests to perform]:NUMBER:_default' \
+'-z+[Duration of the test, e.g. 10s, 3m, 2h (mutually exclusive with -n)]:DURATION:_default' \
+'--duration=[Duration of the test, e.g. 10s, 3m, 2h (mutually exclusive with -n)]:DURATION:_default' \
+'-m+[HTTP method, e.g. GET, POST, PUT, DELETE]:METHOD:_default' \
+'--method=[HTTP method, e.g. GET, POST, PUT, DELETE]:METHOD:_default' \
+'*-H+[HTTP headers, e.g. -H '\''Accept\: application/json'\'']:HEADERS:_default' \
+'*--headers=[HTTP headers, e.g. -H '\''Accept\: application/json'\'']:HEADERS:_default' \
+'-t+[Time in seconds to wait for a response]:TIMEOUT:_default' \
+'--timeout=[Time in seconds to wait for a response]:TIMEOUT:_default' \
+'--warmup=[Send for this long before measuring, e.g. 5s\: connections open, caches fill and JITs settle without counting against the run]:TIME:_default' \
+'--threads=[Threads sending requests (default 1), or "auto" to add one whenever those sending are all busy. One sends 100k requests a second or more; the dashboard says when it is the limit]:N|auto:_default' \
+'--rate=[Start this many requests a second, spread evenly, instead of as many as the concurrency allows; -c is then the most in flight at once, and pepe says when it holds the rate back]:PER_SECOND:_default' \
+'-d+[HTTP request body]:BODY:_default' \
+'--body=[HTTP request body]:BODY:_default' \
+'-p+[Proxy server URL\: http\://user\:pass@host\:port or socks5\://host\:port]:PROXY:_default' \
+'--proxy=[Proxy server URL\: http\://user\:pass@host\:port or socks5\://host\:port]:PROXY:_default' \
+'--trace-header=[Response header holding the request id to show for the slowest requests and in the inspector, so they can be found in the server'\''s logs; without it, X-Request-Id, traceparent, CF-Ray, X-Amzn-Trace-Id and other common ones are looked for]:NAME:_default' \
+'--snapshot=[Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run'\''s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run]:FILE:_files' \
+'--config=[Read settings from this file instead of ./pepe.toml; flags on the command line win over it]:FILE:_files' \
+'--write-config=[Write the settings as they stand to this file, as a pepe.toml, and exit]:FILE:_files' \
+'-c+[Number of concurrent requests at a time]:CONCURRENCY:_default' \
+'--concurrency=[Number of concurrent requests at a time]:CONCURRENCY:_default' \
+'-u+[User-Agent string, default is pepe/{version}]:USER_AGENT:_default' \
+'--user-agent=[User-Agent string, default is pepe/{version}]:USER_AGENT:_default' \
+'--gate[Exit 1 when the verdict is Slower or Worse, for CI]' \
+'-h[Print help]' \
+'--help[Print help]' \
+'-k[Accept invalid TLS certificates (self-signed, expired, wrong host)]' \
+'--insecure[Accept invalid TLS certificates (self-signed, expired, wrong host)]' \
+'--disable-compression[Disable HTTP compression, e.g. gzip]' \
+'--disable-keepalive[Disable HTTP keepalive, e.g. Connection\: close]' \
+'--disable-redirects[Prevent http redirects]' \
+'--json[Output results in JSON format]' \
+'-i[Open the setup screen to review or change the settings before starting (it opens by itself when no URL is given)]' \
+'--setup[Open the setup screen to review or change the settings before starting (it opens by itself when no URL is given)]' \
+':before -- The earlier report (`pepe --json`, `--snapshot`, or a ramp'\''s):_files' \
+':after -- The later one, of the same test:_files' \
+&& ret=0
+;;
 (help)
 _arguments "${_arguments_options[@]}" : \
 ":: :_pepe__subcmd__help_commands" \
@@ -478,6 +521,10 @@ _arguments "${_arguments_options[@]}" : \
 _arguments "${_arguments_options[@]}" : \
 && ret=0
 ;;
+(compare)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
 (help)
 _arguments "${_arguments_options[@]}" : \
 && ret=0
@@ -502,6 +549,7 @@ _pepe_commands() {
 'flow:Run a sequence of requests from a flow file, each step fed by the last' \
 'logs:Read nginx logs\: requests per second now, against each minute, hour and day' \
 'ping:Ping a URL\: a request a second, each split into DNS, connect, TLS, first byte and download, on a graph' \
+'compare:Hold a run'\''s JSON report against an earlier one and say what moved' \
 'help:Print this message or the help of the given subcommand(s)' \
     )
     _describe -t commands 'pepe commands' commands "$@"
@@ -510,6 +558,11 @@ _pepe_commands() {
 _pepe__subcmd__api_commands() {
     local commands; commands=()
     _describe -t commands 'pepe api commands' commands "$@"
+}
+(( $+functions[_pepe__subcmd__compare_commands] )) ||
+_pepe__subcmd__compare_commands() {
+    local commands; commands=()
+    _describe -t commands 'pepe compare commands' commands "$@"
 }
 (( $+functions[_pepe__subcmd__completions_commands] )) ||
 _pepe__subcmd__completions_commands() {
@@ -532,6 +585,7 @@ _pepe__subcmd__help_commands() {
 'flow:Run a sequence of requests from a flow file, each step fed by the last' \
 'logs:Read nginx logs\: requests per second now, against each minute, hour and day' \
 'ping:Ping a URL\: a request a second, each split into DNS, connect, TLS, first byte and download, on a graph' \
+'compare:Hold a run'\''s JSON report against an earlier one and say what moved' \
 'help:Print this message or the help of the given subcommand(s)' \
     )
     _describe -t commands 'pepe help commands' commands "$@"
@@ -540,6 +594,11 @@ _pepe__subcmd__help_commands() {
 _pepe__subcmd__help__subcmd__api_commands() {
     local commands; commands=()
     _describe -t commands 'pepe help api commands' commands "$@"
+}
+(( $+functions[_pepe__subcmd__help__subcmd__compare_commands] )) ||
+_pepe__subcmd__help__subcmd__compare_commands() {
+    local commands; commands=()
+    _describe -t commands 'pepe help compare commands' commands "$@"
 }
 (( $+functions[_pepe__subcmd__help__subcmd__completions_commands] )) ||
 _pepe__subcmd__help__subcmd__completions_commands() {

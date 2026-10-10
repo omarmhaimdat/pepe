@@ -3,130 +3,286 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>pepe · HTTP load generator</title>
-<meta name="description" content="pepe is an HTTP load generator with a live dashboard, built to cost less than the server it tests. Install it in one line.">
-<link rel="icon" href="/assets/logo.svg" type="image/svg+xml">
+<title>pepe · HTTP load testing with a live terminal dashboard</title>
+<meta name="description" content="pepe is a fast HTTP load testing tool with a live terminal dashboard and a verdict in plain words. Ramp to find capacity, replay access logs, test OpenAPI specs, chain requests, and watch nginx logs live. One binary, written in Rust.">
+<link rel="canonical" href="https://pepe.mhaimdat.com/">
+<link rel="icon" href="assets/logo.svg" type="image/svg+xml">
+<meta name="theme-color" content="#140f0d">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://pepe.mhaimdat.com/">
+<meta property="og:title" content="pepe · HTTP load testing with a live terminal dashboard">
+<meta property="og:description" content="Load test an endpoint and read what happened: a live dashboard, a verdict in plain words, ramps, replays, OpenAPI, flows and live nginx logs. One binary.">
+<meta property="og:image" content="https://pepe.mhaimdat.com/img/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="https://pepe.mhaimdat.com/img/og.png">
+<script type="application/ld+json">
+{"@context":"https://schema.org","@type":"SoftwareApplication","name":"pepe","applicationCategory":"DeveloperApplication","operatingSystem":"macOS, Linux, Windows","description":"HTTP load testing tool with a live terminal dashboard.","url":"https://pepe.mhaimdat.com/","license":"https://opensource.org/licenses/MIT","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"author":{"@type":"Person","name":"Omar Mhaimdat"},"codeRepository":"https://github.com/omarmhaimdat/pepe"}
+</script>
 <style>
+  /* pepe's own palette, as the dashboard has it (src/ui/theme.rs) */
   :root {
-    --bg: #1e1e2e; --panel: #181825; --line: #313244; --text: #cdd6f4; --dim: #a6adc8;
-    --accent: #5fd7ff; --ok: #a6e3a1; --warn: #f9e2af; --code-bg: #11111b;
-  }
-  @media (prefers-color-scheme: light) {
-    :root { --bg: #fafafa; --panel: #ffffff; --line: #e5e5ea; --text: #1d1d1f; --dim: #5c5c66;
-            --accent: #005f87; --ok: #40a02b; --warn: #df8e1d; --code-bg: #f0f0f3; }
+    --ground: #140f0d; --surface: #1d1613; --selected: #2e2420; --rule: #3a2c25;
+    --text: #f3e8de; --label: #9c8a7e; --faint: #7f6d61;
+    --ember: #ff8a3d; --banked: #b44516; --flame: #ffc27a;
+    --good: #9ccf6a; --warn: #f0cf5a; --bad: #ff5a6e;
   }
   * { box-sizing: border-box; }
-  body { margin: 0; background: var(--bg); color: var(--text);
-         font: 16px/1.55 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; }
-  main { max-width: 760px; margin: 0 auto; padding: 48px 16px 64px; }
-  header { display: flex; align-items: center; gap: 20px; margin-bottom: 8px; }
-  .logo { width: 72px; height: 63px; flex: none; }
-  h1 { font-size: 40px; margin: 0; letter-spacing: -0.5px; }
-  .tagline { color: var(--dim); margin: 0 0 32px; font-size: 18px; }
-  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 20px; }
-  .tabs { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
-  .tabs button { font: inherit; font-size: 14px; color: var(--dim); background: transparent;
-                 border: 1px solid var(--line); border-radius: 999px; padding: 5px 12px; cursor: pointer; }
-  .tabs button[aria-selected="true"] { color: var(--text); border-color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent); }
-  .panel { display: none; } .panel.on { display: block; }
-  pre { position: relative; margin: 0; background: var(--code-bg); border-radius: 8px; padding: 14px 92px 14px 16px;
-        overflow-x: auto; font: 14px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; white-space: pre-wrap; word-break: break-all; }
-  pre button { position: absolute; top: 8px; right: 8px; font: inherit; font-size: 12px; color: var(--dim);
-               background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 4px 9px; cursor: pointer; }
-  pre button:hover, .tabs button:hover { color: var(--text); }
-  .note { color: var(--dim); font-size: 14px; margin: 10px 0 0; }
-  .then { margin-top: 20px; }
-  .then p { margin: 0 0 8px; color: var(--dim); font-size: 14px; }
-  h2 { font-size: 20px; margin: 40px 0 12px; }
-  .shot { width: 100%; border-radius: 10px; border: 1px solid var(--line); display: block; }
-  ul.points { padding-left: 20px; margin: 0; color: var(--dim); }
-  ul.points li { margin: 6px 0; } ul.points b { color: var(--text); font-weight: 600; }
-  nav { display: flex; flex-wrap: wrap; gap: 8px 18px; margin-top: 36px; font-size: 15px; }
-  a { color: var(--accent); text-decoration: none; } a:hover { text-decoration: underline; }
-  footer { margin-top: 40px; color: var(--dim); font-size: 13px; }
-  kbd { font: 13px ui-monospace, SFMono-Regular, Menlo, monospace; background: var(--code-bg); border-radius: 4px; padding: 1px 5px; }
+  html { background: #0b0807; scroll-behavior: smooth; }
+  body { margin: 0; color: var(--text); font: 15px/1.6 ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+          -webkit-font-smoothing: antialiased; }
+  a { color: inherit; text-decoration: none; }
+  code { font: inherit; }
+  b { font-weight: 700; }
+  .lab { color: var(--label); }
+  .em { color: var(--ember); } .good { color: var(--good); } .warn { color: var(--warn); } .bad { color: var(--bad); }
+
+  /* The terminal the page is */
+  .term { max-width: 1280px; margin: 28px auto; background: var(--ground); border: 1px solid var(--rule); border-radius: 10px;
+           padding: 22px 28px 0; }
+  .panel { background: var(--surface); padding: 16px 22px; }
+  .row { display: flex; justify-content: space-between; gap: 2ch; }
+  h2 { font: inherit; margin: 0; color: var(--text); }
+  section { margin-top: 30px; }
+  .gap { display: grid; gap: 14px; }
+
+  /* Title line */
+  .title { display: flex; flex-wrap: wrap; gap: 0 2ch; align-items: baseline; }
+  .title .name { color: var(--ember); font-weight: 700; }
+  .title nav { margin-left: auto; display: flex; gap: 3ch; color: var(--label); }
+  .title nav a:hover, .chips a:hover span { color: var(--text); }
+  .live { color: var(--good); font-weight: 700; }
+
+  /* Pepe, the line, the way in */
+  .hero { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 40px; align-items: center; margin-top: 26px; }
+  .pepe { width: 250px; height: auto; display: block; }
+  .says { color: var(--ember); font-style: italic; margin-top: 6px; }
+  h1 { font: 800 clamp(26px, 4.6vw, 54px)/1.08 ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace; letter-spacing: -0.02em;
+        text-transform: uppercase; margin: 0 0 16px; }
+  h1 span { display: block; } h1 .em { color: var(--ember); }
+  .lede { color: var(--label); max-width: 66ch; margin: 0 0 22px; }
+  .lede b { color: var(--text); font-weight: 400; }
+
+  /* Tabs, as the dashboard draws them */
+  .tabs { display: flex; flex-wrap: wrap; gap: 1ch; }
+  .tabs button { font: inherit; color: var(--label); background: none; border: 0; padding: 0 1ch; cursor: pointer; }
+  .tabs button b { font-weight: 400; }
+  .tabs button:hover { color: var(--text); }
+  .tabs button[aria-selected="true"] { color: var(--ground); background: var(--ember); font-weight: 700; }
+  .tabs button[aria-selected="true"] b { font-weight: 700; }
+
+  .install { padding: 14px 18px 16px; }
+  .install .tabs { margin-bottom: 12px; }
+  .how { display: none; } .how.on { display: block; }
+  .line { display: flex; gap: 1.5ch; align-items: flex-start; }
+  .line code { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+  .pr { color: var(--ember); }
+  .chip { font: inherit; font-weight: 700; color: var(--ember); background: var(--selected); border: 0; padding: 0 1ch; cursor: pointer; white-space: nowrap; }
+  .chip:hover { color: var(--ground); background: var(--ember); }
+  .how p { margin: 8px 0 0; color: var(--faint); }
+
+  /* Number cards */
+  .cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)) minmax(0, 1.5fr); gap: 14px; }
+  .card .num { display: flex; align-items: flex-end; gap: 1ch; margin: 8px 0 10px; color: var(--text); }
+  .card .num.em { color: var(--ember); } .card .num.good { color: var(--good); }
+  .big { height: 52px; width: auto; fill: currentColor; display: block; }
+  .unit { font-weight: 700; line-height: 1; }
+  .verdict { border-left: 1ch solid var(--good); padding-left: 2ch; }
+  .verdict div { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+  /* The screens */
+  .screens .tabs { margin-bottom: 4px; }
+  figure { margin: 0; }
+  .cmdline { color: var(--text); padding: 10px 0 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  figure img { display: block; width: calc(100% + 28px); max-width: none; height: auto; margin: 0 -14px; }
+  figcaption { color: var(--label); padding: 0 0 4px; }
+
+  /* What it does: a table with a bar on the line the pointer is on */
+  table { width: 100%; border-collapse: collapse; }
+  th { text-align: left; font-weight: 700; color: var(--label); padding: 0 2ch 2px 2ch; white-space: nowrap; }
+  td { padding: 2px 2ch; vertical-align: top; }
+  tr td:first-child, tr th:first-child { border-left: 1ch solid transparent; padding-left: 1ch; }
+  tbody tr:hover { background: var(--selected); } tbody tr:hover td:first-child { border-left-color: var(--ember); }
+  td.m { font-weight: 700; white-space: nowrap; } td.c { color: var(--flame); white-space: nowrap; } td.w { color: var(--label); }
+
+  /* Against the others */
+  .bench { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px 4ch; margin-top: 8px; }
+  .brow { display: grid; grid-template-columns: 5ch minmax(0, 1fr) 5ch 7ch 8ch; gap: 1ch; align-items: center; color: var(--label); }
+  .brow .bar { height: 1em; } .brow .bar i { display: block; height: 100%; background: var(--banked); }
+  .brow .v, .brow .x { text-align: right; }
+  .brow.us { color: var(--text); font-weight: 700; } .brow.us .bar i { background: var(--ember); }
+  .cols { display: grid; grid-template-columns: 5ch minmax(0, 1fr) 5ch 7ch 8ch; gap: 1ch; color: var(--faint); }
+  .cols span:nth-child(n+3) { text-align: right; }
+  .fine { color: var(--faint); margin: 12px 0 0; max-width: 110ch; } .fine a { color: var(--label); text-decoration: underline; text-underline-offset: 3px; }
+
+  .two { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px; }
+  pre { margin: 8px 0 0; font: inherit; color: var(--label); overflow-x: auto; }
+  pre .k { color: var(--flame); } pre .s { color: var(--good); }
+  ul { list-style: none; margin: 8px 0 0; padding: 0; color: var(--label); }
+  ul li::before { content: "✔ "; color: var(--good); } ul b { color: var(--text); font-weight: 400; }
+
+  /* The keys, on the bottom line as in the dashboard */
+  .chips { position: sticky; bottom: 0; background: var(--ground); margin: 26px -28px 0; padding: 10px 28px 12px; border-radius: 0 0 10px 10px;
+            display: flex; flex-wrap: wrap; gap: 4px 2.5ch; color: var(--label); border-top: 1px solid var(--surface); }
+  .chips kbd, .keys kbd { font: inherit; font-weight: 700; color: var(--ember); background: var(--selected); padding: 0 1ch; margin-right: 1ch; }
+  .chips .by { margin-left: auto; color: var(--faint); }
+
+  dialog { background: var(--ground); color: var(--text); border: 1px solid var(--ember); border-radius: 8px; padding: 18px 26px; font: inherit; max-width: 60ch; }
+  dialog::backdrop { background: rgba(11, 8, 7, .7); }
+  .keys div { margin: 2px 0; } .keys h2 { color: var(--ember); font-weight: 700; margin-bottom: 8px; }
+
+  @media (max-width: 1000px) {
+    .term { margin: 0; border: 0; border-radius: 0; padding: 16px 16px 0; }
+    .hero { grid-template-columns: 1fr; gap: 14px; } .pepe { width: 150px; }
+    .cards, .two, .bench { grid-template-columns: 1fr; }
+    td.c { white-space: normal; overflow-wrap: anywhere; } td.w { display: none; }
+    .chips { margin: 26px -16px 0; padding: 10px 16px 12px; border-radius: 0; } .chips .by, .chips .wide { display: none; }
+    figure img { width: 100%; margin: 0; }
+    .title nav { gap: 2ch; }
+  }
+  @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
 </style>
 </head>
 <body>
-<main>
-  <header>
-    <svg class="logo" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 112" width="128" height="112" shape-rendering="crispEdges"><rect x="80" y="0" width="8" height="8" fill="#008700"/><rect x="88" y="0" width="8" height="8" fill="#008700"/><rect x="72" y="8" width="8" height="8" fill="#008700"/><rect x="80" y="8" width="8" height="8" fill="#008700"/><rect x="40" y="16" width="8" height="8" fill="#5f0000"/><rect x="48" y="16" width="8" height="8" fill="#008700"/><rect x="56" y="16" width="8" height="8" fill="#5fd700"/><rect x="64" y="16" width="8" height="8" fill="#5fd700"/><rect x="72" y="16" width="8" height="8" fill="#5fd700"/><rect x="80" y="16" width="8" height="8" fill="#5fd700"/><rect x="88" y="16" width="8" height="8" fill="#008700"/><rect x="96" y="16" width="8" height="8" fill="#5f0000"/><rect x="32" y="24" width="8" height="8" fill="#5f0000"/><rect x="40" y="24" width="8" height="8" fill="#ff0000"/><rect x="48" y="24" width="8" height="8" fill="#008700"/><rect x="56" y="24" width="8" height="8" fill="#5fd700"/><rect x="64" y="24" width="8" height="8" fill="#5fd700"/><rect x="72" y="24" width="8" height="8" fill="#5fd700"/><rect x="80" y="24" width="8" height="8" fill="#5fd700"/><rect x="88" y="24" width="8" height="8" fill="#008700"/><rect x="96" y="24" width="8" height="8" fill="#ff0000"/><rect x="104" y="24" width="8" height="8" fill="#5f0000"/><rect x="24" y="32" width="8" height="8" fill="#5f0000"/><rect x="32" y="32" width="8" height="8" fill="#ff0000"/><rect x="40" y="32" width="8" height="8" fill="#ffafaf"/><rect x="48" y="32" width="8" height="8" fill="#ff0000"/><rect x="56" y="32" width="8" height="8" fill="#ff0000"/><rect x="64" y="32" width="8" height="8" fill="#ff0000"/><rect x="72" y="32" width="8" height="8" fill="#ff0000"/><rect x="80" y="32" width="8" height="8" fill="#ff0000"/><rect x="88" y="32" width="8" height="8" fill="#ff0000"/><rect x="96" y="32" width="8" height="8" fill="#ff0000"/><rect x="104" y="32" width="8" height="8" fill="#ff0000"/><rect x="112" y="32" width="8" height="8" fill="#5f0000"/><rect x="24" y="40" width="8" height="8" fill="#5f0000"/><rect x="32" y="40" width="8" height="8" fill="#ff0000"/><rect x="40" y="40" width="8" height="8" fill="#ffffff"/><rect x="48" y="40" width="8" height="8" fill="#ffffff"/><rect x="56" y="40" width="8" height="8" fill="#ff0000"/><rect x="64" y="40" width="8" height="8" fill="#ff0000"/><rect x="72" y="40" width="8" height="8" fill="#ff0000"/><rect x="80" y="40" width="8" height="8" fill="#ffffff"/><rect x="88" y="40" width="8" height="8" fill="#ffffff"/><rect x="96" y="40" width="8" height="8" fill="#ff0000"/><rect x="104" y="40" width="8" height="8" fill="#ff0000"/><rect x="112" y="40" width="8" height="8" fill="#d70000"/><rect x="120" y="40" width="8" height="8" fill="#5f0000"/><rect x="16" y="48" width="8" height="8" fill="#5f0000"/><rect x="24" y="48" width="8" height="8" fill="#ff0000"/><rect x="32" y="48" width="8" height="8" fill="#ff0000"/><rect x="40" y="48" width="8" height="8" fill="#ffffff"/><rect x="48" y="48" width="8" height="8" fill="#000000"/><rect x="56" y="48" width="8" height="8" fill="#ff0000"/><rect x="64" y="48" width="8" height="8" fill="#ff0000"/><rect x="72" y="48" width="8" height="8" fill="#ff0000"/><rect x="80" y="48" width="8" height="8" fill="#ffffff"/><rect x="88" y="48" width="8" height="8" fill="#000000"/><rect x="96" y="48" width="8" height="8" fill="#ff0000"/><rect x="104" y="48" width="8" height="8" fill="#ff0000"/><rect x="112" y="48" width="8" height="8" fill="#d70000"/><rect x="120" y="48" width="8" height="8" fill="#5f0000"/><rect x="16" y="56" width="8" height="8" fill="#5f0000"/><rect x="24" y="56" width="8" height="8" fill="#ff0000"/><rect x="32" y="56" width="8" height="8" fill="#ff87af"/><rect x="40" y="56" width="8" height="8" fill="#ff0000"/><rect x="48" y="56" width="8" height="8" fill="#ff0000"/><rect x="56" y="56" width="8" height="8" fill="#ff0000"/><rect x="64" y="56" width="8" height="8" fill="#ff0000"/><rect x="72" y="56" width="8" height="8" fill="#ff0000"/><rect x="80" y="56" width="8" height="8" fill="#ff0000"/><rect x="88" y="56" width="8" height="8" fill="#ff0000"/><rect x="96" y="56" width="8" height="8" fill="#ff87af"/><rect x="104" y="56" width="8" height="8" fill="#ff0000"/><rect x="112" y="56" width="8" height="8" fill="#d70000"/><rect x="120" y="56" width="8" height="8" fill="#5f0000"/><rect x="16" y="64" width="8" height="8" fill="#5f0000"/><rect x="24" y="64" width="8" height="8" fill="#ff0000"/><rect x="32" y="64" width="8" height="8" fill="#ff0000"/><rect x="40" y="64" width="8" height="8" fill="#ff0000"/><rect x="48" y="64" width="8" height="8" fill="#ff0000"/><rect x="56" y="64" width="8" height="8" fill="#000000"/><rect x="64" y="64" width="8" height="8" fill="#ff0000"/><rect x="72" y="64" width="8" height="8" fill="#ff0000"/><rect x="80" y="64" width="8" height="8" fill="#000000"/><rect x="88" y="64" width="8" height="8" fill="#ff0000"/><rect x="96" y="64" width="8" height="8" fill="#ff0000"/><rect x="104" y="64" width="8" height="8" fill="#d70000"/><rect x="112" y="64" width="8" height="8" fill="#5f0000"/><rect x="24" y="72" width="8" height="8" fill="#5f0000"/><rect x="32" y="72" width="8" height="8" fill="#ff0000"/><rect x="40" y="72" width="8" height="8" fill="#ff0000"/><rect x="48" y="72" width="8" height="8" fill="#ff0000"/><rect x="56" y="72" width="8" height="8" fill="#ff0000"/><rect x="64" y="72" width="8" height="8" fill="#000000"/><rect x="72" y="72" width="8" height="8" fill="#000000"/><rect x="80" y="72" width="8" height="8" fill="#ff0000"/><rect x="88" y="72" width="8" height="8" fill="#ff0000"/><rect x="96" y="72" width="8" height="8" fill="#d70000"/><rect x="104" y="72" width="8" height="8" fill="#5f0000"/><rect x="24" y="80" width="8" height="8" fill="#5f0000"/><rect x="32" y="80" width="8" height="8" fill="#ff0000"/><rect x="40" y="80" width="8" height="8" fill="#ff0000"/><rect x="48" y="80" width="8" height="8" fill="#ff0000"/><rect x="56" y="80" width="8" height="8" fill="#ff0000"/><rect x="64" y="80" width="8" height="8" fill="#ff0000"/><rect x="72" y="80" width="8" height="8" fill="#ff0000"/><rect x="80" y="80" width="8" height="8" fill="#ff0000"/><rect x="88" y="80" width="8" height="8" fill="#d70000"/><rect x="96" y="80" width="8" height="8" fill="#5f0000"/><rect x="16" y="88" width="8" height="8" fill="#5f0000"/><rect x="24" y="88" width="8" height="8" fill="#ff0000"/><rect x="32" y="88" width="8" height="8" fill="#ff0000"/><rect x="40" y="88" width="8" height="8" fill="#ff0000"/><rect x="48" y="88" width="8" height="8" fill="#ff0000"/><rect x="56" y="88" width="8" height="8" fill="#ff0000"/><rect x="64" y="88" width="8" height="8" fill="#ff0000"/><rect x="72" y="88" width="8" height="8" fill="#d70000"/><rect x="80" y="88" width="8" height="8" fill="#d70000"/><rect x="88" y="88" width="8" height="8" fill="#5f0000"/><rect x="8" y="96" width="8" height="8" fill="#5f0000"/><rect x="16" y="96" width="8" height="8" fill="#ff0000"/><rect x="24" y="96" width="8" height="8" fill="#ff0000"/><rect x="32" y="96" width="8" height="8" fill="#ff0000"/><rect x="40" y="96" width="8" height="8" fill="#d70000"/><rect x="48" y="96" width="8" height="8" fill="#d70000"/><rect x="56" y="96" width="8" height="8" fill="#d70000"/><rect x="64" y="96" width="8" height="8" fill="#5f0000"/><rect x="72" y="96" width="8" height="8" fill="#5f0000"/><rect x="0" y="104" width="8" height="8" fill="#5f0000"/><rect x="8" y="104" width="8" height="8" fill="#d70000"/><rect x="16" y="104" width="8" height="8" fill="#d70000"/><rect x="24" y="104" width="8" height="8" fill="#5f0000"/><rect x="32" y="104" width="8" height="8" fill="#5f0000"/><rect x="40" y="104" width="8" height="8" fill="#5f0000"/></svg>
-    <div>
-      <h1>pepe</h1>
-    </div>
+<div class="term">
+  <header class="title">
+    <span class="name">pepe</span><span>HTTP load testing</span>
+    <nav aria-label="Site"><span class="live">● open source</span><a href="https://github.com/omarmhaimdat/pepe#usage">docs</a><a href="https://github.com/omarmhaimdat/pepe/blob/master/bench/README.md">benchmarks</a><a href="https://github.com/omarmhaimdat/pepe">github</a></nav>
   </header>
-  <p class="tagline">An HTTP load generator with a live dashboard, built to cost less than the server it tests.</p>
 
-  <section class="card" aria-label="Install">
-    <div class="tabs" role="tablist">
-      <button role="tab" data-tab="shell">macOS &amp; Linux</button>
-      <button role="tab" data-tab="windows">Windows</button>
-      <button role="tab" data-tab="brew">Homebrew</button>
-      <button role="tab" data-tab="nix">Nix</button>
-      <button role="tab" data-tab="cargo">From source</button>
+  <main>
+    <div class="hero">
+      <div><svg class="pepe" viewBox="0 0 23 26" shape-rendering="crispEdges" role="img" aria-label="Pepe, a pixel-art chili pepper"><rect x="0" y="15" width="1.02" height="1.02" fill="#2c0a0b"/><rect x="0" y="23" width="1.02" height="1.02" fill="#2c0a0b"/><rect x="0" y="24" width="1.02" height="1.02" fill="#2c0a0b"/><rect x="1" y="14" width="1.02" height="1.02" fill="#2c0a0b"/><rect x="1" y="15" width="1.02" height="1.02" fill="#ef3324"/><rect x="1" y="16" width="1.02" height="1.02" fill="#2c0a0b"/><rect x="1" y="22" width="1.02" height="1.02" fill="#2c0a0b"/><rect x="1" y="23" width="1.02" height="1.02" fill="#ef3324"/><rect x="1" y="24" width="1.02" height="1.02" fill="#b81c1e"/><rect x="1" y="25" width="1.02" height="1.02" fill="#2c0a0b"/><rect x="2" y="10" width="1.02" height="1.02" fill="#2c0a0b"/><rect x="2" y="11" width="1.02" height="1.02" fill="#2c0a0b"/><rect x="2" y="12" width="1.02" height="1.02" fill="#2c0a0b"/><rect x="2" y="13" width="1.02" height="1.02" fill="#2c0a0b"/><rect x="2" y="14" width="1.02" height="1.02" fill="#2c0a0b"/><rect x="2" y="15" width="1.02" height="1.02" fill="#ef3324"/><rect x="2" y="16" width="1.02" height="1.02" fill="#2c0a0b"/><rect x="2" y="21" width="1.02" height="1.02" fill="#2c0a0b"/><rect x="2" y="22" width="1.02" height="1.02" fill="#ef3324"/><rect x="2" y="23" width="1.02" height="1.02" fill="#b81c1e"/><rect x="2" y="24" width="1.02" height="1.02" fill="#b81c1e"/><rect x="2" y="25" width="1.02" height="1.02" fill="#2c0a0b"/><rect x="3" y="8" width="1.02" height="1.02" fill="#2c0a0b"/><rect x="3" y="9" width="1.02" height="1.02" fill="#2c0a0b"/><rect x="3" y="10" width="1.02" height="1.02" fill="#ef3324"/><rect x="3" y="11" width="1.02" height="1.02" fill="#ef3324"/><rect x="3" y="12" width="1.02" height="1.02" fill="#ef3324"/><rect x="3" y="13" width="1.02" height="1.02" fill="#ef3324"/><rect x="3" y="14" width="1.02" height="1.02" fill="#ef3324"/><rect x="3" y="15" width="1.02" height="1.02" fill="#ef3324"/><rect x="3" y="16" width="1.02" height="1.02" fill="#2c0a0b"/><rect x="3" y="17" width="1.02" height="1.02" fill="#2c0a0b"/><rect x="3" y="20" width="1.02" height="1.02" fill="#2c0a0b"/><rect x="3" y="21" width="1.02" height="1.02" fill="#ef3324"/><rect x="3" y="22" width="1.02" height="1.02" fill="#ef3324"/><rect x="3" y="23" width="1.02" height="1.02" fill="#b81c1e"/><rect x="3" y="24" width="1.02" height="1.02" fill="#2c0a0b"/><rect x="4" y="7" width="1.02" height="1.02" fill="#2c0a0b"/><rect x="4" y="8" width="1.02" height="1.02" fill="#ef3324"/><rect x="4" y="9" width="1.02" height="1.02" fill="#ef3324"/><rect x="4" y="10" width="1.02" height="1.02" fill="#ffa082"/><rect x="4" y="11" width="1.02" height="1.02" fill="#ffa082"/><rect x="4" y="12" width="1.02" height="1.02" fill="#ef3324"/><rect x="4" y="13" width="1.02" height="1.02" fill="#ef3324"/><rect x="4" y="14" width="1.02" height="1.02" fill="#ef3324"/><rect x="4" y="15" width="1.02" height="1.02" fill="#ef3324"/><rect x="4" y="16" width="1.02" height="1.02" fill="#ef3324"/><rect x="4" y="17" width="1.02" height="1.02" fill="#ef3324"/><rect x="4" y="18" width="1.02" height="1.02" fill="#2c0a0b"/><rect x="4" y="19" width="1.02" height="1.02" fill="#2c0a0b"/><rect x="4" y="20" width="1.02" height="1.02" fill="#ef3324"/><rect x="4" y="21" width="1.02" height="1.02" fill="#ef3324"/><rect x="4" y="22" width="1.02" height="1.02" fill="#ef3324"/><rect x="4" y="23" width="1.02" height="1.02" fill="#b81c1e"/><rect x="4" y="24" width="1.02" height="1.02" fill="#2c0a0b"/><rect x="5" y="6" width="1.02" height="1.02" fill="#2c0a0b"/><rect x="5" y="7" width="1.02" height="1.02" fill="#ef3324"/><rect x="5" y="8" width="1.02" height="1.02" fill="#ffa082"/><rect x="5" y="9" width="1.02" height="1.02" fill="#ffa082"/><rect x="5" y="10" width="1.02" height="1.02" fill="#ef3324"/><rect x="5" y="11" width="1.02" height="1.02" fill="#ef3324"/><rect x="5" y="12" width="1.02" height="1.02" fill="#ef3324"/><rect x="5" y="13" width="1.02" height="1.02" fill="#ff809a"/><rect x="5" y="14" width="1.02" height="1.02" fill="#ef3324"/><rect x="5" y="15" width="1.02" height="1.02" fill="#ef3324"/><rect x="5" y="16" width="1.02" height="1.02" fill="#ef3324"/><rect x="5" y="17" width="1.02" height="1.02" fill="#ef3324"/><rect x="5" y="18" width="1.02" height="1.02" fill="#ef3324"/><rect x="5" y="19" width="1.02" height="1.02" fill="#ef3324"/><rect x="5" y="20" width="1.02" height="1.02" fill="#ef3324"/><rect x="5" y="21" width="1.02" height="1.02" fill="#ef3324"/><rect x="5" y="22" width="1.02" height="1.02" fill="#ef3324"/><rect x="5" y="23" width="1.02" height="1.02" fill="#b81c1e"/><rect x="5" y="24" width="1.02" height="1.02" fill="#2c0a0b"/><rect x="6" y="5" width="1.02" height="1.02" fill="#2c0a0b"/><rect x="6" y="6" width="1.02" height="1.02" fill="#7ac846"/><rect x="6" y="7" width="1.02" height="1.02" fill="#7ac846"/><rect x="6" y="8" width="1.02" height="1.02" fill="#ef3324"/><rect x="6" y="9" width="1.02" height="1.02" fill="#ef3324"/><rect x="6" y="10" width="1.02" height="1.02" fill="#ef3324"/><rect x="6" y="11" width="1.02" height="1.02" fill="#ef3324"/><rect x="6" y="12" width="1.02" height="1.02" fill="#ef3324"/><rect x="6" y="13" width="1.02" height="1.02" fill="#ff809a"/><rect x="6" y="14" width="1.02" height="1.02" fill="#ef3324"/><rect x="6" y="15" width="1.02" height="1.02" fill="#ef3324"/><rect x="6" y="16" width="1.02" height="1.02" fill="#ef3324"/><rect x="6" y="17" width="1.02" height="1.02" fill="#ef3324"/><rect x="6" y="18" width="1.02" height="1.02" fill="#ef3324"/><rect x="6" y="19" width="1.02" height="1.02" fill="#ef3324"/><rect x="6" y="20" width="1.02" height="1.02" fill="#ef3324"/><rect x="6" y="21" width="1.02" height="1.02" fill="#ef3324"/><rect x="6" y="22" width="1.02" height="1.02" fill="#ef3324"/><rect x="6" y="23" width="1.02" height="1.02" fill="#b81c1e"/><rect x="6" y="24" width="1.02" height="1.02" fill="#2c0a0b"/><rect x="7" y="4" width="1.02" height="1.02" fill="#2c0a0b"/><rect x="7" y="5" width="1.02" height="1.02" fill="#7ac846"/><rect x="7" y="6" width="1.02" height="1.02" fill="#2e7832"/><rect x="7" y="7" width="1.02" height="1.02" fill="#2e7832"/><rect x="7" y="8" width="1.02" height="1.02" fill="#2e7832"/><rect x="7" y="9" width="1.02" height="1.02" fill="#ef3324"/><rect x="7" y="10" width="1.02" height="1.02" fill="#24080a"/><rect x="7" y="11" width="1.02" height="1.02" fill="#24080a"/><rect x="7" y="12" width="1.02" height="1.02" fill="#24080a"/><rect x="7" y="13" width="1.02" height="1.02" fill="#ef3324"/><rect x="7" y="14" width="1.02" height="1.02" fill="#ef3324"/><rect x="7" y="15" width="1.02" height="1.02" fill="#ef3324"/><rect x="7" y="16" width="1.02" height="1.02" fill="#ef3324"/><rect x="7" y="17" width="1.02" height="1.02" fill="#ef3324"/><rect x="7" y="18" width="1.02" height="1.02" fill="#ef3324"/><rect x="7" y="19" width="1.02" height="1.02" fill="#ef3324"/><rect x="7" y="20" width="1.02" height="1.02" fill="#ef3324"/><rect x="7" y="21" width="1.02" height="1.02" fill="#ef3324"/><rect x="7" y="22" width="1.02" height="1.02" fill="#ef3324"/><rect x="7" y="23" width="1.02" height="1.02" fill="#2c0a0b"/><rect x="8" y="4" width="1.02" height="1.02" fill="#2c0a0b"/><rect x="8" y="5" width="1.02" height="1.02" fill="#7ac846"/><rect x="8" y="6" width="1.02" height="1.02" fill="#7ac846"/><rect x="8" y="7" width="1.02" height="1.02" fill="#ef3324"/><rect x="8" y="8" width="1.02" height="1.02" fill="#ef3324"/><rect x="8" y="9" width="1.02" height="1.02" fill="#ef3324"/><rect x="8" y="10" width="1.02" height="1.02" fill="#ffffff"/><rect x="8" y="11" width="1.02" height="1.02" fill="#24080a"/><rect x="8" y="12" width="1.02" height="1.02" fill="#24080a"/><rect x="8" y="13" width="1.02" height="1.02" fill="#ef3324"/><rect x="8" y="14" width="1.02" height="1.02" fill="#ef3324"/><rect x="8" y="15" width="1.02" height="1.02" fill="#ef3324"/><rect x="8" y="16" width="1.02" height="1.02" fill="#ef3324"/><rect x="8" y="17" width="1.02" height="1.02" fill="#ef3324"/><rect x="8" y="18" width="1.02" height="1.02" fill="#ef3324"/><rect x="8" y="19" width="1.02" height="1.02" fill="#ef3324"/><rect x="8" y="20" width="1.02" height="1.02" fill="#ef3324"/><rect x="8" y="21" width="1.02" height="1.02" fill="#ef3324"/><rect x="8" y="22" width="1.02" height="1.02" fill="#b81c1e"/><rect x="8" y="23" width="1.02" height="1.02" fill="#2c0a0b"/><rect x="9" y="4" width="1.02" height="1.02" fill="#2c0a0b"/><rect x="9" y="5" width="1.02" height="1.02" fill="#7ac846"/><rect x="9" y="6" width="1.02" height="1.02" fill="#7ac846"/><rect x="9" y="7" width="1.02" height="1.02" fill="#ef3324"/><rect x="9" y="8" width="1.02" height="1.02" fill="#ef3324"/><rect x="9" y="9" width="1.02" height="1.02" fill="#ef3324"/><rect x="9" y="10" width="1.02" height="1.02" fill="#ef3324"/><rect x="9" y="11" width="1.02" height="1.02" fill="#ef3324"/><rect x="9" y="12" width="1.02" height="1.02" fill="#ef3324"/><rect x="9" y="13" width="1.02" height="1.02" fill="#ef3324"/><rect x="9" y="14" width="1.02" height="1.02" fill="#24080a"/><rect x="9" y="15" width="1.02" height="1.02" fill="#ef3324"/><rect x="9" y="16" width="1.02" height="1.02" fill="#ef3324"/><rect x="9" y="17" width="1.02" height="1.02" fill="#ef3324"/><rect x="9" y="18" width="1.02" height="1.02" fill="#ef3324"/><rect x="9" y="19" width="1.02" height="1.02" fill="#ef3324"/><rect x="9" y="20" width="1.02" height="1.02" fill="#ef3324"/><rect x="9" y="21" width="1.02" height="1.02" fill="#ef3324"/><rect x="9" y="22" width="1.02" height="1.02" fill="#b81c1e"/><rect x="10" y="4" width="1.02" height="1.02" fill="#2c0a0b"/><rect x="10" y="5" width="1.02" height="1.02" fill="#2e7832"/><rect x="10" y="6" width="1.02" height="1.02" fill="#7ac846"/><rect x="10" y="7" width="1.02" height="1.02" fill="#ef3324"/><rect x="10" y="8" width="1.02" height="1.02" fill="#ef3324"/><rect x="10" y="9" width="1.02" height="1.02" fill="#ef3324"/><rect x="10" y="10" width="1.02" height="1.02" fill="#ef3324"/><rect x="10" y="11" width="1.02" height="1.02" fill="#ef3324"/><rect x="10" y="12" width="1.02" height="1.02" fill="#ef3324"/><rect x="10" y="13" width="1.02" height="1.02" fill="#ef3324"/><rect x="10" y="14" width="1.02" height="1.02" fill="#ef3324"/><rect x="10" y="15" width="1.02" height="1.02" fill="#24080a"/><rect x="10" y="16" width="1.02" height="1.02" fill="#ef3324"/><rect x="10" y="17" width="1.02" height="1.02" fill="#ef3324"/><rect x="10" y="18" width="1.02" height="1.02" fill="#ef3324"/><rect x="10" y="19" width="1.02" height="1.02" fill="#ef3324"/><rect x="10" y="20" width="1.02" height="1.02" fill="#ef3324"/><rect x="10" y="21" width="1.02" height="1.02" fill="#ef3324"/><rect x="10" y="22" width="1.02" height="1.02" fill="#2c0a0b"/><rect x="11" y="3" width="1.02" height="1.02" fill="#2c0a0b"/><rect x="11" y="4" width="1.02" height="1.02" fill="#2c0a0b"/><rect x="11" y="5" width="1.02" height="1.02" fill="#7ac846"/><rect x="11" y="6" width="1.02" height="1.02" fill="#7ac846"/><rect x="11" y="7" width="1.02" height="1.02" fill="#7ac846"/><rect x="11" y="8" width="1.02" height="1.02" fill="#ef3324"/><rect x="11" y="9" width="1.02" height="1.02" fill="#ef3324"/><rect x="11" y="10" width="1.02" height="1.02" fill="#ef3324"/><rect x="11" y="11" width="1.02" height="1.02" fill="#ef3324"/><rect x="11" y="12" width="1.02" height="1.02" fill="#ef3324"/><rect x="11" y="13" width="1.02" height="1.02" fill="#ef3324"/><rect x="11" y="14" width="1.02" height="1.02" fill="#ef3324"/><rect x="11" y="15" width="1.02" height="1.02" fill="#24080a"/><rect x="11" y="16" width="1.02" height="1.02" fill="#ef3324"/><rect x="11" y="17" width="1.02" height="1.02" fill="#ef3324"/><rect x="11" y="18" width="1.02" height="1.02" fill="#ef3324"/><rect x="11" y="19" width="1.02" height="1.02" fill="#ef3324"/><rect x="11" y="20" width="1.02" height="1.02" fill="#ef3324"/><rect x="11" y="21" width="1.02" height="1.02" fill="#b81c1e"/><rect x="11" y="22" width="1.02" height="1.02" fill="#2c0a0b"/><rect x="12" y="2" width="1.02" height="1.02" fill="#2c0a0b"/><rect x="12" y="3" width="1.02" height="1.02" fill="#2e7832"/><rect x="12" y="4" width="1.02" height="1.02" fill="#2e7832"/><rect x="12" y="5" width="1.02" height="1.02" fill="#7ac846"/><rect x="12" y="6" width="1.02" height="1.02" fill="#2e7832"/><rect x="12" y="7" width="1.02" height="1.02" fill="#7ac846"/><rect x="12" y="8" width="1.02" height="1.02" fill="#2e7832"/><rect x="12" y="9" width="1.02" height="1.02" fill="#ef3324"/><rect x="12" y="10" width="1.02" height="1.02" fill="#ef3324"/><rect x="12" y="11" width="1.02" height="1.02" fill="#ef3324"/><rect x="12" y="12" width="1.02" height="1.02" fill="#ef3324"/><rect x="12" y="13" width="1.02" height="1.02" fill="#ef3324"/><rect x="12" y="14" width="1.02" height="1.02" fill="#24080a"/><rect x="12" y="15" width="1.02" height="1.02" fill="#ef3324"/><rect x="12" y="16" width="1.02" height="1.02" fill="#ef3324"/><rect x="12" y="17" width="1.02" height="1.02" fill="#ef3324"/><rect x="12" y="18" width="1.02" height="1.02" fill="#ef3324"/><rect x="12" y="19" width="1.02" height="1.02" fill="#ef3324"/><rect x="12" y="20" width="1.02" height="1.02" fill="#ef3324"/><rect x="12" y="21" width="1.02" height="1.02" fill="#b81c1e"/><rect x="13" y="1" width="1.02" height="1.02" fill="#2c0a0b"/><rect x="13" y="2" width="1.02" height="1.02" fill="#2e7832"/><rect x="13" y="3" width="1.02" height="1.02" fill="#2e7832"/><rect x="13" y="4" width="1.02" height="1.02" fill="#7ac846"/><rect x="13" y="5" width="1.02" height="1.02" fill="#7ac846"/><rect x="13" y="6" width="1.02" height="1.02" fill="#7ac846"/><rect x="13" y="7" width="1.02" height="1.02" fill="#ef3324"/><rect x="13" y="8" width="1.02" height="1.02" fill="#ef3324"/><rect x="13" y="9" width="1.02" height="1.02" fill="#ef3324"/><rect x="13" y="10" width="1.02" height="1.02" fill="#ef3324"/><rect x="13" y="11" width="1.02" height="1.02" fill="#ef3324"/><rect x="13" y="12" width="1.02" height="1.02" fill="#ef3324"/><rect x="13" y="13" width="1.02" height="1.02" fill="#ef3324"/><rect x="13" y="14" width="1.02" height="1.02" fill="#ef3324"/><rect x="13" y="15" width="1.02" height="1.02" fill="#ef3324"/><rect x="13" y="16" width="1.02" height="1.02" fill="#ef3324"/><rect x="13" y="17" width="1.02" height="1.02" fill="#ef3324"/><rect x="13" y="18" width="1.02" height="1.02" fill="#ef3324"/><rect x="13" y="19" width="1.02" height="1.02" fill="#ef3324"/><rect x="13" y="20" width="1.02" height="1.02" fill="#b81c1e"/><rect x="13" y="21" width="1.02" height="1.02" fill="#2c0a0b"/><rect x="14" y="0" width="1.02" height="1.02" fill="#2c0a0b"/><rect x="14" y="1" width="1.02" height="1.02" fill="#2e7832"/><rect x="14" y="2" width="1.02" height="1.02" fill="#2e7832"/><rect x="14" y="3" width="1.02" height="1.02" fill="#2c0a0b"/><rect x="14" y="4" width="1.02" height="1.02" fill="#2c0a0b"/><rect x="14" y="5" width="1.02" height="1.02" fill="#7ac846"/><rect x="14" y="6" width="1.02" height="1.02" fill="#7ac846"/><rect x="14" y="7" width="1.02" height="1.02" fill="#ef3324"/><rect x="14" y="8" width="1.02" height="1.02" fill="#ef3324"/><rect x="14" y="9" width="1.02" height="1.02" fill="#ef3324"/><rect x="14" y="10" width="1.02" height="1.02" fill="#24080a"/><rect x="14" y="11" width="1.02" height="1.02" fill="#24080a"/><rect x="14" y="12" width="1.02" height="1.02" fill="#24080a"/><rect x="14" y="13" width="1.02" height="1.02" fill="#ef3324"/><rect x="14" y="14" width="1.02" height="1.02" fill="#ef3324"/><rect x="14" y="15" width="1.02" height="1.02" fill="#ef3324"/><rect x="14" y="16" width="1.02" height="1.02" fill="#ef3324"/><rect x="14" y="17" width="1.02" height="1.02" fill="#ef3324"/><rect x="14" y="18" width="1.02" height="1.02" fill="#ef3324"/><rect x="14" y="19" width="1.02" height="1.02" fill="#b81c1e"/><rect x="14" y="20" width="1.02" height="1.02" fill="#b81c1e"/><rect x="15" y="0" width="1.02" height="1.02" fill="#2c0a0b"/><rect x="15" y="1" width="1.02" height="1.02" fill="#2e7832"/><rect x="15" y="2" width="1.02" height="1.02" fill="#2c0a0b"/><rect x="15" y="4" width="1.02" height="1.02" fill="#2c0a0b"/><rect x="15" y="5" width="1.02" height="1.02" fill="#2e7832"/><rect x="15" y="6" width="1.02" height="1.02" fill="#7ac846"/><rect x="15" y="7" width="1.02" height="1.02" fill="#ef3324"/><rect x="15" y="8" width="1.02" height="1.02" fill="#ef3324"/><rect x="15" y="9" width="1.02" height="1.02" fill="#ef3324"/><rect x="15" y="10" width="1.02" height="1.02" fill="#ffffff"/><rect x="15" y="11" width="1.02" height="1.02" fill="#24080a"/><rect x="15" y="12" width="1.02" height="1.02" fill="#24080a"/><rect x="15" y="13" width="1.02" height="1.02" fill="#ef3324"/><rect x="15" y="14" width="1.02" height="1.02" fill="#ef3324"/><rect x="15" y="15" width="1.02" height="1.02" fill="#ef3324"/><rect x="15" y="16" width="1.02" height="1.02" fill="#ef3324"/><rect x="15" y="17" width="1.02" height="1.02" fill="#ef3324"/><rect x="15" y="18" width="1.02" height="1.02" fill="#b81c1e"/><rect x="15" y="19" width="1.02" height="1.02" fill="#b81c1e"/><rect x="15" y="20" width="1.02" height="1.02" fill="#2c0a0b"/><rect x="16" y="0" width="1.02" height="1.02" fill="#2c0a0b"/><rect x="16" y="1" width="1.02" height="1.02" fill="#2e7832"/><rect x="16" y="2" width="1.02" height="1.02" fill="#2c0a0b"/><rect x="16" y="4" width="1.02" height="1.02" fill="#2c0a0b"/><rect x="16" y="5" width="1.02" height="1.02" fill="#7ac846"/><rect x="16" y="6" width="1.02" height="1.02" fill="#7ac846"/><rect x="16" y="7" width="1.02" height="1.02" fill="#ef3324"/><rect x="16" y="8" width="1.02" height="1.02" fill="#ef3324"/><rect x="16" y="9" width="1.02" height="1.02" fill="#ef3324"/><rect x="16" y="10" width="1.02" height="1.02" fill="#ef3324"/><rect x="16" y="11" width="1.02" height="1.02" fill="#ef3324"/><rect x="16" y="12" width="1.02" height="1.02" fill="#ef3324"/><rect x="16" y="13" width="1.02" height="1.02" fill="#ff809a"/><rect x="16" y="14" width="1.02" height="1.02" fill="#ef3324"/><rect x="16" y="15" width="1.02" height="1.02" fill="#ef3324"/><rect x="16" y="16" width="1.02" height="1.02" fill="#ef3324"/><rect x="16" y="17" width="1.02" height="1.02" fill="#b81c1e"/><rect x="16" y="18" width="1.02" height="1.02" fill="#b81c1e"/><rect x="16" y="19" width="1.02" height="1.02" fill="#2c0a0b"/><rect x="17" y="1" width="1.02" height="1.02" fill="#2c0a0b"/><rect x="17" y="4" width="1.02" height="1.02" fill="#2c0a0b"/><rect x="17" y="5" width="1.02" height="1.02" fill="#7ac846"/><rect x="17" y="6" width="1.02" height="1.02" fill="#7ac846"/><rect x="17" y="7" width="1.02" height="1.02" fill="#2e7832"/><rect x="17" y="8" width="1.02" height="1.02" fill="#ef3324"/><rect x="17" y="9" width="1.02" height="1.02" fill="#ef3324"/><rect x="17" y="10" width="1.02" height="1.02" fill="#ef3324"/><rect x="17" y="11" width="1.02" height="1.02" fill="#ef3324"/><rect x="17" y="12" width="1.02" height="1.02" fill="#ef3324"/><rect x="17" y="13" width="1.02" height="1.02" fill="#ff809a"/><rect x="17" y="14" width="1.02" height="1.02" fill="#ef3324"/><rect x="17" y="15" width="1.02" height="1.02" fill="#ef3324"/><rect x="17" y="16" width="1.02" height="1.02" fill="#b81c1e"/><rect x="17" y="17" width="1.02" height="1.02" fill="#b81c1e"/><rect x="17" y="18" width="1.02" height="1.02" fill="#2c0a0b"/><rect x="18" y="5" width="1.02" height="1.02" fill="#2c0a0b"/><rect x="18" y="6" width="1.02" height="1.02" fill="#2e7832"/><rect x="18" y="7" width="1.02" height="1.02" fill="#7ac846"/><rect x="18" y="8" width="1.02" height="1.02" fill="#2e7832"/><rect x="18" y="9" width="1.02" height="1.02" fill="#ef3324"/><rect x="18" y="10" width="1.02" height="1.02" fill="#ef3324"/><rect x="18" y="11" width="1.02" height="1.02" fill="#ef3324"/><rect x="18" y="12" width="1.02" height="1.02" fill="#ef3324"/><rect x="18" y="13" width="1.02" height="1.02" fill="#ef3324"/><rect x="18" y="14" width="1.02" height="1.02" fill="#b81c1e"/><rect x="18" y="15" width="1.02" height="1.02" fill="#b81c1e"/><rect x="18" y="16" width="1.02" height="1.02" fill="#b81c1e"/><rect x="18" y="17" width="1.02" height="1.02" fill="#2c0a0b"/><rect x="19" y="5" width="1.02" height="1.02" fill="#2c0a0b"/><rect x="19" y="6" width="1.02" height="1.02" fill="#7ac846"/><rect x="19" y="7" width="1.02" height="1.02" fill="#ef3324"/><rect x="19" y="8" width="1.02" height="1.02" fill="#ef3324"/><rect x="19" y="9" width="1.02" height="1.02" fill="#ef3324"/><rect x="19" y="10" width="1.02" height="1.02" fill="#ef3324"/><rect x="19" y="11" width="1.02" height="1.02" fill="#b81c1e"/><rect x="19" y="12" width="1.02" height="1.02" fill="#b81c1e"/><rect x="19" y="13" width="1.02" height="1.02" fill="#b81c1e"/><rect x="19" y="14" width="1.02" height="1.02" fill="#b81c1e"/><rect x="19" y="15" width="1.02" height="1.02" fill="#2c0a0b"/><rect x="19" y="16" width="1.02" height="1.02" fill="#2c0a0b"/><rect x="20" y="6" width="1.02" height="1.02" fill="#2c0a0b"/><rect x="20" y="7" width="1.02" height="1.02" fill="#ef3324"/><rect x="20" y="8" width="1.02" height="1.02" fill="#b81c1e"/><rect x="20" y="9" width="1.02" height="1.02" fill="#b81c1e"/><rect x="20" y="10" width="1.02" height="1.02" fill="#b81c1e"/><rect x="20" y="11" width="1.02" height="1.02" fill="#b81c1e"/><rect x="20" y="12" width="1.02" height="1.02" fill="#2c0a0b"/><rect x="20" y="13" width="1.02" height="1.02" fill="#2c0a0b"/><rect x="20" y="14" width="1.02" height="1.02" fill="#2c0a0b"/><rect x="20" y="15" width="1.02" height="1.02" fill="#b81c1e"/><rect x="20" y="16" width="1.02" height="1.02" fill="#2c0a0b"/><rect x="21" y="7" width="1.02" height="1.02" fill="#2c0a0b"/><rect x="21" y="8" width="1.02" height="1.02" fill="#2c0a0b"/><rect x="21" y="9" width="1.02" height="1.02" fill="#2c0a0b"/><rect x="21" y="10" width="1.02" height="1.02" fill="#2c0a0b"/><rect x="21" y="11" width="1.02" height="1.02" fill="#2c0a0b"/><rect x="21" y="14" width="1.02" height="1.02" fill="#2c0a0b"/><rect x="21" y="15" width="1.02" height="1.02" fill="#ef3324"/><rect x="21" y="16" width="1.02" height="1.02" fill="#2c0a0b"/><rect x="22" y="15" width="1.02" height="1.02" fill="#2c0a0b"/></svg><div class="says">all good</div></div>
+      <div>
+        <h1><span>Load test it.</span><span>Then <span class="em" style="display:inline">read</span> what happened.</span></h1>
+        <p class="lede">A load generator with <b>a live terminal dashboard</b> and <b>a verdict in plain words</b>. One small binary, light enough that the server is what you measure.</p>
+        <div class="panel install" id="install">
+          <div class="tabs" role="tablist" aria-label="Install on">
+            <button role="tab" data-tab="shell">macOS &amp; Linux</button><button role="tab" data-tab="windows">Windows</button><button role="tab" data-tab="brew">Homebrew</button><button role="tab" data-tab="nix">Nix</button><button role="tab" data-tab="docker">Docker</button><button role="tab" data-tab="cargo">Source</button>
+          </div>
+          <div class="how" data-how="shell"><div class="line"><span class="pr">$</span><code>curl -LsSf https://pepe.mhaimdat.com/install.sh | sh</code><button class="chip" type="button">copy</button></div><p>to ~/.local/bin, with tab completion and man pepe · later: pepe self-update</p></div>
+          <div class="how" data-how="windows"><div class="line"><span class="pr">&gt;</span><code>powershell -ExecutionPolicy Bypass -c "irm https://pepe.mhaimdat.com/install.ps1 | iex"</code><button class="chip" type="button">copy</button></div><p>to ~\.local\bin, with tab completion for PowerShell · later: pepe self-update</p></div>
+          <div class="how" data-how="brew"><div class="line"><span class="pr">$</span><code>brew install omarmhaimdat/pepe/pepe</code><button class="chip" type="button">copy</button></div><p>macOS and Linux</p></div>
+          <div class="how" data-how="nix"><div class="line"><span class="pr">$</span><code>nix run github:omarmhaimdat/pepe -- https://example.com</code><button class="chip" type="button">copy</button></div><p>or keep it: nix profile install github:omarmhaimdat/pepe</p></div>
+          <div class="how" data-how="docker"><div class="line"><span class="pr">$</span><code>docker run --rm -it ghcr.io/omarmhaimdat/pepe https://example.com</code><button class="chip" type="button">copy</button></div><p>a few megabytes, linux/amd64 and linux/arm64</p></div>
+          <div class="how" data-how="cargo"><div class="line"><span class="pr">$</span><code>cargo install --locked --git https://github.com/omarmhaimdat/pepe</code><button class="chip" type="button">copy</button></div><p>signed binaries for every platform: github.com/omarmhaimdat/pepe/releases</p></div>
+        </div>
+      </div>
     </div>
-    <div class="panel" data-panel="shell">
-      <pre><code>curl -LsSf https://pepe.mhaimdat.com/install.sh | sh</code><button type="button">copy</button></pre>
-      <p class="note">Installs to <kbd>~/.local/bin</kbd>, puts it on your PATH, and sets up tab completion and <kbd>man pepe</kbd> for your shell. Updates later with <kbd>pepe self-update</kbd>.</p>
-    </div>
-    <div class="panel" data-panel="windows">
-      <pre><code>powershell -ExecutionPolicy Bypass -c "irm https://pepe.mhaimdat.com/install.ps1 | iex"</code><button type="button">copy</button></pre>
-      <p class="note">Installs to <kbd>~\.local\bin</kbd>, puts it on your PATH, and sets up tab completion for PowerShell. Updates later with <kbd>pepe self-update</kbd>.</p>
-    </div>
-    <div class="panel" data-panel="brew">
-      <pre><code>brew install omarmhaimdat/pepe/pepe</code><button type="button">copy</button></pre>
-      <p class="note">macOS and Linux. Completions and the man page go where Homebrew activates them.</p>
-    </div>
-    <div class="panel" data-panel="nix">
-      <pre><code>nix profile install github:omarmhaimdat/pepe</code><button type="button">copy</button></pre>
-      <p class="note">Or try it without installing: <kbd>nix run github:omarmhaimdat/pepe -- https://example.com</kbd></p>
-    </div>
-    <div class="panel" data-panel="cargo">
-      <pre><code>cargo install --locked --git https://github.com/omarmhaimdat/pepe</code><button type="button">copy</button></pre>
-      <p class="note">Then <kbd>pepe completions --install</kbd> for tab completion and the man page. Prebuilt, signed binaries for every platform are on the <a href="https://github.com/omarmhaimdat/pepe/releases/latest">releases page</a>.</p>
-    </div>
-    <div class="then">
-      <p>then</p>
-      <pre><code>pepe https://example.com</code><button type="button">copy</button></pre>
-    </div>
-  </section>
 
-  <h2>What you get</h2>
-  <img class="shot" src="/assets/run.gif" alt="pepe's dashboard during a run: throughput, latency percentiles and a heatmap, status codes, a request log, and a verdict when the run ends" width="1280" height="720" loading="lazy">
-  <ul class="points" style="margin-top:16px">
-    <li><b>A live dashboard</b> with a latency heatmap, percentiles, throughput, status codes, failure causes and a request log you can open any request from. Pause, resume and change concurrency while it runs.</li>
-    <li><b>A verdict in plain words</b> when the run ends: Healthy, Degraded or Failing, and why.</li>
-    <li><b>Any curl command</b> as input, straight from a browser's "Copy as cURL".</li>
-    <li><b>A setup screen</b> when you run <kbd>pepe</kbd> on its own, <b>ramp mode</b> to find where a target stops keeping up, and <b>API mode</b> for the endpoints of an OpenAPI spec.</li>
-    <li><b>Light</b>: one thread sends about 100k requests a second at 2.5× less CPU than comparable tools, and pepe says when it, not the target, is the limit.</li>
-  </ul>
+    <section class="cards" aria-label="In numbers">
+      <div class="panel card"><div class="row"><span class="lab">requests / s</span><span class="lab">one thread</span></div>
+<div class="num em" aria-label="398 k"><svg class="big" viewBox="0 0 11 5" shape-rendering="crispEdges" aria-hidden="true"><rect x="0" y="0" width="1.02" height="1.02"/><rect x="0" y="4" width="1.02" height="1.02"/><rect x="1" y="0" width="1.02" height="1.02"/><rect x="1" y="2" width="1.02" height="1.02"/><rect x="1" y="4" width="1.02" height="1.02"/><rect x="2" y="0" width="1.02" height="1.02"/><rect x="2" y="1" width="1.02" height="1.02"/><rect x="2" y="2" width="1.02" height="1.02"/><rect x="2" y="3" width="1.02" height="1.02"/><rect x="2" y="4" width="1.02" height="1.02"/><rect x="4" y="0" width="1.02" height="1.02"/><rect x="4" y="1" width="1.02" height="1.02"/><rect x="4" y="2" width="1.02" height="1.02"/><rect x="4" y="4" width="1.02" height="1.02"/><rect x="5" y="0" width="1.02" height="1.02"/><rect x="5" y="2" width="1.02" height="1.02"/><rect x="5" y="4" width="1.02" height="1.02"/><rect x="6" y="0" width="1.02" height="1.02"/><rect x="6" y="1" width="1.02" height="1.02"/><rect x="6" y="2" width="1.02" height="1.02"/><rect x="6" y="3" width="1.02" height="1.02"/><rect x="6" y="4" width="1.02" height="1.02"/><rect x="8" y="0" width="1.02" height="1.02"/><rect x="8" y="1" width="1.02" height="1.02"/><rect x="8" y="2" width="1.02" height="1.02"/><rect x="8" y="3" width="1.02" height="1.02"/><rect x="8" y="4" width="1.02" height="1.02"/><rect x="9" y="0" width="1.02" height="1.02"/><rect x="9" y="2" width="1.02" height="1.02"/><rect x="9" y="4" width="1.02" height="1.02"/><rect x="10" y="0" width="1.02" height="1.02"/><rect x="10" y="1" width="1.02" height="1.02"/><rect x="10" y="2" width="1.02" height="1.02"/><rect x="10" y="3" width="1.02" height="1.02"/><rect x="10" y="4" width="1.02" height="1.02"/></svg><span class="unit">k</span></div><div class="lab">linux, 4 vCPU, 64 connections</div></div>
+      <div class="panel card"><div class="row"><span class="lab">cpu / 1,000 requests</span><span class="lab"></span></div>
+<div class="num " aria-label="2.4 ms"><svg class="big" viewBox="0 0 9 5" shape-rendering="crispEdges" aria-hidden="true"><rect x="0" y="0" width="1.02" height="1.02"/><rect x="0" y="2" width="1.02" height="1.02"/><rect x="0" y="3" width="1.02" height="1.02"/><rect x="0" y="4" width="1.02" height="1.02"/><rect x="1" y="0" width="1.02" height="1.02"/><rect x="1" y="2" width="1.02" height="1.02"/><rect x="1" y="4" width="1.02" height="1.02"/><rect x="2" y="0" width="1.02" height="1.02"/><rect x="2" y="1" width="1.02" height="1.02"/><rect x="2" y="2" width="1.02" height="1.02"/><rect x="2" y="4" width="1.02" height="1.02"/><rect x="4" y="4" width="1.02" height="1.02"/><rect x="6" y="0" width="1.02" height="1.02"/><rect x="6" y="1" width="1.02" height="1.02"/><rect x="6" y="2" width="1.02" height="1.02"/><rect x="7" y="2" width="1.02" height="1.02"/><rect x="8" y="0" width="1.02" height="1.02"/><rect x="8" y="1" width="1.02" height="1.02"/><rect x="8" y="2" width="1.02" height="1.02"/><rect x="8" y="3" width="1.02" height="1.02"/><rect x="8" y="4" width="1.02" height="1.02"/></svg><span class="unit">ms</span></div><div class="lab">wrk 3.5 ms · oha 6.8 ms</div></div>
+      <div class="panel card"><div class="row"><span class="lab">memory</span><span class="lab">peak</span></div>
+<div class="num good" aria-label="4.0 MB"><svg class="big" viewBox="0 0 9 5" shape-rendering="crispEdges" aria-hidden="true"><rect x="0" y="0" width="1.02" height="1.02"/><rect x="0" y="1" width="1.02" height="1.02"/><rect x="0" y="2" width="1.02" height="1.02"/><rect x="1" y="2" width="1.02" height="1.02"/><rect x="2" y="0" width="1.02" height="1.02"/><rect x="2" y="1" width="1.02" height="1.02"/><rect x="2" y="2" width="1.02" height="1.02"/><rect x="2" y="3" width="1.02" height="1.02"/><rect x="2" y="4" width="1.02" height="1.02"/><rect x="4" y="4" width="1.02" height="1.02"/><rect x="6" y="0" width="1.02" height="1.02"/><rect x="6" y="1" width="1.02" height="1.02"/><rect x="6" y="2" width="1.02" height="1.02"/><rect x="6" y="3" width="1.02" height="1.02"/><rect x="6" y="4" width="1.02" height="1.02"/><rect x="7" y="0" width="1.02" height="1.02"/><rect x="7" y="4" width="1.02" height="1.02"/><rect x="8" y="0" width="1.02" height="1.02"/><rect x="8" y="1" width="1.02" height="1.02"/><rect x="8" y="2" width="1.02" height="1.02"/><rect x="8" y="3" width="1.02" height="1.02"/><rect x="8" y="4" width="1.02" height="1.02"/></svg><span class="unit">MB</span></div><div class="lab">4.5 MB after ten million requests</div></div>
+      <div class="panel verdict"><div class="good"><b>✔ Healthy</b></div><div>10,000 requests in 12.0s · 833 req/s</div><div><span class="good">✔</span> 100% of requests succeeded</div><div><span class="good">✔</span> p99 is 2.1× the median</div><div><span class="warn">▲</span> p99 jumped 4.5× to 45ms at 26s</div><div class="lab">what a run leaves in your shell</div></div>
+    </section>
 
-  <nav aria-label="More">
-    <a href="https://github.com/omarmhaimdat/pepe">GitHub</a>
-    <a href="https://github.com/omarmhaimdat/pepe#usage">Usage</a>
-    <a href="https://github.com/omarmhaimdat/pepe/releases">Releases</a>
-    <a href="https://github.com/omarmhaimdat/pepe/blob/master/CHANGELOG.md">Changelog</a>
-    <a href="https://github.com/omarmhaimdat/pepe/blob/master/bench/README.md">Benchmarks</a>
-    <a href="https://github.com/omarmhaimdat/pepe/blob/master/ROADMAP.md">Roadmap</a>
-  </nav>
-  <footer>MIT licensed. Made by <a href="https://github.com/omarmhaimdat">Omar Mhaimdat</a>.</footer>
-</main>
+    <section class="screens" id="screens">
+      <div class="tabs" role="tablist" aria-label="Screens"><button role="tab" data-screen="run" aria-selected="true"><b>1</b> Run</button><button role="tab" data-screen="ramp" aria-selected="false"><b>2</b> Ramp</button><button role="tab" data-screen="api" aria-selected="false"><b>3</b> API</button><button role="tab" data-screen="logs" aria-selected="false"><b>4</b> Logs</button></div>
+      <figure data-shot="run"><div class="cmdline"><span class="pr">$</span> pepe -z 1m -c 50 https://api.example.com/checkout</div><a href="img/run.png"><img src="img/run.png" width="2896" height="1836" alt="pepe&#x27;s dashboard during a run: 44 requests a second, a 202 ms median, a 1.84 s p99 and 99.6% success drawn large; the p99 on a heat scale from bell to ghost; findings; a latency heatmap, percentile lines, throughput, the latest requests and errors by cause."></a><figcaption>Four numbers, a verdict, a latency heatmap and every request, while it runs.</figcaption></figure><figure data-shot="ramp" hidden><div class="cmdline"><span class="pr">$</span> pepe ramp https://api.example.com/checkout --to 200 --step 20 --until &#x27;p99 &gt; 800ms&#x27;</div><a href="img/ramp.png"><img src="img/ramp.png" width="2896" height="1836" loading=lazy alt="pepe&#x27;s ramp screen: ten steps from 20 to 200 concurrent, each with its throughput, p50, p99 and errors. It holds at 40, stops scaling between 40 and 60, and breaks at 200 where p99 crosses 800 ms. A timeline of throughput per step and the result in four lines."></a><figcaption>Where it holds, where it stops scaling, where it breaks, and the command to run at the level that held.</figcaption></figure><figure data-shot="api" hidden><div class="cmdline"><span class="pr">$</span> pepe api openapi.yaml -c 40 -z 1m</div><a href="img/api.png"><img src="img/api.png" width="2896" height="1836" loading=lazy alt="pepe&#x27;s API mode: ten endpoints of an OpenAPI spec, each a row with its requests, rate, p50, p99, errors and status codes. POST /checkout fails 11% of the time with 502."></a><figcaption>Every endpoint of a spec under load at once: which are slow, which fail.</figcaption></figure><figure data-shot="logs" hidden><div class="cmdline"><span class="pr">$</span> pepe logs access.log error.log</div><a href="img/logs.png"><img src="img/logs.png" width="2896" height="1836" loading=lazy alt="pepe logs: 36 requests a second now, 0.3% answering 5xx, a 30 ms median request time and the verdict Busy at 2.4 times a usual minute. A chart of the last 25 minutes with traffic doubling, the top paths, status codes, the error log&#x27;s messages and the latest lines."></a><figcaption>What the server saw: the rate now against a usual minute, what fails, and what nginx's error log says of it.</figcaption></figure>
+    </section>
+
+    <section class="panel" id="modes">
+      <table>
+        <thead><tr><th>what it does</th><th>command</th><th></th></tr></thead>
+        <tbody><tr><td class="m">run</td><td class="c"><code>pepe -z 30s -c 50 https://example.com</code></td><td class="w">send load, watch latency, throughput and errors live; pause, resume, change concurrency</td></tr><tr><td class="m">ramp</td><td class="c"><code>pepe ramp URL --to 200 --until 'p99 &gt; 500ms'</code></td><td class="w">raise the load step by step to find where the target stops keeping up</td></tr><tr><td class="m">curl</td><td class="c"><code>pepe --curl -- curl -X POST URL -d '{"a":1}'</code></td><td class="w">any “Copy as cURL”, sent exactly as curl would send it</td></tr><tr><td class="m">api</td><td class="c"><code>pepe api openapi.yaml --tag Billing</code></td><td class="w">every endpoint of an OpenAPI 3 or Swagger 2 spec, a row each</td></tr><tr><td class="m">flow</td><td class="c"><code>pepe flow checkout.toml -c 20 -z 1m</code></td><td class="w">a sequence where each response feeds the next request</td></tr><tr><td class="m">replay</td><td class="c"><code>pepe replay access.log --base-url https://staging</code></td><td class="w">an access log's URLs in their real proportions</td></tr><tr><td class="m">rate</td><td class="c"><code>pepe --rate 500 -c 100 -z 2m URL</code></td><td class="w">a fixed arrival rate; pepe says when -c can't carry it</td></tr><tr><td class="m">soak</td><td class="c"><code>pepe -z 8h --snapshot soak.json URL</code></td><td class="w">long runs that write their report every minute</td></tr><tr><td class="m">logs</td><td class="c"><code>pepe logs /var/log/nginx/access.log</code></td><td class="w">nginx's logs live: requests a second now against a usual minute, hour and day</td></tr><tr><td class="m">json</td><td class="c"><code>pepe --json -n 10000 URL &gt; report.json</code></td><td class="w">no dashboard; the same numbers for scripts and CI</td></tr><tr><td class="m">setup</td><td class="c"><code>pepe</code></td><td class="w">no arguments: a form for every option, saved as pepe.toml if you like</td></tr></tbody>
+      </table>
+    </section>
+
+    <section class="panel" id="speed">
+      <div class="row"><h2>against the others</h2><span class="lab">requests / s from one thread · cpu per 1,000 requests · peak memory</span></div>
+      <div class="bench"><div class="bgroup"><div class="lab">GET · 64 connections</div><div class="brow us"><span class="t">pepe</span><span class="bar"><i style="width:100.0%"></i></span><span class="v">398k</span><span class="x">2.4 ms</span><span class="x">4.0 MB</span></div><div class="brow"><span class="t">oha</span><span class="bar"><i style="width:76.6%"></i></span><span class="v">305k</span><span class="x">6.8 ms</span><span class="x">67 MB</span></div><div class="brow"><span class="t">wrk</span><span class="bar"><i style="width:70.9%"></i></span><span class="v">282k</span><span class="x">3.5 ms</span><span class="x">4.5 MB</span></div></div><div class="bgroup"><div class="lab">GET · 1,000 connections</div><div class="brow us"><span class="t">pepe</span><span class="bar"><i style="width:74.4%"></i></span><span class="v">296k</span><span class="x">3.2 ms</span><span class="x">5.8 MB</span></div><div class="brow"><span class="t">wrk</span><span class="bar"><i style="width:57.3%"></i></span><span class="v">228k</span><span class="x">4.4 ms</span><span class="x">7.7 MB</span></div><div class="brow"><span class="t">oha</span><span class="bar"><i style="width:46.0%"></i></span><span class="v">183k</span><span class="x">5.6 ms</span><span class="x">73 MB</span></div></div><div class="bgroup"><div class="lab">HTTPS · 64 connections</div><div class="brow us"><span class="t">pepe</span><span class="bar"><i style="width:71.4%"></i></span><span class="v">284k</span><span class="x">3.3 ms</span><span class="x">6.0 MB</span></div><div class="brow"><span class="t">oha</span><span class="bar"><i style="width:62.8%"></i></span><span class="v">250k</span><span class="x">8.1 ms</span><span class="x">42 MB</span></div><div class="brow"><span class="t">wrk</span><span class="bar"><i style="width:54.8%"></i></span><span class="v">218k</span><span class="x">4.5 ms</span><span class="x">10.8 MB</span></div></div></div>
+      <p class="fine">Linux arm64, 4 vCPU, the musl build that is released, against a local server that answers from memory. Where pepe is level rather than ahead, macOS, vegeta, k6 and the method: <a href="https://github.com/omarmhaimdat/pepe/blob/master/bench/README.md">bench/README.md</a>.</p>
+    </section>
+
+    <section class="two">
+      <div class="panel">
+        <h2>in a pipeline</h2>
+<pre><span class="k">- uses</span>: omarmhaimdat/pepe@v0
+  <span class="k">with</span>:
+    <span class="k">url</span>: <span class="s">https://staging.example.com/health</span>
+    <span class="k">args</span>: <span class="s">-z 30s -c 20</span>
+    <span class="k">fail-if</span>: <span class="s">".summary.latency.p99_ms &gt; 300"</span></pre>
+      </div>
+      <div class="panel">
+        <h2>and the rest</h2>
+        <ul>
+          <li><b>failures by cause</b>, each with the first response body</li>
+          <li><b>latency by phase</b>: connect, first byte, download</li>
+          <li><b>Server-Timing</b> and request ids for the slowest requests</li>
+          <li><b>pepe.toml</b> in a project, so pepe there runs the agreed test</li>
+          <li><b>proxies</b>, HTTP and SOCKS5 · <b>light and no-colour</b> themes</li>
+        </ul>
+      </div>
+    </section>
+  </main>
+
+  <footer class="chips">
+    <a href="#install"><kbd>i</kbd><span>install</span></a>
+    <a href="#screens"><kbd>1-4</kbd><span>screens</span></a>
+    <a href="https://github.com/omarmhaimdat/pepe" class="wide"><kbd>g</kbd><span>github</span></a>
+    <a href="https://github.com/omarmhaimdat/pepe#usage" class="wide"><kbd>d</kbd><span>docs</span></a>
+    <a href="#" id="help" class="wide"><kbd>?</kbd><span>keys</span></a>
+    <span class="by">MIT · made by <a href="https://github.com/omarmhaimdat">Omar Mhaimdat</a></span>
+  </footer>
+</div>
+
+<dialog id="keys" class="keys">
+  <h2>keys</h2>
+  <div><kbd>1-4</kbd>the run, ramp, API and logs screens</div>
+  <div><kbd>tab</kbd>the next screen · <kbd>← →</kbd>too</div>
+  <div><kbd>i</kbd>to the install line · <kbd>c</kbd>copy it</div>
+  <div><kbd>g</kbd>GitHub · <kbd>d</kbd>the docs · <kbd>b</kbd>the benchmarks</div>
+  <div><kbd>?</kbd>or <kbd>esc</kbd>close this</div>
+</dialog>
+
 <script>
-  // Open on the tab for this machine; the others are a click away
+  // The install line opens on the tab for this machine
   const platform = (navigator.userAgentData && navigator.userAgentData.platform) || navigator.platform || "";
-  const first = /win/i.test(platform) || /Windows/.test(navigator.userAgent) ? "windows" : "shell";
-  const tabs = document.querySelectorAll("[data-tab]"), panels = document.querySelectorAll("[data-panel]");
-  function show(name) {
+  const tabs = document.querySelectorAll("[data-tab]"), hows = document.querySelectorAll("[data-how]");
+  function install(name) {
     tabs.forEach(t => t.setAttribute("aria-selected", t.dataset.tab === name));
-    panels.forEach(p => p.classList.toggle("on", p.dataset.panel === name));
+    hows.forEach(h => h.classList.toggle("on", h.dataset.how === name));
   }
-  tabs.forEach(t => t.addEventListener("click", () => show(t.dataset.tab)));
-  show(first);
-  document.querySelectorAll("pre button").forEach(b => b.addEventListener("click", async () => {
-    try { await navigator.clipboard.writeText(b.previousElementSibling.textContent); b.textContent = "copied"; }
-    catch { b.textContent = "select it"; }
-    setTimeout(() => { b.textContent = "copy"; }, 1500);
-  }));
+  tabs.forEach(t => t.addEventListener("click", () => install(t.dataset.tab)));
+  install(/win/i.test(platform) || /Windows/.test(navigator.userAgent) ? "windows" : "shell");
+  async function copy(button) {
+    try { await navigator.clipboard.writeText(button.previousElementSibling.textContent); button.textContent = "copied"; }
+    catch { button.textContent = "select it"; }
+    setTimeout(() => { button.textContent = "copy"; }, 1500);
+  }
+  document.querySelectorAll(".chip").forEach(b => b.addEventListener("click", () => copy(b)));
+
+  // The screens, and the keys that move between them as in pepe itself
+  const screens = [...document.querySelectorAll("[data-screen]")], shots = document.querySelectorAll("[data-shot]");
+  let at = 0;
+  function show(i) {
+    at = (i + screens.length) % screens.length;
+    screens.forEach((s, n) => s.setAttribute("aria-selected", n === at));
+    shots.forEach((s, n) => { s.hidden = n !== at; });
+  }
+  screens.forEach((s, i) => s.addEventListener("click", () => show(i)));
+  const keys = document.getElementById("keys");
+  document.getElementById("help").addEventListener("click", e => { e.preventDefault(); keys.showModal(); });
+  const go = url => { location.href = url; };
+  document.addEventListener("keydown", e => {
+    if (e.metaKey || e.ctrlKey || e.altKey || /INPUT|TEXTAREA|SELECT/.test(e.target.tagName)) return;
+    const into = () => document.getElementById("screens").scrollIntoView({ block: "start" });
+    if (e.key >= "1" && e.key <= String(screens.length)) { show(+e.key - 1); into(); }
+    else if (e.key === "ArrowRight") show(at + 1);
+    else if (e.key === "ArrowLeft") show(at - 1);
+    else if (e.key === "Tab" && !e.shiftKey && document.activeElement === document.body) { e.preventDefault(); show(at + 1); into(); }
+    else if (e.key === "i") document.getElementById("install").scrollIntoView({ block: "center" });
+    else if (e.key === "c") copy(document.querySelector(".how.on .chip"));
+    else if (e.key === "g") go("https://github.com/omarmhaimdat/pepe");
+    else if (e.key === "d") go("https://github.com/omarmhaimdat/pepe#usage");
+    else if (e.key === "b") go("https://github.com/omarmhaimdat/pepe/blob/master/bench/README.md");
+    else if (e.key === "?") keys.open ? keys.close() : keys.showModal();
+  });
 </script>
 </body>
 </html>

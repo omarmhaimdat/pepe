@@ -6,6 +6,595 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+## [0.23.0](https://github.com/omarmhaimdat/pepe/compare/v0.22.1...v0.23.0) - 2026-10-09
+
+### Added
+
+- *(action)* a pull request is held against its base branch, in a comment ([#118](https://github.com/omarmhaimdat/pepe/pull/118))
+
+  Second of three, on top of #117 (`pepe compare`). Merge #117 first and
+  let its release go out: the action runs the released binary, so merged
+  before that, `baseline` would fail with "needs pepe 0.21 or newer". The
+  CI on this PR doesn't wait for it: the action's test now builds pepe
+  from the branch, which is what the action prefers to installing a
+  release.
+
+  Three inputs on the action:
+
+  - `baseline: auto` keeps every branch's last report in the Actions cache
+  and holds a pull request against its base branch's with `pepe compare`;
+  a path names a report file instead. A pull request only reads the cache;
+  a branch's own runs write it, so the first run on the base branch after
+  this is added makes the baseline, and until then the comment says so.
+  - `comment: true` posts the result on the pull request as one comment,
+  found again by its marker and updated on every push: the verdict in the
+  heading, a table of p99, median, throughput, capacity and failures
+  before and after, each with its change or "within the usual spread",
+  then the findings. Needs `pull-requests: write`; warns rather than fails
+  without it, as on a fork.
+  - `gate: true` fails the step on Slower or Worse.
+
+  Two new outputs, `verdict` and `compare`. The README's action section
+  shows the comment.
+
+  The action's test runs it twice, the second time against the first as
+  its baseline, gated, and commenting on this very pull request, so the
+  comment should appear below.
+
+  **Squash-merge with the title as it is.**
+
+
+## [0.22.1](https://github.com/omarmhaimdat/pepe/compare/v0.22.0...v0.22.1) - 2026-10-09
+
+### Fixed
+
+- *(logs)* the traffic chart fills its panel instead of half of it ([#121](https://github.com/omarmhaimdat/pepe/pull/121))
+
+  The bug in the screenshot: the dashboard's traffic chart has its bars in
+  the right half of the panel and the left half blank.
+
+  The chart took the finest round grain whose bars fit the panel, then
+  widened the bars only when they covered less than half of it. An hour at
+  30s a bar is 120 bars, so on a terminal 230 cells wide the bars sat in
+  the right half; ten minutes at 5s a bar did the same on anything wider
+  than 240 cells, and the README's own recording ([#114](https://github.com/omarmhaimdat/pepe/pull/114)) shows it too.
+
+  Now there is a bar per column, each over its share of the seconds, and a
+  bar holds a rate rather than a count, so bars of 4 and of 5 seconds
+  stand level; the title says "~4s a bar" when the share isn't whole.
+  Short spans still get wider bars. A test draws the dashboard at six
+  widths, 80 to 300 columns, and wants the bars over at least three
+  quarters of the panel; before the fix it failed at 240 and 300.
+
+  Once this and #114 are both in, `assets/record.sh
+  assets/tapes/logs.tape` should be run again so the README's logs
+  recording shows a full chart.
+
+  **Squash-merge with the title as it is.**
+
+
+## [0.22.0](https://github.com/omarmhaimdat/pepe/compare/v0.21.0...v0.22.0) - 2026-10-09
+
+### Added
+
+- *(compare)* `pepe compare before.json after.json` says what moved ([#117](https://github.com/omarmhaimdat/pepe/pull/117))
+
+  First of three: this, then the action's baseline and PR comment ([#2](https://github.com/omarmhaimdat/pepe/pull/2)),
+  then the card ([#3](https://github.com/omarmhaimdat/pepe/pull/3)). Each is based on master and contains the one before;
+  merge them in order, and a release has to carry this one before the
+  action PR is merged, because the action runs the released binary.
+
+  Two runs of the same build never give the same p99. `pepe compare
+  before.json after.json` holds a report against an earlier one and calls
+  a number a change only when it moved more than two runs like these
+  wobble on their own: the run's own latency spread, scaled by how many
+  requests sit past the percentile. Measured against a local server, the
+  p99 of 2,000-request runs sat ±25% apart and that of 20,000-request runs
+  ±1%; the model is fitted to that, with a 5% floor, and 10% for a ramp's
+  capacity fit.
+
+  - The verdict is **Faster**, **About the same**, **Slower**, or, when
+  failures appeared or rose, **Worse** (**Better** when they fell):
+  failures outrank speed.
+  - Findings in the end-of-run report's shape, coloured in the shell: `p99
+  up 38%: 120.0ms → 166.0ms`, `Median within the usual spread: 30.00ms →
+  31.00ms (±5%)`, `A long tail is new: p99 is 5.4× the median, was 4.0×`.
+  Different targets or concurrency are said first.
+  - Run, API, flow and replay reports compare their summary; ramp reports
+  their capacity estimate and the level that held.
+  - `--gate` exits 1 on Slower or Worse, for CI. `--json` gives the
+  verdict, every number with its change and the spread it was held
+  against, and the findings.
+  - Every report now carries a `target` block (mode, method, URL or
+  source, concurrency), so the comparison can tell two tests apart.
+
+  Tried on real reports: two identical 2,000-request runs read "About the
+  same (p99 ±24%)"; the same run against a slower endpoint reads "Slower",
+  and `--gate` exits 1.
+
+  **Squash-merge with the title as it is.**
+
+
+## [0.21.0](https://github.com/omarmhaimdat/pepe/compare/v0.20.2...v0.21.0) - 2026-10-09
+
+### Added
+
+- *(api)* `pepe api` alone asks for the spec, which can be pasted whole ([#114](https://github.com/omarmhaimdat/pepe/pull/114))
+
+  `pepe api` with nothing after it printed an error. Now, at a terminal,
+  it opens the setup screen in API mode with the Spec field focused, the
+  way `pepe` alone opens it for a URL. The field takes a file, a URL, or
+  the OpenAPI document itself: paste the whole spec anywhere on the form
+  (multi-line text, or text opening a JSON object, is the document; one
+  line is a name) and the field says "the pasted spec, 312 lines";
+  backspace or typing starts over with a name. Piped, `pepe api` still
+  errors as before.
+
+  - The loader takes the document as a source too, so `pepe api "$(cat
+  spec.json)"` works, and a pasted spec that names servers with `://` is
+  no longer taken for a URL origin. The command printed on quit says `api
+  '<the pasted spec>'` where there is no file to name.
+  - The README's recordings are redone for the panel UI: run, setup, ramp
+  and API, which now shows `pepe api` asking for the spec, and a new one
+  for `pepe logs` in the nginx logs section. `record.sh` writes a day of
+  nginx logs for it and keeps appending to them while recording, so "now"
+  is a live number rather than a log that stopped.
+  - Completions and man page regenerated for the new help text.
+
+  **Squash-merge with the title as it is.**
+
+
+## [0.20.2](https://github.com/omarmhaimdat/pepe/compare/v0.20.1...v0.20.2) - 2026-10-09
+
+### Fixed
+
+- *(action)* a description short enough for the Marketplace ([#113](https://github.com/omarmhaimdat/pepe/pull/113))
+
+  The Marketplace refuses to publish the action: its description must be
+  under 125 characters, and the one in action.yml was 137. Now 124, saying
+  the same thing.
+
+  The Marketplace reads action.yml at the release's tag, so this needs a
+  release before the "Publish this Action to the GitHub Marketplace" box
+  can be ticked. **Squash-merge with the title as it is** so release-plz
+  opens the release PR; publish from that release.
+
+
+
+### Other
+
+- *(action)* every release moves the v0 tag, so the action is pinned like others ([#111](https://github.com/omarmhaimdat/pepe/pull/111))
+
+  The repository is also a GitHub Action, and the README told people to
+  use it at `@master`. Actions are pinned to a floating major tag
+  (`actions/checkout@v7`), and the Marketplace lists releases, so pepe
+  should have both.
+
+  - `publish-action.yml` is a dist publish job like the Homebrew, R2 and
+  Docker ones: once the GitHub Release for vX.Y.Z exists, it moves the
+  `vX` tag (`v0` today, `v1` after 1.0) to the same commit, with
+  `GITHUB_TOKEN`, which starts no further workflow.
+  - The README and the site now say `omarmhaimdat/pepe@v0`.
+  - Added to `release.yml` by hand: `dist generate` refuses to rewrite it
+  while `allow-dirty = ["ci"]` is set (it is, so Dependabot can bump the
+  actions in it).
+
+  Not in this PR, because GitHub has no API for it: the Marketplace
+  listing takes a one-time click on one release's edit page, "Publish this
+  Action to the GitHub Marketplace", after accepting the Marketplace
+  Developer Agreement. After that, the listing follows the releases by
+  itself.
+
+  **Squash-merge with the title as it is.** It's a `ci:` commit, so it
+  rides along with the next feat/fix release; that release is the first
+  one to move `v0`.
+
+
+## [0.20.1](https://github.com/omarmhaimdat/pepe/compare/v0.20.0...v0.20.1) - 2026-10-09
+
+### Fixed
+
+- *(ui)* a card's name and the numbers beside it no longer run together ([#110](https://github.com/omarmhaimdat/pepe/pull/110))
+
+  ## What
+
+  On the load test's dashboard (the tall layout with the four number
+  cards), the first card's name and the text at its right overlapped once
+  the rate reached three digits:
+
+  ```
+  requests / savg 249 · peak 268      before
+  requests / s        avg 249         after
+  ```
+
+  The card is 30 cells wide inside; `requests / s` is 12 and `avg 249 ·
+  peak 268` is 18, so they touched with nothing between. At four digits
+  and up (`avg 12.3k · peak 15.6k`) the numbers were drawn over the end of
+  the name.
+
+  ## Fix
+
+  In `render_cards` (`src/ui/view.rs`), what is beside a card's name gets
+  the room the name leaves, less a two-cell gap, through the existing
+  `fit_parts`: the parts that fit are shown, and the rest give way from
+  the right. So at three digits and up the card says `avg 249` and drops
+  `peak 268`; the peak is still on the Live view's throughput chart and in
+  the Stats view. The other three cards have one part each and are
+  unchanged at any value seen so far.
+
+  ## For the reviewer
+
+  - It is the peak that goes, not the average, only because it is second.
+  If the peak is the one worth keeping, swap the two.
+  - Found while making the site's pictures: `site/img/api.png` shows the
+  overlap ("requests / savg 249"). It can be redrawn once this is in; I
+  have not redrawn it here.
+
+  ## Tested
+
+  - New test `a_card_keeps_a_gap_between_its_name_and_what_is_beside_it`:
+  the header drawn at 40, 240 and 12,000 requests a second. Both parts at
+  two digits, a gap and no "savg" at three, a gap at thousands.
+  - 249 tests pass; clippy 1.98 `-D warnings` and `cargo fmt --check`
+  clean.
+  - Not looked at in a terminal; the test reads the drawn row.
+
+
+## [0.20.0](https://github.com/omarmhaimdat/pepe/compare/v0.19.3...v0.20.0) - 2026-10-09
+
+### Added
+
+- *(logs)* a dashboard opens first, and every view is on panels ([#108](https://github.com/omarmhaimdat/pepe/pull/108))
+
+  The same change as #105, this time into `master`.
+
+  #105 was opened on top of #104's branch (`fix/logs-live`) so that its
+  diff would show only the screen. #104 was then squash-merged, its branch
+  stayed, and #105 was merged into that branch, not into `master`. So the
+  dashboard never reached `master` and release-plz had nothing to release.
+  This is #105's one commit cherry-picked onto today's `master`; nothing
+  else is in it.
+
+  **Squash-merge it with the title as it is** (`feat(logs): …`), so
+  release-plz opens the release PR. The site merged in #107 already shows
+  this dashboard in its Logs picture, so the release that carries the site
+  should carry this too.
+
+  ## What (from #105)
+
+  `pepe logs` opened on a table of minutes. It now opens on a
+  **Dashboard**, and Traffic, Paths, Errors and Log are views 2 to 5.
+
+  - **Three numbers drawn large**: the rate now with a sparkline and how
+  it stands against a usual minute; the share answering 5xx; the request
+  time's p50 with p90 and p99.
+  - **A verdict** beside them, in the colour of the server's health and
+  never of its load: Steady, Busy, Quiet, Degraded, Failing, or Ended,
+  with the path answering the most 5xx and the error log's most frequent
+  message.
+  - **Traffic**, a bar for every few seconds as far back as is known, up
+  to an hour, with 4xx and 5xx in yellow and red in proportion, and a mark
+  under bars whose 5xx are too few to show.
+  - **Top paths, status codes, the error log by message**, and the newest
+  lines.
+  - The other views are each on a panel, with the numbers in one line
+  above them; bars that say how much are one colour everywhere, so green,
+  yellow and red mean health.
+  - The number keys are now 1 to 5: Traffic was `1` and is `2`.
+
+  ## Tested
+
+  - 248 tests pass on this branch; clippy 1.98 `-D warnings` and `cargo
+  fmt --check` clean.
+  - As in #105: every view was rendered through pepe's theme to an image
+  and looked at, and the release binary was driven through all five views
+  on a live log in a pseudo-terminal. That was on #105's branch; on this
+  one only the tests and lints were run, the code being the same commit.
+
+
+
+### Other
+
+- *(site)* pepe.mhaimdat.com as a terminal, drawn the way pepe draws ([#107](https://github.com/omarmhaimdat/pepe/pull/107))
+
+  ## What
+
+  `site/index.html` was an install box and a GIF. It is now a site that
+  looks and behaves like pepe itself. (The first commit here is a
+  conventional landing page; the second replaces it, after it was rightly
+  called generic. Squash them.)
+
+  - **One typeface, flat panels on the warm ground, no gradients**: the
+  palette is `src/ui/theme.rs`'s, and the tabs, the key chips on the
+  bottom line and the bar on the hovered table row are drawn as the
+  dashboard draws them.
+  - **Pepe and the big digits are pixels**: Pepe is taken from the cells
+  the dashboard draws him in, and `398`, `2.4`, `4.0` are set in
+  `bigtext.rs`'s block face, both as inline SVG.
+  - **Four of pepe's screens, in the page without a frame**: Run, Ramp,
+  API and Logs, each with the command that makes it. The pictures have the
+  page's own background, so they read as part of it.
+  - **The keys work**: `1`-`4`, `tab` and the arrows switch screens; `i`
+  goes to the install line and `c` copies it; `g`, `d`, `b` open GitHub,
+  the docs and the benchmarks; `?` lists them.
+  - **What it does** as a table of eleven commands, and **against the
+  others** as bars: the README's Linux figures for pepe, wrk and oha, with
+  a link to the benchmark notes for the method and for where pepe is level
+  rather than ahead.
+  - The install box as before (opens on the visitor's platform, copy
+  button), now with a Docker tab.
+  - Title, description, canonical, Open Graph and Twitter tags, JSON-LD,
+  and `img/og.png` for links to unfold into.
+
+  One static file, no build step, no dependencies, no tracking. It stacks
+  down to phone widths, where the table drops its last column.
+
+  ## The pictures
+
+  `site/img/{run,ramp,api,logs}.png` are pepe's own drawing code, rendered
+  to cells through the pepe theme (as the `preview` test in
+  `src/ui/view.rs` does) and drawn at 2× by headless Chrome. The data is
+  made up: the tests' sample run, a simulated ramp that saturates, ten
+  invented endpoints, a generated nginx log.
+
+  ## Deploy
+
+  `publish-r2.yml` uploads `site/img/*.png` to `/img/` and checks they
+  answer 200. The site goes out with the next release; `docs:` doesn't
+  make one on its own.
+
+  ## For the reviewer
+
+  - **`logs.png` shows the dashboard from #105**, which is not merged. If
+  #105 doesn't land, that picture wants replacing.
+  - **`https://pepe.mhaimdat.com/` answers 404 today; only `/index.html`
+  answers.** The bucket has no index for the root, and the repo's website
+  link, the canonical and `og:url` all point at the root. It needs a rule
+  on the Cloudflare side.
+  - **A bug the API picture shows**: in the dashboard's first card,
+  "requests / s" and "avg 249 · peak 268" overlap ("requests / savg") when
+  the numbers are three digits. That is in `src/ui/view.rs`, not here.
+  - The verdict panel beside the numbers is an example of the wording.
+  - `og.png` is still the first design's (headline, command, the run
+  screen); it suits either.
+  - Single-key shortcuts are ignored while a modifier is held or a field
+  has focus. `tab` switches screens only when nothing on the page has
+  focus, so keyboard navigation of the links still works once you have
+  tabbed in.
+
+  ## Tested
+
+  - Looked at in headless Chrome at 1400 and 520 px wide. Two things found
+  that way and fixed: the hero Pepe had picked up the edge of the card
+  beside him, and a table header wrapped.
+  - The keys and the copy button are not exercised by anything automatic,
+  and I have not pressed them in a real browser: headless Chrome only took
+  pictures. Safari and Firefox are unchecked.
+
+
+## [0.19.3](https://github.com/omarmhaimdat/pepe/compare/v0.19.2...v0.19.3) - 2026-10-09
+
+### Fixed
+
+- *(logs)* at a terminal a log being written is shown live, not read from its start ([#104](https://github.com/omarmhaimdat/pepe/pull/104))
+
+  ## What
+
+  `pepe logs` on a host read the whole log before the screen had anything
+  to say about now, and the numbers on it were the log's history rather
+  than the server's present. At a terminal, a log that is being written is
+  now shown live.
+
+  - **Live by default.** If the last line of any of the files is from the
+  last five minutes, the screen starts five minutes back (or `--window`
+  back, if that is longer) and follows from there. Five minutes rather
+  than none, so that "now" is right from the first frame and the chart has
+  bars in it. The title says where the counts start: `● live · from
+  15:33:40`.
+  - **`--since 24h`** starts further back, as before; **`--all`** (new)
+  reads everything first. The two conflict.
+  - **A log nobody is writing is read whole**, as before: it has no now,
+  and starting five minutes before the clock would show nothing.
+  - **Unchanged**: piped out or `--json` (a report of the whole log, or of
+  `--since`), and what is piped in.
+
+  ## How
+
+  - `seek_since` finds where a time starts in a file by halving it, a log
+  being in order of time, and reading 64 KB at each step. What it can't
+  tell (no dated line in the 64 KB) it settles toward the top of the file,
+  so more is read, never less. Lines before the time that are still read
+  are left out by the filter that was already there.
+  - This serves `--since` everywhere, not only the live default: on a
+  two-day, 193 MB log `--since 1h` takes 0.03 s where the whole log takes
+  0.11 s, and the gap grows with the file.
+  - The multi-threaded read takes a place to start from, so `--since 30d`
+  of a large log still uses every core.
+  - `being_written` reads the last 64 KB of each file for its last
+  timestamp.
+
+  ## For the reviewer
+
+  - This changes what `pepe logs access.log` shows at a terminal on a live
+  host: the cards (a usual minute, the busiest) now describe the last
+  minutes until the screen has been open longer, and "an hour ago" / "a
+  day ago" are empty without `--since` or `--all`.
+  - A file whose lines aren't in time order can be taken up at the wrong
+  place; `--all` reads it whole.
+  - The error log's times are this machine's, so on a machine in another
+  zone than the server it can be judged written or not wrongly; `--since`
+  and `--all` say it outright.
+  - Titled `fix` so it is a patch release.
+
+  ## Tested
+
+  - New test: a six-hour log with undated lines, taken up 1 s, 5 min, 1 h
+  and nearly 6 h back; the place is a line's start, at most 128 KB before
+  the first line wanted, the counts are exactly the requests since, and
+  every byte is accounted for in the progress. Also before the log's
+  start, after its end, a missing file, and `being_written` either side of
+  five minutes.
+  - 247 tests pass; clippy 1.98 `-D warnings` and `cargo fmt --check`
+  clean; man page and completions regenerated for `--all`.
+  - By hand: a generated two-day log ending now, with its error log, on
+  the screen in a pseudo-terminal: it opens five minutes back (11,058
+  requests of 1.3M), shows `● live`, and counts lines appended while it
+  runs. Reading a whole 3.45 GB log takes the same time as on master,
+  within the noise of alternating runs.
+  - Not run against a real nginx host, nor on Linux or Windows.
+
+
+## [0.19.2](https://github.com/omarmhaimdat/pepe/compare/v0.19.1...v0.19.2) - 2026-10-09
+
+### Fixed
+
+- *(logs)* the screen survives what else is written to the terminal, and reads compose's colour ([#102](https://github.com/omarmhaimdat/pepe/pull/102))
+
+  ## What
+
+  `docker compose logs -f nginx | pepe logs` left the screen in ruins
+  (doubled header rows, blank path names, shifted columns, `nginx_twitter`
+  listed as a client). Two causes, both outside pepe's drawing code:
+
+  - compose's **stderr** still points at the terminal; its `WARN[0000] …
+  version is obsolete` line landed at the bottom row, where the hidden
+  cursor sat, and scrolled the alternate screen up one row. ratatui only
+  redraws what changed, so every later frame was one row off the truth.
+  - compose **colours** the `nginx_twitter | ` prefix even into a pipe;
+  the escapes went into the parse (client = container name) and into drawn
+  cells, where the terminal interpreted them and shifted columns.
+
+  ## Changes
+
+  - **Lines are cleaned at ingest** (`logs::clean`): CSI/OSC escapes
+  stripped, tabs → spaces, other control characters dropped. Nothing read
+  from a log can move the cursor.
+  - **The screen repairs itself**: the hidden cursor is parked at the
+  top-left after every frame, so stray output overwrites a row rather than
+  scrolling; and the whole frame is rewritten cell-for-cell every second
+  (`REPAINT`), so damage heals. Verified against a fake coloured compose
+  stream writing to stderr every few seconds.
+  - **A pipe is caught up with from its first chunk** — it has no end to
+  be short of. The title no longer says `reading` forever; an empty pipe
+  says *Waiting for the first line*.
+  - **Design**: number cards are fixed-width panels packed from the left
+  (they were stretched across all 200 columns); chart bars cap at 4 wide
+  with the picked one in the accent colour, and the pick's marker no
+  longer stamps over the date label; the paths list is capped at 96
+  columns so the numbers sit next to the names.
+  - **CLI**: a bare word given as the URL (`pepe logs` on a 0.16 binary
+  gave `Invalid URL "logs": relative URL without a base`) now says it
+  isn't a URL nor a command *this* pepe has, lists the commands from clap,
+  and points at `pepe self-update`; a host with no scheme is shown with
+  `https://` in front.
+
+  ## Notes for review
+
+  - The full repaint is ~15 KB/s over SSH on a 200×60 terminal; `REPAINT`
+  is one constant if that ever needs slowing.
+  - `view::panel` and `view::inset` are now `pub(super)` so the logs
+  screen shares the dashboard's cards.
+  - Tests: colour/control stripping, the piped caught-up state, the
+  empty-pipe wording, and the three URL messages. 246 pass; clippy and fmt
+  clean.
+
+  🤖 Generated with [Claude Code](https://claude.com/claude-code)
+
+
+## [0.19.1](https://github.com/omarmhaimdat/pepe/compare/v0.19.0...v0.19.1) - 2026-10-08
+
+### Fixed
+
+- *(logs)* a log is read by every core, ten times as fast ([#100](https://github.com/omarmhaimdat/pepe/pull/100))
+
+  ## What
+
+  `pepe logs` read a file on one thread. What a file already has is now
+  read by every core, and the per-line work is cheaper for every way of
+  reading. No flag, no change to what is shown: the `--json` report is the
+  same to the byte as before.
+
+  | 862 MB, 5.86M lines, M4 Pro (10P + 4E) | time | lines/s | MB/s |
+  memory |
+  | --- | ---: | ---: | ---: | ---: |
+  | master, a file | 1.99 s | 2.9M | 433 | 16 MB |
+  | this PR, a file | 0.20 s | 29M | 4,300 | 119 MB |
+  | master, piped in | 2.00 s | 2.9M | 431 | 16 MB |
+  | this PR, piped in (one thread) | 1.54 s | 3.8M | 560 | 16 MB |
+  | `wc -l`, for scale | 0.65 s | | 1,330 | |
+
+  Best of five, file in the page cache. A 3.45 GB file takes 0.84 s.
+  Details and the list of what was found are in `bench/README.md`.
+
+  **This is ten times, not a hundred.** A hundred times the starting point
+  would be 43 GB/s, which is more than this machine can copy out of the
+  page cache, let alone parse. What is left is spread evenly over reading
+  from the kernel, finding the fields and looking up three names a line.
+
+  ## How
+
+  - **Every core** (`sprint` in `src/logs.rs`): threads take the file a
+  megabyte at a time with `pread`, count the lines that start in their
+  megabyte into counts of their own, and add those to the shared ones once
+  a second, so the screen fills in while a long log is read. The file's
+  last partial megabyte, and everything appended after, goes to the one
+  thread that follows the file, as before.
+  - **Same result in any order** (`Stats::merge`): sums, minima and
+  maxima. The one thing a cut can split is the count of the second it
+  falls in, which the "busiest second" figures need whole; each stretch's
+  first and last runs of one second are kept and put together again when
+  merged. The first unread line and each error message's example are
+  chosen by place in the file, and the last 2,000 lines by time and then
+  place.
+  - **A keyed hash in place of SipHash** for the maps of paths, clients,
+  user agents and parameter names: eight bytes at a time through a folded
+  multiply, under a key drawn from `RandomState` when pepe starts. The
+  names come from whoever sends requests, which is why it is keyed.
+  - **Less per line**: a request in the same second as the one before it
+  counts into the slots already held, with no lookup; a timestamp written
+  as the last one was isn't worked out again; a path with an id in it is
+  rewritten into a kept buffer; lines are copied for the log view only
+  within 32 MB of a file's end.
+
+  ## For the reviewer
+
+  - **Memory while a file is read goes from 16 MB to about 120 MB** with
+  14 threads on this log (each thread's megabyte, and its own counts of up
+  to 50,000 client addresses between merges). It doesn't grow with the
+  file. Piped input is unchanged at 16 MB.
+  - Files under 16 MB, stdin and followed appends take the single-threaded
+  path.
+  - Once a log has more distinct names than a cap (20,000 paths, 50,000
+  clients), which names are kept past the cap can differ from run to run,
+  since threads merge in no fixed order. Totals don't change.
+  - A log whose lines aren't in time order can report a different busiest
+  second per slot than one thread would: both are approximations there.
+  - The hash is not SipHash. It is keyed per process, but it has had no
+  cryptanalysis; if that trade isn't wanted, `Keyed` is one type to swap
+  back.
+  - `seek_read` is used on Windows in place of `pread`. That path is
+  compiled and tested only by CI.
+  - The title says `fix` so release-plz makes this a patch release; by the
+  changelog's own groups it is `perf`.
+
+  ## Tested
+
+  - New: `every_core_reading_counts_what_one_would` reads one log (seconds
+  of 0 to 40 requests, error log lines, unreadable lines, a line longer
+  than a stretch, bytes that aren't UTF-8, an unfinished last line,
+  `--since`) on one thread and then with stretches of 1 KB, 3 KB, 64 KB
+  and 1 MB on 2 to 8 threads, and compares the JSON report, the kept
+  lines, the busiest second and the first unread line.
+  `names_are_found_by_a_keyed_hash` covers the hash and merging at a cap.
+  - 245 tests pass; `cargo clippy --all-targets -- -D warnings` on 1.98
+  and `cargo fmt --check` are clean.
+  - The release binary's `--json` for the 862 MB access log plus its error
+  log is identical (`cmp`) to master's.
+  - The live screen was driven in a pseudo-terminal on the same files,
+  with lines appended while it ran.
+  - Not measured on Linux or Windows, and not against another log reader.
+
+
 ## [0.19.0](https://github.com/omarmhaimdat/pepe/compare/v0.18.0...v0.19.0) - 2026-10-08
 
 ### Added
