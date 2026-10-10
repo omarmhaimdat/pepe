@@ -420,6 +420,7 @@ pepe ping aws:eu-west-1 aws:us-east-1               # cloud regions, by shorthan
 pepe ping https://example.com --jsonl > pings.jsonl # no screen: one JSON object per ping
 pepe ping https://example.com --csv -n 100          # one CSV line per ping, a hundred of them
 pepe ping https://example.com --json -n 10          # the summary as JSON
+pepe ping https://example.com --once                # three quick pings, then why it is slow, and out
 ```
 
 A host without a scheme is `https://`, unless it has a port or is this machine. Each ping opens its own connection, so every phase is measured every time, and the TLS session is still resumed when the server allows it: the first handshake is full, the next ones resumed, and the report says how long each kind takes. `--keep-alive` keeps the connection instead, as a browser would, and the pings after the first measure only the server. Redirects are followed, each hop listed with its status and time. `-n` and `-z` end the run; without them it runs until `q`.
@@ -431,6 +432,17 @@ A host without a scheme is `https://`, unless it has a port or is this machine. 
 | **Pings** | Every ping, newest last, with each phase; `x` keeps failures and SLO breaks, `a` one target or all, `enter` opens one: its hops, headers, TLS and certificate, and the body with `--show-body` |
 
 The table above the views has each target's last, min, avg, max, jitter, p95, p99, loss and timeouts over what the graph shows, or over the whole run with `t`. `space` pauses. The summary left in the shell has the same, with the medians of each phase and the certificate's expiry; `--save report.json` writes it as JSON too, and `--save-body page.html` the last body.
+
+**What to look at.** The numbers come with what they mean, in the summary, in the phases view and under `findings` in the JSON: the DNS lookup is a third of every request; connecting is a round trip of 90 ms, so the server is far; the TLS session is never resumed, so every connection pays the full handshake; TLS sessions are resumed after the first; every request is redirected, point at the final URL; the server takes 40 ms of 44 to start answering, and its `Server-Timing` says where; the body isn't compressed; it was answered by a cache; the certificate expires in 9 days; one ping in a hundred is five times slower. `pepe ping URL --once` is the quick version: three pings, the last one's phases, what answered, the findings, and out.
+
+```
+pepe ping · https://example.com/ · 3 pings
+  dns 1.84ms → connect 49.88ms → tls 66.57ms → first byte 63.72ms → download 33µs · 182.5ms in all
+  HTTP/1.1 200 · text/html · 334 B · 104.20.23.154:443 from 192.168.0.164 · TLS 1.3 TLS13_AES_256_GCM_SHA384
+  certificate for example.com by SSL Corporation, expires in 76 days
+  ▲ TLS sessions are resumed: 66.82ms after the first handshake's 118.6ms, still 66.82ms of 190.0ms
+  · answered by a cache (cf-cache-status: HIT): the server itself wasn't measured
+```
 
 `--slo total=500,ttfb=200,connect=100,dns=50,tls=150,download=100`, in milliseconds, marks a ping that goes over any of them, counts them in the report, and makes the exit code 4. The exit code is 1 when nothing ever answered. `--bell` rings the terminal on a failed or slow ping. `--interface en0` sends from that interface, `-4` and `-6` pick the address family, `--tcp-rst fail` makes a refused connection a failure in `--tcp` mode rather than the answer it is by default, `--color red,#8cb8ff` colours the lines, and `--ymin` and `--ymax` fix the graph's range. Piped, or with `--jsonl`, `--csv` or `--json`, there is no screen: a line per ping as it happens, then the summary on stderr, or the JSON report on stdout.
 
