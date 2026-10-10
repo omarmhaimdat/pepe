@@ -1091,6 +1091,10 @@ fn run_compare(args: &Cli, what: &cli::CompareArgs) -> Result<(), Box<dyn std::e
         }
     };
     let comparison = compare::compare(&before, &after);
+    if let Some(path) = &what.svg {
+        std::fs::write(path, comparison.svg())
+            .map_err(|e| format!("can't write {}: {e}", path.display()))?;
+    }
     if args.json {
         println!("{}", comparison.to_json()?);
     } else {

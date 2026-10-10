@@ -329,12 +329,16 @@ _pepe() {
             return 0
             ;;
         pepe__subcmd__compare)
-            opts="-h -n -z -m -H -t -d -p -k -i -c -u --gate --help --number --duration --method --headers --timeout --warmup --threads --rate --body --proxy --insecure --disable-compression --disable-keepalive --disable-redirects --json --trace-header --snapshot --setup --config --write-config --concurrency --user-agent"
+            opts="-h -n -z -m -H -t -d -p -k -i -c -u --gate --svg --help --number --duration --method --headers --timeout --warmup --threads --rate --body --proxy --insecure --disable-compression --disable-keepalive --disable-redirects --json --trace-header --snapshot --setup --config --write-config --concurrency --user-agent"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
             fi
             case "${prev}" in
+                --svg)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
                 --number)
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0

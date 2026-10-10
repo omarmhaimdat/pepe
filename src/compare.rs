@@ -91,6 +91,29 @@ pub struct Comparison {
     pub after: Side,
     pub changes: Vec<Change>,
     pub findings: Vec<Finding>,
+    /// The verdict in a badge's three parts, for shields.io and the like
+    pub badge: Badge,
+}
+
+/// `pepe | slower · p99 +38%`, in a colour: what a badge service draws
+#[derive(Debug, Clone, Serialize, PartialEq)]
+pub struct Badge {
+    pub label: &'static str,
+    pub message: String,
+    /// A hex colour, without the `#`
+    pub color: &'static str,
+}
+
+/// pepe's palette, as the dashboard draws it (src/ui/theme.rs)
+mod palette {
+    pub const GROUND: &str = "#140f0d";
+    pub const SURFACE: &str = "#1d1613";
+    pub const TEXT: &str = "#f3e8de";
+    pub const EMBER: &str = "#ff8a3d";
+    pub const LABEL: &str = "#9c8a7e";
+    pub const GOOD: &str = "#9ccf6a";
+    pub const WARN: &str = "#f0cf5a";
+    pub const BAD: &str = "#ff5a6e";
 }
 
 /// What a report says, in the numbers the comparison is made of
@@ -440,6 +463,7 @@ pub fn compare(before: &Side, after: &Side) -> Comparison {
             "Nothing to compare: the reports hold no numbers in common".into(),
         ));
     }
+    let badge = badge(outcome, &changes, before, after);
     Comparison {
         verdict: outcome,
         regression: outcome.is_regression(),
@@ -447,6 +471,51 @@ pub fn compare(before: &Side, after: &Side) -> Comparison {
         after: after.clone(),
         changes,
         findings,
+        badge,
+    }
+}
+
+/// The verdict and the one number that says it most
+fn badge(outcome: Outcome, changes: &[Change], before: &Side, after: &Side) -> Badge {
+    let word = outcome.headline().to_lowercase();
+    let detail = match outcome {
+        Outcome::Worse | Outcome::Better => Some(format!("{} failed", pct(after.failed_percent))),
+        Outcome::Faster | Outcome::Slower => changes
+            .iter()
+            .filter(|c| c.significant)
+            .max_by(|a, b| {
+                let size = |c: &Change| c.change_percent.unwrap_or(0.0).abs();
+                size(a).total_cmp(&size(b))
+            })
+            .and_then(|c| {
+                let change = c.change_percent?;
+                let name = match c.metric {
+                    "p99_ms" => "p99",
+                    "median_ms" => "median",
+                    "requests_per_second" => "req/s",
+                    "capacity_per_second" => "capacity",
+                    other => other,
+                };
+                Some(format!(
+                    "{name} {}{}%",
+                    if change > 0.0 { "+" } else { "−" },
+                    change.abs().round()
+                ))
+            }),
+        Outcome::Same => None,
+    };
+    let _ = before;
+    Badge {
+        label: "pepe",
+        message: match detail {
+            Some(detail) => format!("{word} · {detail}"),
+            None => word,
+        },
+        color: match outcome.level() {
+            Level::Healthy => &palette::GOOD[1..],
+            Level::Degraded => &palette::WARN[1..],
+            Level::Failing => &palette::BAD[1..],
+        },
     }
 }
 
@@ -504,6 +573,120 @@ impl Comparison {
     pub fn to_json(&self) -> Result<String, serde_json::Error> {
         serde_json::to_string_pretty(self)
     }
+
+    /// A card of the verdict, drawn as the dashboard draws: the verdict in
+    /// its colour, then each number before and after with what moved.
+    /// Self-contained SVG, for a README, a site or a report
+    pub fn svg(&self) -> String {
+        use palette::*;
+        struct Row {
+            name: &'static str,
+            before: String,
+            after: String,
+            word: String,
+            tone: &'static str,
+        }
+        let level = self.verdict.level();
+        let color = match level {
+            Level::Healthy => GOOD,
+            Level::Degraded => WARN,
+            Level::Failing => BAD,
+        };
+        let mut rows: Vec<Row> = Vec::new();
+        for change in &self.changes {
+            let (name, show, up_is_bad): (&'static str, &dyn Fn(f64) -> String, bool) =
+                match change.metric {
+                    "p99_ms" => ("p99", &ms, true),
+                    "median_ms" => ("median", &ms, true),
+                    "requests_per_second" => ("throughput", &rate, false),
+                    "capacity_per_second" => ("capacity", &rate, false),
+                    _ => continue,
+                };
+            let (word, tone) = match (change.significant, change.change_percent) {
+                (true, Some(c)) => (
+                    format!("{} {}%", if c > 0.0 { "▲" } else { "▼" }, c.abs().round()),
+                    if (c > 0.0) == up_is_bad { WARN } else { GOOD },
+                ),
+                _ => (format!("±{}%", change.noise_percent.round()), LABEL),
+            };
+            rows.push(Row {
+                name,
+                before: show(change.before),
+                after: show(change.after),
+                word,
+                tone,
+            });
+        }
+        let more_failed = self.after.failed_percent > self.before.failed_percent;
+        rows.push(Row {
+            name: "failed",
+            before: pct(self.before.failed_percent),
+            after: pct(self.after.failed_percent),
+            word: if more_failed {
+                "▲".into()
+            } else {
+                String::new()
+            },
+            tone: if more_failed { BAD } else { LABEL },
+        });
+        let width = 460;
+        let height = 72 + rows.len() * 22;
+        let mut out = format!(
+            r##"<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="13">
+<title>pepe · {verdict}</title>
+<rect width="{width}" height="{height}" rx="8" fill="{GROUND}"/>
+<rect x="1" y="1" width="{inner}" height="{inner_h}" rx="7" fill="{SURFACE}" stroke="#2e231d"/>
+<text x="16" y="30" fill="{EMBER}" font-weight="bold">pepe</text>
+<text x="58" y="30" fill="{LABEL}">· compare</text>
+<text x="{right}" y="30" fill="{color}" font-weight="bold" font-size="16" text-anchor="end">{glyph} {verdict}</text>
+<text x="16" y="52" fill="{LABEL}" font-size="11">{before}</text>
+<text x="{right}" y="52" fill="{LABEL}" font-size="11" text-anchor="end">{after}</text>
+<line x1="12" y1="60" x2="{line_end}" y2="60" stroke="#2e231d"/>
+"##,
+            verdict = escape(self.verdict.headline()),
+            glyph = level.symbol(),
+            inner = width - 2,
+            inner_h = height - 2,
+            right = width - 16,
+            line_end = width - 12,
+            before = escape(&file_name(&self.before.file)),
+            after = escape(&file_name(&self.after.file)),
+        );
+        for (i, row) in rows.iter().enumerate() {
+            let y = 82 + i * 22;
+            out += &format!(
+                r##"<text x="16" y="{y}" fill="{LABEL}">{name}</text>
+<text x="150" y="{y}" fill="{TEXT}">{a}</text>
+<text x="250" y="{y}" fill="{LABEL}">→</text>
+<text x="270" y="{y}" fill="{TEXT}">{b}</text>
+<text x="{right}" y="{y}" fill="{tone}" text-anchor="end">{word}</text>
+"##,
+                name = row.name,
+                a = escape(&row.before),
+                b = escape(&row.after),
+                word = escape(&row.word),
+                tone = row.tone,
+                right = width - 16,
+            );
+        }
+        out += "</svg>\n";
+        out
+    }
+}
+
+/// The file's name without its directories, for the card's small print
+fn file_name(path: &str) -> String {
+    std::path::Path::new(path)
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_else(|| path.to_string())
+}
+
+fn escape(text: &str) -> String {
+    text.replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('"', "&quot;")
 }
 
 fn round(v: f64) -> f64 {
@@ -511,7 +694,9 @@ fn round(v: f64) -> f64 {
 }
 
 fn pct(p: f64) -> String {
-    if p < 1.0 {
+    if p == 0.0 {
+        "0%".into()
+    } else if p < 1.0 {
         format!("{p:.2}%")
     } else if p < 10.0 {
         format!("{p:.1}%")
@@ -604,7 +789,7 @@ mod tests {
         assert!(c
             .report()
             .starts_with("pepe · compare run.json → run.json\n✖ Worse"));
-        assert!(c.report().contains("· 0.00% → 2.2% failed"));
+        assert!(c.report().contains("· 0% → 2.2% failed"));
 
         let c = compare(&b, &a);
         assert_eq!(c.verdict, Outcome::Better);
@@ -708,6 +893,72 @@ mod tests {
     }
 
     #[test]
+    fn the_badge_says_the_verdict_and_what_moved_most() {
+        let slower = compare(
+            &run(5000, 0, 30.0, 120.0, 5.0, 260.0),
+            &run(5000, 0, 31.0, 166.0, 5.0, 252.0),
+        );
+        assert_eq!(
+            slower.badge,
+            Badge {
+                label: "pepe",
+                message: "slower · p99 +38%".into(),
+                color: "f0cf5a"
+            }
+        );
+        let same = compare(
+            &run(5000, 0, 30.0, 120.0, 5.0, 260.0),
+            &run(5000, 0, 30.0, 121.0, 5.0, 260.0),
+        );
+        assert_eq!(
+            (same.badge.message.as_str(), same.badge.color),
+            ("about the same", "9ccf6a")
+        );
+        let worse = compare(
+            &run(5000, 0, 30.0, 120.0, 5.0, 260.0),
+            &run(5000, 110, 30.0, 120.0, 5.0, 260.0),
+        );
+        assert_eq!(
+            (worse.badge.message.as_str(), worse.badge.color),
+            ("worse · 2.2% failed", "ff5a6e")
+        );
+        let faster = compare(
+            &run(5000, 0, 30.0, 120.0, 5.0, 260.0),
+            &run(5000, 0, 20.0, 110.0, 5.0, 390.0),
+        );
+        assert_eq!(faster.badge.message, "faster · req/s +50%");
+    }
+
+    #[test]
+    fn the_card_is_an_svg_of_the_verdict() {
+        let mut a = run(5000, 0, 30.0, 120.0, 5.0, 260.0);
+        a.file = "reports/main & co.json".into();
+        let b = run(5000, 0, 31.0, 166.0, 5.0, 252.0);
+        let c = compare(&a, &b);
+        let svg = c.svg();
+        assert!(svg.starts_with("<svg xmlns=\"http://www.w3.org/2000/svg\""));
+        assert!(svg.trim_end().ends_with("</svg>"));
+        assert_eq!(svg.matches("<text").count(), svg.matches("</text>").count());
+        assert!(svg.contains(">▲ Slower</text>"));
+        assert!(
+            svg.contains("main &amp; co.json"),
+            "the file's name, escaped, without its directory"
+        );
+        assert!(
+            svg.contains(">p99</text>")
+                && svg.contains(">120.0ms</text>")
+                && svg.contains(">166.0ms</text>")
+        );
+        assert!(svg.contains(">▲ 38%</text>"), "{svg}");
+        assert!(
+            svg.contains(">±5%</text>"),
+            "a number within the spread shows the spread"
+        );
+        assert!(svg.contains("fill=\"#f0cf5a\""), "the verdict's colour");
+        assert!(!svg.contains("http://x.io"), "no target on the card");
+    }
+
+    #[test]
     fn json_has_the_verdict_and_every_change() {
         let c = compare(
             &run(5000, 0, 30.0, 120.0, 5.0, 260.0),
@@ -721,5 +972,6 @@ mod tests {
         assert_eq!(json["before"]["p99_ms"], 120.0);
         assert_eq!(json["after"]["target"], "GET http://x.io/");
         assert_eq!(json["findings"][0]["level"], "Degraded");
+        assert_eq!(json["badge"]["message"], "slower · p99 +38%");
     }
 }

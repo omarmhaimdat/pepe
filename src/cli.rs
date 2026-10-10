@@ -197,6 +197,10 @@ pub struct CompareArgs {
     /// Exit 1 when the verdict is Slower or Worse, for CI
     #[arg(long)]
     pub gate: bool,
+
+    /// Also write the verdict as a card, an SVG for a README or a page
+    #[arg(long, value_name = "FILE")]
+    pub svg: Option<std::path::PathBuf>,
 }
 
 #[derive(clap::Args, Debug, Clone, PartialEq)]
