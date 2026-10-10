@@ -6,6 +6,59 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+## [0.31.0](https://github.com/omarmhaimdat/pepe/compare/v0.30.0...v0.31.0) - 2026-10-10
+
+### Added
+
+- the verdict says where the time went, and the JSON report carries it ([#140](https://github.com/omarmhaimdat/pepe/pull/140))
+
+  ## What
+
+  - **Findings about where the time went**, in the verdict of a run, when
+  it is somewhere worth knowing:
+  - connecting being a quarter or more of each request when every request
+  opens a connection (`--disable-keepalive`);
+  - connections opened three times over the concurrency or more, so the
+  server closes them and keep-alive isn't holding;
+    - DNS lookups over 50 ms on average;
+  - downloading large bodies (32 KiB and up) being a quarter or more of
+  each request;
+  - half or more of the responses answered by a cache, by their headers,
+  so the origin wasn't measured for those.
+
+  These are the rules `pepe ping`'s findings use, read from what a load
+  run measures anyway (the connect histogram, the first-byte and download
+  phases, the DNS probe, the cache headers).
+
+  - **The verdict in the JSON report.** `--json` reports of a run, API
+  mode, a flow and a replay now carry `verdict`: `level` (healthy,
+  degraded, failing) and `findings`, each with a level and its text, what
+  the dashboard would have said. Until now the JSON had the numbers and
+  the anomalies but not the judgement. The schema and the docs have it;
+  the agents page says to read it first.
+
+  - A trend is no longer read off the empty seconds that trail the last
+  request, which could call a short run's throughput "fallen 100%".
+
+  ## Where
+
+  - `src/insights.rs`: `phase_notes`, and the trailing-seconds trim in
+  `verdict`
+  - `src/ui/mod.rs`: the dashboard appends the phase notes to its verdict
+  - `src/json_report.rs`, `src/main.rs`: `with_verdict`, built by
+  `verdict_of` in every `--json` runner
+  - `schema/run.schema.json`, `docs/output.md`, `docs/dashboard.md`,
+  `docs/agents.md`
+
+  ## Checked
+
+  - `cargo test --locked`: 296 passed, including each phase rule and the
+  keep-alive reconnect rule; clippy with `-D warnings` and `cargo fmt
+  --check` clean; the docs site current
+  - A real `--json` run and a piped run of example.com: the cache finding
+  appears in both, and the short run no longer says its throughput fell
+
+
 ## [0.30.0](https://github.com/omarmhaimdat/pepe/compare/v0.29.0...v0.30.0) - 2026-10-10
 
 ### Added
