@@ -6,6 +6,82 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+## [0.26.0](https://github.com/omarmhaimdat/pepe/compare/v0.25.0...v0.26.0) - 2026-10-10
+
+### Added
+
+- *(ping)* what the numbers mean, said in a few lines, and --once for a quick diagnosis ([#127](https://github.com/omarmhaimdat/pepe/pull/127))
+
+  ## What
+
+  `pepe ping` now says what to look at, next to the numbers: in the
+  summary, in the phases view (a "look at" block), and under `findings` in
+  the JSON report. And `pepe ping URL --once` is the quick version: three
+  pings 200 ms apart, the last one's phases, what answered, the findings,
+  and out.
+
+  ```
+  pepe ping · https://example.com/ · 3 pings
+    dns 2.40ms → connect 69.7ms → tls 40.4ms → first byte 44.2ms → download 47µs · 157ms in all
+    HTTP/1.1 200 · text/html · 334 B · 104.20.23.154:443 from 192.168.0.164 · TLS 1.3 TLS13_AES_256_GCM_SHA384
+    certificate for example.com by SSL Corporation, expires in 76 days
+    ▲ connecting takes 69.7ms of 157ms: a round trip of about 69.7ms; the server is far, and a kept connection would skip it
+    ✔ TLS sessions are resumed: 30.1ms after the first handshake's 78.0ms
+    · answered by a cache (cf-cache-status: HIT): the server itself wasn't measured
+  ```
+
+  ## Why
+
+  Ping measures everything needed to say *why* a URL is slow, but until
+  now only reported numbers. These few lines are the verdict's voice
+  applied to a single request: the thing to paste into a channel.
+
+  ## How
+
+  `src/diagnose.rs` holds the rules, each reading what ping already has
+  (the medians of each phase, the TLS sessions, the last response's
+  headers, the losses, the tail):
+
+  - nothing answered, and the cause; pings lost and timed out; 5xx; 401,
+  403, 404 and 429 on every ping
+  - every request redirected, with the final URL to point at and what the
+  chain costs
+  - a slow DNS lookup; connecting as a share of the request, read as a
+  round trip; the TLS session never resumed (every connection pays the
+  full handshake) or resumed and how much it saves; the server closing
+  every connection
+  - the server's own share of the time, with its `Server-Timing` segments
+  when it sends them; a large or slow download; a text body over 4 KB that
+  isn't compressed though gzip and br were offered; a cache answering (and
+  so the server itself not measured); HTTP/1.0
+  - a certificate expired or expiring within 30 days; a long tail (p99
+  three times the median or more)
+
+  Findings are ordered most serious first, with a glyph and a level
+  (`bad`, `warn`, `note`, `good`) in the JSON.
+
+  **Also fixed:** the connect phase was counted twice in a ping's
+  breakdown (once by `connect`, once more when the phases were summed), so
+  the phases added up to more than the total. A test now checks that the
+  parts never exceed the whole.
+
+  ## Where
+
+  - `src/diagnose.rs`: the rules, `--once`'s output, and their tests
+  - `src/ping.rs`: findings in the text report and the JSON; a sample
+  keeps the URL its redirects ended at; the connect fix
+  - `src/ui/ping.rs`: the "look at" block under the phases
+  - `src/cli.rs`, `src/main.rs`: `--once`
+  - README, man page and completions
+
+  ## Checked
+
+  - `cargo test --locked`: 284 passed; clippy with `-D warnings` and
+  `cargo fmt --check` clean
+  - `--once` and `--json` against example.com over https and http; the
+  phases now add up to the total
+
+
 ## [0.25.0](https://github.com/omarmhaimdat/pepe/compare/v0.24.0...v0.25.0) - 2026-10-10
 
 ### Added
