@@ -6,6 +6,92 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+## [0.29.0](https://github.com/omarmhaimdat/pepe/compare/v0.28.0...v0.29.0) - 2026-10-10
+
+### Added
+
+- a report without a terminal, --fail-if, a versioned report with its schema, and the documentation site ([#133](https://github.com/omarmhaimdat/pepe/pull/133))
+
+  ## What
+
+  Two things, the second built on the first.
+
+  ### Three roadmap items that make pepe safe to call from a script
+
+  - **Without a terminal, a report.** Piped, redirected or run by a script
+  without `--json`, pepe used to try to open the dashboard and fail. Now
+  the run goes to its end and the report the dashboard would have left is
+  printed: the same verdict and findings. A plain run, a ramp, API mode, a
+  flow and a replay all do it; `--snapshot` and `--metrics` work as on the
+  dashboard. API mode needs its endpoints picked on the command line,
+  since there is no plan screen.
+  - **`--fail-if 'p99 > 300ms'`**, in the ramp's condition language,
+  repeatable, in every mode that measures requests, with or without
+  `--json`. The report is still printed, each crossed condition is said on
+  stderr with the number it saw (`✖ --fail-if p99 > 300ms: p99 was
+  412.0ms`), and the exit code is 4, the same as a ping's `--slo`. `pepe
+  ping` refuses it and points at `--slo`.
+  - **A versioned report.** Every JSON report starts with
+  `"schema_version": 1`. The JSON Schema of each report kind is in
+  `schema/`, embedded and printed by `pepe schema run|ramp|ping|compare`,
+  shipped in every release archive, and published at
+  `pepe.mhaimdat.com/schema/`. A test holds a real report of each kind
+  against its schema.
+
+  ```bash
+  pepe -z 30s -c 20 https://example.com > run.txt
+  pepe --json -n 2000 --fail-if 'p99 > 300ms' --fail-if 'errors > 1%' https://staging.example.com/api
+  pepe schema ping | jq '.properties.targets.items.required'
+  ```
+
+  ### The documentation site, at pepe.mhaimdat.com/docs
+
+  Every feature of pepe, page by page, with examples: overview, install,
+  load testing (every option, the load's shape, the config file, the curl
+  command, the setup screen), the dashboard and its keys, ramp, OpenAPI,
+  flows, replay, ping, nginx logs, compare, output and exit codes, CI and
+  Docker, agents and scripts, benchmarks, and a command reference.
+
+  - The sources are Markdown files under `docs/`, readable on GitHub as
+  they are.
+  - `site/build-docs.py` builds them into `site/docs/` with no dependency:
+  the install page's look, a sidebar, an "on this page" list, anchors on
+  every heading, and a phone layout. The built site is committed, and the
+  Lint job checks it is current.
+  - `docs/reference.md`, every command's `--help`, is generated from the
+  command definition by `cargo test` (`UPDATE_CONTRIB=1` rewrites it), so
+  it can't drift from the binary. It documents `pepe schema` and
+  `--fail-if`, which is why the two parts share a branch.
+  - The release workflow publishes `site/docs/` with the rest of the site
+  and verifies two of its pages; the install page's "docs" link and the
+  README point at it.
+
+  ## How
+
+  - `Dashboard::run_headless` collects results on the same pump as the
+  dashboard, writes snapshots, and leaves `report()` and `metrics()` to
+  read afterwards. Each mode's runner gains a headless branch. The ramp's
+  climb is factored out of `--json` (`climb`) and shared with the piped
+  path.
+  - `exit_if_failed` runs `Condition::crossed` against the run's final
+  metrics; the interactive sessions return their metrics with their report
+  so it runs after the screen closes.
+  - `src/schema.rs` embeds the four schema files and carries a small
+  checker (required fields, types, `$ref` into `$defs`, items) used by the
+  tests.
+
+  ## Checked
+
+  - `cargo test --locked`: 295 passed; clippy with `-D warnings`, `cargo
+  fmt --check` and `python3 site/build-docs.py --check` clean
+  - By hand: a piped plain run and a piped ramp print their reports;
+  `--fail-if` exits 4 with and without `--json`; `pepe schema ping`
+  prints, `pepe schema nope` says what exists
+  - The site served locally and checked in the browser at desktop and
+  phone widths: sidebar, tables, code blocks, images from `assets/`,
+  anchors; no horizontal scroll on a phone
+
+
 ## [0.28.0](https://github.com/omarmhaimdat/pepe/compare/v0.27.0...v0.28.0) - 2026-10-10
 
 ### Added
