@@ -414,6 +414,7 @@ Register-ArgumentCompleter -Native -CommandName 'pepe' -ScriptBlock {
             [CompletionResult]::new('--jsonl', '--jsonl', [CompletionResultType]::ParameterName, 'No screen: one JSON object per ping on stdout, as it happens')
             [CompletionResult]::new('--csv', '--csv', [CompletionResultType]::ParameterName, 'No screen: one CSV line per ping on stdout, under a header')
             [CompletionResult]::new('--show-body', '--show-body', [CompletionResultType]::ParameterName, 'Keep the first kilobyte of each body for the inspector')
+            [CompletionResult]::new('--once', '--once', [CompletionResultType]::ParameterName, 'One diagnosis and out: three quick pings, then the last one''s phases, what answered, and what to look at; no screen')
             [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('-k', '-k', [CompletionResultType]::ParameterName, 'Accept invalid TLS certificates (self-signed, expired, wrong host)')

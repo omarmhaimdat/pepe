@@ -422,6 +422,7 @@ fail\:"A failure"))' \
 '(--csv)--jsonl[No screen\: one JSON object per ping on stdout, as it happens]' \
 '--csv[No screen\: one CSV line per ping on stdout, under a header]' \
 '--show-body[Keep the first kilobyte of each body for the inspector]' \
+'--once[One diagnosis and out\: three quick pings, then the last one'\''s phases, what answered, and what to look at; no screen]' \
 '-h[Print help]' \
 '--help[Print help]' \
 '-k[Accept invalid TLS certificates (self-signed, expired, wrong host)]' \

@@ -303,6 +303,11 @@ pub struct PingArgs {
     /// Write the last body received to this file when the run ends
     #[arg(long, value_name = "FILE")]
     pub save_body: Option<std::path::PathBuf>,
+
+    /// One diagnosis and out: three quick pings, then the last one's
+    /// phases, what answered, and what to look at; no screen
+    #[arg(long)]
+    pub once: bool,
 }
 
 /// `--tcp-rst`: what a connection refused means

@@ -556,6 +556,8 @@ pub struct Sample {
     pub tls: Option<Tls>,
     /// Each redirect followed, in order, before the final response
     pub hops: Vec<Hop>,
+    /// Where the redirects ended, when there were any
+    pub final_url: Option<String>,
     pub headers: Vec<(String, String)>,
     /// Up to `BODY_PREVIEW` bytes of the body
     pub body: Vec<u8>,
@@ -584,6 +586,7 @@ impl Sample {
             version: None,
             tls: None,
             hops: Vec::new(),
+            final_url: None,
             headers: Vec::new(),
             body: Vec::new(),
             violations: Vec::new(),
@@ -1117,6 +1120,9 @@ impl Pinger {
                     let redirect = matches!(status, 301 | 302 | 303 | 307 | 308);
                     let Some(location) = location.filter(|_| redirect && settings.follow_redirects)
                     else {
+                        if !sample.hops.is_empty() {
+                            sample.final_url = Some(url.to_string());
+                        }
                         return Ok(());
                     };
                     hops += 1;
@@ -1178,8 +1184,11 @@ impl Pinger {
             None => {
                 let addresses = resolve(&host, port, connect_to, settings, sample).await?;
                 phases.dns = sample.phases.dns.take();
-                let (stream, remote, local, took) = connect(&addresses, settings, sample).await?;
-                phases.connect = Some(took);
+                let (stream, remote, local, _) = connect(&addresses, settings, sample).await?;
+                // `connect` noted it on the sample, as `resolve` did the
+                // lookup; both are moved here so a redirect's hop adds
+                // its own rather than counting these twice
+                phases.connect = sample.phases.connect.take();
                 let (stream, tls) = if https {
                     let began = Instant::now();
                     let name = ServerName::try_from(host.clone())
@@ -1921,6 +1930,9 @@ pub fn json_report(state: &State, settings: &Settings, interrupted: bool) -> ser
                     "violations": t.violations,
                     "worst_ms": t.worst.iter().map(|(k, d)| (k.to_string(), ms(*d))).collect::<BTreeMap<_, _>>(),
                 },
+                "findings": crate::diagnose::findings(t, settings, now).iter().map(|f| serde_json::json!({
+                    "level": f.level.name(), "text": f.text,
+                })).collect::<Vec<_>>(),
             })
         })
         .collect();
@@ -2076,10 +2088,8 @@ pub fn report(state: &State, settings: &Settings) -> String {
         for (cause, n) in &t.causes {
             let _ = writeln!(out, "  ✖ {cause} ×{n}");
         }
-        if let Some(cert) = t.last_tls.as_ref().and_then(|t| t.cert.as_ref()) {
-            if cert.days_left(now) < 14 {
-                let _ = writeln!(out, "  ▲ the certificate {}", cert.expiry(now));
-            }
+        for finding in crate::diagnose::findings(t, settings, now) {
+            let _ = writeln!(out, "  {} {}", finding.level.glyph(), finding.text);
         }
     }
     if !settings.slo.is_empty() {
@@ -2377,6 +2387,9 @@ mod tests {
         assert_eq!(last.body, b"hello");
         assert!(last.phases.connect.is_some() && last.phases.ttfb.is_some());
         assert!(last.phases.tls.is_none());
+        // The phases are parts of the total, counted once each
+        let parts: Duration = last.phases.each().iter().filter_map(|(_, d)| *d).sum();
+        assert!(parts <= last.total, "{parts:?} > {:?}", last.total);
         assert!(last.remote.is_some() && last.local.is_some());
         assert_eq!(last.version.as_deref(), Some("HTTP/1.1"));
         assert_eq!(glyph(t), '✔');

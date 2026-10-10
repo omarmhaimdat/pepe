@@ -903,6 +903,33 @@ impl PingScreen {
                 t.reused, t.answered
             ))));
         }
+        let findings = crate::diagnose::findings(t, &self.shared.settings, crate::logs::wall());
+        if !findings.is_empty() {
+            lines.push(Line::raw(""));
+            lines.push(Line::from(label("LOOK AT")));
+            let width = (area.width as usize).saturating_sub(4).max(20);
+            for finding in findings {
+                let color = match finding.level {
+                    crate::diagnose::Level::Good => GOOD,
+                    crate::diagnose::Level::Note => LABEL,
+                    crate::diagnose::Level::Warn => WARN,
+                    crate::diagnose::Level::Bad => BAD,
+                };
+                for (i, piece) in wrap(&finding.text, width, 3).into_iter().enumerate() {
+                    lines.push(Line::from(vec![
+                        Span::styled(
+                            if i == 0 {
+                                format!("{} ", finding.level.glyph())
+                            } else {
+                                "  ".into()
+                            },
+                            Style::new().fg(color),
+                        ),
+                        Span::raw(piece),
+                    ]));
+                }
+            }
+        }
         f.render_widget(Paragraph::new(lines), area);
     }
 

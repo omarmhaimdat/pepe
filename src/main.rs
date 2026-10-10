@@ -24,6 +24,7 @@ mod completions;
 mod config;
 mod contrib;
 mod curl;
+mod diagnose;
 mod direct;
 mod flow;
 mod insights;
@@ -1094,8 +1095,19 @@ async fn run_ping(
         (_, true) => Some(ping::Family::V6),
         _ => None,
     };
-    let every = ping::interval(&what.every, std::time::Duration::from_secs(1))
+    let mut every = ping::interval(&what.every, std::time::Duration::from_secs(1))
         .unwrap_or_else(|e| fail(format!("--every: {e}")));
+    let typed = |name: &str| {
+        matches
+            .subcommand_matches("ping")
+            .and_then(|m| m.value_source(name))
+            .or_else(|| matches.value_source(name))
+            == Some(clap::parser::ValueSource::CommandLine)
+    };
+    // --once: three pings, quickly, unless told otherwise
+    if what.once && !typed("every") {
+        every = std::time::Duration::from_millis(200);
+    }
     let window = ping::interval(&what.window, std::time::Duration::from_secs(1))
         .unwrap_or_else(|e| fail(format!("--window: {e}")));
     let slo = match &what.slo {
@@ -1116,13 +1128,12 @@ async fn run_ping(
         })
         .collect();
     // Only a count that was typed ends the run: the default is forever
-    let count = match matches
-        .subcommand_matches("ping")
-        .and_then(|m| m.value_source("number"))
-        .or_else(|| matches.value_source("number"))
-    {
-        Some(clap::parser::ValueSource::CommandLine) => Some(u64::from(args.number)),
-        _ => None,
+    let count = if typed("number") {
+        Some(u64::from(args.number))
+    } else if what.once {
+        Some(3)
+    } else {
+        None
     };
     let headers = {
         let mut map = reqwest::header::HeaderMap::new();
@@ -1170,8 +1181,12 @@ async fn run_ping(
     .await
     .unwrap_or_else(|e| fail(e));
 
-    let screen =
-        !args.json && !what.jsonl && !what.csv && stdout().is_terminal() && stdin().is_terminal();
+    let screen = !args.json
+        && !what.jsonl
+        && !what.csv
+        && !what.once
+        && stdout().is_terminal()
+        && stdin().is_terminal();
     let shared = ping::start(targets, settings.clone());
     let mut interrupted = false;
     if screen {
@@ -1209,6 +1224,8 @@ async fn run_ping(
         // No screen: each ping as a line, as it happens, and the summary
         // at the end; JSON goes to stdout alone, the summary to stderr
         let (jsonl, csv, json) = (what.jsonl, what.csv, args.json);
+        // --once says it all at the end, not a line per ping
+        let quiet = what.once && !jsonl && !csv;
         if csv {
             println!("{}", ping::CSV_HEADER);
         }
@@ -1234,7 +1251,7 @@ async fn run_ping(
                         ping::sample_json(sample, &t.target).to_string()
                     } else if csv {
                         ping::sample_csv(sample, &t.target)
-                    } else if json {
+                    } else if json || quiet {
                         continue;
                     } else {
                         ping::sample_line(sample, &t.target)
@@ -1265,6 +1282,8 @@ async fn run_ping(
             );
         } else if jsonl || csv {
             eprint!("{}", ping::report(&state, &settings));
+        } else if what.once {
+            print_report(&diagnose::once(&state, &settings));
         } else {
             print_report(&ping::report(&state, &settings));
         }
