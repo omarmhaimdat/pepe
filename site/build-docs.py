@@ -129,6 +129,30 @@ def cards(lines):
     return "".join(out)
 
 
+def hero(lines):
+    """The overview's opening: a logo line, a heading, a sentence, and a
+    line of links that become the buttons."""
+    out = ['<div class="hero">']
+    for line in lines:
+        line = line.strip()
+        if not line:
+            continue
+        m = IMAGE.fullmatch(line)
+        if m:
+            out.append('<img src="%s" alt="%s" width="96" height="84">' % (asset(m.group(2)), html.escape(m.group(1), quote=True)))
+            continue
+        m = re.match(r"^#\s+(.*)$", line)
+        if m:
+            out.append("<h1>%s</h1>" % inline(m.group(1)))
+            continue
+        if LINK.sub("", line).strip() == "":
+            out.append('<p class="buttons">%s</p>' % inline(line))
+            continue
+        out.append("<p>%s</p>" % inline(line))
+    out.append("</div>")
+    return "".join(out)
+
+
 def convert(text):
     """Markdown to HTML, the headings for the page's own list, and the
     sections for the search index."""
@@ -162,6 +186,9 @@ def convert(text):
             i += 1
             if kind == "cards":
                 out.append(cards(block))
+            elif kind == "hero":
+                out.append(hero(block))
+                current["text"].append(plain(" ".join(l for l in block if l.strip() and not l.strip().startswith(("#", "!", "[")))))
             else:
                 inner, _, _ = convert("\n".join(block))
                 out.append('<div class="callout %s">%s</div>' % (html.escape(kind), inner))
@@ -244,6 +271,12 @@ def convert(text):
 
 
 def first_paragraph(text):
+    m = re.search(r"^:::hero\n(.*?)^:::$", text, re.S | re.M)
+    if m:
+        for line in m.group(1).split("\n"):
+            line = line.strip()
+            if line and not line.startswith(("#", "!")) and LINK.sub("", line).strip():
+                return plain(line)[:300]
     for block in text.split("\n\n"):
         block = block.strip()
         if block and not block.startswith(("#", "```", "|", "-", "!", ">", ":::")):
