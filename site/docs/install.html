@@ -3,69 +3,76 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Install · pepe docs</title>
+<title>Install · pepe</title>
 <meta name="description" content="One binary, a few megabytes, for macOS (Apple Silicon and Intel), Linux (x86_64 and ARM64, statically linked) and Windows (x86_64). Every way below gives the same pepe.">
 <link rel="canonical" href="https://pepe.mhaimdat.com/docs/install.html">
 <link rel="icon" href="../assets/logo.svg" type="image/svg+xml">
-<meta name="theme-color" content="#140f0d">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#121010" media="(prefers-color-scheme: dark)">
 <meta property="og:type" content="article">
-<meta property="og:title" content="Install · pepe docs">
+<meta property="og:title" content="Install · pepe">
 <meta property="og:description" content="One binary, a few megabytes, for macOS (Apple Silicon and Intel), Linux (x86_64 and ARM64, statically linked) and Windows (x86_64). Every way below gives the same pepe.">
 <meta property="og:image" content="https://pepe.mhaimdat.com/img/og.png">
 <link rel="stylesheet" href="docs.css">
+<script>try{var t=localStorage.getItem('pepe-theme');if(t)document.documentElement.dataset.theme=t;}catch(e){}</script>
 </head>
 <body>
-<div class="term">
-  <header class="title">
-    <a class="name" href="../">pepe</a><a href="index.html">docs</a>
-    <nav aria-label="Site"><a href="../">install</a><a href="https://github.com/omarmhaimdat/pepe">github</a><a href="https://github.com/omarmhaimdat/pepe/releases">releases</a></nav>
-  </header>
-  <div class="cols">
-    <aside class="side" aria-label="Pages"><a href="index.html">Overview</a><a href="install.html" class="on">Install</a><a href="load-test.html">Load testing</a><a href="dashboard.html">The dashboard</a><a href="ramp.html">Ramp</a><a href="api.html">OpenAPI</a><a href="flow.html">Flows</a><a href="replay.html">Replay</a><a href="ping.html">Ping</a><a href="logs.html">nginx logs</a><a href="compare.html">Compare</a><a href="output.html">Output and exit codes</a><a href="ci.html">CI and Docker</a><a href="agents.html">Agents and scripts</a><a href="benchmarks.html">Benchmarks</a><a href="reference.html">Command reference</a></aside>
-    <main>
+<header class="top">
+  <button type="button" class="menu" aria-label="Pages" aria-expanded="false">☰</button>
+  <a class="brand" href="index.html"><img src="../assets/logo.svg" alt="" width="22" height="24">pepe<span>docs</span></a>
+  <div class="search"><input type="search" placeholder="Search the docs…" aria-label="Search the docs" autocomplete="off"><div class="results" hidden></div></div>
+  <nav class="links"><a href="../">Install</a><a href="https://github.com/omarmhaimdat/pepe">GitHub</a><button type="button" class="theme" aria-label="Switch between light and dark">◐</button></nav>
+</header>
+<div class="shell">
+  <aside class="side" id="side"><div class="group">Start here</div><a href="index.html">Overview</a><a href="install.html" aria-current="page">Install</a><div class="group">Modes</div><a href="load-test.html">Load testing</a><a href="dashboard.html">The dashboard</a><a href="ping.html">Ping</a><a href="ramp.html">Ramp</a><a href="api.html">OpenAPI</a><a href="flow.html">Flows</a><a href="replay.html">Replay</a><a href="logs.html">nginx logs</a><a href="compare.html">Compare</a><div class="group">Integrate</div><a href="output.html">Output and exit codes</a><a href="ci.html">CI and Docker</a><a href="agents.html">Agents and scripts</a><div class="group">Reference</div><a href="reference.html">Command reference</a><a href="benchmarks.html">Benchmarks</a></aside>
+  <main class="main">
+    <article class="prose">
 <h1>Install</h1>
 <p>One binary, a few megabytes, for macOS (Apple Silicon and Intel), Linux (x86_64 and ARM64, statically linked) and Windows (x86_64). Every way below gives the same <code>pepe</code>.</p>
-<h2 id="the-installer">The installer <a class="anchor" href="#the-installer" aria-label="Link to this section">#</a></h2>
+<h2 id="the-installer"><a href="#the-installer">The installer</a></h2>
 <p>macOS and Linux:</p>
-<pre class="lang-bash"><code>curl -LsSf https://pepe.mhaimdat.com/install.sh | sh</code></pre>
+<figure class="code"><div class="bar"><span>bash</span><button type="button" class="copy" aria-label="Copy">copy</button></div><pre><code>curl -LsSf https://pepe.mhaimdat.com/install.sh | sh</code></pre></figure>
 <p>Windows, in PowerShell:</p>
-<pre class="lang-powershell"><code>powershell -ExecutionPolicy Bypass -c &quot;irm https://pepe.mhaimdat.com/install.ps1 | iex&quot;</code></pre>
+<figure class="code"><div class="bar"><span>powershell</span><button type="button" class="copy" aria-label="Copy">copy</button></div><pre><code>powershell -ExecutionPolicy Bypass -c &quot;irm https://pepe.mhaimdat.com/install.ps1 | iex&quot;</code></pre></figure>
 <p>The installer puts <code>pepe</code> in <code>~/.local/bin</code> (or where <code>CARGO_HOME</code>/bin would be), adds it to the shell's path if it isn't there, and sets up tab completion and the man pages for the shell you're in.</p>
-<h2 id="homebrew">Homebrew <a class="anchor" href="#homebrew" aria-label="Link to this section">#</a></h2>
+<h2 id="homebrew"><a href="#homebrew">Homebrew</a></h2>
 <p>macOS and Linux:</p>
-<pre class="lang-bash"><code>brew install omarmhaimdat/pepe/pepe</code></pre>
+<figure class="code"><div class="bar"><span>bash</span><button type="button" class="copy" aria-label="Copy">copy</button></div><pre><code>brew install omarmhaimdat/pepe/pepe</code></pre></figure>
 <p>The formula puts the completions and man pages where Homebrew activates them.</p>
-<h2 id="nix">Nix <a class="anchor" href="#nix" aria-label="Link to this section">#</a></h2>
-<pre class="lang-bash"><code>nix run github:omarmhaimdat/pepe -- https://example.com   # try it without installing
-nix profile install github:omarmhaimdat/pepe              # install it</code></pre>
-<h2 id="docker">Docker <a class="anchor" href="#docker" aria-label="Link to this section">#</a></h2>
-<pre class="lang-bash"><code>docker run --rm -it ghcr.io/omarmhaimdat/pepe -z 30s -c 50 https://example.com   # the dashboard needs -it
-docker run --rm ghcr.io/omarmhaimdat/pepe --json -n 1000 https://example.com     # for scripts</code></pre>
+<h2 id="nix"><a href="#nix">Nix</a></h2>
+<figure class="code"><div class="bar"><span>bash</span><button type="button" class="copy" aria-label="Copy">copy</button></div><pre><code>nix run github:omarmhaimdat/pepe -- https://example.com   # try it without installing
+nix profile install github:omarmhaimdat/pepe              # install it</code></pre></figure>
+<h2 id="docker"><a href="#docker">Docker</a></h2>
+<figure class="code"><div class="bar"><span>bash</span><button type="button" class="copy" aria-label="Copy">copy</button></div><pre><code>docker run --rm -it ghcr.io/omarmhaimdat/pepe -z 30s -c 50 https://example.com   # the dashboard needs -it
+docker run --rm ghcr.io/omarmhaimdat/pepe --json -n 1000 https://example.com     # for scripts</code></pre></figure>
 <p>An empty image with the static binary in it, for <code>linux/amd64</code> and <code>linux/arm64</code>, with <code>:latest</code> and <code>:&lt;version&gt;</code> tags. <code>docker build -t pepe .</code> in a checkout builds the same from source.</p>
-<h2 id="prebuilt-binaries">Prebuilt binaries <a class="anchor" href="#prebuilt-binaries" aria-label="Link to this section">#</a></h2>
+<h2 id="prebuilt-binaries"><a href="#prebuilt-binaries">Prebuilt binaries</a></h2>
 <p>Every <a href="https://github.com/omarmhaimdat/pepe/releases">release</a> ships binaries for each platform with SHA-256 checksums and signed build provenance:</p>
-<pre class="lang-bash"><code>gh attestation verify pepe-x86_64-unknown-linux-musl.tar.xz --repo omarmhaimdat/pepe</code></pre>
+<figure class="code"><div class="bar"><span>bash</span><button type="button" class="copy" aria-label="Copy">copy</button></div><pre><code>gh attestation verify pepe-x86_64-unknown-linux-musl.tar.xz --repo omarmhaimdat/pepe</code></pre></figure>
 <p>Each archive also carries the shell completions, the man pages and the JSON Schema of each report (<code>schema/</code>). <code>pepe completions --install</code> puts the completions and man pages in place for your shell; <code>--dry-run</code> shows what it would change.</p>
-<h2 id="from-source">From source <a class="anchor" href="#from-source" aria-label="Link to this section">#</a></h2>
-<pre class="lang-bash"><code>cargo install --locked --git https://github.com/omarmhaimdat/pepe</code></pre>
+<h2 id="from-source"><a href="#from-source">From source</a></h2>
+<figure class="code"><div class="bar"><span>bash</span><button type="button" class="copy" aria-label="Copy">copy</button></div><pre><code>cargo install --locked --git https://github.com/omarmhaimdat/pepe</code></pre></figure>
 <p>Rust 1.85 or newer.</p>
-<h2 id="staying-up-to-date">Staying up to date <a class="anchor" href="#staying-up-to-date" aria-label="Link to this section">#</a></h2>
+<h2 id="staying-up-to-date"><a href="#staying-up-to-date">Staying up to date</a></h2>
 <p>pepe looks for a newer release once a day and says so when a run ends, with what changed and the command that updates your copy. Installer-based installs update themselves:</p>
-<pre class="lang-bash"><code>pepe self-update            # install the latest release
-pepe self-update --check    # only say whether there is one (exit code 1 if so)</code></pre>
+<figure class="code"><div class="bar"><span>bash</span><button type="button" class="copy" aria-label="Copy">copy</button></div><pre><code>pepe self-update            # install the latest release
+pepe self-update --check    # only say whether there is one (exit code 1 if so)</code></pre></figure>
 <p>Homebrew and Nix installs update with <code>brew upgrade pepe</code> and <code>nix profile upgrade pepe</code>. Set <code>PEPE_NO_UPDATE_CHECK=1</code> to turn the daily check off; it is off in CI already. <code>PEPE_GITHUB_TOKEN</code> gives <code>self-update</code> a GitHub token, for forks or rate-limited CI, and <code>PEPE_CACHE_DIR</code> is where the check keeps its answer.</p>
-<h2 id="tab-completion-and-man-pages">Tab completion and man pages <a class="anchor" href="#tab-completion-and-man-pages" aria-label="Link to this section">#</a></h2>
+<h2 id="tab-completion-and-man-pages"><a href="#tab-completion-and-man-pages">Tab completion and man pages</a></h2>
 <p>Bash, zsh, fish and PowerShell completions and <code>man pepe</code> (and <code>man pepe-ping</code>, <code>pepe-ramp</code>, …) come with the installer and the Homebrew formula. Installed another way:</p>
-<pre class="lang-bash"><code>pepe completions --install            # for the shell you&#x27;re in
+<figure class="code"><div class="bar"><span>bash</span><button type="button" class="copy" aria-label="Copy">copy</button></div><pre><code>pepe completions --install            # for the shell you&#x27;re in
 pepe completions --install --dry-run  # see what it would change first
-pepe completions zsh                  # print the script, for packagers and dotfiles</code></pre>
+pepe completions zsh                  # print the script, for packagers and dotfiles</code></pre></figure>
 <p><code>--install</code> writes the completion file and the man pages under <code>~/.local/share</code> (fish: <code>~/.config/fish/completions</code>) and appends what the shell needs to its startup file, once, marked with a comment. It is safe to run again; <code>pepe self-update</code> runs it for you after an update.</p>
-<h2 id="themes-and-colour">Themes and colour <a class="anchor" href="#themes-and-colour" aria-label="Link to this section">#</a></h2>
+<h2 id="themes-and-colour"><a href="#themes-and-colour">Themes and colour</a></h2>
 <p>pepe draws in its own palette on terminals that say they can show true colour, and in the terminal's own 256-colour palette otherwise. <code>PEPE_THEME=light</code> or <code>dark</code> picks the palette for the terminal's background when <code>COLORFGBG</code> doesn't say; <code>NO_COLOR=1</code> draws without colour, with selections in reverse video, the heatmap in shades and the verdict uncoloured.</p>
-    </main>
-    <aside class="toc" aria-label="On this page"><div class="lab">on this page</div><a href="#the-installer" class="h2">The installer</a><a href="#homebrew" class="h2">Homebrew</a><a href="#nix" class="h2">Nix</a><a href="#docker" class="h2">Docker</a><a href="#prebuilt-binaries" class="h2">Prebuilt binaries</a><a href="#from-source" class="h2">From source</a><a href="#staying-up-to-date" class="h2">Staying up to date</a><a href="#tab-completion-and-man-pages" class="h2">Tab completion and man pages</a><a href="#themes-and-colour" class="h2">Themes and colour</a></aside>
-  </div>
-  <footer class="chips"><span><kbd>?</kbd>every screen lists its keys</span><span><kbd>q</kbd>leaves the report in your shell</span><span class="by">MIT · <a href="https://github.com/omarmhaimdat/pepe">omarmhaimdat/pepe</a></span></footer>
+    </article>
+    <nav class="turn"><a class="prev" href="index.html"><small>Previous</small>Overview</a><a class="next" href="load-test.html"><small>Next</small>Load testing</a></nav>
+    <p class="edit"><a href="https://github.com/omarmhaimdat/pepe/edit/master/docs/install.md">Edit this page on GitHub</a></p>
+  </main>
+  <aside class="toc"><div class="label">On this page</div><a href="#the-installer" class="h2">The installer</a><a href="#homebrew" class="h2">Homebrew</a><a href="#nix" class="h2">Nix</a><a href="#docker" class="h2">Docker</a><a href="#prebuilt-binaries" class="h2">Prebuilt binaries</a><a href="#from-source" class="h2">From source</a><a href="#staying-up-to-date" class="h2">Staying up to date</a><a href="#tab-completion-and-man-pages" class="h2">Tab completion and man pages</a><a href="#themes-and-colour" class="h2">Themes and colour</a></aside>
 </div>
+<script src="docs.js" defer></script>
 </body>
 </html>

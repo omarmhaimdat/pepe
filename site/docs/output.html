@@ -3,39 +3,44 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Output and exit codes · pepe docs</title>
+<title>Output and exit codes · pepe</title>
 <meta name="description" content="What a run leaves behind, and what a script can rely on: the report in the shell, the JSON report and its schema, thresholds that set the exit code, live metrics for Prometheus, and the exit codes themselves.">
 <link rel="canonical" href="https://pepe.mhaimdat.com/docs/output.html">
 <link rel="icon" href="../assets/logo.svg" type="image/svg+xml">
-<meta name="theme-color" content="#140f0d">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#121010" media="(prefers-color-scheme: dark)">
 <meta property="og:type" content="article">
-<meta property="og:title" content="Output and exit codes · pepe docs">
+<meta property="og:title" content="Output and exit codes · pepe">
 <meta property="og:description" content="What a run leaves behind, and what a script can rely on: the report in the shell, the JSON report and its schema, thresholds that set the exit code, live metrics for Prometheus, and the exit codes themselves.">
 <meta property="og:image" content="https://pepe.mhaimdat.com/img/og.png">
 <link rel="stylesheet" href="docs.css">
+<script>try{var t=localStorage.getItem('pepe-theme');if(t)document.documentElement.dataset.theme=t;}catch(e){}</script>
 </head>
 <body>
-<div class="term">
-  <header class="title">
-    <a class="name" href="../">pepe</a><a href="index.html">docs</a>
-    <nav aria-label="Site"><a href="../">install</a><a href="https://github.com/omarmhaimdat/pepe">github</a><a href="https://github.com/omarmhaimdat/pepe/releases">releases</a></nav>
-  </header>
-  <div class="cols">
-    <aside class="side" aria-label="Pages"><a href="index.html">Overview</a><a href="install.html">Install</a><a href="load-test.html">Load testing</a><a href="dashboard.html">The dashboard</a><a href="ramp.html">Ramp</a><a href="api.html">OpenAPI</a><a href="flow.html">Flows</a><a href="replay.html">Replay</a><a href="ping.html">Ping</a><a href="logs.html">nginx logs</a><a href="compare.html">Compare</a><a href="output.html" class="on">Output and exit codes</a><a href="ci.html">CI and Docker</a><a href="agents.html">Agents and scripts</a><a href="benchmarks.html">Benchmarks</a><a href="reference.html">Command reference</a></aside>
-    <main>
+<header class="top">
+  <button type="button" class="menu" aria-label="Pages" aria-expanded="false">☰</button>
+  <a class="brand" href="index.html"><img src="../assets/logo.svg" alt="" width="22" height="24">pepe<span>docs</span></a>
+  <div class="search"><input type="search" placeholder="Search the docs…" aria-label="Search the docs" autocomplete="off"><div class="results" hidden></div></div>
+  <nav class="links"><a href="../">Install</a><a href="https://github.com/omarmhaimdat/pepe">GitHub</a><button type="button" class="theme" aria-label="Switch between light and dark">◐</button></nav>
+</header>
+<div class="shell">
+  <aside class="side" id="side"><div class="group">Start here</div><a href="index.html">Overview</a><a href="install.html">Install</a><div class="group">Modes</div><a href="load-test.html">Load testing</a><a href="dashboard.html">The dashboard</a><a href="ping.html">Ping</a><a href="ramp.html">Ramp</a><a href="api.html">OpenAPI</a><a href="flow.html">Flows</a><a href="replay.html">Replay</a><a href="logs.html">nginx logs</a><a href="compare.html">Compare</a><div class="group">Integrate</div><a href="output.html" aria-current="page">Output and exit codes</a><a href="ci.html">CI and Docker</a><a href="agents.html">Agents and scripts</a><div class="group">Reference</div><a href="reference.html">Command reference</a><a href="benchmarks.html">Benchmarks</a></aside>
+  <main class="main">
+    <article class="prose">
 <h1>Output and exit codes</h1>
 <p>What a run leaves behind, and what a script can rely on: the report in the shell, the JSON report and its schema, thresholds that set the exit code, live metrics for Prometheus, and the exit codes themselves.</p>
-<h2 id="the-report-in-the-shell">The report in the shell <a class="anchor" href="#the-report-in-the-shell" aria-label="Link to this section">#</a></h2>
+<h2 id="the-report-in-the-shell"><a href="#the-report-in-the-shell">The report in the shell</a></h2>
 <p>Every screen leaves its report in the scrollback when you quit: the verdict and its findings for a run, the table and the estimate for a ramp, the summary for a ping, the report for the logs. Coloured when the shell shows colour, plain with <code>NO_COLOR</code>.</p>
-<h2 id="without-a-terminal">Without a terminal <a class="anchor" href="#without-a-terminal" aria-label="Link to this section">#</a></h2>
+<h2 id="without-a-terminal"><a href="#without-a-terminal">Without a terminal</a></h2>
 <p>Piped, redirected, or run by a script, pepe doesn't try to draw: the run goes to its end and the report the dashboard would have left is printed, the same verdict and findings, so a forgotten <code>--json</code> costs nothing. <code>--snapshot</code> and <code>--metrics</code> work as they do on the dashboard. A ramp prints its steps and estimate; API mode needs its endpoints picked on the command line (<code>--all</code>, <code>--tag</code>, <code>--only</code>), since there is no plan screen to pick them on. A ping prints a line per ping, then its summary.</p>
-<pre class="lang-bash"><code>pepe -z 30s -c 20 https://example.com &gt; run.txt
-pepe ramp https://example.com --to 200 | tee ramp.txt</code></pre>
-<h2 id="json-output">JSON output <a class="anchor" href="#json-output" aria-label="Link to this section">#</a></h2>
+<figure class="code"><div class="bar"><span>bash</span><button type="button" class="copy" aria-label="Copy">copy</button></div><pre><code>pepe -z 30s -c 20 https://example.com &gt; run.txt
+pepe ramp https://example.com --to 200 | tee ramp.txt</code></pre></figure>
+<h2 id="json-output"><a href="#json-output">JSON output</a></h2>
 <p><code>--json</code> skips the dashboard, runs to completion and prints a report to stdout. Press Ctrl-C to stop early; the report then has <code>&quot;interrupted&quot;: true</code>. Notes and errors go to stderr, so stdout stays valid JSON.</p>
-<pre class="lang-bash"><code>pepe --json -n 1000 -c 20 https://example.com &gt; results.json
-jq &#x27;.summary.latency.p99_ms&#x27; results.json</code></pre>
-<pre class="lang-json"><code>{
+<figure class="code"><div class="bar"><span>bash</span><button type="button" class="copy" aria-label="Copy">copy</button></div><pre><code>pepe --json -n 1000 -c 20 https://example.com &gt; results.json
+jq &#x27;.summary.latency.p99_ms&#x27; results.json</code></pre></figure>
+<figure class="code"><div class="bar"><span>json</span><button type="button" class="copy" aria-label="Copy">copy</button></div><pre><code>{
   &quot;schema_version&quot;: 1,
   &quot;target&quot;: { &quot;mode&quot;: &quot;run&quot;, &quot;method&quot;: &quot;GET&quot;, &quot;url&quot;: &quot;https://example.com&quot;, &quot;concurrency&quot;: 20 },
   &quot;summary&quot;: {
@@ -66,37 +71,39 @@ jq &#x27;.summary.latency.p99_ms&#x27; results.json</code></pre>
   },
   &quot;generator&quot;: { &quot;threads&quot;: 1, &quot;peak_busy_percent&quot;: 12 },
   &quot;timeline&quot;: [ { &quot;at_s&quot;: 60, &quot;requests_per_second&quot;: 540.1, &quot;errors_per_second&quot;: 0, &quot;p50_ms&quot;: 31.0, &quot;p90_ms&quot;: 57.9, &quot;p99_ms&quot;: 118.0 } ]
-}</code></pre>
-<table><thead><tr><th>Section</th><th>What it holds</th></tr></thead><tbody><tr><td><code>target</code></td><td>What was tested and with what load: <code>mode</code> (run, ramp, api, flow, replay), <code>method</code>, <code>url</code>, <code>concurrency</code></td></tr><tr><td><code>summary</code></td><td>The counts, <code>duration_ms</code>, <code>requests_per_second</code>, <code>data_transfer_bytes</code>, <code>latency</code> with its percentiles and <code>phases</code>, <code>status_codes</code>, and, when there is something to say, <code>server_timing</code>, <code>slowest_requests</code>, <code>anomalies</code> and <code>failures</code> by cause with the first body of each</td></tr><tr><td><code>generator</code></td><td>pepe's own load: <code>threads</code>, <code>peak_busy_percent</code> (near 100, pepe was the limit), <code>warmup_s</code>, <code>warmup_requests</code>, <code>rate_per_second</code>, <code>rate_missed</code></td></tr><tr><td><code>timeline</code></td><td>One point per minute over the whole run, for runs over a minute</td></tr><tr><td><code>snapshot</code></td><td>With <code>--snapshot</code>: when it was written and whether the run was still going</td></tr><tr><td><code>endpoints</code>, <code>flow</code>, <code>replay</code></td><td>API mode, flows and replays: one entry per endpoint, step or URL</td></tr></tbody></table>
+}</code></pre></figure>
+<div class="table"><table><thead><tr><th>Section</th><th>What it holds</th></tr></thead><tbody><tr><td><code>target</code></td><td>What was tested and with what load: <code>mode</code> (run, ramp, api, flow, replay), <code>method</code>, <code>url</code>, <code>concurrency</code></td></tr><tr><td><code>summary</code></td><td>The counts, <code>duration_ms</code>, <code>requests_per_second</code>, <code>data_transfer_bytes</code>, <code>latency</code> with its percentiles and <code>phases</code>, <code>status_codes</code>, and, when there is something to say, <code>server_timing</code>, <code>slowest_requests</code>, <code>anomalies</code> and <code>failures</code> by cause with the first body of each</td></tr><tr><td><code>generator</code></td><td>pepe's own load: <code>threads</code>, <code>peak_busy_percent</code> (near 100, pepe was the limit), <code>warmup_s</code>, <code>warmup_requests</code>, <code>rate_per_second</code>, <code>rate_missed</code></td></tr><tr><td><code>timeline</code></td><td>One point per minute over the whole run, for runs over a minute</td></tr><tr><td><code>snapshot</code></td><td>With <code>--snapshot</code>: when it was written and whether the run was still going</td></tr><tr><td><code>endpoints</code>, <code>flow</code>, <code>replay</code></td><td>API mode, flows and replays: one entry per endpoint, step or URL</td></tr></tbody></table></div>
 <p>Ramps print their own shape (every step, <code>findings</code>, <code>capacity</code>, <code>holds_concurrency</code>), pings theirs (every target with its latency, phases, TLS, certificate, SLO and findings), compares theirs (the verdict, each change, the badge), and the logs theirs.</p>
-<h2 id="the-schema">The schema <a class="anchor" href="#the-schema" aria-label="Link to this section">#</a></h2>
+<h2 id="the-schema"><a href="#the-schema">The schema</a></h2>
 <p>Every report starts with <code>&quot;schema_version&quot;: 1</code>: fields are added within a version and never renamed, so a script can depend on the names. The JSON Schema of each report kind is in every release archive under <code>schema/</code>, at <code>https://pepe.mhaimdat.com/schema/</code>, and printed by <code>pepe schema</code>:</p>
-<pre class="lang-bash"><code>pepe schema run &gt; run.schema.json
+<figure class="code"><div class="bar"><span>bash</span><button type="button" class="copy" aria-label="Copy">copy</button></div><pre><code>pepe schema run &gt; run.schema.json
 pepe schema ramp
 pepe schema ping | jq &#x27;.properties.targets.items.required&#x27;
-pepe schema compare</code></pre>
+pepe schema compare</code></pre></figure>
 <p>The schemas describe what a report always has and what it has when there is something to say; readers should take an absent optional section as "nothing to say", not an error.</p>
-<h2 id="thresholds-that-fail-ci">Thresholds that fail CI <a class="anchor" href="#thresholds-that-fail-ci" aria-label="Link to this section">#</a></h2>
+<h2 id="thresholds-that-fail-ci"><a href="#thresholds-that-fail-ci">Thresholds that fail CI</a></h2>
 <p><code>--fail-if</code> names what the run must not cross, in the ramp's condition language, and ends with exit code 4 when it does, the report still printed and the condition said on stderr with the number it saw. Repeat it for more than one; every mode that measures requests takes it (a plain run, a ramp, API mode, a flow, a replay, with or without <code>--json</code>). <code>pepe ping</code> has <code>--slo</code> for the same.</p>
-<pre class="lang-bash"><code>pepe --json -n 2000 -c 20 --fail-if &#x27;p99 &gt; 300ms&#x27; --fail-if &#x27;errors &gt; 1%&#x27; https://staging.example.com/api</code></pre>
-<pre><code>✖ --fail-if p99 &gt; 300ms: p99 was 412.0ms</code></pre>
+<figure class="code"><div class="bar"><span>bash</span><button type="button" class="copy" aria-label="Copy">copy</button></div><pre><code>pepe --json -n 2000 -c 20 --fail-if &#x27;p99 &gt; 300ms&#x27; --fail-if &#x27;errors &gt; 1%&#x27; https://staging.example.com/api</code></pre></figure>
+<figure class="code"><div class="bar"><span></span><button type="button" class="copy" aria-label="Copy">copy</button></div><pre><code>✖ --fail-if p99 &gt; 300ms: p99 was 412.0ms</code></pre></figure>
 <p>A condition is <code>pNN &gt; LATENCY</code> (any percentile, with a unit: <code>500ms</code>, <code>2s</code>, <code>800us</code>) or <code>errors &gt; PERCENT</code>.</p>
-<h2 id="prometheus-metrics">Prometheus metrics <a class="anchor" href="#prometheus-metrics" aria-label="Link to this section">#</a></h2>
+<h2 id="prometheus-metrics"><a href="#prometheus-metrics">Prometheus metrics</a></h2>
 <p><code>--metrics :9100</code> serves the live numbers at <code>http://localhost:9100/metrics</code> while the run goes, in Prometheus's text form, so a soak run or a long ping shows up in Grafana next to the server's own metrics. It works with the dashboard and with <code>--json</code>, for plain runs, API mode, flows, replays and <code>pepe ping</code>; a ramp isn't served, its steps being the point of it. <code>:9100</code>, <code>9100</code> and <code>host:port</code> are all addresses; the one it listens on is printed to stderr at the start.</p>
-<pre class="lang-bash"><code>pepe -z 6h -c 50 --metrics :9100 https://example.com
+<figure class="code"><div class="bar"><span>bash</span><button type="button" class="copy" aria-label="Copy">copy</button></div><pre><code>pepe -z 6h -c 50 --metrics :9100 https://example.com
 pepe ping https://example.com --metrics 127.0.0.1:9100
-curl -s localhost:9100/metrics</code></pre>
+curl -s localhost:9100/metrics</code></pre></figure>
 <p>A load run has <code>pepe_requests_total</code>, <code>pepe_requests_succeeded_total</code>, <code>pepe_requests_timed_out_total</code>, <code>pepe_requests_errored_total</code>, <code>pepe_responses_total{status}</code>, <code>pepe_failures_total{cause}</code>, <code>pepe_response_bytes_total</code>, <code>pepe_cache_hits_total</code>, <code>pepe_requests_per_second</code> and <code>pepe_errors_per_second</code> over the last second, <code>pepe_latency_seconds{quantile}</code> (0.5, 0.9, 0.95, 0.99) and <code>pepe_first_byte_seconds{quantile}</code> so far, the histogram <code>pepe_request_duration_seconds</code> with fixed buckets from 1 ms to 30 s, <code>pepe_concurrency</code> and <code>pepe_run_elapsed_seconds</code>. Every line carries <code>target=&quot;GET https://…&quot;</code>, and in API mode, a flow or a replay the same again per row, with <code>row=&quot;GET /pets/{id}&quot;</code>.</p>
 <p>A ping has <code>pepe_ping_sent_total</code>, <code>pepe_ping_answered_total</code>, <code>pepe_ping_lost_total</code>, <code>pepe_ping_timed_out_total</code>, <code>pepe_ping_slo_broken_total</code>, <code>pepe_ping_up</code>, <code>pepe_ping_last_seconds</code>, <code>pepe_ping_loss_ratio</code>, <code>pepe_ping_latency_seconds{quantile}</code>, <code>pepe_ping_jitter_seconds</code>, <code>pepe_ping_phase_seconds{phase}</code> (the median of dns, connect, tls, tls_resumed, ttfb and download), <code>pepe_ping_responses_total{status}</code>, <code>pepe_ping_tls_resumed_total</code>, <code>pepe_ping_cert_not_after_seconds</code> and the histogram <code>pepe_ping_duration_seconds</code>, each per <code>target</code>. The page is rendered once a second at most, whatever scrapes it.</p>
-<h2 id="soak-runs">Soak runs <a class="anchor" href="#soak-runs" aria-label="Link to this section">#</a></h2>
+<h2 id="soak-runs"><a href="#soak-runs">Soak runs</a></h2>
 <p><code>--snapshot FILE</code> writes the JSON report so far every minute, whole or not at all, and once more at the end, with a minute-by-minute <code>timeline</code>, so a long run's numbers survive a crash or a lost terminal (<a href="load-test.html#soak-runs">Load testing: soak runs</a>).</p>
-<h2 id="exit-codes">Exit codes <a class="anchor" href="#exit-codes" aria-label="Link to this section">#</a></h2>
-<table><thead><tr><th>Code</th><th>Means</th></tr></thead><tbody><tr><td>0</td><td>The run went as asked; <code>pepe compare</code> found no regression</td></tr><tr><td>1</td><td>It couldn't start (a bad file, no endpoint to run), nothing ever answered (a ping), <code>pepe compare --gate</code> found a regression, or <code>pepe self-update --check</code> found a newer release</td></tr><tr><td>2</td><td>A usage error: a flag or a value pepe doesn't take, or nothing to run</td></tr><tr><td>4</td><td>A limit was crossed: <code>--fail-if</code> on a run, <code>--slo</code> on a ping</td></tr><tr><td>130</td><td>Interrupted with Ctrl-C while the screen couldn't be left cleanly</td></tr></tbody></table>
+<h2 id="exit-codes"><a href="#exit-codes">Exit codes</a></h2>
+<div class="table"><table><thead><tr><th>Code</th><th>Means</th></tr></thead><tbody><tr><td>0</td><td>The run went as asked; <code>pepe compare</code> found no regression</td></tr><tr><td>1</td><td>It couldn't start (a bad file, no endpoint to run), nothing ever answered (a ping), <code>pepe compare --gate</code> found a regression, or <code>pepe self-update --check</code> found a newer release</td></tr><tr><td>2</td><td>A usage error: a flag or a value pepe doesn't take, or nothing to run</td></tr><tr><td>4</td><td>A limit was crossed: <code>--fail-if</code> on a run, <code>--slo</code> on a ping</td></tr><tr><td>130</td><td>Interrupted with Ctrl-C while the screen couldn't be left cleanly</td></tr></tbody></table></div>
 <p>The report is printed before a non-zero code, so what crossed the limit is still there to read.</p>
-    </main>
-    <aside class="toc" aria-label="On this page"><div class="lab">on this page</div><a href="#the-report-in-the-shell" class="h2">The report in the shell</a><a href="#without-a-terminal" class="h2">Without a terminal</a><a href="#json-output" class="h2">JSON output</a><a href="#the-schema" class="h2">The schema</a><a href="#thresholds-that-fail-ci" class="h2">Thresholds that fail CI</a><a href="#prometheus-metrics" class="h2">Prometheus metrics</a><a href="#soak-runs" class="h2">Soak runs</a><a href="#exit-codes" class="h2">Exit codes</a></aside>
-  </div>
-  <footer class="chips"><span><kbd>?</kbd>every screen lists its keys</span><span><kbd>q</kbd>leaves the report in your shell</span><span class="by">MIT · <a href="https://github.com/omarmhaimdat/pepe">omarmhaimdat/pepe</a></span></footer>
+    </article>
+    <nav class="turn"><a class="prev" href="compare.html"><small>Previous</small>Compare</a><a class="next" href="ci.html"><small>Next</small>CI and Docker</a></nav>
+    <p class="edit"><a href="https://github.com/omarmhaimdat/pepe/edit/master/docs/output.md">Edit this page on GitHub</a></p>
+  </main>
+  <aside class="toc"><div class="label">On this page</div><a href="#the-report-in-the-shell" class="h2">The report in the shell</a><a href="#without-a-terminal" class="h2">Without a terminal</a><a href="#json-output" class="h2">JSON output</a><a href="#the-schema" class="h2">The schema</a><a href="#thresholds-that-fail-ci" class="h2">Thresholds that fail CI</a><a href="#prometheus-metrics" class="h2">Prometheus metrics</a><a href="#soak-runs" class="h2">Soak runs</a><a href="#exit-codes" class="h2">Exit codes</a></aside>
 </div>
+<script src="docs.js" defer></script>
 </body>
 </html>

@@ -3,42 +3,49 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Benchmarks · pepe docs</title>
+<title>Benchmarks · pepe</title>
 <meta name="description" content="pepe is built to cost less than the server it tests. It is measured against oha, vegeta, wrk and k6 on every release, with the suite in bench/, against a local server that answers from memory, so the client is the cost being measured. CPU milliseconds per 1,000 requests, peak memory, and the request">
 <link rel="canonical" href="https://pepe.mhaimdat.com/docs/benchmarks.html">
 <link rel="icon" href="../assets/logo.svg" type="image/svg+xml">
-<meta name="theme-color" content="#140f0d">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#121010" media="(prefers-color-scheme: dark)">
 <meta property="og:type" content="article">
-<meta property="og:title" content="Benchmarks · pepe docs">
+<meta property="og:title" content="Benchmarks · pepe">
 <meta property="og:description" content="pepe is built to cost less than the server it tests. It is measured against oha, vegeta, wrk and k6 on every release, with the suite in bench/, against a local server that answers from memory, so the client is the cost being measured. CPU milliseconds per 1,000 requests, peak memory, and the request">
 <meta property="og:image" content="https://pepe.mhaimdat.com/img/og.png">
 <link rel="stylesheet" href="docs.css">
+<script>try{var t=localStorage.getItem('pepe-theme');if(t)document.documentElement.dataset.theme=t;}catch(e){}</script>
 </head>
 <body>
-<div class="term">
-  <header class="title">
-    <a class="name" href="../">pepe</a><a href="index.html">docs</a>
-    <nav aria-label="Site"><a href="../">install</a><a href="https://github.com/omarmhaimdat/pepe">github</a><a href="https://github.com/omarmhaimdat/pepe/releases">releases</a></nav>
-  </header>
-  <div class="cols">
-    <aside class="side" aria-label="Pages"><a href="index.html">Overview</a><a href="install.html">Install</a><a href="load-test.html">Load testing</a><a href="dashboard.html">The dashboard</a><a href="ramp.html">Ramp</a><a href="api.html">OpenAPI</a><a href="flow.html">Flows</a><a href="replay.html">Replay</a><a href="ping.html">Ping</a><a href="logs.html">nginx logs</a><a href="compare.html">Compare</a><a href="output.html">Output and exit codes</a><a href="ci.html">CI and Docker</a><a href="agents.html">Agents and scripts</a><a href="benchmarks.html" class="on">Benchmarks</a><a href="reference.html">Command reference</a></aside>
-    <main>
+<header class="top">
+  <button type="button" class="menu" aria-label="Pages" aria-expanded="false">☰</button>
+  <a class="brand" href="index.html"><img src="../assets/logo.svg" alt="" width="22" height="24">pepe<span>docs</span></a>
+  <div class="search"><input type="search" placeholder="Search the docs…" aria-label="Search the docs" autocomplete="off"><div class="results" hidden></div></div>
+  <nav class="links"><a href="../">Install</a><a href="https://github.com/omarmhaimdat/pepe">GitHub</a><button type="button" class="theme" aria-label="Switch between light and dark">◐</button></nav>
+</header>
+<div class="shell">
+  <aside class="side" id="side"><div class="group">Start here</div><a href="index.html">Overview</a><a href="install.html">Install</a><div class="group">Modes</div><a href="load-test.html">Load testing</a><a href="dashboard.html">The dashboard</a><a href="ping.html">Ping</a><a href="ramp.html">Ramp</a><a href="api.html">OpenAPI</a><a href="flow.html">Flows</a><a href="replay.html">Replay</a><a href="logs.html">nginx logs</a><a href="compare.html">Compare</a><div class="group">Integrate</div><a href="output.html">Output and exit codes</a><a href="ci.html">CI and Docker</a><a href="agents.html">Agents and scripts</a><div class="group">Reference</div><a href="reference.html">Command reference</a><a href="benchmarks.html" aria-current="page">Benchmarks</a></aside>
+  <main class="main">
+    <article class="prose">
 <h1>Benchmarks</h1>
 <p>pepe is built to cost less than the server it tests. It is measured against oha, vegeta, wrk and k6 on every release, with the suite in <a href="https://github.com/omarmhaimdat/pepe/blob/master/bench/README.md"><code>bench/</code></a>, against a local server that answers from memory, so the client is the cost being measured. CPU milliseconds per 1,000 requests, peak memory, and the requests per second each tool reported.</p>
-<h2 id="apple-m4-pro">Apple M4 Pro <a class="anchor" href="#apple-m4-pro" aria-label="Link to this section">#</a></h2>
+<h2 id="apple-m4-pro"><a href="#apple-m4-pro">Apple M4 Pro</a></h2>
 <p>Single-thread numbers for pepe, where the loopback tops out near 175k requests a second:</p>
-<table><thead><tr><th>Workload</th><th>pepe</th><th>oha</th><th>vegeta</th></tr></thead><tbody><tr><td>GET, 64 connections</td><td><b>6.2 ms · 9 MB</b> · 160k req/s</td><td>23.0 ms · 78 MB · 161k req/s</td><td>90.4 ms · 26 MB · 76k req/s</td></tr><tr><td>GET, 1,000 connections</td><td><b>6.0 ms · 12 MB</b> · 163k req/s</td><td>21.6 ms · 101 MB · 147k req/s</td><td>52.7 ms · 92 MB · 131k req/s</td></tr><tr><td>HTTPS, 64 connections</td><td><b>6.8 ms · 12 MB</b> · 142k req/s</td><td>24.8 ms · 60 MB · 156k req/s</td><td>69.8 ms · 30 MB · 90k req/s</td></tr></tbody></table>
-<h2 id="linux">Linux <a class="anchor" href="#linux" aria-label="Link to this section">#</a></h2>
+<div class="table"><table><thead><tr><th>Workload</th><th>pepe</th><th>oha</th><th>vegeta</th></tr></thead><tbody><tr><td>GET, 64 connections</td><td><strong>6.2 ms · 9 MB</strong> · 160k req/s</td><td>23.0 ms · 78 MB · 161k req/s</td><td>90.4 ms · 26 MB · 76k req/s</td></tr><tr><td>GET, 1,000 connections</td><td><strong>6.0 ms · 12 MB</strong> · 163k req/s</td><td>21.6 ms · 101 MB · 147k req/s</td><td>52.7 ms · 92 MB · 131k req/s</td></tr><tr><td>HTTPS, 64 connections</td><td><strong>6.8 ms · 12 MB</strong> · 142k req/s</td><td>24.8 ms · 60 MB · 156k req/s</td><td>69.8 ms · 30 MB · 90k req/s</td></tr></tbody></table></div>
+<h2 id="linux"><a href="#linux">Linux</a></h2>
 <p>A 4-vCPU arm64 VM, the musl build that is released, with wrk on one thread beside it:</p>
-<table><thead><tr><th>Workload</th><th>pepe</th><th>wrk</th><th>oha</th></tr></thead><tbody><tr><td>GET, 64 connections</td><td><b>2.4 ms · 4.0 MB</b> · 398k req/s</td><td>3.5 ms · 4.5 MB · 282k req/s</td><td>6.8 ms · 67 MB · 305k req/s</td></tr><tr><td>GET, 1,000 connections</td><td><b>3.2 ms · 5.8 MB</b> · 296k req/s</td><td>4.4 ms · 7.7 MB · 228k req/s</td><td>5.6 ms · 73 MB · 183k req/s</td></tr><tr><td>HTTPS, 64 connections</td><td><b>3.3 ms · 6.0 MB</b> · 284k req/s</td><td>4.5 ms · 10.8 MB · 218k req/s</td><td>8.1 ms · 42 MB · 250k req/s</td></tr><tr><td>10 million requests, 256 connections</td><td><b>2.9 ms · 4.5 MB</b> · 343k req/s</td><td>3.3 ms · 4.6 MB · 304k req/s</td><td>6.5 ms · 2,404 MB · 316k req/s</td></tr></tbody></table>
-<h2 id="how">How <a class="anchor" href="#how" aria-label="Link to this section">#</a></h2>
+<div class="table"><table><thead><tr><th>Workload</th><th>pepe</th><th>wrk</th><th>oha</th></tr></thead><tbody><tr><td>GET, 64 connections</td><td><strong>2.4 ms · 4.0 MB</strong> · 398k req/s</td><td>3.5 ms · 4.5 MB · 282k req/s</td><td>6.8 ms · 67 MB · 305k req/s</td></tr><tr><td>GET, 1,000 connections</td><td><strong>3.2 ms · 5.8 MB</strong> · 296k req/s</td><td>4.4 ms · 7.7 MB · 228k req/s</td><td>5.6 ms · 73 MB · 183k req/s</td></tr><tr><td>HTTPS, 64 connections</td><td><strong>3.3 ms · 6.0 MB</strong> · 284k req/s</td><td>4.5 ms · 10.8 MB · 218k req/s</td><td>8.1 ms · 42 MB · 250k req/s</td></tr><tr><td>10 million requests, 256 connections</td><td><strong>2.9 ms · 4.5 MB</strong> · 343k req/s</td><td>3.3 ms · 4.6 MB · 304k req/s</td><td>6.5 ms · 2,404 MB · 316k req/s</td></tr></tbody></table></div>
+<h2 id="how"><a href="#how">How</a></h2>
 <p>A share-nothing engine: each sending thread keeps its own connections and reads and writes them itself. The request is bytes made before the run; the response is parsed where it was read; nothing is allocated for a request, and a thread's connections share one read buffer. Proxies, redirects and flows go through a general client instead, and the benchmark's README says where pepe is level rather than ahead (a slow target at 1,000 connections, 16 KB bodies over TLS), what a glibc build changes, and how k6 does.</p>
 <p>Where a target can take more than one thread sends, pepe says so, in the footer, the verdict and <code>generator.peak_busy_percent</code>, and <code>--threads auto</code> adds them (<a href="load-test.html#threads">Load testing: threads</a>).</p>
 <p>Every workload, the profiles and the method are in <a href="https://github.com/omarmhaimdat/pepe/blob/master/bench/README.md">bench/README.md</a>; a benchmark gate runs on every release pull request.</p>
-    </main>
-    <aside class="toc" aria-label="On this page"><div class="lab">on this page</div><a href="#apple-m4-pro" class="h2">Apple M4 Pro</a><a href="#linux" class="h2">Linux</a><a href="#how" class="h2">How</a></aside>
-  </div>
-  <footer class="chips"><span><kbd>?</kbd>every screen lists its keys</span><span><kbd>q</kbd>leaves the report in your shell</span><span class="by">MIT · <a href="https://github.com/omarmhaimdat/pepe">omarmhaimdat/pepe</a></span></footer>
+    </article>
+    <nav class="turn"><a class="prev" href="reference.html"><small>Previous</small>Command reference</a><span></span></nav>
+    <p class="edit"><a href="https://github.com/omarmhaimdat/pepe/edit/master/docs/benchmarks.md">Edit this page on GitHub</a></p>
+  </main>
+  <aside class="toc"><div class="label">On this page</div><a href="#apple-m4-pro" class="h2">Apple M4 Pro</a><a href="#linux" class="h2">Linux</a><a href="#how" class="h2">How</a></aside>
 </div>
+<script src="docs.js" defer></script>
 </body>
 </html>
