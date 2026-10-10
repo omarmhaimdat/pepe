@@ -258,6 +258,14 @@ async fn run_json(args: &Cli) -> Result<(), Box<dyn std::error::Error>> {
             .with_slowest(slowest)
             .with_anomalies(anomalies)
             .with_connects(&connects)
+            .with_verdict(&verdict_of(
+                args,
+                metrics,
+                &timeline.whole_run(),
+                interrupted,
+                &connects,
+                load.concurrency(),
+            ))
     };
 
     loop {
@@ -504,6 +512,25 @@ async fn run_ramp_json(args: &Cli, plan: RampPlan) -> Result<(), Box<dyn std::er
     Ok(())
 }
 
+/// What the dashboard would have said of a run, for its JSON report:
+/// the findings, with where the time went
+fn verdict_of(
+    args: &Cli,
+    metrics: &Metrics,
+    samples: &[timeline::Sample],
+    interrupted: bool,
+    connects: &request::ConnectTimes,
+    concurrency: usize,
+) -> insights::Verdict {
+    let mut verdict = insights::verdict(metrics, samples, interrupted);
+    let hist = connects.histogram();
+    for note in insights::phase_notes(metrics, Some(&hist), !args.disable_keepalive, concurrency) {
+        verdict.level = verdict.level.max(note.level);
+        verdict.notes.push(note);
+    }
+    verdict
+}
+
 /// No terminal to draw on, and no `--json`: the run goes to its end and
 /// the report the dashboard would have left is printed, so a forgotten
 /// flag in a script costs nothing
@@ -696,7 +723,15 @@ async fn run_api_json(args: &Cli, run: &api::ApiRun) -> Result<(), Box<dyn std::
         )
         .with_target("api", None, &run.spec.base_url, args.concurrency)
         .with_warmup(args.warmup(), warmup_requests)
-        .with_connects(&connects);
+        .with_connects(&connects)
+        .with_verdict(&verdict_of(
+            args,
+            &total,
+            &[],
+            interrupted,
+            &connects,
+            load.concurrency(),
+        ));
     let mut report = serde_json::to_value(&report)?;
     let ms = |d: std::time::Duration| (d.as_secs_f64() * 1_000_000.0).round() / 1000.0;
     let endpoints: Vec<serde_json::Value> = which
@@ -936,7 +971,15 @@ async fn run_flow_json(args: &Cli, flow: flow::Flow) -> Result<(), Box<dyn std::
         )
         .with_target("flow", None, &name, args.concurrency)
         .with_warmup(args.warmup(), warmup_requests)
-        .with_connects(&connects);
+        .with_connects(&connects)
+        .with_verdict(&verdict_of(
+            args,
+            &total,
+            &[],
+            interrupted,
+            &connects,
+            load.concurrency(),
+        ));
     let mut report = serde_json::to_value(&report)?;
     let ms = |d: std::time::Duration| (d.as_secs_f64() * 1_000_000.0).round() / 1000.0;
     let steps: Vec<serde_json::Value> = views
@@ -1150,7 +1193,15 @@ async fn run_replay_json(
             args.concurrency,
         )
         .with_warmup(args.warmup(), warmup_requests)
-        .with_connects(&connects);
+        .with_connects(&connects)
+        .with_verdict(&verdict_of(
+            args,
+            &total,
+            &[],
+            interrupted,
+            &connects,
+            load.concurrency(),
+        ));
     let mut report = serde_json::to_value(&report)?;
     let ms = |d: std::time::Duration| (d.as_secs_f64() * 1_000_000.0).round() / 1000.0;
     let kept = replay.kept().max(1) as f64;

@@ -124,6 +124,25 @@
         }
       }
     },
+    "verdict": {
+      "type": "object",
+      "description": "What the dashboard would have said: the level and its findings, most of which the text report shows too",
+      "required": ["level", "findings"],
+      "properties": {
+        "level": { "type": "string", "enum": ["healthy", "degraded", "failing"] },
+        "findings": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["level", "text"],
+            "properties": {
+              "level": { "type": "string", "enum": ["healthy", "degraded", "failing"] },
+              "text": { "type": "string" }
+            }
+          }
+        }
+      }
+    },
     "snapshot": {
       "type": "object",
       "description": "Present when written by --snapshot",

@@ -55,7 +55,9 @@ jq '.summary.latency.p99_ms' results.json
     "failures": [ { "cause": "HTTP 503", "count": 3, "example_body": "upstream unavailable" } ]
   },
   "generator": { "threads": 1, "peak_busy_percent": 12 },
-  "timeline": [ { "at_s": 60, "requests_per_second": 540.1, "errors_per_second": 0, "p50_ms": 31.0, "p90_ms": 57.9, "p99_ms": 118.0 } ]
+  "timeline": [ { "at_s": 60, "requests_per_second": 540.1, "errors_per_second": 0, "p50_ms": 31.0, "p90_ms": 57.9, "p99_ms": 118.0 } ],
+  "verdict": { "level": "healthy", "findings": [ { "level": "healthy", "text": "No failed requests" },
+                                                 { "level": "healthy", "text": "Tight latency: p99 is 3.8× the median" } ] }
 }
 ```
 
@@ -63,6 +65,7 @@ jq '.summary.latency.p99_ms' results.json
 | --- | --- |
 | `target` | What was tested and with what load: `mode` (run, ramp, api, flow, replay), `method`, `url`, `concurrency` |
 | `summary` | The counts, `duration_ms`, `requests_per_second`, `data_transfer_bytes`, `latency` with its percentiles and `phases`, `status_codes`, and, when there is something to say, `server_timing`, `slowest_requests`, `anomalies` and `failures` by cause with the first body of each |
+| `verdict` | What the dashboard would have said: `level` (healthy, degraded, failing) and `findings`, each with a level and its text, including where the time went |
 | `generator` | pepe's own load: `threads`, `peak_busy_percent` (near 100, pepe was the limit), `warmup_s`, `warmup_requests`, `rate_per_second`, `rate_missed` |
 | `timeline` | One point per minute over the whole run, for runs over a minute |
 | `snapshot` | With `--snapshot`: when it was written and whether the run was still going |

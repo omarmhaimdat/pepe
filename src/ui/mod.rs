@@ -569,10 +569,19 @@ impl Dashboard {
                             verdict.level = verdict.level.max(note.level);
                             verdict.notes.push(note);
                         }
-                        for note in [self.saturation_note(), self.rate_note()]
-                            .into_iter()
-                            .flatten()
-                        {
+                        let connects = self.connects.as_ref().map(|c| c.histogram());
+                        for note in insights::phase_notes(
+                            &self.metrics,
+                            connects.as_ref(),
+                            !self.args.disable_keepalive,
+                            self.concurrency,
+                        )
+                        .into_iter()
+                        .chain(
+                            [self.saturation_note(), self.rate_note()]
+                                .into_iter()
+                                .flatten(),
+                        ) {
                             verdict.level = verdict.level.max(note.level);
                             verdict.notes.push(note);
                         }

@@ -34,7 +34,7 @@ One JSON object per ping (`timings_ms`, `status`, `error`, `tls`) as it happens;
 pepe --json -z 30s -c 50 --fail-if 'p99 > 500ms' --fail-if 'errors > 1%' https://api.example.com/health
 ```
 
-Read `summary`: `total_requests`, `failed_requests`, `requests_per_second`, `latency.median_ms`, `latency.p99_ms`, `latency.phases`, `status_codes`, `failures` with the first body of each cause, `anomalies`. Read `generator.peak_busy_percent`: near 100, pepe rather than the target was the limit, so add `--threads auto` and run again. `--fail-if` names what the run must not cross; the exit code says whether it did.
+Read `verdict`: its `level` and `findings`, what the dashboard would have said, including where the time went. Then `summary`: `total_requests`, `failed_requests`, `requests_per_second`, `latency.median_ms`, `latency.p99_ms`, `latency.phases`, `status_codes`, `failures` with the first body of each cause, `anomalies`. Read `generator.peak_busy_percent`: near 100, pepe rather than the target was the limit, so add `--threads auto` and run again. `--fail-if` names what the run must not cross; the exit code says whether it did.
 
 ## Find the capacity
 
