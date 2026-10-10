@@ -33,6 +33,7 @@ mod insights;
 mod json_report;
 mod load;
 mod logs;
+mod mcp;
 mod metrics;
 mod openapi;
 mod ping;
@@ -1915,6 +1916,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     if let Some(cli::Command::Schema(what)) = &args.command {
         return schema::print(Some(&what.which));
+    }
+    if let Some(cli::Command::Mcp(_)) = &args.command {
+        return mcp::serve(mcp::guard_args(&args)).await;
     }
 
     // Release builds abort on panic; restore the terminal first so a crash
