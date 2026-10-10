@@ -325,6 +325,11 @@ pub struct PingArgs {
     #[arg(long, value_name = "FILE")]
     pub save_body: Option<std::path::PathBuf>,
 
+    /// Speak HTTP/1.1 even when the server offers HTTP/2; without it a
+    /// ping takes h2 when the server offers it through ALPN
+    #[arg(long)]
+    pub http1: bool,
+
     /// One diagnosis and out: three quick pings, then the last one's
     /// phases, what answered, and what to look at; no screen
     #[arg(long)]

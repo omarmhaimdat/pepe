@@ -440,6 +440,7 @@ fail\:"A failure"))' \
 '(--csv)--jsonl[No screen\: one JSON object per ping on stdout, as it happens]' \
 '--csv[No screen\: one CSV line per ping on stdout, under a header]' \
 '--show-body[Keep the first kilobyte of each body for the inspector]' \
+'--http1[Speak HTTP/1.1 even when the server offers HTTP/2; without it a ping takes h2 when the server offers it through ALPN]' \
 '--once[One diagnosis and out\: three quick pings, then the last one'\''s phases, what answered, and what to look at; no screen]' \
 '-h[Print help]' \
 '--help[Print help]' \

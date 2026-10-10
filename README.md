@@ -439,7 +439,7 @@ pepe ping https://example.com --json -n 10          # the summary as JSON
 pepe ping https://example.com --once                # three quick pings, then why it is slow, and out
 ```
 
-A host without a scheme is `https://`, unless it has a port or is this machine. Each ping opens its own connection, so every phase is measured every time, and the TLS session is still resumed when the server allows it: the first handshake is full, the next ones resumed, and the report says how long each kind takes. `--keep-alive` keeps the connection instead, as a browser would, and the pings after the first measure only the server. Redirects are followed, each hop listed with its status and time. `-n` and `-z` end the run; without them it runs until `q`.
+A host without a scheme is `https://`, unless it has a port or is this machine. A ping takes HTTP/2 when the server offers it (`--http1` stays on HTTP/1.1). Each ping opens its own connection, so every phase is measured every time, and the TLS session is still resumed when the server allows it: the first handshake is full, the next ones resumed, and the report says how long each kind takes. `--keep-alive` keeps the connection instead, as a browser would, and the pings after the first measure only the server. Redirects are followed, each hop listed with its status and time. `-n` and `-z` end the run; without them it runs until `q`.
 
 | View | Shows |
 | --- | --- |

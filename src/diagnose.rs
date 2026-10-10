@@ -355,6 +355,14 @@ pub fn findings(t: &TargetStats, settings: &Settings, now: i64) -> Vec<Finding> 
             _ => say(Level::Note, format!("not from a cache ({name}: {value})")),
         }
     }
+    if let Some(tls) = &t.last_tls {
+        if !settings.http1 && tls.alpn.as_deref() == Some("http/1.1") {
+            say(
+                Level::Note,
+                "the server speaks HTTP/1.1 only: it didn't offer h2 when asked".into(),
+            );
+        }
+    }
     if last.version.as_deref() == Some("HTTP/1.0") {
         say(
             Level::Warn,
@@ -521,6 +529,7 @@ mod tests {
             count: None,
             duration: None,
             compression: true,
+            http1: false,
         }
     }
 

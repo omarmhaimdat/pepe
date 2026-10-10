@@ -4,7 +4,7 @@
 .SH NAME
 pepe\-ping \- Ping a URL: a request a second, each split into DNS, connect, TLS, first byte and download, on a graph
 .SH SYNOPSIS
-\fBpepe ping\fR [\fB\-\-every\fR] [\fB\-\-window\fR] [\fB\-\-name\fR] [\fB\-\-color\fR] [\fB\-4 \fR] [\fB\-6 \fR] [\fB\-\-all\-ips\fR] [\fB\-\-interface\fR] [\fB\-\-tcp\fR] [\fB\-\-port\fR] [\fB\-\-tcp\-rst\fR] [\fB\-\-cmd\fR] [\fB\-\-keep\-alive\fR] [\fB\-\-slo\fR] [\fB\-\-bell\fR] [\fB\-\-ymin\fR] [\fB\-\-ymax\fR] [\fB\-0 \fR] [\fB\-s\fR|\fB\-\-simple\-graphics\fR] [\fB\-\-jsonl\fR] [\fB\-\-csv\fR] [\fB\-\-save\fR] [\fB\-\-show\-body\fR] [\fB\-\-save\-body\fR] [\fB\-\-once\fR] [\fB\-h\fR|\fB\-\-help\fR] [\fITARGETS\fR] 
+\fBpepe ping\fR [\fB\-\-every\fR] [\fB\-\-window\fR] [\fB\-\-name\fR] [\fB\-\-color\fR] [\fB\-4 \fR] [\fB\-6 \fR] [\fB\-\-all\-ips\fR] [\fB\-\-interface\fR] [\fB\-\-tcp\fR] [\fB\-\-port\fR] [\fB\-\-tcp\-rst\fR] [\fB\-\-cmd\fR] [\fB\-\-keep\-alive\fR] [\fB\-\-slo\fR] [\fB\-\-bell\fR] [\fB\-\-ymin\fR] [\fB\-\-ymax\fR] [\fB\-0 \fR] [\fB\-s\fR|\fB\-\-simple\-graphics\fR] [\fB\-\-jsonl\fR] [\fB\-\-csv\fR] [\fB\-\-save\fR] [\fB\-\-show\-body\fR] [\fB\-\-save\-body\fR] [\fB\-\-http1\fR] [\fB\-\-once\fR] [\fB\-h\fR|\fB\-\-help\fR] [\fITARGETS\fR] 
 .SH DESCRIPTION
 Ping a URL: a request a second, each split into DNS, connect, TLS, first byte and download, on a graph
 .SH OPTIONS
@@ -90,6 +90,9 @@ Keep the first kilobyte of each body for the inspector
 .TP
 \fB\-\-save\-body\fR \fI<FILE>\fR
 Write the last body received to this file when the run ends
+.TP
+\fB\-\-http1\fR
+Speak HTTP/1.1 even when the server offers HTTP/2; without it a ping takes h2 when the server offers it through ALPN
 .TP
 \fB\-\-once\fR
 One diagnosis and out: three quick pings, then the last one\*(Aqs phases, what answered, and what to look at; no screen

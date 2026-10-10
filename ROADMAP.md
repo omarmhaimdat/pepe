@@ -212,8 +212,9 @@ these build on them.
 
 Considered and set aside, so they aren't re-argued every month:
 
-- **More protocols** (HTTP/2, gRPC, WebSocket, HTTP/3). HTTP/1.1 is where
-  pepe is best; these each deserve a release of their own once the above
-  is done.
+- **More protocols** (gRPC, WebSocket, HTTP/3). HTTP/1.1 is where pepe's
+  load engine is best; these each deserve a release of their own once the
+  above is done. `pepe ping` speaks HTTP/2 since the ping is one request
+  at a time and the phases are what matter there; the load path doesn't.
 - **Dashboard extras** (replaying a saved run, side-by-side runs, themes).
   Nice, not pressing.

@@ -1453,6 +1453,7 @@ mod tests {
             count: None,
             duration: None,
             compression: false,
+            http1: false,
         }
     }
 
