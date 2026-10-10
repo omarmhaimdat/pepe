@@ -132,6 +132,21 @@ Options:
       --snapshot &lt;FILE&gt;
           Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run&#x27;s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run
 
+      --allow-host &lt;HOST&gt;
+          Refuse to send anywhere but these hosts: api.example.com exactly, or .example.com for it and its subdomains; repeat for more. Every target is checked before anything is sent
+
+      --max-requests &lt;N&gt;
+          Refuse a run that would send more requests than this: -n above it, or -z without a --rate that bounds it
+
+      --max-rate &lt;PER_SECOND&gt;
+          Refuse a --rate above this, and a run with no --rate at all, which sends as fast as the target answers
+
+      --max-concurrency &lt;N&gt;
+          Refuse a concurrency above this
+
+      --dry-run
+          Say what would be sent, to where and how much, and send nothing; as JSON with --json
+
       --fail-if &lt;CONDITION&gt;
           End with exit code 4 when the run crosses this, for CI and scripts: &#x27;p99 &gt; 300ms&#x27;, &#x27;errors &gt; 1%&#x27;; repeat for more. The report is still printed. (pepe ping has --slo for the same.)
 
@@ -314,6 +329,21 @@ Options:
       --snapshot &lt;FILE&gt;
           Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run&#x27;s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run
 
+      --allow-host &lt;HOST&gt;
+          Refuse to send anywhere but these hosts: api.example.com exactly, or .example.com for it and its subdomains; repeat for more. Every target is checked before anything is sent
+
+      --max-requests &lt;N&gt;
+          Refuse a run that would send more requests than this: -n above it, or -z without a --rate that bounds it
+
+      --max-rate &lt;PER_SECOND&gt;
+          Refuse a --rate above this, and a run with no --rate at all, which sends as fast as the target answers
+
+      --max-concurrency &lt;N&gt;
+          Refuse a concurrency above this
+
+      --dry-run
+          Say what would be sent, to where and how much, and send nothing; as JSON with --json
+
       --fail-if &lt;CONDITION&gt;
           End with exit code 4 when the run crosses this, for CI and scripts: &#x27;p99 &gt; 300ms&#x27;, &#x27;errors &gt; 1%&#x27;; repeat for more. The report is still printed. (pepe ping has --slo for the same.)
 
@@ -428,6 +458,21 @@ Options:
 
       --snapshot &lt;FILE&gt;
           Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run&#x27;s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run
+
+      --allow-host &lt;HOST&gt;
+          Refuse to send anywhere but these hosts: api.example.com exactly, or .example.com for it and its subdomains; repeat for more. Every target is checked before anything is sent
+
+      --max-requests &lt;N&gt;
+          Refuse a run that would send more requests than this: -n above it, or -z without a --rate that bounds it
+
+      --max-rate &lt;PER_SECOND&gt;
+          Refuse a --rate above this, and a run with no --rate at all, which sends as fast as the target answers
+
+      --max-concurrency &lt;N&gt;
+          Refuse a concurrency above this
+
+      --dry-run
+          Say what would be sent, to where and how much, and send nothing; as JSON with --json
 
       --fail-if &lt;CONDITION&gt;
           End with exit code 4 when the run crosses this, for CI and scripts: &#x27;p99 &gt; 300ms&#x27;, &#x27;errors &gt; 1%&#x27;; repeat for more. The report is still printed. (pepe ping has --slo for the same.)
@@ -545,6 +590,21 @@ Options:
       --snapshot &lt;FILE&gt;
           Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run&#x27;s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run
 
+      --allow-host &lt;HOST&gt;
+          Refuse to send anywhere but these hosts: api.example.com exactly, or .example.com for it and its subdomains; repeat for more. Every target is checked before anything is sent
+
+      --max-requests &lt;N&gt;
+          Refuse a run that would send more requests than this: -n above it, or -z without a --rate that bounds it
+
+      --max-rate &lt;PER_SECOND&gt;
+          Refuse a --rate above this, and a run with no --rate at all, which sends as fast as the target answers
+
+      --max-concurrency &lt;N&gt;
+          Refuse a concurrency above this
+
+      --dry-run
+          Say what would be sent, to where and how much, and send nothing; as JSON with --json
+
       --fail-if &lt;CONDITION&gt;
           End with exit code 4 when the run crosses this, for CI and scripts: &#x27;p99 &gt; 300ms&#x27;, &#x27;errors &gt; 1%&#x27;; repeat for more. The report is still printed. (pepe ping has --slo for the same.)
 
@@ -648,6 +708,21 @@ Options:
       --snapshot &lt;FILE&gt;
           Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run&#x27;s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run
 
+      --allow-host &lt;HOST&gt;
+          Refuse to send anywhere but these hosts: api.example.com exactly, or .example.com for it and its subdomains; repeat for more. Every target is checked before anything is sent
+
+      --max-requests &lt;N&gt;
+          Refuse a run that would send more requests than this: -n above it, or -z without a --rate that bounds it
+
+      --max-rate &lt;PER_SECOND&gt;
+          Refuse a --rate above this, and a run with no --rate at all, which sends as fast as the target answers
+
+      --max-concurrency &lt;N&gt;
+          Refuse a concurrency above this
+
+      --dry-run
+          Say what would be sent, to where and how much, and send nothing; as JSON with --json
+
       --fail-if &lt;CONDITION&gt;
           End with exit code 4 when the run crosses this, for CI and scripts: &#x27;p99 &gt; 300ms&#x27;, &#x27;errors &gt; 1%&#x27;; repeat for more. The report is still printed. (pepe ping has --slo for the same.)
 
@@ -739,6 +814,21 @@ Options:
 
       --snapshot &lt;FILE&gt;
           Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run&#x27;s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run
+
+      --allow-host &lt;HOST&gt;
+          Refuse to send anywhere but these hosts: api.example.com exactly, or .example.com for it and its subdomains; repeat for more. Every target is checked before anything is sent
+
+      --max-requests &lt;N&gt;
+          Refuse a run that would send more requests than this: -n above it, or -z without a --rate that bounds it
+
+      --max-rate &lt;PER_SECOND&gt;
+          Refuse a --rate above this, and a run with no --rate at all, which sends as fast as the target answers
+
+      --max-concurrency &lt;N&gt;
+          Refuse a concurrency above this
+
+      --dry-run
+          Say what would be sent, to where and how much, and send nothing; as JSON with --json
 
       --fail-if &lt;CONDITION&gt;
           End with exit code 4 when the run crosses this, for CI and scripts: &#x27;p99 &gt; 300ms&#x27;, &#x27;errors &gt; 1%&#x27;; repeat for more. The report is still printed. (pepe ping has --slo for the same.)
@@ -854,6 +944,21 @@ Options:
       --snapshot &lt;FILE&gt;
           Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run&#x27;s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run
 
+      --allow-host &lt;HOST&gt;
+          Refuse to send anywhere but these hosts: api.example.com exactly, or .example.com for it and its subdomains; repeat for more. Every target is checked before anything is sent
+
+      --max-requests &lt;N&gt;
+          Refuse a run that would send more requests than this: -n above it, or -z without a --rate that bounds it
+
+      --max-rate &lt;PER_SECOND&gt;
+          Refuse a --rate above this, and a run with no --rate at all, which sends as fast as the target answers
+
+      --max-concurrency &lt;N&gt;
+          Refuse a concurrency above this
+
+      --dry-run
+          Say what would be sent, to where and how much, and send nothing; as JSON with --json
+
       --fail-if &lt;CONDITION&gt;
           End with exit code 4 when the run crosses this, for CI and scripts: &#x27;p99 &gt; 300ms&#x27;, &#x27;errors &gt; 1%&#x27;; repeat for more. The report is still printed. (pepe ping has --slo for the same.)
 
@@ -955,6 +1060,21 @@ Options:
       --snapshot &lt;FILE&gt;
           Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run&#x27;s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run
 
+      --allow-host &lt;HOST&gt;
+          Refuse to send anywhere but these hosts: api.example.com exactly, or .example.com for it and its subdomains; repeat for more. Every target is checked before anything is sent
+
+      --max-requests &lt;N&gt;
+          Refuse a run that would send more requests than this: -n above it, or -z without a --rate that bounds it
+
+      --max-rate &lt;PER_SECOND&gt;
+          Refuse a --rate above this, and a run with no --rate at all, which sends as fast as the target answers
+
+      --max-concurrency &lt;N&gt;
+          Refuse a concurrency above this
+
+      --dry-run
+          Say what would be sent, to where and how much, and send nothing; as JSON with --json
+
       --fail-if &lt;CONDITION&gt;
           End with exit code 4 when the run crosses this, for CI and scripts: &#x27;p99 &gt; 300ms&#x27;, &#x27;errors &gt; 1%&#x27;; repeat for more. The report is still printed. (pepe ping has --slo for the same.)
 
@@ -1049,6 +1169,21 @@ Options:
       --snapshot &lt;FILE&gt;
           Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run&#x27;s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run
 
+      --allow-host &lt;HOST&gt;
+          Refuse to send anywhere but these hosts: api.example.com exactly, or .example.com for it and its subdomains; repeat for more. Every target is checked before anything is sent
+
+      --max-requests &lt;N&gt;
+          Refuse a run that would send more requests than this: -n above it, or -z without a --rate that bounds it
+
+      --max-rate &lt;PER_SECOND&gt;
+          Refuse a --rate above this, and a run with no --rate at all, which sends as fast as the target answers
+
+      --max-concurrency &lt;N&gt;
+          Refuse a concurrency above this
+
+      --dry-run
+          Say what would be sent, to where and how much, and send nothing; as JSON with --json
+
       --fail-if &lt;CONDITION&gt;
           End with exit code 4 when the run crosses this, for CI and scripts: &#x27;p99 &gt; 300ms&#x27;, &#x27;errors &gt; 1%&#x27;; repeat for more. The report is still printed. (pepe ping has --slo for the same.)
 
@@ -1142,6 +1277,21 @@ Options:
 
       --snapshot &lt;FILE&gt;
           Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run&#x27;s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run
+
+      --allow-host &lt;HOST&gt;
+          Refuse to send anywhere but these hosts: api.example.com exactly, or .example.com for it and its subdomains; repeat for more. Every target is checked before anything is sent
+
+      --max-requests &lt;N&gt;
+          Refuse a run that would send more requests than this: -n above it, or -z without a --rate that bounds it
+
+      --max-rate &lt;PER_SECOND&gt;
+          Refuse a --rate above this, and a run with no --rate at all, which sends as fast as the target answers
+
+      --max-concurrency &lt;N&gt;
+          Refuse a concurrency above this
+
+      --dry-run
+          Say what would be sent, to where and how much, and send nothing; as JSON with --json
 
       --fail-if &lt;CONDITION&gt;
           End with exit code 4 when the run crosses this, for CI and scripts: &#x27;p99 &gt; 300ms&#x27;, &#x27;errors &gt; 1%&#x27;; repeat for more. The report is still printed. (pepe ping has --slo for the same.)
@@ -1242,6 +1392,18 @@ Options:
 
       --snapshot &lt;FILE&gt;
           Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run&#x27;s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run
+
+      --allow-host &lt;HOST&gt;
+          Refuse to send anywhere but these hosts: api.example.com exactly, or .example.com for it and its subdomains; repeat for more. Every target is checked before anything is sent
+
+      --max-requests &lt;N&gt;
+          Refuse a run that would send more requests than this: -n above it, or -z without a --rate that bounds it
+
+      --max-rate &lt;PER_SECOND&gt;
+          Refuse a --rate above this, and a run with no --rate at all, which sends as fast as the target answers
+
+      --max-concurrency &lt;N&gt;
+          Refuse a concurrency above this
 
       --fail-if &lt;CONDITION&gt;
           End with exit code 4 when the run crosses this, for CI and scripts: &#x27;p99 &gt; 300ms&#x27;, &#x27;errors &gt; 1%&#x27;; repeat for more. The report is still printed. (pepe ping has --slo for the same.)

@@ -69,6 +69,15 @@ pub struct Config {
     pub redirects: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub snapshot: Option<PathBuf>,
+    /// `--allow-host`: the hosts a run may be pointed at
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub allow_host: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_requests: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_rate: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_concurrency: Option<u32>,
     /// Defaults for `pepe ramp`
     #[serde(skip_serializing_if = "Option::is_none")]
     pub ramp: Option<RampConfig>,
@@ -207,6 +216,20 @@ impl Config {
         if cli.snapshot.is_none() {
             cli.snapshot = self.snapshot.clone();
         }
+        // The guardrails: the file's hold unless the command line names
+        // its own; a cap in the file can't be loosened by leaving it out
+        if let (Some(hosts), true) = (&self.allow_host, cli.allow_host.is_empty()) {
+            cli.allow_host = hosts.clone();
+        }
+        if cli.max_requests.is_none() {
+            cli.max_requests = self.max_requests;
+        }
+        if cli.max_rate.is_none() {
+            cli.max_rate = self.max_rate;
+        }
+        if cli.max_concurrency.is_none() {
+            cli.max_concurrency = self.max_concurrency;
+        }
         // Flags can only be switched on from the command line, so an "on"
         // there always wins, and "off" in the file can't undo it
         cli.insecure |= self.insecure.unwrap_or(false);
@@ -291,6 +314,10 @@ impl Config {
             keep_alive: cli.disable_keepalive.then_some(false),
             redirects: cli.disable_redirects.then_some(false),
             snapshot: cli.snapshot.clone(),
+            allow_host: (!cli.allow_host.is_empty()).then(|| cli.allow_host.clone()),
+            max_requests: cli.max_requests,
+            max_rate: cli.max_rate,
+            max_concurrency: cli.max_concurrency,
             ramp: None,
             api: None,
         };

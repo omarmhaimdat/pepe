@@ -1,6 +1,6 @@
 # Print an optspec for argparse to handle cmd's options that are independent of any subcommand.
 function __fish_pepe_global_optspecs
-    string join \n h/help n/number= z/duration= curl m/method= H/headers= t/timeout= warmup= threads= rate= d/body= p/proxy= k/insecure disable-compression disable-keepalive disable-redirects json trace-header= snapshot= fail-if= metrics= i/setup config= write-config= c/concurrency= u/user-agent= V/version
+    string join \n h/help n/number= z/duration= curl m/method= H/headers= t/timeout= warmup= threads= rate= d/body= p/proxy= k/insecure disable-compression disable-keepalive disable-redirects json trace-header= snapshot= allow-host= max-requests= max-rate= max-concurrency= dry-run fail-if= metrics= i/setup config= write-config= c/concurrency= u/user-agent= V/version
 end
 
 function __fish_pepe_needs_command
@@ -36,6 +36,10 @@ complete -c pepe -n "__fish_pepe_needs_command" -s d -l body -d 'HTTP request bo
 complete -c pepe -n "__fish_pepe_needs_command" -s p -l proxy -d 'Proxy server URL: http://user:pass@host:port or socks5://host:port' -r
 complete -c pepe -n "__fish_pepe_needs_command" -l trace-header -d 'Response header holding the request id to show for the slowest requests and in the inspector, so they can be found in the server\'s logs; without it, X-Request-Id, traceparent, CF-Ray, X-Amzn-Trace-Id and other common ones are looked for' -r
 complete -c pepe -n "__fish_pepe_needs_command" -l snapshot -d 'Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run\'s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run' -r -F
+complete -c pepe -n "__fish_pepe_needs_command" -l allow-host -d 'Refuse to send anywhere but these hosts: api.example.com exactly, or .example.com for it and its subdomains; repeat for more. Every target is checked before anything is sent' -r
+complete -c pepe -n "__fish_pepe_needs_command" -l max-requests -d 'Refuse a run that would send more requests than this: -n above it, or -z without a --rate that bounds it' -r
+complete -c pepe -n "__fish_pepe_needs_command" -l max-rate -d 'Refuse a --rate above this, and a run with no --rate at all, which sends as fast as the target answers' -r
+complete -c pepe -n "__fish_pepe_needs_command" -l max-concurrency -d 'Refuse a concurrency above this' -r
 complete -c pepe -n "__fish_pepe_needs_command" -l fail-if -d 'End with exit code 4 when the run crosses this, for CI and scripts: \'p99 > 300ms\', \'errors > 1%\'; repeat for more. The report is still printed. (pepe ping has --slo for the same.)' -r
 complete -c pepe -n "__fish_pepe_needs_command" -l metrics -d 'Serve the live numbers for Prometheus at http://ADDR/metrics while the run goes, e.g. :9100 or 127.0.0.1:9100, so a soak run or a long ping shows up in Grafana next to the server\'s own' -r
 complete -c pepe -n "__fish_pepe_needs_command" -l config -d 'Read settings from this file instead of ./pepe.toml; flags on the command line win over it' -r -F
@@ -49,6 +53,7 @@ complete -c pepe -n "__fish_pepe_needs_command" -l disable-compression -d 'Disab
 complete -c pepe -n "__fish_pepe_needs_command" -l disable-keepalive -d 'Disable HTTP keepalive, e.g. Connection: close'
 complete -c pepe -n "__fish_pepe_needs_command" -l disable-redirects -d 'Prevent http redirects'
 complete -c pepe -n "__fish_pepe_needs_command" -l json -d 'Output results in JSON format'
+complete -c pepe -n "__fish_pepe_needs_command" -l dry-run -d 'Say what would be sent, to where and how much, and send nothing; as JSON with --json'
 complete -c pepe -n "__fish_pepe_needs_command" -s i -l setup -d 'Open the setup screen to review or change the settings before starting (it opens by itself when no URL is given)'
 complete -c pepe -n "__fish_pepe_needs_command" -s V -l version -d 'Print version'
 complete -c pepe -n "__fish_pepe_needs_command" -a "self-update" -d 'Update pepe to the latest release, or say what\'s new in it'
@@ -74,6 +79,10 @@ complete -c pepe -n "__fish_pepe_using_subcommand self-update" -s d -l body -d '
 complete -c pepe -n "__fish_pepe_using_subcommand self-update" -s p -l proxy -d 'Proxy server URL: http://user:pass@host:port or socks5://host:port' -r
 complete -c pepe -n "__fish_pepe_using_subcommand self-update" -l trace-header -d 'Response header holding the request id to show for the slowest requests and in the inspector, so they can be found in the server\'s logs; without it, X-Request-Id, traceparent, CF-Ray, X-Amzn-Trace-Id and other common ones are looked for' -r
 complete -c pepe -n "__fish_pepe_using_subcommand self-update" -l snapshot -d 'Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run\'s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run' -r -F
+complete -c pepe -n "__fish_pepe_using_subcommand self-update" -l allow-host -d 'Refuse to send anywhere but these hosts: api.example.com exactly, or .example.com for it and its subdomains; repeat for more. Every target is checked before anything is sent' -r
+complete -c pepe -n "__fish_pepe_using_subcommand self-update" -l max-requests -d 'Refuse a run that would send more requests than this: -n above it, or -z without a --rate that bounds it' -r
+complete -c pepe -n "__fish_pepe_using_subcommand self-update" -l max-rate -d 'Refuse a --rate above this, and a run with no --rate at all, which sends as fast as the target answers' -r
+complete -c pepe -n "__fish_pepe_using_subcommand self-update" -l max-concurrency -d 'Refuse a concurrency above this' -r
 complete -c pepe -n "__fish_pepe_using_subcommand self-update" -l fail-if -d 'End with exit code 4 when the run crosses this, for CI and scripts: \'p99 > 300ms\', \'errors > 1%\'; repeat for more. The report is still printed. (pepe ping has --slo for the same.)' -r
 complete -c pepe -n "__fish_pepe_using_subcommand self-update" -l metrics -d 'Serve the live numbers for Prometheus at http://ADDR/metrics while the run goes, e.g. :9100 or 127.0.0.1:9100, so a soak run or a long ping shows up in Grafana next to the server\'s own' -r
 complete -c pepe -n "__fish_pepe_using_subcommand self-update" -l config -d 'Read settings from this file instead of ./pepe.toml; flags on the command line win over it' -r -F
@@ -88,6 +97,7 @@ complete -c pepe -n "__fish_pepe_using_subcommand self-update" -l disable-compre
 complete -c pepe -n "__fish_pepe_using_subcommand self-update" -l disable-keepalive -d 'Disable HTTP keepalive, e.g. Connection: close'
 complete -c pepe -n "__fish_pepe_using_subcommand self-update" -l disable-redirects -d 'Prevent http redirects'
 complete -c pepe -n "__fish_pepe_using_subcommand self-update" -l json -d 'Output results in JSON format'
+complete -c pepe -n "__fish_pepe_using_subcommand self-update" -l dry-run -d 'Say what would be sent, to where and how much, and send nothing; as JSON with --json'
 complete -c pepe -n "__fish_pepe_using_subcommand self-update" -s i -l setup -d 'Open the setup screen to review or change the settings before starting (it opens by itself when no URL is given)'
 complete -c pepe -n "__fish_pepe_using_subcommand completions" -s n -l number -d 'Number of requests to perform' -r
 complete -c pepe -n "__fish_pepe_using_subcommand completions" -s z -l duration -d 'Duration of the test, e.g. 10s, 3m, 2h (mutually exclusive with -n)' -r
@@ -101,6 +111,10 @@ complete -c pepe -n "__fish_pepe_using_subcommand completions" -s d -l body -d '
 complete -c pepe -n "__fish_pepe_using_subcommand completions" -s p -l proxy -d 'Proxy server URL: http://user:pass@host:port or socks5://host:port' -r
 complete -c pepe -n "__fish_pepe_using_subcommand completions" -l trace-header -d 'Response header holding the request id to show for the slowest requests and in the inspector, so they can be found in the server\'s logs; without it, X-Request-Id, traceparent, CF-Ray, X-Amzn-Trace-Id and other common ones are looked for' -r
 complete -c pepe -n "__fish_pepe_using_subcommand completions" -l snapshot -d 'Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run\'s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run' -r -F
+complete -c pepe -n "__fish_pepe_using_subcommand completions" -l allow-host -d 'Refuse to send anywhere but these hosts: api.example.com exactly, or .example.com for it and its subdomains; repeat for more. Every target is checked before anything is sent' -r
+complete -c pepe -n "__fish_pepe_using_subcommand completions" -l max-requests -d 'Refuse a run that would send more requests than this: -n above it, or -z without a --rate that bounds it' -r
+complete -c pepe -n "__fish_pepe_using_subcommand completions" -l max-rate -d 'Refuse a --rate above this, and a run with no --rate at all, which sends as fast as the target answers' -r
+complete -c pepe -n "__fish_pepe_using_subcommand completions" -l max-concurrency -d 'Refuse a concurrency above this' -r
 complete -c pepe -n "__fish_pepe_using_subcommand completions" -l fail-if -d 'End with exit code 4 when the run crosses this, for CI and scripts: \'p99 > 300ms\', \'errors > 1%\'; repeat for more. The report is still printed. (pepe ping has --slo for the same.)' -r
 complete -c pepe -n "__fish_pepe_using_subcommand completions" -l metrics -d 'Serve the live numbers for Prometheus at http://ADDR/metrics while the run goes, e.g. :9100 or 127.0.0.1:9100, so a soak run or a long ping shows up in Grafana next to the server\'s own' -r
 complete -c pepe -n "__fish_pepe_using_subcommand completions" -l config -d 'Read settings from this file instead of ./pepe.toml; flags on the command line win over it' -r -F
@@ -134,6 +148,10 @@ complete -c pepe -n "__fish_pepe_using_subcommand api" -s d -l body -d 'HTTP req
 complete -c pepe -n "__fish_pepe_using_subcommand api" -s p -l proxy -d 'Proxy server URL: http://user:pass@host:port or socks5://host:port' -r
 complete -c pepe -n "__fish_pepe_using_subcommand api" -l trace-header -d 'Response header holding the request id to show for the slowest requests and in the inspector, so they can be found in the server\'s logs; without it, X-Request-Id, traceparent, CF-Ray, X-Amzn-Trace-Id and other common ones are looked for' -r
 complete -c pepe -n "__fish_pepe_using_subcommand api" -l snapshot -d 'Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run\'s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run' -r -F
+complete -c pepe -n "__fish_pepe_using_subcommand api" -l allow-host -d 'Refuse to send anywhere but these hosts: api.example.com exactly, or .example.com for it and its subdomains; repeat for more. Every target is checked before anything is sent' -r
+complete -c pepe -n "__fish_pepe_using_subcommand api" -l max-requests -d 'Refuse a run that would send more requests than this: -n above it, or -z without a --rate that bounds it' -r
+complete -c pepe -n "__fish_pepe_using_subcommand api" -l max-rate -d 'Refuse a --rate above this, and a run with no --rate at all, which sends as fast as the target answers' -r
+complete -c pepe -n "__fish_pepe_using_subcommand api" -l max-concurrency -d 'Refuse a concurrency above this' -r
 complete -c pepe -n "__fish_pepe_using_subcommand api" -l fail-if -d 'End with exit code 4 when the run crosses this, for CI and scripts: \'p99 > 300ms\', \'errors > 1%\'; repeat for more. The report is still printed. (pepe ping has --slo for the same.)' -r
 complete -c pepe -n "__fish_pepe_using_subcommand api" -l metrics -d 'Serve the live numbers for Prometheus at http://ADDR/metrics while the run goes, e.g. :9100 or 127.0.0.1:9100, so a soak run or a long ping shows up in Grafana next to the server\'s own' -r
 complete -c pepe -n "__fish_pepe_using_subcommand api" -l config -d 'Read settings from this file instead of ./pepe.toml; flags on the command line win over it' -r -F
@@ -148,6 +166,7 @@ complete -c pepe -n "__fish_pepe_using_subcommand api" -l disable-compression -d
 complete -c pepe -n "__fish_pepe_using_subcommand api" -l disable-keepalive -d 'Disable HTTP keepalive, e.g. Connection: close'
 complete -c pepe -n "__fish_pepe_using_subcommand api" -l disable-redirects -d 'Prevent http redirects'
 complete -c pepe -n "__fish_pepe_using_subcommand api" -l json -d 'Output results in JSON format'
+complete -c pepe -n "__fish_pepe_using_subcommand api" -l dry-run -d 'Say what would be sent, to where and how much, and send nothing; as JSON with --json'
 complete -c pepe -n "__fish_pepe_using_subcommand api" -s i -l setup -d 'Open the setup screen to review or change the settings before starting (it opens by itself when no URL is given)'
 complete -c pepe -n "__fish_pepe_using_subcommand ramp" -l from -d 'Concurrency of the first step' -r
 complete -c pepe -n "__fish_pepe_using_subcommand ramp" -l to -d 'Concurrency of the last step' -r
@@ -166,6 +185,10 @@ complete -c pepe -n "__fish_pepe_using_subcommand ramp" -s d -l body -d 'HTTP re
 complete -c pepe -n "__fish_pepe_using_subcommand ramp" -s p -l proxy -d 'Proxy server URL: http://user:pass@host:port or socks5://host:port' -r
 complete -c pepe -n "__fish_pepe_using_subcommand ramp" -l trace-header -d 'Response header holding the request id to show for the slowest requests and in the inspector, so they can be found in the server\'s logs; without it, X-Request-Id, traceparent, CF-Ray, X-Amzn-Trace-Id and other common ones are looked for' -r
 complete -c pepe -n "__fish_pepe_using_subcommand ramp" -l snapshot -d 'Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run\'s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run' -r -F
+complete -c pepe -n "__fish_pepe_using_subcommand ramp" -l allow-host -d 'Refuse to send anywhere but these hosts: api.example.com exactly, or .example.com for it and its subdomains; repeat for more. Every target is checked before anything is sent' -r
+complete -c pepe -n "__fish_pepe_using_subcommand ramp" -l max-requests -d 'Refuse a run that would send more requests than this: -n above it, or -z without a --rate that bounds it' -r
+complete -c pepe -n "__fish_pepe_using_subcommand ramp" -l max-rate -d 'Refuse a --rate above this, and a run with no --rate at all, which sends as fast as the target answers' -r
+complete -c pepe -n "__fish_pepe_using_subcommand ramp" -l max-concurrency -d 'Refuse a concurrency above this' -r
 complete -c pepe -n "__fish_pepe_using_subcommand ramp" -l fail-if -d 'End with exit code 4 when the run crosses this, for CI and scripts: \'p99 > 300ms\', \'errors > 1%\'; repeat for more. The report is still printed. (pepe ping has --slo for the same.)' -r
 complete -c pepe -n "__fish_pepe_using_subcommand ramp" -l metrics -d 'Serve the live numbers for Prometheus at http://ADDR/metrics while the run goes, e.g. :9100 or 127.0.0.1:9100, so a soak run or a long ping shows up in Grafana next to the server\'s own' -r
 complete -c pepe -n "__fish_pepe_using_subcommand ramp" -l config -d 'Read settings from this file instead of ./pepe.toml; flags on the command line win over it' -r -F
@@ -178,6 +201,7 @@ complete -c pepe -n "__fish_pepe_using_subcommand ramp" -l disable-compression -
 complete -c pepe -n "__fish_pepe_using_subcommand ramp" -l disable-keepalive -d 'Disable HTTP keepalive, e.g. Connection: close'
 complete -c pepe -n "__fish_pepe_using_subcommand ramp" -l disable-redirects -d 'Prevent http redirects'
 complete -c pepe -n "__fish_pepe_using_subcommand ramp" -l json -d 'Output results in JSON format'
+complete -c pepe -n "__fish_pepe_using_subcommand ramp" -l dry-run -d 'Say what would be sent, to where and how much, and send nothing; as JSON with --json'
 complete -c pepe -n "__fish_pepe_using_subcommand ramp" -s i -l setup -d 'Open the setup screen to review or change the settings before starting (it opens by itself when no URL is given)'
 complete -c pepe -n "__fish_pepe_using_subcommand replay" -l base-url -d 'Where to send the requests: put in front of paths, and in place of the host of full URLs, e.g. https://staging.example.com' -r
 complete -c pepe -n "__fish_pepe_using_subcommand replay" -l rows -d 'URLs that get a row of their own on the dashboard, most frequent first; the rest share one' -r
@@ -193,6 +217,10 @@ complete -c pepe -n "__fish_pepe_using_subcommand replay" -s d -l body -d 'HTTP 
 complete -c pepe -n "__fish_pepe_using_subcommand replay" -s p -l proxy -d 'Proxy server URL: http://user:pass@host:port or socks5://host:port' -r
 complete -c pepe -n "__fish_pepe_using_subcommand replay" -l trace-header -d 'Response header holding the request id to show for the slowest requests and in the inspector, so they can be found in the server\'s logs; without it, X-Request-Id, traceparent, CF-Ray, X-Amzn-Trace-Id and other common ones are looked for' -r
 complete -c pepe -n "__fish_pepe_using_subcommand replay" -l snapshot -d 'Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run\'s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run' -r -F
+complete -c pepe -n "__fish_pepe_using_subcommand replay" -l allow-host -d 'Refuse to send anywhere but these hosts: api.example.com exactly, or .example.com for it and its subdomains; repeat for more. Every target is checked before anything is sent' -r
+complete -c pepe -n "__fish_pepe_using_subcommand replay" -l max-requests -d 'Refuse a run that would send more requests than this: -n above it, or -z without a --rate that bounds it' -r
+complete -c pepe -n "__fish_pepe_using_subcommand replay" -l max-rate -d 'Refuse a --rate above this, and a run with no --rate at all, which sends as fast as the target answers' -r
+complete -c pepe -n "__fish_pepe_using_subcommand replay" -l max-concurrency -d 'Refuse a concurrency above this' -r
 complete -c pepe -n "__fish_pepe_using_subcommand replay" -l fail-if -d 'End with exit code 4 when the run crosses this, for CI and scripts: \'p99 > 300ms\', \'errors > 1%\'; repeat for more. The report is still printed. (pepe ping has --slo for the same.)' -r
 complete -c pepe -n "__fish_pepe_using_subcommand replay" -l metrics -d 'Serve the live numbers for Prometheus at http://ADDR/metrics while the run goes, e.g. :9100 or 127.0.0.1:9100, so a soak run or a long ping shows up in Grafana next to the server\'s own' -r
 complete -c pepe -n "__fish_pepe_using_subcommand replay" -l config -d 'Read settings from this file instead of ./pepe.toml; flags on the command line win over it' -r -F
@@ -206,6 +234,7 @@ complete -c pepe -n "__fish_pepe_using_subcommand replay" -l disable-compression
 complete -c pepe -n "__fish_pepe_using_subcommand replay" -l disable-keepalive -d 'Disable HTTP keepalive, e.g. Connection: close'
 complete -c pepe -n "__fish_pepe_using_subcommand replay" -l disable-redirects -d 'Prevent http redirects'
 complete -c pepe -n "__fish_pepe_using_subcommand replay" -l json -d 'Output results in JSON format'
+complete -c pepe -n "__fish_pepe_using_subcommand replay" -l dry-run -d 'Say what would be sent, to where and how much, and send nothing; as JSON with --json'
 complete -c pepe -n "__fish_pepe_using_subcommand replay" -s i -l setup -d 'Open the setup screen to review or change the settings before starting (it opens by itself when no URL is given)'
 complete -c pepe -n "__fish_pepe_using_subcommand flow" -s n -l number -d 'Number of requests to perform' -r
 complete -c pepe -n "__fish_pepe_using_subcommand flow" -s z -l duration -d 'Duration of the test, e.g. 10s, 3m, 2h (mutually exclusive with -n)' -r
@@ -219,6 +248,10 @@ complete -c pepe -n "__fish_pepe_using_subcommand flow" -s d -l body -d 'HTTP re
 complete -c pepe -n "__fish_pepe_using_subcommand flow" -s p -l proxy -d 'Proxy server URL: http://user:pass@host:port or socks5://host:port' -r
 complete -c pepe -n "__fish_pepe_using_subcommand flow" -l trace-header -d 'Response header holding the request id to show for the slowest requests and in the inspector, so they can be found in the server\'s logs; without it, X-Request-Id, traceparent, CF-Ray, X-Amzn-Trace-Id and other common ones are looked for' -r
 complete -c pepe -n "__fish_pepe_using_subcommand flow" -l snapshot -d 'Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run\'s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run' -r -F
+complete -c pepe -n "__fish_pepe_using_subcommand flow" -l allow-host -d 'Refuse to send anywhere but these hosts: api.example.com exactly, or .example.com for it and its subdomains; repeat for more. Every target is checked before anything is sent' -r
+complete -c pepe -n "__fish_pepe_using_subcommand flow" -l max-requests -d 'Refuse a run that would send more requests than this: -n above it, or -z without a --rate that bounds it' -r
+complete -c pepe -n "__fish_pepe_using_subcommand flow" -l max-rate -d 'Refuse a --rate above this, and a run with no --rate at all, which sends as fast as the target answers' -r
+complete -c pepe -n "__fish_pepe_using_subcommand flow" -l max-concurrency -d 'Refuse a concurrency above this' -r
 complete -c pepe -n "__fish_pepe_using_subcommand flow" -l fail-if -d 'End with exit code 4 when the run crosses this, for CI and scripts: \'p99 > 300ms\', \'errors > 1%\'; repeat for more. The report is still printed. (pepe ping has --slo for the same.)' -r
 complete -c pepe -n "__fish_pepe_using_subcommand flow" -l metrics -d 'Serve the live numbers for Prometheus at http://ADDR/metrics while the run goes, e.g. :9100 or 127.0.0.1:9100, so a soak run or a long ping shows up in Grafana next to the server\'s own' -r
 complete -c pepe -n "__fish_pepe_using_subcommand flow" -l config -d 'Read settings from this file instead of ./pepe.toml; flags on the command line win over it' -r -F
@@ -231,6 +264,7 @@ complete -c pepe -n "__fish_pepe_using_subcommand flow" -l disable-compression -
 complete -c pepe -n "__fish_pepe_using_subcommand flow" -l disable-keepalive -d 'Disable HTTP keepalive, e.g. Connection: close'
 complete -c pepe -n "__fish_pepe_using_subcommand flow" -l disable-redirects -d 'Prevent http redirects'
 complete -c pepe -n "__fish_pepe_using_subcommand flow" -l json -d 'Output results in JSON format'
+complete -c pepe -n "__fish_pepe_using_subcommand flow" -l dry-run -d 'Say what would be sent, to where and how much, and send nothing; as JSON with --json'
 complete -c pepe -n "__fish_pepe_using_subcommand flow" -s i -l setup -d 'Open the setup screen to review or change the settings before starting (it opens by itself when no URL is given)'
 complete -c pepe -n "__fish_pepe_using_subcommand logs" -l format -d 'The access log\'s log_format as nginx.conf has it, on one line, when it isn\'t `combined`: \'$remote_addr [$time_local] "$request" $status $request_time\'' -r
 complete -c pepe -n "__fish_pepe_using_subcommand logs" -l window -d 'What "now" is measured over, e.g. 10s, 1m, 5m' -r
@@ -248,6 +282,10 @@ complete -c pepe -n "__fish_pepe_using_subcommand logs" -s d -l body -d 'HTTP re
 complete -c pepe -n "__fish_pepe_using_subcommand logs" -s p -l proxy -d 'Proxy server URL: http://user:pass@host:port or socks5://host:port' -r
 complete -c pepe -n "__fish_pepe_using_subcommand logs" -l trace-header -d 'Response header holding the request id to show for the slowest requests and in the inspector, so they can be found in the server\'s logs; without it, X-Request-Id, traceparent, CF-Ray, X-Amzn-Trace-Id and other common ones are looked for' -r
 complete -c pepe -n "__fish_pepe_using_subcommand logs" -l snapshot -d 'Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run\'s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run' -r -F
+complete -c pepe -n "__fish_pepe_using_subcommand logs" -l allow-host -d 'Refuse to send anywhere but these hosts: api.example.com exactly, or .example.com for it and its subdomains; repeat for more. Every target is checked before anything is sent' -r
+complete -c pepe -n "__fish_pepe_using_subcommand logs" -l max-requests -d 'Refuse a run that would send more requests than this: -n above it, or -z without a --rate that bounds it' -r
+complete -c pepe -n "__fish_pepe_using_subcommand logs" -l max-rate -d 'Refuse a --rate above this, and a run with no --rate at all, which sends as fast as the target answers' -r
+complete -c pepe -n "__fish_pepe_using_subcommand logs" -l max-concurrency -d 'Refuse a concurrency above this' -r
 complete -c pepe -n "__fish_pepe_using_subcommand logs" -l fail-if -d 'End with exit code 4 when the run crosses this, for CI and scripts: \'p99 > 300ms\', \'errors > 1%\'; repeat for more. The report is still printed. (pepe ping has --slo for the same.)' -r
 complete -c pepe -n "__fish_pepe_using_subcommand logs" -l metrics -d 'Serve the live numbers for Prometheus at http://ADDR/metrics while the run goes, e.g. :9100 or 127.0.0.1:9100, so a soak run or a long ping shows up in Grafana next to the server\'s own' -r
 complete -c pepe -n "__fish_pepe_using_subcommand logs" -l config -d 'Read settings from this file instead of ./pepe.toml; flags on the command line win over it' -r -F
@@ -262,6 +300,7 @@ complete -c pepe -n "__fish_pepe_using_subcommand logs" -l disable-compression -
 complete -c pepe -n "__fish_pepe_using_subcommand logs" -l disable-keepalive -d 'Disable HTTP keepalive, e.g. Connection: close'
 complete -c pepe -n "__fish_pepe_using_subcommand logs" -l disable-redirects -d 'Prevent http redirects'
 complete -c pepe -n "__fish_pepe_using_subcommand logs" -l json -d 'Output results in JSON format'
+complete -c pepe -n "__fish_pepe_using_subcommand logs" -l dry-run -d 'Say what would be sent, to where and how much, and send nothing; as JSON with --json'
 complete -c pepe -n "__fish_pepe_using_subcommand logs" -s i -l setup -d 'Open the setup screen to review or change the settings before starting (it opens by itself when no URL is given)'
 complete -c pepe -n "__fish_pepe_using_subcommand ping" -l every -d 'Time between pings, e.g. 1s, 500ms, 2m' -r
 complete -c pepe -n "__fish_pepe_using_subcommand ping" -l window -d 'How much of the run the graph shows, e.g. 60s, 5m; + and - change it on screen, w shows the whole run' -r
@@ -288,6 +327,10 @@ complete -c pepe -n "__fish_pepe_using_subcommand ping" -s d -l body -d 'HTTP re
 complete -c pepe -n "__fish_pepe_using_subcommand ping" -s p -l proxy -d 'Proxy server URL: http://user:pass@host:port or socks5://host:port' -r
 complete -c pepe -n "__fish_pepe_using_subcommand ping" -l trace-header -d 'Response header holding the request id to show for the slowest requests and in the inspector, so they can be found in the server\'s logs; without it, X-Request-Id, traceparent, CF-Ray, X-Amzn-Trace-Id and other common ones are looked for' -r
 complete -c pepe -n "__fish_pepe_using_subcommand ping" -l snapshot -d 'Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run\'s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run' -r -F
+complete -c pepe -n "__fish_pepe_using_subcommand ping" -l allow-host -d 'Refuse to send anywhere but these hosts: api.example.com exactly, or .example.com for it and its subdomains; repeat for more. Every target is checked before anything is sent' -r
+complete -c pepe -n "__fish_pepe_using_subcommand ping" -l max-requests -d 'Refuse a run that would send more requests than this: -n above it, or -z without a --rate that bounds it' -r
+complete -c pepe -n "__fish_pepe_using_subcommand ping" -l max-rate -d 'Refuse a --rate above this, and a run with no --rate at all, which sends as fast as the target answers' -r
+complete -c pepe -n "__fish_pepe_using_subcommand ping" -l max-concurrency -d 'Refuse a concurrency above this' -r
 complete -c pepe -n "__fish_pepe_using_subcommand ping" -l fail-if -d 'End with exit code 4 when the run crosses this, for CI and scripts: \'p99 > 300ms\', \'errors > 1%\'; repeat for more. The report is still printed. (pepe ping has --slo for the same.)' -r
 complete -c pepe -n "__fish_pepe_using_subcommand ping" -l metrics -d 'Serve the live numbers for Prometheus at http://ADDR/metrics while the run goes, e.g. :9100 or 127.0.0.1:9100, so a soak run or a long ping shows up in Grafana next to the server\'s own' -r
 complete -c pepe -n "__fish_pepe_using_subcommand ping" -l config -d 'Read settings from this file instead of ./pepe.toml; flags on the command line win over it' -r -F
@@ -313,6 +356,7 @@ complete -c pepe -n "__fish_pepe_using_subcommand ping" -l disable-compression -
 complete -c pepe -n "__fish_pepe_using_subcommand ping" -l disable-keepalive -d 'Disable HTTP keepalive, e.g. Connection: close'
 complete -c pepe -n "__fish_pepe_using_subcommand ping" -l disable-redirects -d 'Prevent http redirects'
 complete -c pepe -n "__fish_pepe_using_subcommand ping" -l json -d 'Output results in JSON format'
+complete -c pepe -n "__fish_pepe_using_subcommand ping" -l dry-run -d 'Say what would be sent, to where and how much, and send nothing; as JSON with --json'
 complete -c pepe -n "__fish_pepe_using_subcommand ping" -s i -l setup -d 'Open the setup screen to review or change the settings before starting (it opens by itself when no URL is given)'
 complete -c pepe -n "__fish_pepe_using_subcommand compare" -l svg -d 'Also write the verdict as a card, an SVG for a README or a page' -r -F
 complete -c pepe -n "__fish_pepe_using_subcommand compare" -s n -l number -d 'Number of requests to perform' -r
@@ -327,6 +371,10 @@ complete -c pepe -n "__fish_pepe_using_subcommand compare" -s d -l body -d 'HTTP
 complete -c pepe -n "__fish_pepe_using_subcommand compare" -s p -l proxy -d 'Proxy server URL: http://user:pass@host:port or socks5://host:port' -r
 complete -c pepe -n "__fish_pepe_using_subcommand compare" -l trace-header -d 'Response header holding the request id to show for the slowest requests and in the inspector, so they can be found in the server\'s logs; without it, X-Request-Id, traceparent, CF-Ray, X-Amzn-Trace-Id and other common ones are looked for' -r
 complete -c pepe -n "__fish_pepe_using_subcommand compare" -l snapshot -d 'Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run\'s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run' -r -F
+complete -c pepe -n "__fish_pepe_using_subcommand compare" -l allow-host -d 'Refuse to send anywhere but these hosts: api.example.com exactly, or .example.com for it and its subdomains; repeat for more. Every target is checked before anything is sent' -r
+complete -c pepe -n "__fish_pepe_using_subcommand compare" -l max-requests -d 'Refuse a run that would send more requests than this: -n above it, or -z without a --rate that bounds it' -r
+complete -c pepe -n "__fish_pepe_using_subcommand compare" -l max-rate -d 'Refuse a --rate above this, and a run with no --rate at all, which sends as fast as the target answers' -r
+complete -c pepe -n "__fish_pepe_using_subcommand compare" -l max-concurrency -d 'Refuse a concurrency above this' -r
 complete -c pepe -n "__fish_pepe_using_subcommand compare" -l fail-if -d 'End with exit code 4 when the run crosses this, for CI and scripts: \'p99 > 300ms\', \'errors > 1%\'; repeat for more. The report is still printed. (pepe ping has --slo for the same.)' -r
 complete -c pepe -n "__fish_pepe_using_subcommand compare" -l metrics -d 'Serve the live numbers for Prometheus at http://ADDR/metrics while the run goes, e.g. :9100 or 127.0.0.1:9100, so a soak run or a long ping shows up in Grafana next to the server\'s own' -r
 complete -c pepe -n "__fish_pepe_using_subcommand compare" -l config -d 'Read settings from this file instead of ./pepe.toml; flags on the command line win over it' -r -F
@@ -340,6 +388,7 @@ complete -c pepe -n "__fish_pepe_using_subcommand compare" -l disable-compressio
 complete -c pepe -n "__fish_pepe_using_subcommand compare" -l disable-keepalive -d 'Disable HTTP keepalive, e.g. Connection: close'
 complete -c pepe -n "__fish_pepe_using_subcommand compare" -l disable-redirects -d 'Prevent http redirects'
 complete -c pepe -n "__fish_pepe_using_subcommand compare" -l json -d 'Output results in JSON format'
+complete -c pepe -n "__fish_pepe_using_subcommand compare" -l dry-run -d 'Say what would be sent, to where and how much, and send nothing; as JSON with --json'
 complete -c pepe -n "__fish_pepe_using_subcommand compare" -s i -l setup -d 'Open the setup screen to review or change the settings before starting (it opens by itself when no URL is given)'
 complete -c pepe -n "__fish_pepe_using_subcommand schema" -s n -l number -d 'Number of requests to perform' -r
 complete -c pepe -n "__fish_pepe_using_subcommand schema" -s z -l duration -d 'Duration of the test, e.g. 10s, 3m, 2h (mutually exclusive with -n)' -r
@@ -353,6 +402,10 @@ complete -c pepe -n "__fish_pepe_using_subcommand schema" -s d -l body -d 'HTTP 
 complete -c pepe -n "__fish_pepe_using_subcommand schema" -s p -l proxy -d 'Proxy server URL: http://user:pass@host:port or socks5://host:port' -r
 complete -c pepe -n "__fish_pepe_using_subcommand schema" -l trace-header -d 'Response header holding the request id to show for the slowest requests and in the inspector, so they can be found in the server\'s logs; without it, X-Request-Id, traceparent, CF-Ray, X-Amzn-Trace-Id and other common ones are looked for' -r
 complete -c pepe -n "__fish_pepe_using_subcommand schema" -l snapshot -d 'Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run\'s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run' -r -F
+complete -c pepe -n "__fish_pepe_using_subcommand schema" -l allow-host -d 'Refuse to send anywhere but these hosts: api.example.com exactly, or .example.com for it and its subdomains; repeat for more. Every target is checked before anything is sent' -r
+complete -c pepe -n "__fish_pepe_using_subcommand schema" -l max-requests -d 'Refuse a run that would send more requests than this: -n above it, or -z without a --rate that bounds it' -r
+complete -c pepe -n "__fish_pepe_using_subcommand schema" -l max-rate -d 'Refuse a --rate above this, and a run with no --rate at all, which sends as fast as the target answers' -r
+complete -c pepe -n "__fish_pepe_using_subcommand schema" -l max-concurrency -d 'Refuse a concurrency above this' -r
 complete -c pepe -n "__fish_pepe_using_subcommand schema" -l fail-if -d 'End with exit code 4 when the run crosses this, for CI and scripts: \'p99 > 300ms\', \'errors > 1%\'; repeat for more. The report is still printed. (pepe ping has --slo for the same.)' -r
 complete -c pepe -n "__fish_pepe_using_subcommand schema" -l metrics -d 'Serve the live numbers for Prometheus at http://ADDR/metrics while the run goes, e.g. :9100 or 127.0.0.1:9100, so a soak run or a long ping shows up in Grafana next to the server\'s own' -r
 complete -c pepe -n "__fish_pepe_using_subcommand schema" -l config -d 'Read settings from this file instead of ./pepe.toml; flags on the command line win over it' -r -F
@@ -365,6 +418,7 @@ complete -c pepe -n "__fish_pepe_using_subcommand schema" -l disable-compression
 complete -c pepe -n "__fish_pepe_using_subcommand schema" -l disable-keepalive -d 'Disable HTTP keepalive, e.g. Connection: close'
 complete -c pepe -n "__fish_pepe_using_subcommand schema" -l disable-redirects -d 'Prevent http redirects'
 complete -c pepe -n "__fish_pepe_using_subcommand schema" -l json -d 'Output results in JSON format'
+complete -c pepe -n "__fish_pepe_using_subcommand schema" -l dry-run -d 'Say what would be sent, to where and how much, and send nothing; as JSON with --json'
 complete -c pepe -n "__fish_pepe_using_subcommand schema" -s i -l setup -d 'Open the setup screen to review or change the settings before starting (it opens by itself when no URL is given)'
 complete -c pepe -n "__fish_pepe_using_subcommand help; and not __fish_seen_subcommand_from self-update completions api ramp replay flow logs ping compare schema help" -f -a "self-update" -d 'Update pepe to the latest release, or say what\'s new in it'
 complete -c pepe -n "__fish_pepe_using_subcommand help; and not __fish_seen_subcommand_from self-update completions api ramp replay flow logs ping compare schema help" -f -a "completions" -d 'Tab completion for your shell: print the script, or --install it'

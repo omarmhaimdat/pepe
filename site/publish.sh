@@ -44,6 +44,10 @@ for gif in "$root"/assets/*.gif; do
     --content-type "image/gif" --cache-control "public, max-age=86400"
 done
 
+# What an agent reads first
+r2 "$root/llms.txt" "s3://$R2_BUCKET/llms.txt" \
+  --content-type "text/plain; charset=utf-8" --cache-control "public, max-age=300"
+
 # The JSON Schema of each report, for scripts and agents
 for schema in "$root"/schema/*.schema.json; do
   [ -f "$schema" ] || continue
