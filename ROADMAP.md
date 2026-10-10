@@ -194,13 +194,11 @@ way it runs the tests: one command, a result it can read, an answer it
 can act on. The thresholds and the versioned report above are the base;
 these build on them.
 
-- [ ] **Agent docs** (S). An `AGENTS.md` and an `llms.txt`: the flags to
-      always pass, the report fields to read, what each exit code means.
-      It is what an agent reads first.
-- [ ] **Guardrails** (S). `--allow-host`, caps on the rate and on total
-      requests, and `--dry-run` to print the plan and send nothing, so an
-      agent pointed at the wrong URL does no harm. Replay already leaves
-      writes out unless asked; this is the same idea for every mode.
+- [x] **Agent docs** (S): `AGENTS.md`, `llms.txt` at the site's root,
+      and a page on the docs site — next release
+- [x] **Guardrails** (S): `--allow-host`, `--max-requests`, `--max-rate`,
+      `--max-concurrency` and `--dry-run`, in every mode, in `pepe.toml`
+      too — next release
 - [ ] **MCP server** (M). `pepe mcp` serves a run, a ramp, a flow, a
       replay and a comparison as typed tools, each returning the JSON
       report, so an agent calls pepe without composing a shell command.

@@ -34,6 +34,10 @@ _pepe() {
 '--proxy=[Proxy server URL\: http\://user\:pass@host\:port or socks5\://host\:port]:PROXY:_default' \
 '--trace-header=[Response header holding the request id to show for the slowest requests and in the inspector, so they can be found in the server'\''s logs; without it, X-Request-Id, traceparent, CF-Ray, X-Amzn-Trace-Id and other common ones are looked for]:NAME:_default' \
 '--snapshot=[Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run'\''s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run]:FILE:_files' \
+'*--allow-host=[Refuse to send anywhere but these hosts\: api.example.com exactly, or .example.com for it and its subdomains; repeat for more. Every target is checked before anything is sent]:HOST:_default' \
+'--max-requests=[Refuse a run that would send more requests than this\: -n above it, or -z without a --rate that bounds it]:N:_default' \
+'--max-rate=[Refuse a --rate above this, and a run with no --rate at all, which sends as fast as the target answers]:PER_SECOND:_default' \
+'--max-concurrency=[Refuse a concurrency above this]:N:_default' \
 '*--fail-if=[End with exit code 4 when the run crosses this, for CI and scripts\: '\''p99 > 300ms'\'', '\''errors > 1%'\''; repeat for more. The report is still printed. (pepe ping has --slo for the same.)]:CONDITION:_default' \
 '--metrics=[Serve the live numbers for Prometheus at http\://ADDR/metrics while the run goes, e.g. \:9100 or 127.0.0.1\:9100, so a soak run or a long ping shows up in Grafana next to the server'\''s own]:ADDR:_default' \
 '--config=[Read settings from this file instead of ./pepe.toml; flags on the command line win over it]:FILE:_files' \
@@ -51,6 +55,7 @@ _pepe() {
 '--disable-keepalive[Disable HTTP keepalive, e.g. Connection\: close]' \
 '--disable-redirects[Prevent http redirects]' \
 '--json[Output results in JSON format]' \
+'--dry-run[Say what would be sent, to where and how much, and send nothing; as JSON with --json]' \
 '-i[Open the setup screen to review or change the settings before starting (it opens by itself when no URL is given)]' \
 '--setup[Open the setup screen to review or change the settings before starting (it opens by itself when no URL is given)]' \
 '-V[Print version]' \
@@ -87,6 +92,10 @@ _arguments "${_arguments_options[@]}" : \
 '--proxy=[Proxy server URL\: http\://user\:pass@host\:port or socks5\://host\:port]:PROXY:_default' \
 '--trace-header=[Response header holding the request id to show for the slowest requests and in the inspector, so they can be found in the server'\''s logs; without it, X-Request-Id, traceparent, CF-Ray, X-Amzn-Trace-Id and other common ones are looked for]:NAME:_default' \
 '--snapshot=[Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run'\''s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run]:FILE:_files' \
+'*--allow-host=[Refuse to send anywhere but these hosts\: api.example.com exactly, or .example.com for it and its subdomains; repeat for more. Every target is checked before anything is sent]:HOST:_default' \
+'--max-requests=[Refuse a run that would send more requests than this\: -n above it, or -z without a --rate that bounds it]:N:_default' \
+'--max-rate=[Refuse a --rate above this, and a run with no --rate at all, which sends as fast as the target answers]:PER_SECOND:_default' \
+'--max-concurrency=[Refuse a concurrency above this]:N:_default' \
 '*--fail-if=[End with exit code 4 when the run crosses this, for CI and scripts\: '\''p99 > 300ms'\'', '\''errors > 1%'\''; repeat for more. The report is still printed. (pepe ping has --slo for the same.)]:CONDITION:_default' \
 '--metrics=[Serve the live numbers for Prometheus at http\://ADDR/metrics while the run goes, e.g. \:9100 or 127.0.0.1\:9100, so a soak run or a long ping shows up in Grafana next to the server'\''s own]:ADDR:_default' \
 '--config=[Read settings from this file instead of ./pepe.toml; flags on the command line win over it]:FILE:_files' \
@@ -105,6 +114,7 @@ _arguments "${_arguments_options[@]}" : \
 '--disable-keepalive[Disable HTTP keepalive, e.g. Connection\: close]' \
 '--disable-redirects[Prevent http redirects]' \
 '--json[Output results in JSON format]' \
+'--dry-run[Say what would be sent, to where and how much, and send nothing; as JSON with --json]' \
 '-i[Open the setup screen to review or change the settings before starting (it opens by itself when no URL is given)]' \
 '--setup[Open the setup screen to review or change the settings before starting (it opens by itself when no URL is given)]' \
 && ret=0
@@ -130,6 +140,10 @@ _arguments "${_arguments_options[@]}" : \
 '--proxy=[Proxy server URL\: http\://user\:pass@host\:port or socks5\://host\:port]:PROXY:_default' \
 '--trace-header=[Response header holding the request id to show for the slowest requests and in the inspector, so they can be found in the server'\''s logs; without it, X-Request-Id, traceparent, CF-Ray, X-Amzn-Trace-Id and other common ones are looked for]:NAME:_default' \
 '--snapshot=[Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run'\''s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run]:FILE:_files' \
+'*--allow-host=[Refuse to send anywhere but these hosts\: api.example.com exactly, or .example.com for it and its subdomains; repeat for more. Every target is checked before anything is sent]:HOST:_default' \
+'--max-requests=[Refuse a run that would send more requests than this\: -n above it, or -z without a --rate that bounds it]:N:_default' \
+'--max-rate=[Refuse a --rate above this, and a run with no --rate at all, which sends as fast as the target answers]:PER_SECOND:_default' \
+'--max-concurrency=[Refuse a concurrency above this]:N:_default' \
 '*--fail-if=[End with exit code 4 when the run crosses this, for CI and scripts\: '\''p99 > 300ms'\'', '\''errors > 1%'\''; repeat for more. The report is still printed. (pepe ping has --slo for the same.)]:CONDITION:_default' \
 '--metrics=[Serve the live numbers for Prometheus at http\://ADDR/metrics while the run goes, e.g. \:9100 or 127.0.0.1\:9100, so a soak run or a long ping shows up in Grafana next to the server'\''s own]:ADDR:_default' \
 '--config=[Read settings from this file instead of ./pepe.toml; flags on the command line win over it]:FILE:_files' \
@@ -180,6 +194,10 @@ _arguments "${_arguments_options[@]}" : \
 '--proxy=[Proxy server URL\: http\://user\:pass@host\:port or socks5\://host\:port]:PROXY:_default' \
 '--trace-header=[Response header holding the request id to show for the slowest requests and in the inspector, so they can be found in the server'\''s logs; without it, X-Request-Id, traceparent, CF-Ray, X-Amzn-Trace-Id and other common ones are looked for]:NAME:_default' \
 '--snapshot=[Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run'\''s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run]:FILE:_files' \
+'*--allow-host=[Refuse to send anywhere but these hosts\: api.example.com exactly, or .example.com for it and its subdomains; repeat for more. Every target is checked before anything is sent]:HOST:_default' \
+'--max-requests=[Refuse a run that would send more requests than this\: -n above it, or -z without a --rate that bounds it]:N:_default' \
+'--max-rate=[Refuse a --rate above this, and a run with no --rate at all, which sends as fast as the target answers]:PER_SECOND:_default' \
+'--max-concurrency=[Refuse a concurrency above this]:N:_default' \
 '*--fail-if=[End with exit code 4 when the run crosses this, for CI and scripts\: '\''p99 > 300ms'\'', '\''errors > 1%'\''; repeat for more. The report is still printed. (pepe ping has --slo for the same.)]:CONDITION:_default' \
 '--metrics=[Serve the live numbers for Prometheus at http\://ADDR/metrics while the run goes, e.g. \:9100 or 127.0.0.1\:9100, so a soak run or a long ping shows up in Grafana next to the server'\''s own]:ADDR:_default' \
 '--config=[Read settings from this file instead of ./pepe.toml; flags on the command line win over it]:FILE:_files' \
@@ -198,6 +216,7 @@ _arguments "${_arguments_options[@]}" : \
 '--disable-keepalive[Disable HTTP keepalive, e.g. Connection\: close]' \
 '--disable-redirects[Prevent http redirects]' \
 '--json[Output results in JSON format]' \
+'--dry-run[Say what would be sent, to where and how much, and send nothing; as JSON with --json]' \
 '-i[Open the setup screen to review or change the settings before starting (it opens by itself when no URL is given)]' \
 '--setup[Open the setup screen to review or change the settings before starting (it opens by itself when no URL is given)]' \
 '::spec -- The OpenAPI spec\: a file, a URL or the document itself, JSON or YAML (or `spec` in pepe.toml). Without it, the setup screen asks:_default' \
@@ -229,6 +248,10 @@ _arguments "${_arguments_options[@]}" : \
 '--proxy=[Proxy server URL\: http\://user\:pass@host\:port or socks5\://host\:port]:PROXY:_default' \
 '--trace-header=[Response header holding the request id to show for the slowest requests and in the inspector, so they can be found in the server'\''s logs; without it, X-Request-Id, traceparent, CF-Ray, X-Amzn-Trace-Id and other common ones are looked for]:NAME:_default' \
 '--snapshot=[Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run'\''s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run]:FILE:_files' \
+'*--allow-host=[Refuse to send anywhere but these hosts\: api.example.com exactly, or .example.com for it and its subdomains; repeat for more. Every target is checked before anything is sent]:HOST:_default' \
+'--max-requests=[Refuse a run that would send more requests than this\: -n above it, or -z without a --rate that bounds it]:N:_default' \
+'--max-rate=[Refuse a --rate above this, and a run with no --rate at all, which sends as fast as the target answers]:PER_SECOND:_default' \
+'--max-concurrency=[Refuse a concurrency above this]:N:_default' \
 '*--fail-if=[End with exit code 4 when the run crosses this, for CI and scripts\: '\''p99 > 300ms'\'', '\''errors > 1%'\''; repeat for more. The report is still printed. (pepe ping has --slo for the same.)]:CONDITION:_default' \
 '--metrics=[Serve the live numbers for Prometheus at http\://ADDR/metrics while the run goes, e.g. \:9100 or 127.0.0.1\:9100, so a soak run or a long ping shows up in Grafana next to the server'\''s own]:ADDR:_default' \
 '--config=[Read settings from this file instead of ./pepe.toml; flags on the command line win over it]:FILE:_files' \
@@ -245,6 +268,7 @@ _arguments "${_arguments_options[@]}" : \
 '--disable-keepalive[Disable HTTP keepalive, e.g. Connection\: close]' \
 '--disable-redirects[Prevent http redirects]' \
 '--json[Output results in JSON format]' \
+'--dry-run[Say what would be sent, to where and how much, and send nothing; as JSON with --json]' \
 '-i[Open the setup screen to review or change the settings before starting (it opens by itself when no URL is given)]' \
 '--setup[Open the setup screen to review or change the settings before starting (it opens by itself when no URL is given)]' \
 '::url -- HTTP url to request; without one, the setup screen opens:_default' \
@@ -273,6 +297,10 @@ _arguments "${_arguments_options[@]}" : \
 '--proxy=[Proxy server URL\: http\://user\:pass@host\:port or socks5\://host\:port]:PROXY:_default' \
 '--trace-header=[Response header holding the request id to show for the slowest requests and in the inspector, so they can be found in the server'\''s logs; without it, X-Request-Id, traceparent, CF-Ray, X-Amzn-Trace-Id and other common ones are looked for]:NAME:_default' \
 '--snapshot=[Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run'\''s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run]:FILE:_files' \
+'*--allow-host=[Refuse to send anywhere but these hosts\: api.example.com exactly, or .example.com for it and its subdomains; repeat for more. Every target is checked before anything is sent]:HOST:_default' \
+'--max-requests=[Refuse a run that would send more requests than this\: -n above it, or -z without a --rate that bounds it]:N:_default' \
+'--max-rate=[Refuse a --rate above this, and a run with no --rate at all, which sends as fast as the target answers]:PER_SECOND:_default' \
+'--max-concurrency=[Refuse a concurrency above this]:N:_default' \
 '*--fail-if=[End with exit code 4 when the run crosses this, for CI and scripts\: '\''p99 > 300ms'\'', '\''errors > 1%'\''; repeat for more. The report is still printed. (pepe ping has --slo for the same.)]:CONDITION:_default' \
 '--metrics=[Serve the live numbers for Prometheus at http\://ADDR/metrics while the run goes, e.g. \:9100 or 127.0.0.1\:9100, so a soak run or a long ping shows up in Grafana next to the server'\''s own]:ADDR:_default' \
 '--config=[Read settings from this file instead of ./pepe.toml; flags on the command line win over it]:FILE:_files' \
@@ -290,6 +318,7 @@ _arguments "${_arguments_options[@]}" : \
 '--disable-keepalive[Disable HTTP keepalive, e.g. Connection\: close]' \
 '--disable-redirects[Prevent http redirects]' \
 '--json[Output results in JSON format]' \
+'--dry-run[Say what would be sent, to where and how much, and send nothing; as JSON with --json]' \
 '-i[Open the setup screen to review or change the settings before starting (it opens by itself when no URL is given)]' \
 '--setup[Open the setup screen to review or change the settings before starting (it opens by itself when no URL is given)]' \
 ':log -- The log\: nginx or Apache (common or combined), Caddy JSON, AWS ALB, or one URL or path per line:_files' \
@@ -316,6 +345,10 @@ _arguments "${_arguments_options[@]}" : \
 '--proxy=[Proxy server URL\: http\://user\:pass@host\:port or socks5\://host\:port]:PROXY:_default' \
 '--trace-header=[Response header holding the request id to show for the slowest requests and in the inspector, so they can be found in the server'\''s logs; without it, X-Request-Id, traceparent, CF-Ray, X-Amzn-Trace-Id and other common ones are looked for]:NAME:_default' \
 '--snapshot=[Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run'\''s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run]:FILE:_files' \
+'*--allow-host=[Refuse to send anywhere but these hosts\: api.example.com exactly, or .example.com for it and its subdomains; repeat for more. Every target is checked before anything is sent]:HOST:_default' \
+'--max-requests=[Refuse a run that would send more requests than this\: -n above it, or -z without a --rate that bounds it]:N:_default' \
+'--max-rate=[Refuse a --rate above this, and a run with no --rate at all, which sends as fast as the target answers]:PER_SECOND:_default' \
+'--max-concurrency=[Refuse a concurrency above this]:N:_default' \
 '*--fail-if=[End with exit code 4 when the run crosses this, for CI and scripts\: '\''p99 > 300ms'\'', '\''errors > 1%'\''; repeat for more. The report is still printed. (pepe ping has --slo for the same.)]:CONDITION:_default' \
 '--metrics=[Serve the live numbers for Prometheus at http\://ADDR/metrics while the run goes, e.g. \:9100 or 127.0.0.1\:9100, so a soak run or a long ping shows up in Grafana next to the server'\''s own]:ADDR:_default' \
 '--config=[Read settings from this file instead of ./pepe.toml; flags on the command line win over it]:FILE:_files' \
@@ -332,6 +365,7 @@ _arguments "${_arguments_options[@]}" : \
 '--disable-keepalive[Disable HTTP keepalive, e.g. Connection\: close]' \
 '--disable-redirects[Prevent http redirects]' \
 '--json[Output results in JSON format]' \
+'--dry-run[Say what would be sent, to where and how much, and send nothing; as JSON with --json]' \
 '-i[Open the setup screen to review or change the settings before starting (it opens by itself when no URL is given)]' \
 '--setup[Open the setup screen to review or change the settings before starting (it opens by itself when no URL is given)]' \
 ':file -- The flow\: a TOML file of \[\[step\]\]s (see the README):_files' \
@@ -362,6 +396,10 @@ _arguments "${_arguments_options[@]}" : \
 '--proxy=[Proxy server URL\: http\://user\:pass@host\:port or socks5\://host\:port]:PROXY:_default' \
 '--trace-header=[Response header holding the request id to show for the slowest requests and in the inspector, so they can be found in the server'\''s logs; without it, X-Request-Id, traceparent, CF-Ray, X-Amzn-Trace-Id and other common ones are looked for]:NAME:_default' \
 '--snapshot=[Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run'\''s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run]:FILE:_files' \
+'*--allow-host=[Refuse to send anywhere but these hosts\: api.example.com exactly, or .example.com for it and its subdomains; repeat for more. Every target is checked before anything is sent]:HOST:_default' \
+'--max-requests=[Refuse a run that would send more requests than this\: -n above it, or -z without a --rate that bounds it]:N:_default' \
+'--max-rate=[Refuse a --rate above this, and a run with no --rate at all, which sends as fast as the target answers]:PER_SECOND:_default' \
+'--max-concurrency=[Refuse a concurrency above this]:N:_default' \
 '*--fail-if=[End with exit code 4 when the run crosses this, for CI and scripts\: '\''p99 > 300ms'\'', '\''errors > 1%'\''; repeat for more. The report is still printed. (pepe ping has --slo for the same.)]:CONDITION:_default' \
 '--metrics=[Serve the live numbers for Prometheus at http\://ADDR/metrics while the run goes, e.g. \:9100 or 127.0.0.1\:9100, so a soak run or a long ping shows up in Grafana next to the server'\''s own]:ADDR:_default' \
 '--config=[Read settings from this file instead of ./pepe.toml; flags on the command line win over it]:FILE:_files' \
@@ -380,6 +418,7 @@ _arguments "${_arguments_options[@]}" : \
 '--disable-keepalive[Disable HTTP keepalive, e.g. Connection\: close]' \
 '--disable-redirects[Prevent http redirects]' \
 '--json[Output results in JSON format]' \
+'--dry-run[Say what would be sent, to where and how much, and send nothing; as JSON with --json]' \
 '-i[Open the setup screen to review or change the settings before starting (it opens by itself when no URL is given)]' \
 '--setup[Open the setup screen to review or change the settings before starting (it opens by itself when no URL is given)]' \
 '*::files -- Access and error logs, rotated ones too; `-` or nothing reads what is piped in, and with nothing at all nginx'\''s own in /var/log/nginx:_files' \
@@ -419,6 +458,10 @@ fail\:"A failure"))' \
 '--proxy=[Proxy server URL\: http\://user\:pass@host\:port or socks5\://host\:port]:PROXY:_default' \
 '--trace-header=[Response header holding the request id to show for the slowest requests and in the inspector, so they can be found in the server'\''s logs; without it, X-Request-Id, traceparent, CF-Ray, X-Amzn-Trace-Id and other common ones are looked for]:NAME:_default' \
 '--snapshot=[Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run'\''s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run]:FILE:_files' \
+'*--allow-host=[Refuse to send anywhere but these hosts\: api.example.com exactly, or .example.com for it and its subdomains; repeat for more. Every target is checked before anything is sent]:HOST:_default' \
+'--max-requests=[Refuse a run that would send more requests than this\: -n above it, or -z without a --rate that bounds it]:N:_default' \
+'--max-rate=[Refuse a --rate above this, and a run with no --rate at all, which sends as fast as the target answers]:PER_SECOND:_default' \
+'--max-concurrency=[Refuse a concurrency above this]:N:_default' \
 '*--fail-if=[End with exit code 4 when the run crosses this, for CI and scripts\: '\''p99 > 300ms'\'', '\''errors > 1%'\''; repeat for more. The report is still printed. (pepe ping has --slo for the same.)]:CONDITION:_default' \
 '--metrics=[Serve the live numbers for Prometheus at http\://ADDR/metrics while the run goes, e.g. \:9100 or 127.0.0.1\:9100, so a soak run or a long ping shows up in Grafana next to the server'\''s own]:ADDR:_default' \
 '--config=[Read settings from this file instead of ./pepe.toml; flags on the command line win over it]:FILE:_files' \
@@ -450,6 +493,7 @@ fail\:"A failure"))' \
 '--disable-keepalive[Disable HTTP keepalive, e.g. Connection\: close]' \
 '--disable-redirects[Prevent http redirects]' \
 '--json[Output results in JSON format]' \
+'--dry-run[Say what would be sent, to where and how much, and send nothing; as JSON with --json]' \
 '-i[Open the setup screen to review or change the settings before starting (it opens by itself when no URL is given)]' \
 '--setup[Open the setup screen to review or change the settings before starting (it opens by itself when no URL is given)]' \
 '*::targets -- What to ping\: URLs or hosts (https unless a port is given), host\:port, aws\:REGION, a range like 10.0.0.0/29, or commands with --cmd; several are graphed together:_default' \
@@ -477,6 +521,10 @@ _arguments "${_arguments_options[@]}" : \
 '--proxy=[Proxy server URL\: http\://user\:pass@host\:port or socks5\://host\:port]:PROXY:_default' \
 '--trace-header=[Response header holding the request id to show for the slowest requests and in the inspector, so they can be found in the server'\''s logs; without it, X-Request-Id, traceparent, CF-Ray, X-Amzn-Trace-Id and other common ones are looked for]:NAME:_default' \
 '--snapshot=[Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run'\''s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run]:FILE:_files' \
+'*--allow-host=[Refuse to send anywhere but these hosts\: api.example.com exactly, or .example.com for it and its subdomains; repeat for more. Every target is checked before anything is sent]:HOST:_default' \
+'--max-requests=[Refuse a run that would send more requests than this\: -n above it, or -z without a --rate that bounds it]:N:_default' \
+'--max-rate=[Refuse a --rate above this, and a run with no --rate at all, which sends as fast as the target answers]:PER_SECOND:_default' \
+'--max-concurrency=[Refuse a concurrency above this]:N:_default' \
 '*--fail-if=[End with exit code 4 when the run crosses this, for CI and scripts\: '\''p99 > 300ms'\'', '\''errors > 1%'\''; repeat for more. The report is still printed. (pepe ping has --slo for the same.)]:CONDITION:_default' \
 '--metrics=[Serve the live numbers for Prometheus at http\://ADDR/metrics while the run goes, e.g. \:9100 or 127.0.0.1\:9100, so a soak run or a long ping shows up in Grafana next to the server'\''s own]:ADDR:_default' \
 '--config=[Read settings from this file instead of ./pepe.toml; flags on the command line win over it]:FILE:_files' \
@@ -494,6 +542,7 @@ _arguments "${_arguments_options[@]}" : \
 '--disable-keepalive[Disable HTTP keepalive, e.g. Connection\: close]' \
 '--disable-redirects[Prevent http redirects]' \
 '--json[Output results in JSON format]' \
+'--dry-run[Say what would be sent, to where and how much, and send nothing; as JSON with --json]' \
 '-i[Open the setup screen to review or change the settings before starting (it opens by itself when no URL is given)]' \
 '--setup[Open the setup screen to review or change the settings before starting (it opens by itself when no URL is given)]' \
 ':before -- The earlier report (`pepe --json`, `--snapshot`, or a ramp'\''s):_files' \
@@ -521,6 +570,10 @@ _arguments "${_arguments_options[@]}" : \
 '--proxy=[Proxy server URL\: http\://user\:pass@host\:port or socks5\://host\:port]:PROXY:_default' \
 '--trace-header=[Response header holding the request id to show for the slowest requests and in the inspector, so they can be found in the server'\''s logs; without it, X-Request-Id, traceparent, CF-Ray, X-Amzn-Trace-Id and other common ones are looked for]:NAME:_default' \
 '--snapshot=[Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run'\''s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run]:FILE:_files' \
+'*--allow-host=[Refuse to send anywhere but these hosts\: api.example.com exactly, or .example.com for it and its subdomains; repeat for more. Every target is checked before anything is sent]:HOST:_default' \
+'--max-requests=[Refuse a run that would send more requests than this\: -n above it, or -z without a --rate that bounds it]:N:_default' \
+'--max-rate=[Refuse a --rate above this, and a run with no --rate at all, which sends as fast as the target answers]:PER_SECOND:_default' \
+'--max-concurrency=[Refuse a concurrency above this]:N:_default' \
 '*--fail-if=[End with exit code 4 when the run crosses this, for CI and scripts\: '\''p99 > 300ms'\'', '\''errors > 1%'\''; repeat for more. The report is still printed. (pepe ping has --slo for the same.)]:CONDITION:_default' \
 '--metrics=[Serve the live numbers for Prometheus at http\://ADDR/metrics while the run goes, e.g. \:9100 or 127.0.0.1\:9100, so a soak run or a long ping shows up in Grafana next to the server'\''s own]:ADDR:_default' \
 '--config=[Read settings from this file instead of ./pepe.toml; flags on the command line win over it]:FILE:_files' \
@@ -537,6 +590,7 @@ _arguments "${_arguments_options[@]}" : \
 '--disable-keepalive[Disable HTTP keepalive, e.g. Connection\: close]' \
 '--disable-redirects[Prevent http redirects]' \
 '--json[Output results in JSON format]' \
+'--dry-run[Say what would be sent, to where and how much, and send nothing; as JSON with --json]' \
 '-i[Open the setup screen to review or change the settings before starting (it opens by itself when no URL is given)]' \
 '--setup[Open the setup screen to review or change the settings before starting (it opens by itself when no URL is given)]' \
 '::which -- Which report\: run, ramp, ping or compare:_default' \

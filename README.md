@@ -210,7 +210,7 @@ Keys are the long flags' names; the on/off ones are said the positive way. A key
 
 ```bash
 pepe -n 1000 -c 20 -H 'Accept: application/json' -H 'X-Request-Id: load' https://example.com
-pepe -n 1000 -c 10 -m PUT -d @payload.json -H 'Content-Type: application/json' https://example.com/items/1
+pepe -n 1000 -c 10 -m PUT -d "$(cat payload.json)" -H 'Content-Type: application/json' https://example.com/items/1
 ```
 
 Repeated headers are kept (several `Cookie` headers are sent as several), and a `User-Agent` given with `-H` wins over the default.
@@ -663,6 +663,15 @@ HTTP, HTTPS and SOCKS5, with or without credentials:
 ```bash
 pepe -n 1000 -c 10 -p http://proxy:port https://example.com
 pepe -n 1000 -c 10 -p socks5://username:password@proxy:port https://example.com
+```
+
+### For scripts and agents
+
+Every mode runs without a screen, prints a versioned JSON report with a published schema, and says what went wrong in an exit code; [AGENTS.md](AGENTS.md) is what an agent reads first. Guardrails hold a run where it may go and how much it may send, checked before anything is sent: `--allow-host .example.com` (the hosts a target may have), `--max-requests`, `--max-rate` (which needs a `--rate`), `--max-concurrency`, and `--dry-run`, which says what would be sent, with secrets masked, and sends nothing. A refusal is exit code 2. They can live in `pepe.toml` (`allow-host`, `max-requests`, `max-rate`, `max-concurrency`), where leaving a flag off the command line can't loosen them.
+
+```bash
+pepe --allow-host .staging.example.com --max-requests 5000 --max-rate 500 --json -z 10s --rate 200 https://api.staging.example.com/health
+pepe --allow-host .staging.example.com --dry-run -n 100 https://api.staging.example.com/health
 ```
 
 ### Environment

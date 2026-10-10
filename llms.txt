@@ -1,0 +1,36 @@
+# pepe
+
+> pepe is an HTTP load generator with a live terminal dashboard, built to cost less than the server it tests. One binary for macOS, Linux and Windows: load-test a URL and watch, ping it and see where each request's time goes (DNS, connect, TLS, first byte, download), ramp to find the capacity, replay an access log, test a whole OpenAPI spec, run a flow of requests, read nginx's logs, and compare two runs. Every mode runs without a screen, prints a versioned JSON report with a published schema, and says what went wrong in an exit code.
+
+Install: `curl -LsSf https://pepe.mhaimdat.com/install.sh | sh` (macOS, Linux), `brew install omarmhaimdat/pepe/pepe`, or Docker `ghcr.io/omarmhaimdat/pepe`.
+
+For a program calling pepe: pass `--json`, end the run with `-n` or `-z`, read `schema_version`, and use the exit code (0 as asked, 1 couldn't start or nothing answered, 2 usage error or a guardrail refused, 4 a limit crossed). Guardrails: `--allow-host .example.com`, `--max-requests N`, `--max-rate N`, `--max-concurrency N`, `--dry-run`.
+
+## Docs
+
+- [Overview](https://pepe.mhaimdat.com/docs/index.html): what pepe does, a page per mode
+- [Agents and scripts](https://pepe.mhaimdat.com/docs/agents.html): the rules, the guardrails, what to read in each report
+- [Load testing](https://pepe.mhaimdat.com/docs/load-test.html): every option of `pepe URL`, warm-up, arrival rate, threads, the config file, a curl command
+- [Ping](https://pepe.mhaimdat.com/docs/ping.html): `pepe ping`, each phase of a request, the findings, `--once`, `--slo`
+- [Ramp](https://pepe.mhaimdat.com/docs/ramp.html): `pepe ramp`, the level that held and the capacity estimate
+- [OpenAPI](https://pepe.mhaimdat.com/docs/api.html): `pepe api`, endpoints by tag, parameters, credentials
+- [Flows](https://pepe.mhaimdat.com/docs/flow.html): `pepe flow`, the flow file, captures and holes
+- [Replay](https://pepe.mhaimdat.com/docs/replay.html): `pepe replay`, an access log's URLs in their proportions
+- [nginx logs](https://pepe.mhaimdat.com/docs/logs.html): `pepe logs`, the rate now against each minute, hour and day
+- [Compare](https://pepe.mhaimdat.com/docs/compare.html): `pepe compare`, the verdict, the badge, the card
+- [Output and exit codes](https://pepe.mhaimdat.com/docs/output.html): the JSON report, `pepe schema`, `--fail-if`, Prometheus metrics, exit codes
+- [CI and Docker](https://pepe.mhaimdat.com/docs/ci.html): the GitHub Action and its inputs and outputs
+- [Command reference](https://pepe.mhaimdat.com/docs/reference.html): every command and flag as `--help` prints them
+
+## Schemas
+
+- [run](https://pepe.mhaimdat.com/schema/run.schema.json): `pepe --json`, API mode, flows, replays
+- [ramp](https://pepe.mhaimdat.com/schema/ramp.schema.json)
+- [ping](https://pepe.mhaimdat.com/schema/ping.schema.json)
+- [compare](https://pepe.mhaimdat.com/schema/compare.schema.json)
+
+## Optional
+
+- [AGENTS.md](https://github.com/omarmhaimdat/pepe/blob/master/AGENTS.md): the same rules, in the repository
+- [Benchmarks](https://pepe.mhaimdat.com/docs/benchmarks.html): pepe against oha, vegeta, wrk and k6
+- [The dashboard](https://pepe.mhaimdat.com/docs/dashboard.html): the screen a person sees, and its keys
