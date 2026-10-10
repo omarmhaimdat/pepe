@@ -303,11 +303,7 @@ pub fn findings(t: &TargetStats, settings: &Settings, now: i64) -> Vec<Finding> 
             say(Level::Note, text);
         }
     }
-    let per_response = if whole.answered > 0 {
-        t.bytes / whole.answered
-    } else {
-        0
-    };
+    let per_response = t.bytes.checked_div(whole.answered).unwrap_or(0);
     if let Some(download) = median(&t.download) {
         if share(download) >= SHARE_OF_NOTE || per_response >= LARGE_BODY {
             say(
