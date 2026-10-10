@@ -34,6 +34,7 @@ _pepe() {
 '--proxy=[Proxy server URL\: http\://user\:pass@host\:port or socks5\://host\:port]:PROXY:_default' \
 '--trace-header=[Response header holding the request id to show for the slowest requests and in the inspector, so they can be found in the server'\''s logs; without it, X-Request-Id, traceparent, CF-Ray, X-Amzn-Trace-Id and other common ones are looked for]:NAME:_default' \
 '--snapshot=[Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run'\''s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run]:FILE:_files' \
+'--metrics=[Serve the live numbers for Prometheus at http\://ADDR/metrics while the run goes, e.g. \:9100 or 127.0.0.1\:9100, so a soak run or a long ping shows up in Grafana next to the server'\''s own]:ADDR:_default' \
 '--config=[Read settings from this file instead of ./pepe.toml; flags on the command line win over it]:FILE:_files' \
 '--write-config=[Write the settings as they stand to this file, as a pepe.toml, and exit]:FILE:_files' \
 '-c+[Number of concurrent requests at a time]:CONCURRENCY:_default' \
@@ -85,6 +86,7 @@ _arguments "${_arguments_options[@]}" : \
 '--proxy=[Proxy server URL\: http\://user\:pass@host\:port or socks5\://host\:port]:PROXY:_default' \
 '--trace-header=[Response header holding the request id to show for the slowest requests and in the inspector, so they can be found in the server'\''s logs; without it, X-Request-Id, traceparent, CF-Ray, X-Amzn-Trace-Id and other common ones are looked for]:NAME:_default' \
 '--snapshot=[Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run'\''s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run]:FILE:_files' \
+'--metrics=[Serve the live numbers for Prometheus at http\://ADDR/metrics while the run goes, e.g. \:9100 or 127.0.0.1\:9100, so a soak run or a long ping shows up in Grafana next to the server'\''s own]:ADDR:_default' \
 '--config=[Read settings from this file instead of ./pepe.toml; flags on the command line win over it]:FILE:_files' \
 '--write-config=[Write the settings as they stand to this file, as a pepe.toml, and exit]:FILE:_files' \
 '-c+[Number of concurrent requests at a time]:CONCURRENCY:_default' \
@@ -126,6 +128,7 @@ _arguments "${_arguments_options[@]}" : \
 '--proxy=[Proxy server URL\: http\://user\:pass@host\:port or socks5\://host\:port]:PROXY:_default' \
 '--trace-header=[Response header holding the request id to show for the slowest requests and in the inspector, so they can be found in the server'\''s logs; without it, X-Request-Id, traceparent, CF-Ray, X-Amzn-Trace-Id and other common ones are looked for]:NAME:_default' \
 '--snapshot=[Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run'\''s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run]:FILE:_files' \
+'--metrics=[Serve the live numbers for Prometheus at http\://ADDR/metrics while the run goes, e.g. \:9100 or 127.0.0.1\:9100, so a soak run or a long ping shows up in Grafana next to the server'\''s own]:ADDR:_default' \
 '--config=[Read settings from this file instead of ./pepe.toml; flags on the command line win over it]:FILE:_files' \
 '--write-config=[Write the settings as they stand to this file, as a pepe.toml, and exit]:FILE:_files' \
 '-c+[Number of concurrent requests at a time]:CONCURRENCY:_default' \
@@ -174,6 +177,7 @@ _arguments "${_arguments_options[@]}" : \
 '--proxy=[Proxy server URL\: http\://user\:pass@host\:port or socks5\://host\:port]:PROXY:_default' \
 '--trace-header=[Response header holding the request id to show for the slowest requests and in the inspector, so they can be found in the server'\''s logs; without it, X-Request-Id, traceparent, CF-Ray, X-Amzn-Trace-Id and other common ones are looked for]:NAME:_default' \
 '--snapshot=[Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run'\''s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run]:FILE:_files' \
+'--metrics=[Serve the live numbers for Prometheus at http\://ADDR/metrics while the run goes, e.g. \:9100 or 127.0.0.1\:9100, so a soak run or a long ping shows up in Grafana next to the server'\''s own]:ADDR:_default' \
 '--config=[Read settings from this file instead of ./pepe.toml; flags on the command line win over it]:FILE:_files' \
 '--write-config=[Write the settings as they stand to this file, as a pepe.toml, and exit]:FILE:_files' \
 '-c+[Number of concurrent requests at a time]:CONCURRENCY:_default' \
@@ -221,6 +225,7 @@ _arguments "${_arguments_options[@]}" : \
 '--proxy=[Proxy server URL\: http\://user\:pass@host\:port or socks5\://host\:port]:PROXY:_default' \
 '--trace-header=[Response header holding the request id to show for the slowest requests and in the inspector, so they can be found in the server'\''s logs; without it, X-Request-Id, traceparent, CF-Ray, X-Amzn-Trace-Id and other common ones are looked for]:NAME:_default' \
 '--snapshot=[Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run'\''s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run]:FILE:_files' \
+'--metrics=[Serve the live numbers for Prometheus at http\://ADDR/metrics while the run goes, e.g. \:9100 or 127.0.0.1\:9100, so a soak run or a long ping shows up in Grafana next to the server'\''s own]:ADDR:_default' \
 '--config=[Read settings from this file instead of ./pepe.toml; flags on the command line win over it]:FILE:_files' \
 '--write-config=[Write the settings as they stand to this file, as a pepe.toml, and exit]:FILE:_files' \
 '-c+[Number of concurrent requests at a time]:CONCURRENCY:_default' \
@@ -263,6 +268,7 @@ _arguments "${_arguments_options[@]}" : \
 '--proxy=[Proxy server URL\: http\://user\:pass@host\:port or socks5\://host\:port]:PROXY:_default' \
 '--trace-header=[Response header holding the request id to show for the slowest requests and in the inspector, so they can be found in the server'\''s logs; without it, X-Request-Id, traceparent, CF-Ray, X-Amzn-Trace-Id and other common ones are looked for]:NAME:_default' \
 '--snapshot=[Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run'\''s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run]:FILE:_files' \
+'--metrics=[Serve the live numbers for Prometheus at http\://ADDR/metrics while the run goes, e.g. \:9100 or 127.0.0.1\:9100, so a soak run or a long ping shows up in Grafana next to the server'\''s own]:ADDR:_default' \
 '--config=[Read settings from this file instead of ./pepe.toml; flags on the command line win over it]:FILE:_files' \
 '--write-config=[Write the settings as they stand to this file, as a pepe.toml, and exit]:FILE:_files' \
 '-c+[Number of concurrent requests at a time]:CONCURRENCY:_default' \
@@ -304,6 +310,7 @@ _arguments "${_arguments_options[@]}" : \
 '--proxy=[Proxy server URL\: http\://user\:pass@host\:port or socks5\://host\:port]:PROXY:_default' \
 '--trace-header=[Response header holding the request id to show for the slowest requests and in the inspector, so they can be found in the server'\''s logs; without it, X-Request-Id, traceparent, CF-Ray, X-Amzn-Trace-Id and other common ones are looked for]:NAME:_default' \
 '--snapshot=[Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run'\''s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run]:FILE:_files' \
+'--metrics=[Serve the live numbers for Prometheus at http\://ADDR/metrics while the run goes, e.g. \:9100 or 127.0.0.1\:9100, so a soak run or a long ping shows up in Grafana next to the server'\''s own]:ADDR:_default' \
 '--config=[Read settings from this file instead of ./pepe.toml; flags on the command line win over it]:FILE:_files' \
 '--write-config=[Write the settings as they stand to this file, as a pepe.toml, and exit]:FILE:_files' \
 '-c+[Number of concurrent requests at a time]:CONCURRENCY:_default' \
@@ -348,6 +355,7 @@ _arguments "${_arguments_options[@]}" : \
 '--proxy=[Proxy server URL\: http\://user\:pass@host\:port or socks5\://host\:port]:PROXY:_default' \
 '--trace-header=[Response header holding the request id to show for the slowest requests and in the inspector, so they can be found in the server'\''s logs; without it, X-Request-Id, traceparent, CF-Ray, X-Amzn-Trace-Id and other common ones are looked for]:NAME:_default' \
 '--snapshot=[Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run'\''s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run]:FILE:_files' \
+'--metrics=[Serve the live numbers for Prometheus at http\://ADDR/metrics while the run goes, e.g. \:9100 or 127.0.0.1\:9100, so a soak run or a long ping shows up in Grafana next to the server'\''s own]:ADDR:_default' \
 '--config=[Read settings from this file instead of ./pepe.toml; flags on the command line win over it]:FILE:_files' \
 '--write-config=[Write the settings as they stand to this file, as a pepe.toml, and exit]:FILE:_files' \
 '-c+[Number of concurrent requests at a time]:CONCURRENCY:_default' \
@@ -403,6 +411,7 @@ fail\:"A failure"))' \
 '--proxy=[Proxy server URL\: http\://user\:pass@host\:port or socks5\://host\:port]:PROXY:_default' \
 '--trace-header=[Response header holding the request id to show for the slowest requests and in the inspector, so they can be found in the server'\''s logs; without it, X-Request-Id, traceparent, CF-Ray, X-Amzn-Trace-Id and other common ones are looked for]:NAME:_default' \
 '--snapshot=[Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run'\''s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run]:FILE:_files' \
+'--metrics=[Serve the live numbers for Prometheus at http\://ADDR/metrics while the run goes, e.g. \:9100 or 127.0.0.1\:9100, so a soak run or a long ping shows up in Grafana next to the server'\''s own]:ADDR:_default' \
 '--config=[Read settings from this file instead of ./pepe.toml; flags on the command line win over it]:FILE:_files' \
 '--write-config=[Write the settings as they stand to this file, as a pepe.toml, and exit]:FILE:_files' \
 '-c+[Number of concurrent requests at a time]:CONCURRENCY:_default' \
@@ -458,6 +467,7 @@ _arguments "${_arguments_options[@]}" : \
 '--proxy=[Proxy server URL\: http\://user\:pass@host\:port or socks5\://host\:port]:PROXY:_default' \
 '--trace-header=[Response header holding the request id to show for the slowest requests and in the inspector, so they can be found in the server'\''s logs; without it, X-Request-Id, traceparent, CF-Ray, X-Amzn-Trace-Id and other common ones are looked for]:NAME:_default' \
 '--snapshot=[Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run'\''s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run]:FILE:_files' \
+'--metrics=[Serve the live numbers for Prometheus at http\://ADDR/metrics while the run goes, e.g. \:9100 or 127.0.0.1\:9100, so a soak run or a long ping shows up in Grafana next to the server'\''s own]:ADDR:_default' \
 '--config=[Read settings from this file instead of ./pepe.toml; flags on the command line win over it]:FILE:_files' \
 '--write-config=[Write the settings as they stand to this file, as a pepe.toml, and exit]:FILE:_files' \
 '-c+[Number of concurrent requests at a time]:CONCURRENCY:_default' \

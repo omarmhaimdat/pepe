@@ -26,6 +26,7 @@ mod contrib;
 mod curl;
 mod diagnose;
 mod direct;
+mod exporter;
 mod flow;
 mod insights;
 mod json_report;
@@ -279,6 +280,16 @@ async fn run_json(args: &Cli) -> Result<(), Box<dyn std::error::Error>> {
                     timeline.advance(started.elapsed());
                     anomalies.extend(watch.observe(timeline.samples(), false));
                 }
+                exporter::publish(|| {
+                    exporter::run_page(
+                        &args.target_label(),
+                        &metrics,
+                        &timeline,
+                        started.elapsed(),
+                        args.concurrency as usize,
+                        &[],
+                    )
+                });
                 if over {
                     break;
                 }
@@ -501,6 +512,11 @@ async fn run_api_json(args: &Cli, run: &api::ApiRun) -> Result<(), Box<dyn std::
         std::process::exit(1);
     }
     let targets = run.targets(args, &which)?;
+    let row_labels: Vec<String> = which
+        .iter()
+        .map(|&index| run.endpoints[index].label.clone())
+        .collect();
+    let timeline = timeline::Timeline::default();
     let (clients, connects) = run.clients(args, shards(args, args.concurrency as usize))?;
     let mut load = load::start_targets(
         clients,
@@ -536,6 +552,18 @@ async fn run_api_json(args: &Cli, run: &api::ApiRun) -> Result<(), Box<dyn std::
                     if let Some(metrics) = each.get_mut(stat.endpoint as usize) {
                         metrics.record(&stat);
                     }
+                });
+                exporter::publish(|| {
+                    let rows: Vec<(String, &Metrics)> =
+                        row_labels.iter().cloned().zip(each.iter()).collect();
+                    exporter::run_page(
+                        &args.target_label(),
+                        &total,
+                        &timeline,
+                        started.elapsed(),
+                        args.concurrency as usize,
+                        &rows,
+                    )
                 });
                 if over {
                     break;
@@ -707,6 +735,8 @@ async fn flow_session(
 async fn run_flow_json(args: &Cli, flow: flow::Flow) -> Result<(), Box<dyn std::error::Error>> {
     let name = flow.name.clone();
     let views = flow.views();
+    let row_labels: Vec<String> = views.iter().map(|v| v.label.clone()).collect();
+    let timeline = timeline::Timeline::default();
     let (clients, connects) = flow_clients(args, &flow, args.concurrency as usize)?;
     let mut load = load::start_flow(clients, flow, args.concurrency as usize, plan(args), false);
     load.set_rate(args.rate);
@@ -736,6 +766,18 @@ async fn run_flow_json(args: &Cli, flow: flow::Flow) -> Result<(), Box<dyn std::
                     if let Some(metrics) = each.get_mut(stat.endpoint as usize) {
                         metrics.record(&stat);
                     }
+                });
+                exporter::publish(|| {
+                    let rows: Vec<(String, &Metrics)> =
+                        row_labels.iter().cloned().zip(each.iter()).collect();
+                    exporter::run_page(
+                        &args.target_label(),
+                        &total,
+                        &timeline,
+                        started.elapsed(),
+                        args.concurrency as usize,
+                        &rows,
+                    )
                 });
                 if over {
                     break;
@@ -872,6 +914,8 @@ async fn run_replay_json(
     what: &cli::ReplayArgs,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let views = replay.views(what.rows);
+    let row_labels: Vec<String> = views.iter().map(|v| v.label.clone()).collect();
+    let timeline = timeline::Timeline::default();
     let (clients, connects) = replay_clients(args, replay, args.concurrency as usize)?;
     let mut load = load::start_targets(
         clients,
@@ -907,6 +951,18 @@ async fn run_replay_json(
                     if let Some(metrics) = each.get_mut(stat.endpoint as usize) {
                         metrics.record(&stat);
                     }
+                });
+                exporter::publish(|| {
+                    let rows: Vec<(String, &Metrics)> =
+                        row_labels.iter().cloned().zip(each.iter()).collect();
+                    exporter::run_page(
+                        &args.target_label(),
+                        &total,
+                        &timeline,
+                        started.elapsed(),
+                        args.concurrency as usize,
+                        &rows,
+                    )
                 });
                 if over {
                     break;
@@ -1188,6 +1244,15 @@ async fn run_ping(
         && stdout().is_terminal()
         && stdin().is_terminal();
     let shared = ping::start(targets, settings.clone());
+    if exporter::address().is_some() {
+        let shared = shared.clone();
+        tokio::spawn(async move {
+            while !shared.stopped() {
+                tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+                exporter::publish(|| exporter::ping_page(&shared.lock()));
+            }
+        });
+    }
     let mut interrupted = false;
     if screen {
         let check = update::Check::start();
@@ -1430,6 +1495,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         restore_terminal();
         default_hook(info);
     }));
+
+    // stderr, so `--json` output on stdout stays valid JSON
+    if let Some(spec) = &args.metrics {
+        match exporter::start(spec).await {
+            Ok(addr) => eprintln!("metrics: http://{addr}/metrics"),
+            Err(e) => {
+                eprintln!("error: --metrics: {e}");
+                std::process::exit(1);
+            }
+        }
+    }
 
     if let Some(cli::Command::Replay(what)) = args.command.clone() {
         if let Err(e) = args.validate() {
