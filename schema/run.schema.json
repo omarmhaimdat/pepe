@@ -1,0 +1,229 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://pepe.mhaimdat.com/schema/run.schema.json",
+  "title": "pepe run report",
+  "description": "What `pepe --json`, `--snapshot`, `pepe api --json`, `pepe flow --json` and `pepe replay --json` print. Fields are added over time and never renamed within a schema_version; read the ones you need and ignore the rest.",
+  "type": "object",
+  "required": ["schema_version", "summary"],
+  "properties": {
+    "schema_version": { "type": "integer", "const": 1 },
+    "target": {
+      "type": "object",
+      "description": "What was tested and with what load",
+      "required": ["mode", "url", "concurrency"],
+      "properties": {
+        "mode": { "type": "string", "enum": ["run", "ramp", "api", "flow", "replay"] },
+        "method": { "type": "string" },
+        "url": { "type": "string", "description": "The URL, or the spec, flow file or log the requests came from" },
+        "concurrency": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "summary": {
+      "type": "object",
+      "required": [
+        "total_requests", "successful_requests", "failed_requests", "http_errors", "timeout_errors",
+        "connection_errors", "interrupted", "duration_ms", "requests_per_second", "data_transfer_bytes",
+        "latency", "status_codes"
+      ],
+      "properties": {
+        "total_requests": { "type": "integer", "minimum": 0 },
+        "successful_requests": { "type": "integer", "minimum": 0, "description": "2xx responses" },
+        "failed_requests": { "type": "integer", "minimum": 0, "description": "Every request that did not get a 2xx response" },
+        "http_errors": { "type": "integer", "minimum": 0, "description": "Responses with a non-2xx status" },
+        "timeout_errors": { "type": "integer", "minimum": 0 },
+        "connection_errors": { "type": "integer", "minimum": 0, "description": "Requests that failed without a response" },
+        "interrupted": { "type": "boolean", "description": "The run was stopped early" },
+        "duration_ms": { "type": "number" },
+        "requests_per_second": { "type": "number" },
+        "data_transfer_bytes": { "type": "integer", "minimum": 0 },
+        "latency": { "$ref": "#/$defs/latency" },
+        "status_codes": {
+          "type": "object",
+          "description": "Responses by status code, the code as the key",
+          "additionalProperties": { "type": "integer", "minimum": 0 }
+        },
+        "server_timing": {
+          "type": "object",
+          "description": "What the target's Server-Timing headers said; absent when it sent none",
+          "required": ["responses", "total", "segments"],
+          "properties": {
+            "responses": { "type": "integer", "minimum": 0 },
+            "total": { "$ref": "#/$defs/timing" },
+            "segments": { "type": "object", "additionalProperties": { "$ref": "#/$defs/timing" } }
+          }
+        },
+        "slowest_requests": {
+          "type": "array",
+          "description": "The slowest responses, slowest first; absent when nothing was tracked",
+          "items": {
+            "type": "object",
+            "required": ["at_s", "latency_ms", "status"],
+            "properties": {
+              "at_s": { "type": "number" },
+              "latency_ms": { "type": "number" },
+              "status": { "type": "integer" },
+              "request_id": { "type": "string" },
+              "id_header": { "type": "string" }
+            }
+          }
+        },
+        "anomalies": {
+          "type": "array",
+          "description": "What changed during the run, as it was noticed; absent when nothing did",
+          "items": {
+            "type": "object",
+            "required": ["at_s", "kind", "text"],
+            "properties": {
+              "at_s": { "type": "number" },
+              "kind": { "type": "string" },
+              "text": { "type": "string" }
+            }
+          }
+        },
+        "failures": {
+          "type": "array",
+          "description": "Failed requests by cause, most frequent first; absent when nothing failed",
+          "items": {
+            "type": "object",
+            "required": ["cause", "count"],
+            "properties": {
+              "cause": { "type": "string" },
+              "count": { "type": "integer", "minimum": 0 },
+              "example_body": { "type": "string" }
+            }
+          }
+        }
+      }
+    },
+    "generator": {
+      "type": "object",
+      "description": "pepe's own load during the run: whether pepe, rather than the target, was the limit",
+      "required": ["threads"],
+      "properties": {
+        "threads": { "type": "integer", "minimum": 1 },
+        "peak_busy_percent": { "type": "integer", "minimum": 0, "maximum": 100, "description": "Near 100, the numbers are pepe's limit" },
+        "warmup_s": { "type": "number" },
+        "warmup_requests": { "type": "integer", "minimum": 0 },
+        "rate_per_second": { "type": "number" },
+        "rate_missed": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "timeline": {
+      "type": "array",
+      "description": "One point per minute over the whole run; absent for runs under a minute",
+      "items": {
+        "type": "object",
+        "required": ["at_s", "requests_per_second", "errors_per_second", "p50_ms", "p90_ms", "p99_ms"],
+        "properties": {
+          "at_s": { "type": "number" },
+          "requests_per_second": { "type": "number" },
+          "errors_per_second": { "type": "number" },
+          "p50_ms": { "type": "number" },
+          "p90_ms": { "type": "number" },
+          "p99_ms": { "type": "number" }
+        }
+      }
+    },
+    "snapshot": {
+      "type": "object",
+      "description": "Present when written by --snapshot",
+      "required": ["unix_time", "running"],
+      "properties": {
+        "unix_time": { "type": "integer" },
+        "running": { "type": "boolean", "description": "False in the last one" }
+      }
+    },
+    "endpoints": {
+      "type": "array",
+      "description": "API mode: one entry per endpoint that ran",
+      "items": { "$ref": "#/$defs/row" }
+    },
+    "flow": {
+      "type": "object",
+      "description": "A flow: its steps, and how many chains started and completed",
+      "properties": {
+        "name": { "type": "string" },
+        "chains_started": { "type": "integer", "minimum": 0 },
+        "chains_completed": { "type": "integer", "minimum": 0 },
+        "steps": { "type": "array", "items": { "$ref": "#/$defs/row" } }
+      }
+    },
+    "replay": {
+      "type": "object",
+      "description": "A replay: the log it came from and its URLs",
+      "properties": {
+        "log": { "type": "string" },
+        "requests_in_log": { "type": "integer", "minimum": 0 },
+        "replayed_from_log": { "type": "integer", "minimum": 0 },
+        "distinct_urls": { "type": "integer", "minimum": 0 },
+        "left_out": { "type": "object", "additionalProperties": { "type": "integer" } },
+        "urls": { "type": "array", "items": { "$ref": "#/$defs/row" } }
+      }
+    }
+  },
+  "$defs": {
+    "latency": {
+      "type": "object",
+      "required": ["min_ms", "max_ms", "avg_ms", "std_dev_ms", "median_ms", "p90_ms", "p95_ms", "p99_ms", "phases"],
+      "properties": {
+        "min_ms": { "type": "number" },
+        "max_ms": { "type": "number" },
+        "avg_ms": { "type": "number" },
+        "std_dev_ms": { "type": "number" },
+        "median_ms": { "type": "number" },
+        "p90_ms": { "type": "number" },
+        "p95_ms": { "type": "number" },
+        "p99_ms": { "type": "number" },
+        "phases": {
+          "type": "object",
+          "description": "Where the time went",
+          "required": ["first_byte", "download", "dns_lookup_avg_ms"],
+          "properties": {
+            "connect": { "$ref": "#/$defs/phase", "description": "Opening a connection, TCP and TLS together; absent when nothing measured it" },
+            "first_byte": { "$ref": "#/$defs/phase" },
+            "download": { "$ref": "#/$defs/phase" },
+            "dns_lookup_avg_ms": { "type": "number" }
+          }
+        }
+      }
+    },
+    "phase": {
+      "type": "object",
+      "required": ["count", "median_ms", "p99_ms", "max_ms"],
+      "properties": {
+        "count": { "type": "integer", "minimum": 0 },
+        "median_ms": { "type": "number" },
+        "p99_ms": { "type": "number" },
+        "max_ms": { "type": "number" }
+      }
+    },
+    "timing": {
+      "type": "object",
+      "required": ["count"],
+      "properties": {
+        "count": { "type": "integer", "minimum": 0 },
+        "median_ms": { "type": "number" },
+        "p90_ms": { "type": "number" },
+        "p99_ms": { "type": "number" }
+      }
+    },
+    "row": {
+      "type": "object",
+      "description": "One endpoint, step or URL of a run",
+      "required": ["requests", "failed_requests", "requests_per_second", "median_ms", "p99_ms", "status_codes"],
+      "properties": {
+        "endpoint": { "type": "string" },
+        "step": { "type": "string" },
+        "method": { "type": "string" },
+        "url": { "type": "string" },
+        "share_in_log": { "type": "number" },
+        "requests": { "type": "integer", "minimum": 0 },
+        "failed_requests": { "type": "integer", "minimum": 0 },
+        "requests_per_second": { "type": "number" },
+        "median_ms": { "type": "number" },
+        "p99_ms": { "type": "number" },
+        "status_codes": { "type": "object", "additionalProperties": { "type": "integer" } }
+      }
+    }
+  }
+}

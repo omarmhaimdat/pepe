@@ -112,6 +112,12 @@ pub struct Cli {
     #[arg(long, global = true, value_name = "FILE")]
     pub snapshot: Option<std::path::PathBuf>,
 
+    /// End with exit code 4 when the run crosses this, for CI and scripts:
+    /// 'p99 > 300ms', 'errors > 1%'; repeat for more. The report is still
+    /// printed. (pepe ping has --slo for the same.)
+    #[arg(long, global = true, value_name = "CONDITION")]
+    pub fail_if: Vec<String>,
+
     /// Serve the live numbers for Prometheus at http://ADDR/metrics while
     /// the run goes, e.g. :9100 or 127.0.0.1:9100, so a soak run or a long
     /// ping shows up in Grafana next to the server's own
@@ -193,6 +199,15 @@ pub enum Command {
     Ping(PingArgs),
     /// Hold a run's JSON report against an earlier one and say what moved
     Compare(CompareArgs),
+    /// Print the JSON Schema of a report: run (the default), ramp, ping or compare
+    Schema(SchemaArgs),
+}
+
+#[derive(clap::Args, Debug, Clone, PartialEq, Default)]
+pub struct SchemaArgs {
+    /// Which report: run, ramp, ping or compare
+    #[arg(default_value = "run", value_name = "REPORT")]
+    pub which: String,
 }
 
 #[derive(clap::Args, Debug, Clone, PartialEq, Default)]
@@ -498,6 +513,14 @@ impl Cli {
                     format!("--rate {rate} is not a number of requests per second"),
                 ));
             }
+        }
+        for condition in &self.fail_if {
+            crate::ramp::Condition::parse(condition).map_err(|e| {
+                Error::raw(
+                    clap::error::ErrorKind::ValueValidation,
+                    format!("--fail-if: {e}"),
+                )
+            })?;
         }
         if let Some(name) = &self.trace_header {
             if reqwest::header::HeaderName::from_bytes(name.as_bytes()).is_err() {

@@ -9,6 +9,9 @@ use crate::timeline::{Sample, Timeline};
 
 #[derive(Serialize, Clone)]
 pub struct JsonReport {
+    /// The shape of this report; fields are added within a version and
+    /// never renamed (see `pepe schema`)
+    pub schema_version: u32,
     /// What was tested and with what load, so two reports can be told
     /// apart before their numbers are held against each other
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -381,6 +384,7 @@ impl JsonReport {
 
     pub fn generate(metrics: &Metrics, elapsed: Duration, interrupted: bool) -> Self {
         Self {
+            schema_version: 1,
             target: None,
             generator: None,
             timeline: Vec::new(),

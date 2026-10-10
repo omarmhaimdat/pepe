@@ -917,6 +917,7 @@ pub fn json(ramp: &Ramp) -> serde_json::Value {
     let ms = |d: Duration| (d.as_secs_f64() * 1_000_000.0).round() / 1000.0;
     let findings = findings(&ramp.steps, ramp.completed());
     serde_json::json!({
+        "schema_version": 1,
         "ended": match &ramp.end {
             Some(End::Stopped(condition)) => format!("stopped: {condition}"),
             Some(End::Interrupted) => "interrupted".to_string(),

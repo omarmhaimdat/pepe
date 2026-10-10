@@ -1,0 +1,188 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://pepe.mhaimdat.com/schema/ping.schema.json",
+  "title": "pepe ping report",
+  "description": "What `pepe ping --json` prints and `--save` writes: each target's pings, latency, phases, TLS and certificate. One line of `--jsonl` is a `sample`. Fields are added over time and never renamed within a schema_version.",
+  "type": "object",
+  "required": ["schema_version", "mode", "every_s", "elapsed_s", "interrupted", "targets"],
+  "properties": {
+    "schema_version": { "type": "integer", "const": 1 },
+    "mode": { "type": "string", "const": "ping" },
+    "every_s": { "type": "number", "description": "Seconds between pings" },
+    "elapsed_s": { "type": "number" },
+    "interrupted": { "type": "boolean" },
+    "slo": {
+      "type": "object",
+      "description": "The --slo limits, in milliseconds, by phase",
+      "additionalProperties": { "type": "number" }
+    },
+    "targets": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "target", "sent", "answered", "lost", "loss", "timeouts", "latency_ms", "phases_ms", "bytes", "status_codes", "failures", "slo"],
+        "properties": {
+          "name": { "type": "string" },
+          "target": { "type": "string", "description": "The URL, the host and port, or the command" },
+          "sent": { "type": "integer", "minimum": 0 },
+          "answered": { "type": "integer", "minimum": 0 },
+          "lost": { "type": "integer", "minimum": 0 },
+          "loss": { "type": "number", "minimum": 0, "maximum": 1, "description": "Lost over sent" },
+          "timeouts": { "type": "integer", "minimum": 0 },
+          "latency_ms": {
+            "type": "object",
+            "required": ["min", "avg", "max", "jitter", "p50", "p95", "p99"],
+            "properties": {
+              "last": { "type": ["number", "null"] },
+              "min": { "type": "number" },
+              "avg": { "type": "number" },
+              "max": { "type": "number" },
+              "jitter": { "type": "number", "description": "Mean difference between one answer and the next" },
+              "p50": { "type": "number" },
+              "p95": { "type": "number" },
+              "p99": { "type": "number" }
+            }
+          },
+          "phases_ms": {
+            "type": "object",
+            "description": "Each phase's distribution; null when nothing measured it",
+            "properties": {
+              "dns": { "$ref": "#/$defs/phase" },
+              "connect": { "$ref": "#/$defs/phase" },
+              "tls_full": { "$ref": "#/$defs/phase" },
+              "tls_resumed": { "$ref": "#/$defs/phase" },
+              "ttfb": { "$ref": "#/$defs/phase" },
+              "download": { "$ref": "#/$defs/phase" }
+            }
+          },
+          "reused_connections": { "type": "integer", "minimum": 0 },
+          "bytes": { "type": "integer", "minimum": 0 },
+          "status_codes": { "type": "object", "additionalProperties": { "type": "integer" } },
+          "failures": { "type": "object", "description": "By cause", "additionalProperties": { "type": "integer" } },
+          "remote": { "type": ["string", "null"] },
+          "local": { "type": ["string", "null"] },
+          "http_version": { "type": ["string", "null"] },
+          "tls": { "$ref": "#/$defs/tls" },
+          "slo": {
+            "type": "object",
+            "required": ["pass", "violations"],
+            "properties": {
+              "pass": { "type": "boolean" },
+              "violations": { "type": "integer", "minimum": 0 },
+              "worst_ms": { "type": "object", "additionalProperties": { "type": "number" } }
+            }
+          },
+          "findings": {
+            "type": "array",
+            "description": "What to look at, most serious first",
+            "items": {
+              "type": "object",
+              "required": ["level", "text"],
+              "properties": {
+                "level": { "type": "string", "enum": ["good", "note", "warn", "bad"] },
+                "text": { "type": "string" }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "phase": {
+      "type": ["object", "null"],
+      "required": ["count", "median_ms", "p99_ms", "max_ms"],
+      "properties": {
+        "count": { "type": "integer", "minimum": 0 },
+        "median_ms": { "type": "number" },
+        "p99_ms": { "type": "number" },
+        "max_ms": { "type": "number" }
+      }
+    },
+    "tls": {
+      "type": ["object", "null"],
+      "properties": {
+        "version": { "type": "string" },
+        "cipher": { "type": "string" },
+        "alpn": { "type": ["string", "null"] },
+        "resumed": { "type": "boolean" },
+        "cert": {
+          "type": ["object", "null"],
+          "properties": {
+            "subject": { "type": "string" },
+            "issuer": { "type": "string" },
+            "names": { "type": "array", "items": { "type": "string" } },
+            "not_before": { "type": "string", "description": "RFC 3339, UTC" },
+            "not_after": { "type": "string" },
+            "days_left": { "type": "integer" },
+            "valid": { "type": "boolean" }
+          }
+        }
+      }
+    },
+    "sample": {
+      "type": "object",
+      "description": "One line of --jsonl: one ping",
+      "required": ["schema_version", "target", "url", "seq", "time", "at_s", "ok", "answered", "timeout", "timings_ms", "slo"],
+      "properties": {
+        "schema_version": { "type": "integer", "const": 1 },
+        "target": { "type": "string" },
+        "url": { "type": "string" },
+        "seq": { "type": "integer" },
+        "time": { "type": "string" },
+        "at_s": { "type": "number" },
+        "ok": { "type": "boolean" },
+        "answered": { "type": "boolean" },
+        "timeout": { "type": "boolean" },
+        "status": { "type": ["integer", "null"] },
+        "error": { "type": ["string", "null"] },
+        "timings_ms": {
+          "type": "object",
+          "required": ["total"],
+          "properties": {
+            "dns": { "type": ["number", "null"] },
+            "connect": { "type": ["number", "null"] },
+            "tls": { "type": ["number", "null"] },
+            "ttfb": { "type": ["number", "null"] },
+            "download": { "type": ["number", "null"] },
+            "total": { "type": "number" }
+          }
+        },
+        "reused_connection": { "type": "boolean" },
+        "bytes": { "type": "integer" },
+        "remote": { "type": ["string", "null"] },
+        "local": { "type": ["string", "null"] },
+        "http_version": { "type": ["string", "null"] },
+        "tls": { "$ref": "#/$defs/tls" },
+        "redirects": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "url": { "type": "string" },
+              "status": { "type": "integer" },
+              "took_ms": { "type": "number" }
+            }
+          }
+        },
+        "slo": {
+          "type": "object",
+          "properties": {
+            "pass": { "type": "boolean" },
+            "violations": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "key": { "type": "string" },
+                  "threshold_ms": { "type": "number" },
+                  "actual_ms": { "type": "number" }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

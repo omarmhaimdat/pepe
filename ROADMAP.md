@@ -110,16 +110,15 @@ Load that looks like production.
 
 Get the results where they're needed.
 
-- [ ] **Thresholds that fail CI** (S). `--fail-if 'p99 > 300ms'`, reusing
-      the ramp's conditions, with a non-zero exit code. The GitHub Action's
-      `fail-if` input covers this in CI today.
-- [ ] **A report when there's no terminal** (S). Piped, or run by a
-      script without `--json`, pepe still tries to open the dashboard and
-      fails. With no terminal it should run to completion and print the
-      report, so a forgotten flag costs nothing.
-- [ ] **A versioned report** (S). `"schema_version": 1` in the JSON and a
-      JSON Schema published with each release, so a script or an agent
-      can depend on the field names while sections keep being added.
+- [x] **Thresholds that fail CI** (S): `--fail-if 'p99 > 300ms'`, the
+      ramp's conditions, in every mode that measures requests, with exit
+      code 4 — next release
+- [x] **A report when there's no terminal** (S): piped or run by a script,
+      the run goes to its end and the dashboard's report is printed — next
+      release
+- [x] **A versioned report** (S): `"schema_version": 1` in every report,
+      and the JSON Schema of each (`pepe schema run|ramp|ping|compare`)
+      in every release and at pepe.mhaimdat.com/schema/ — next release
 - [x] **Compare two runs** (M): `pepe compare before.json after.json` says
       what moved, in the verdict's language, and only when it moved more
       than runs of that size wobble; `--gate` exits 1 on a regression — next release

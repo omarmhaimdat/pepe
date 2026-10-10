@@ -1,0 +1,74 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://pepe.mhaimdat.com/schema/ramp.schema.json",
+  "title": "pepe ramp report",
+  "description": "What `pepe ramp --json` prints: each step of the climb, the level that held, and the capacity estimate. Fields are added over time and never renamed within a schema_version.",
+  "type": "object",
+  "required": ["schema_version", "ended", "requests", "failed_requests", "seconds", "findings", "steps"],
+  "properties": {
+    "schema_version": { "type": "integer", "const": 1 },
+    "ended": { "type": "string", "description": "completed, interrupted, or `stopped: <condition>`" },
+    "holds_concurrency": { "type": ["integer", "null"], "description": "The highest level the target kept up with" },
+    "capacity": {
+      "type": ["object", "null"],
+      "description": "A saturation curve fitted to the steps; null when the curve hadn't begun to bend",
+      "required": ["requests_per_second", "concurrency", "extrapolated"],
+      "properties": {
+        "requests_per_second": { "type": "number" },
+        "concurrency": { "type": "number", "description": "Where that rate is reached" },
+        "extrapolated": { "type": "boolean", "description": "Past the levels that were run" },
+        "latency_doubles_at_concurrency": { "type": ["number", "null"] }
+      }
+    },
+    "requests": { "type": "integer", "minimum": 0 },
+    "failed_requests": { "type": "integer", "minimum": 0 },
+    "seconds": { "type": "number", "description": "Time spent on the steps, pauses left out" },
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["level", "title"],
+        "properties": {
+          "level": { "type": "string", "enum": ["healthy", "degraded", "failing"] },
+          "title": { "type": "string" },
+          "detail": { "type": ["string", "null"] }
+        }
+      }
+    },
+    "steps": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["concurrency", "seconds", "requests", "failed_requests", "requests_per_second", "successful_per_second", "error_rate_percent", "median_ms", "p99_ms", "status_codes"],
+        "properties": {
+          "concurrency": { "type": "integer" },
+          "seconds": { "type": "number" },
+          "requests": { "type": "integer", "minimum": 0 },
+          "failed_requests": { "type": "integer", "minimum": 0 },
+          "requests_per_second": { "type": "number" },
+          "successful_per_second": { "type": "number" },
+          "error_rate_percent": { "type": "number" },
+          "data_transfer_bytes": { "type": "integer", "minimum": 0 },
+          "min_ms": { "type": "number" },
+          "avg_ms": { "type": "number" },
+          "median_ms": { "type": "number" },
+          "p90_ms": { "type": "number" },
+          "p95_ms": { "type": "number" },
+          "p99_ms": { "type": "number" },
+          "max_ms": { "type": "number" },
+          "status_codes": { "type": "object", "additionalProperties": { "type": "integer" } },
+          "timeouts": { "type": "integer", "minimum": 0 },
+          "connection_errors": { "type": "integer", "minimum": 0 },
+          "note": { "type": ["string", "null"], "description": "What the step was: where throughput stopped following the load, where it broke" }
+        }
+      }
+    },
+    "generator": {
+      "type": "object",
+      "properties": {
+        "threads": { "type": "integer" },
+        "peak_busy_percent": { "type": ["integer", "null"] }
+      }
+    }
+  }
+}

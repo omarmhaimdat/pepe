@@ -100,6 +100,11 @@ impl RampScreen {
     }
 
     /// The ramp as text, once at least one step has been measured
+    /// Everything the ramp measured, for `--fail-if`
+    pub fn metrics(&self) -> &crate::metrics::Metrics {
+        &self.ramp.total
+    }
+
     pub fn report(&self) -> Option<String> {
         (!self.ramp.steps.is_empty()).then(|| ramp::report(&self.cli, &self.ramp))
     }

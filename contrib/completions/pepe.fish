@@ -1,6 +1,6 @@
 # Print an optspec for argparse to handle cmd's options that are independent of any subcommand.
 function __fish_pepe_global_optspecs
-    string join \n h/help n/number= z/duration= curl m/method= H/headers= t/timeout= warmup= threads= rate= d/body= p/proxy= k/insecure disable-compression disable-keepalive disable-redirects json trace-header= snapshot= metrics= i/setup config= write-config= c/concurrency= u/user-agent= V/version
+    string join \n h/help n/number= z/duration= curl m/method= H/headers= t/timeout= warmup= threads= rate= d/body= p/proxy= k/insecure disable-compression disable-keepalive disable-redirects json trace-header= snapshot= fail-if= metrics= i/setup config= write-config= c/concurrency= u/user-agent= V/version
 end
 
 function __fish_pepe_needs_command
@@ -36,6 +36,7 @@ complete -c pepe -n "__fish_pepe_needs_command" -s d -l body -d 'HTTP request bo
 complete -c pepe -n "__fish_pepe_needs_command" -s p -l proxy -d 'Proxy server URL: http://user:pass@host:port or socks5://host:port' -r
 complete -c pepe -n "__fish_pepe_needs_command" -l trace-header -d 'Response header holding the request id to show for the slowest requests and in the inspector, so they can be found in the server\'s logs; without it, X-Request-Id, traceparent, CF-Ray, X-Amzn-Trace-Id and other common ones are looked for' -r
 complete -c pepe -n "__fish_pepe_needs_command" -l snapshot -d 'Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run\'s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run' -r -F
+complete -c pepe -n "__fish_pepe_needs_command" -l fail-if -d 'End with exit code 4 when the run crosses this, for CI and scripts: \'p99 > 300ms\', \'errors > 1%\'; repeat for more. The report is still printed. (pepe ping has --slo for the same.)' -r
 complete -c pepe -n "__fish_pepe_needs_command" -l metrics -d 'Serve the live numbers for Prometheus at http://ADDR/metrics while the run goes, e.g. :9100 or 127.0.0.1:9100, so a soak run or a long ping shows up in Grafana next to the server\'s own' -r
 complete -c pepe -n "__fish_pepe_needs_command" -l config -d 'Read settings from this file instead of ./pepe.toml; flags on the command line win over it' -r -F
 complete -c pepe -n "__fish_pepe_needs_command" -l write-config -d 'Write the settings as they stand to this file, as a pepe.toml, and exit' -r -F
@@ -59,6 +60,7 @@ complete -c pepe -n "__fish_pepe_needs_command" -a "flow" -d 'Run a sequence of 
 complete -c pepe -n "__fish_pepe_needs_command" -a "logs" -d 'Read nginx logs: requests per second now, against each minute, hour and day'
 complete -c pepe -n "__fish_pepe_needs_command" -a "ping" -d 'Ping a URL: a request a second, each split into DNS, connect, TLS, first byte and download, on a graph'
 complete -c pepe -n "__fish_pepe_needs_command" -a "compare" -d 'Hold a run\'s JSON report against an earlier one and say what moved'
+complete -c pepe -n "__fish_pepe_needs_command" -a "schema" -d 'Print the JSON Schema of a report: run (the default), ramp, ping or compare'
 complete -c pepe -n "__fish_pepe_needs_command" -a "help" -d 'Print this message or the help of the given subcommand(s)'
 complete -c pepe -n "__fish_pepe_using_subcommand self-update" -s n -l number -d 'Number of requests to perform' -r
 complete -c pepe -n "__fish_pepe_using_subcommand self-update" -s z -l duration -d 'Duration of the test, e.g. 10s, 3m, 2h (mutually exclusive with -n)' -r
@@ -72,6 +74,7 @@ complete -c pepe -n "__fish_pepe_using_subcommand self-update" -s d -l body -d '
 complete -c pepe -n "__fish_pepe_using_subcommand self-update" -s p -l proxy -d 'Proxy server URL: http://user:pass@host:port or socks5://host:port' -r
 complete -c pepe -n "__fish_pepe_using_subcommand self-update" -l trace-header -d 'Response header holding the request id to show for the slowest requests and in the inspector, so they can be found in the server\'s logs; without it, X-Request-Id, traceparent, CF-Ray, X-Amzn-Trace-Id and other common ones are looked for' -r
 complete -c pepe -n "__fish_pepe_using_subcommand self-update" -l snapshot -d 'Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run\'s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run' -r -F
+complete -c pepe -n "__fish_pepe_using_subcommand self-update" -l fail-if -d 'End with exit code 4 when the run crosses this, for CI and scripts: \'p99 > 300ms\', \'errors > 1%\'; repeat for more. The report is still printed. (pepe ping has --slo for the same.)' -r
 complete -c pepe -n "__fish_pepe_using_subcommand self-update" -l metrics -d 'Serve the live numbers for Prometheus at http://ADDR/metrics while the run goes, e.g. :9100 or 127.0.0.1:9100, so a soak run or a long ping shows up in Grafana next to the server\'s own' -r
 complete -c pepe -n "__fish_pepe_using_subcommand self-update" -l config -d 'Read settings from this file instead of ./pepe.toml; flags on the command line win over it' -r -F
 complete -c pepe -n "__fish_pepe_using_subcommand self-update" -l write-config -d 'Write the settings as they stand to this file, as a pepe.toml, and exit' -r -F
@@ -98,6 +101,7 @@ complete -c pepe -n "__fish_pepe_using_subcommand completions" -s d -l body -d '
 complete -c pepe -n "__fish_pepe_using_subcommand completions" -s p -l proxy -d 'Proxy server URL: http://user:pass@host:port or socks5://host:port' -r
 complete -c pepe -n "__fish_pepe_using_subcommand completions" -l trace-header -d 'Response header holding the request id to show for the slowest requests and in the inspector, so they can be found in the server\'s logs; without it, X-Request-Id, traceparent, CF-Ray, X-Amzn-Trace-Id and other common ones are looked for' -r
 complete -c pepe -n "__fish_pepe_using_subcommand completions" -l snapshot -d 'Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run\'s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run' -r -F
+complete -c pepe -n "__fish_pepe_using_subcommand completions" -l fail-if -d 'End with exit code 4 when the run crosses this, for CI and scripts: \'p99 > 300ms\', \'errors > 1%\'; repeat for more. The report is still printed. (pepe ping has --slo for the same.)' -r
 complete -c pepe -n "__fish_pepe_using_subcommand completions" -l metrics -d 'Serve the live numbers for Prometheus at http://ADDR/metrics while the run goes, e.g. :9100 or 127.0.0.1:9100, so a soak run or a long ping shows up in Grafana next to the server\'s own' -r
 complete -c pepe -n "__fish_pepe_using_subcommand completions" -l config -d 'Read settings from this file instead of ./pepe.toml; flags on the command line win over it' -r -F
 complete -c pepe -n "__fish_pepe_using_subcommand completions" -l write-config -d 'Write the settings as they stand to this file, as a pepe.toml, and exit' -r -F
@@ -130,6 +134,7 @@ complete -c pepe -n "__fish_pepe_using_subcommand api" -s d -l body -d 'HTTP req
 complete -c pepe -n "__fish_pepe_using_subcommand api" -s p -l proxy -d 'Proxy server URL: http://user:pass@host:port or socks5://host:port' -r
 complete -c pepe -n "__fish_pepe_using_subcommand api" -l trace-header -d 'Response header holding the request id to show for the slowest requests and in the inspector, so they can be found in the server\'s logs; without it, X-Request-Id, traceparent, CF-Ray, X-Amzn-Trace-Id and other common ones are looked for' -r
 complete -c pepe -n "__fish_pepe_using_subcommand api" -l snapshot -d 'Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run\'s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run' -r -F
+complete -c pepe -n "__fish_pepe_using_subcommand api" -l fail-if -d 'End with exit code 4 when the run crosses this, for CI and scripts: \'p99 > 300ms\', \'errors > 1%\'; repeat for more. The report is still printed. (pepe ping has --slo for the same.)' -r
 complete -c pepe -n "__fish_pepe_using_subcommand api" -l metrics -d 'Serve the live numbers for Prometheus at http://ADDR/metrics while the run goes, e.g. :9100 or 127.0.0.1:9100, so a soak run or a long ping shows up in Grafana next to the server\'s own' -r
 complete -c pepe -n "__fish_pepe_using_subcommand api" -l config -d 'Read settings from this file instead of ./pepe.toml; flags on the command line win over it' -r -F
 complete -c pepe -n "__fish_pepe_using_subcommand api" -l write-config -d 'Write the settings as they stand to this file, as a pepe.toml, and exit' -r -F
@@ -161,6 +166,7 @@ complete -c pepe -n "__fish_pepe_using_subcommand ramp" -s d -l body -d 'HTTP re
 complete -c pepe -n "__fish_pepe_using_subcommand ramp" -s p -l proxy -d 'Proxy server URL: http://user:pass@host:port or socks5://host:port' -r
 complete -c pepe -n "__fish_pepe_using_subcommand ramp" -l trace-header -d 'Response header holding the request id to show for the slowest requests and in the inspector, so they can be found in the server\'s logs; without it, X-Request-Id, traceparent, CF-Ray, X-Amzn-Trace-Id and other common ones are looked for' -r
 complete -c pepe -n "__fish_pepe_using_subcommand ramp" -l snapshot -d 'Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run\'s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run' -r -F
+complete -c pepe -n "__fish_pepe_using_subcommand ramp" -l fail-if -d 'End with exit code 4 when the run crosses this, for CI and scripts: \'p99 > 300ms\', \'errors > 1%\'; repeat for more. The report is still printed. (pepe ping has --slo for the same.)' -r
 complete -c pepe -n "__fish_pepe_using_subcommand ramp" -l metrics -d 'Serve the live numbers for Prometheus at http://ADDR/metrics while the run goes, e.g. :9100 or 127.0.0.1:9100, so a soak run or a long ping shows up in Grafana next to the server\'s own' -r
 complete -c pepe -n "__fish_pepe_using_subcommand ramp" -l config -d 'Read settings from this file instead of ./pepe.toml; flags on the command line win over it' -r -F
 complete -c pepe -n "__fish_pepe_using_subcommand ramp" -l write-config -d 'Write the settings as they stand to this file, as a pepe.toml, and exit' -r -F
@@ -187,6 +193,7 @@ complete -c pepe -n "__fish_pepe_using_subcommand replay" -s d -l body -d 'HTTP 
 complete -c pepe -n "__fish_pepe_using_subcommand replay" -s p -l proxy -d 'Proxy server URL: http://user:pass@host:port or socks5://host:port' -r
 complete -c pepe -n "__fish_pepe_using_subcommand replay" -l trace-header -d 'Response header holding the request id to show for the slowest requests and in the inspector, so they can be found in the server\'s logs; without it, X-Request-Id, traceparent, CF-Ray, X-Amzn-Trace-Id and other common ones are looked for' -r
 complete -c pepe -n "__fish_pepe_using_subcommand replay" -l snapshot -d 'Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run\'s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run' -r -F
+complete -c pepe -n "__fish_pepe_using_subcommand replay" -l fail-if -d 'End with exit code 4 when the run crosses this, for CI and scripts: \'p99 > 300ms\', \'errors > 1%\'; repeat for more. The report is still printed. (pepe ping has --slo for the same.)' -r
 complete -c pepe -n "__fish_pepe_using_subcommand replay" -l metrics -d 'Serve the live numbers for Prometheus at http://ADDR/metrics while the run goes, e.g. :9100 or 127.0.0.1:9100, so a soak run or a long ping shows up in Grafana next to the server\'s own' -r
 complete -c pepe -n "__fish_pepe_using_subcommand replay" -l config -d 'Read settings from this file instead of ./pepe.toml; flags on the command line win over it' -r -F
 complete -c pepe -n "__fish_pepe_using_subcommand replay" -l write-config -d 'Write the settings as they stand to this file, as a pepe.toml, and exit' -r -F
@@ -212,6 +219,7 @@ complete -c pepe -n "__fish_pepe_using_subcommand flow" -s d -l body -d 'HTTP re
 complete -c pepe -n "__fish_pepe_using_subcommand flow" -s p -l proxy -d 'Proxy server URL: http://user:pass@host:port or socks5://host:port' -r
 complete -c pepe -n "__fish_pepe_using_subcommand flow" -l trace-header -d 'Response header holding the request id to show for the slowest requests and in the inspector, so they can be found in the server\'s logs; without it, X-Request-Id, traceparent, CF-Ray, X-Amzn-Trace-Id and other common ones are looked for' -r
 complete -c pepe -n "__fish_pepe_using_subcommand flow" -l snapshot -d 'Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run\'s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run' -r -F
+complete -c pepe -n "__fish_pepe_using_subcommand flow" -l fail-if -d 'End with exit code 4 when the run crosses this, for CI and scripts: \'p99 > 300ms\', \'errors > 1%\'; repeat for more. The report is still printed. (pepe ping has --slo for the same.)' -r
 complete -c pepe -n "__fish_pepe_using_subcommand flow" -l metrics -d 'Serve the live numbers for Prometheus at http://ADDR/metrics while the run goes, e.g. :9100 or 127.0.0.1:9100, so a soak run or a long ping shows up in Grafana next to the server\'s own' -r
 complete -c pepe -n "__fish_pepe_using_subcommand flow" -l config -d 'Read settings from this file instead of ./pepe.toml; flags on the command line win over it' -r -F
 complete -c pepe -n "__fish_pepe_using_subcommand flow" -l write-config -d 'Write the settings as they stand to this file, as a pepe.toml, and exit' -r -F
@@ -240,6 +248,7 @@ complete -c pepe -n "__fish_pepe_using_subcommand logs" -s d -l body -d 'HTTP re
 complete -c pepe -n "__fish_pepe_using_subcommand logs" -s p -l proxy -d 'Proxy server URL: http://user:pass@host:port or socks5://host:port' -r
 complete -c pepe -n "__fish_pepe_using_subcommand logs" -l trace-header -d 'Response header holding the request id to show for the slowest requests and in the inspector, so they can be found in the server\'s logs; without it, X-Request-Id, traceparent, CF-Ray, X-Amzn-Trace-Id and other common ones are looked for' -r
 complete -c pepe -n "__fish_pepe_using_subcommand logs" -l snapshot -d 'Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run\'s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run' -r -F
+complete -c pepe -n "__fish_pepe_using_subcommand logs" -l fail-if -d 'End with exit code 4 when the run crosses this, for CI and scripts: \'p99 > 300ms\', \'errors > 1%\'; repeat for more. The report is still printed. (pepe ping has --slo for the same.)' -r
 complete -c pepe -n "__fish_pepe_using_subcommand logs" -l metrics -d 'Serve the live numbers for Prometheus at http://ADDR/metrics while the run goes, e.g. :9100 or 127.0.0.1:9100, so a soak run or a long ping shows up in Grafana next to the server\'s own' -r
 complete -c pepe -n "__fish_pepe_using_subcommand logs" -l config -d 'Read settings from this file instead of ./pepe.toml; flags on the command line win over it' -r -F
 complete -c pepe -n "__fish_pepe_using_subcommand logs" -l write-config -d 'Write the settings as they stand to this file, as a pepe.toml, and exit' -r -F
@@ -279,6 +288,7 @@ complete -c pepe -n "__fish_pepe_using_subcommand ping" -s d -l body -d 'HTTP re
 complete -c pepe -n "__fish_pepe_using_subcommand ping" -s p -l proxy -d 'Proxy server URL: http://user:pass@host:port or socks5://host:port' -r
 complete -c pepe -n "__fish_pepe_using_subcommand ping" -l trace-header -d 'Response header holding the request id to show for the slowest requests and in the inspector, so they can be found in the server\'s logs; without it, X-Request-Id, traceparent, CF-Ray, X-Amzn-Trace-Id and other common ones are looked for' -r
 complete -c pepe -n "__fish_pepe_using_subcommand ping" -l snapshot -d 'Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run\'s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run' -r -F
+complete -c pepe -n "__fish_pepe_using_subcommand ping" -l fail-if -d 'End with exit code 4 when the run crosses this, for CI and scripts: \'p99 > 300ms\', \'errors > 1%\'; repeat for more. The report is still printed. (pepe ping has --slo for the same.)' -r
 complete -c pepe -n "__fish_pepe_using_subcommand ping" -l metrics -d 'Serve the live numbers for Prometheus at http://ADDR/metrics while the run goes, e.g. :9100 or 127.0.0.1:9100, so a soak run or a long ping shows up in Grafana next to the server\'s own' -r
 complete -c pepe -n "__fish_pepe_using_subcommand ping" -l config -d 'Read settings from this file instead of ./pepe.toml; flags on the command line win over it' -r -F
 complete -c pepe -n "__fish_pepe_using_subcommand ping" -l write-config -d 'Write the settings as they stand to this file, as a pepe.toml, and exit' -r -F
@@ -317,6 +327,7 @@ complete -c pepe -n "__fish_pepe_using_subcommand compare" -s d -l body -d 'HTTP
 complete -c pepe -n "__fish_pepe_using_subcommand compare" -s p -l proxy -d 'Proxy server URL: http://user:pass@host:port or socks5://host:port' -r
 complete -c pepe -n "__fish_pepe_using_subcommand compare" -l trace-header -d 'Response header holding the request id to show for the slowest requests and in the inspector, so they can be found in the server\'s logs; without it, X-Request-Id, traceparent, CF-Ray, X-Amzn-Trace-Id and other common ones are looked for' -r
 complete -c pepe -n "__fish_pepe_using_subcommand compare" -l snapshot -d 'Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run\'s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run' -r -F
+complete -c pepe -n "__fish_pepe_using_subcommand compare" -l fail-if -d 'End with exit code 4 when the run crosses this, for CI and scripts: \'p99 > 300ms\', \'errors > 1%\'; repeat for more. The report is still printed. (pepe ping has --slo for the same.)' -r
 complete -c pepe -n "__fish_pepe_using_subcommand compare" -l metrics -d 'Serve the live numbers for Prometheus at http://ADDR/metrics while the run goes, e.g. :9100 or 127.0.0.1:9100, so a soak run or a long ping shows up in Grafana next to the server\'s own' -r
 complete -c pepe -n "__fish_pepe_using_subcommand compare" -l config -d 'Read settings from this file instead of ./pepe.toml; flags on the command line win over it' -r -F
 complete -c pepe -n "__fish_pepe_using_subcommand compare" -l write-config -d 'Write the settings as they stand to this file, as a pepe.toml, and exit' -r -F
@@ -330,13 +341,39 @@ complete -c pepe -n "__fish_pepe_using_subcommand compare" -l disable-keepalive 
 complete -c pepe -n "__fish_pepe_using_subcommand compare" -l disable-redirects -d 'Prevent http redirects'
 complete -c pepe -n "__fish_pepe_using_subcommand compare" -l json -d 'Output results in JSON format'
 complete -c pepe -n "__fish_pepe_using_subcommand compare" -s i -l setup -d 'Open the setup screen to review or change the settings before starting (it opens by itself when no URL is given)'
-complete -c pepe -n "__fish_pepe_using_subcommand help; and not __fish_seen_subcommand_from self-update completions api ramp replay flow logs ping compare help" -f -a "self-update" -d 'Update pepe to the latest release, or say what\'s new in it'
-complete -c pepe -n "__fish_pepe_using_subcommand help; and not __fish_seen_subcommand_from self-update completions api ramp replay flow logs ping compare help" -f -a "completions" -d 'Tab completion for your shell: print the script, or --install it'
-complete -c pepe -n "__fish_pepe_using_subcommand help; and not __fish_seen_subcommand_from self-update completions api ramp replay flow logs ping compare help" -f -a "api" -d 'Load-test every endpoint of an OpenAPI spec'
-complete -c pepe -n "__fish_pepe_using_subcommand help; and not __fish_seen_subcommand_from self-update completions api ramp replay flow logs ping compare help" -f -a "ramp" -d 'Raise the load step by step to find where the target stops keeping up'
-complete -c pepe -n "__fish_pepe_using_subcommand help; and not __fish_seen_subcommand_from self-update completions api ramp replay flow logs ping compare help" -f -a "replay" -d 'Send the URLs of an access log in their real proportions'
-complete -c pepe -n "__fish_pepe_using_subcommand help; and not __fish_seen_subcommand_from self-update completions api ramp replay flow logs ping compare help" -f -a "flow" -d 'Run a sequence of requests from a flow file, each step fed by the last'
-complete -c pepe -n "__fish_pepe_using_subcommand help; and not __fish_seen_subcommand_from self-update completions api ramp replay flow logs ping compare help" -f -a "logs" -d 'Read nginx logs: requests per second now, against each minute, hour and day'
-complete -c pepe -n "__fish_pepe_using_subcommand help; and not __fish_seen_subcommand_from self-update completions api ramp replay flow logs ping compare help" -f -a "ping" -d 'Ping a URL: a request a second, each split into DNS, connect, TLS, first byte and download, on a graph'
-complete -c pepe -n "__fish_pepe_using_subcommand help; and not __fish_seen_subcommand_from self-update completions api ramp replay flow logs ping compare help" -f -a "compare" -d 'Hold a run\'s JSON report against an earlier one and say what moved'
-complete -c pepe -n "__fish_pepe_using_subcommand help; and not __fish_seen_subcommand_from self-update completions api ramp replay flow logs ping compare help" -f -a "help" -d 'Print this message or the help of the given subcommand(s)'
+complete -c pepe -n "__fish_pepe_using_subcommand schema" -s n -l number -d 'Number of requests to perform' -r
+complete -c pepe -n "__fish_pepe_using_subcommand schema" -s z -l duration -d 'Duration of the test, e.g. 10s, 3m, 2h (mutually exclusive with -n)' -r
+complete -c pepe -n "__fish_pepe_using_subcommand schema" -s m -l method -d 'HTTP method, e.g. GET, POST, PUT, DELETE' -r
+complete -c pepe -n "__fish_pepe_using_subcommand schema" -s H -l headers -d 'HTTP headers, e.g. -H \'Accept: application/json\'' -r
+complete -c pepe -n "__fish_pepe_using_subcommand schema" -s t -l timeout -d 'Time in seconds to wait for a response' -r
+complete -c pepe -n "__fish_pepe_using_subcommand schema" -l warmup -d 'Send for this long before measuring, e.g. 5s: connections open, caches fill and JITs settle without counting against the run' -r
+complete -c pepe -n "__fish_pepe_using_subcommand schema" -l threads -d 'Threads sending requests (default 1), or "auto" to add one whenever those sending are all busy. One sends 100k requests a second or more; the dashboard says when it is the limit' -r
+complete -c pepe -n "__fish_pepe_using_subcommand schema" -l rate -d 'Start this many requests a second, spread evenly, instead of as many as the concurrency allows; -c is then the most in flight at once, and pepe says when it holds the rate back' -r
+complete -c pepe -n "__fish_pepe_using_subcommand schema" -s d -l body -d 'HTTP request body' -r
+complete -c pepe -n "__fish_pepe_using_subcommand schema" -s p -l proxy -d 'Proxy server URL: http://user:pass@host:port or socks5://host:port' -r
+complete -c pepe -n "__fish_pepe_using_subcommand schema" -l trace-header -d 'Response header holding the request id to show for the slowest requests and in the inspector, so they can be found in the server\'s logs; without it, X-Request-Id, traceparent, CF-Ray, X-Amzn-Trace-Id and other common ones are looked for' -r
+complete -c pepe -n "__fish_pepe_using_subcommand schema" -l snapshot -d 'Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run\'s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run' -r -F
+complete -c pepe -n "__fish_pepe_using_subcommand schema" -l fail-if -d 'End with exit code 4 when the run crosses this, for CI and scripts: \'p99 > 300ms\', \'errors > 1%\'; repeat for more. The report is still printed. (pepe ping has --slo for the same.)' -r
+complete -c pepe -n "__fish_pepe_using_subcommand schema" -l metrics -d 'Serve the live numbers for Prometheus at http://ADDR/metrics while the run goes, e.g. :9100 or 127.0.0.1:9100, so a soak run or a long ping shows up in Grafana next to the server\'s own' -r
+complete -c pepe -n "__fish_pepe_using_subcommand schema" -l config -d 'Read settings from this file instead of ./pepe.toml; flags on the command line win over it' -r -F
+complete -c pepe -n "__fish_pepe_using_subcommand schema" -l write-config -d 'Write the settings as they stand to this file, as a pepe.toml, and exit' -r -F
+complete -c pepe -n "__fish_pepe_using_subcommand schema" -s c -l concurrency -d 'Number of concurrent requests at a time' -r
+complete -c pepe -n "__fish_pepe_using_subcommand schema" -s u -l user-agent -d 'User-Agent string, default is pepe/{version}' -r
+complete -c pepe -n "__fish_pepe_using_subcommand schema" -s h -l help -d 'Print help'
+complete -c pepe -n "__fish_pepe_using_subcommand schema" -s k -l insecure -d 'Accept invalid TLS certificates (self-signed, expired, wrong host)'
+complete -c pepe -n "__fish_pepe_using_subcommand schema" -l disable-compression -d 'Disable HTTP compression, e.g. gzip'
+complete -c pepe -n "__fish_pepe_using_subcommand schema" -l disable-keepalive -d 'Disable HTTP keepalive, e.g. Connection: close'
+complete -c pepe -n "__fish_pepe_using_subcommand schema" -l disable-redirects -d 'Prevent http redirects'
+complete -c pepe -n "__fish_pepe_using_subcommand schema" -l json -d 'Output results in JSON format'
+complete -c pepe -n "__fish_pepe_using_subcommand schema" -s i -l setup -d 'Open the setup screen to review or change the settings before starting (it opens by itself when no URL is given)'
+complete -c pepe -n "__fish_pepe_using_subcommand help; and not __fish_seen_subcommand_from self-update completions api ramp replay flow logs ping compare schema help" -f -a "self-update" -d 'Update pepe to the latest release, or say what\'s new in it'
+complete -c pepe -n "__fish_pepe_using_subcommand help; and not __fish_seen_subcommand_from self-update completions api ramp replay flow logs ping compare schema help" -f -a "completions" -d 'Tab completion for your shell: print the script, or --install it'
+complete -c pepe -n "__fish_pepe_using_subcommand help; and not __fish_seen_subcommand_from self-update completions api ramp replay flow logs ping compare schema help" -f -a "api" -d 'Load-test every endpoint of an OpenAPI spec'
+complete -c pepe -n "__fish_pepe_using_subcommand help; and not __fish_seen_subcommand_from self-update completions api ramp replay flow logs ping compare schema help" -f -a "ramp" -d 'Raise the load step by step to find where the target stops keeping up'
+complete -c pepe -n "__fish_pepe_using_subcommand help; and not __fish_seen_subcommand_from self-update completions api ramp replay flow logs ping compare schema help" -f -a "replay" -d 'Send the URLs of an access log in their real proportions'
+complete -c pepe -n "__fish_pepe_using_subcommand help; and not __fish_seen_subcommand_from self-update completions api ramp replay flow logs ping compare schema help" -f -a "flow" -d 'Run a sequence of requests from a flow file, each step fed by the last'
+complete -c pepe -n "__fish_pepe_using_subcommand help; and not __fish_seen_subcommand_from self-update completions api ramp replay flow logs ping compare schema help" -f -a "logs" -d 'Read nginx logs: requests per second now, against each minute, hour and day'
+complete -c pepe -n "__fish_pepe_using_subcommand help; and not __fish_seen_subcommand_from self-update completions api ramp replay flow logs ping compare schema help" -f -a "ping" -d 'Ping a URL: a request a second, each split into DNS, connect, TLS, first byte and download, on a graph'
+complete -c pepe -n "__fish_pepe_using_subcommand help; and not __fish_seen_subcommand_from self-update completions api ramp replay flow logs ping compare schema help" -f -a "compare" -d 'Hold a run\'s JSON report against an earlier one and say what moved'
+complete -c pepe -n "__fish_pepe_using_subcommand help; and not __fish_seen_subcommand_from self-update completions api ramp replay flow logs ping compare schema help" -f -a "schema" -d 'Print the JSON Schema of a report: run (the default), ramp, ping or compare'
+complete -c pepe -n "__fish_pepe_using_subcommand help; and not __fish_seen_subcommand_from self-update completions api ramp replay flow logs ping compare schema help" -f -a "help" -d 'Print this message or the help of the given subcommand(s)'

@@ -489,6 +489,46 @@ impl Dashboard {
     }
 
     /// Pull everything the load generator produced since the last frame
+    /// Everything measured so far, for `--fail-if`
+    pub fn metrics(&self) -> &Metrics {
+        &self.metrics
+    }
+
+    /// The run without a screen: results are collected until it ends or
+    /// Ctrl-C, snapshots are written as on the dashboard, and `report`
+    /// then says what it would have said
+    pub async fn run_headless(
+        &mut self,
+        load: &mut LoadHandle,
+    ) -> Result<Outcome, Box<dyn std::error::Error>> {
+        let mut pump = tokio::time::interval(PUMP);
+        pump.set_missed_tick_behavior(MissedTickBehavior::Skip);
+        let mut snapshots = tokio::time::interval(crate::SNAPSHOT_EVERY);
+        snapshots.set_missed_tick_behavior(MissedTickBehavior::Skip);
+        snapshots.tick().await;
+        let ctrl_c = tokio::signal::ctrl_c();
+        tokio::pin!(ctrl_c);
+        let mut stopping = false;
+        loop {
+            tokio::select! {
+                _ = &mut ctrl_c, if !stopping => {
+                    stopping = true;
+                    self.interrupted = true;
+                    load.stop();
+                }
+                _ = pump.tick() => {
+                    self.drain(load);
+                    if self.finished.is_some() {
+                        return Ok(Outcome::Quit);
+                    }
+                }
+                _ = snapshots.tick(), if self.snapshot.is_some() && self.finished.is_none() => {
+                    self.write_snapshot(load, true);
+                }
+            }
+        }
+    }
+
     /// The page `--metrics` serves, once a second at most
     fn publish_metrics(&self) {
         crate::exporter::publish(|| {

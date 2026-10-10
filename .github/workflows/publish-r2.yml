@@ -77,6 +77,13 @@ jobs:
             r2 "$png" "s3://$R2_BUCKET/img/$(basename "$png")" \
               --content-type "image/png" --cache-control "public, max-age=86400"
           done
+          # The JSON Schema of each report, for scripts and agents
+          for schema in ../repo/schema/*.schema.json; do
+            [ -f "$schema" ] || continue
+            r2 "$schema" "s3://$R2_BUCKET/schema/$(basename "$schema")" \
+              --content-type "application/schema+json; charset=utf-8" \
+              --cache-control "public, max-age=300"
+          done
           for gif in ../repo/assets/*.gif; do
             [ -f "$gif" ] || continue
             r2 "$gif" "s3://$R2_BUCKET/assets/$(basename "$gif")" \

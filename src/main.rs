@@ -39,6 +39,7 @@ mod ramp;
 mod replay;
 mod request;
 mod response;
+mod schema;
 mod timeline;
 mod trace;
 mod ui;
@@ -322,6 +323,7 @@ async fn run_json(args: &Cli) -> Result<(), Box<dyn std::error::Error>> {
         report.clone().with_snapshot(false).write_to(path)?;
     }
     println!("{}", report.to_json()?);
+    exit_if_failed(args, &metrics);
     Ok(())
 }
 
@@ -348,6 +350,8 @@ async fn say_if_newer(check: update::Check) {
 struct Farewell {
     /// The end-of-run report
     report: Option<String>,
+    /// What the run measured, for `--fail-if`
+    metrics: Option<Metrics>,
     /// The command that reproduces settings chosen on the setup screen
     command: Option<String>,
 }
@@ -404,6 +408,7 @@ async fn run_interactive(
                     ui::Outcome::Edit => setup = true,
                     ui::Outcome::Quit => {
                         farewell.report = screen.report();
+                        farewell.metrics = Some(screen.metrics().clone());
                         return Ok(farewell);
                     }
                 }
@@ -417,7 +422,9 @@ async fn run_interactive(
                         continue;
                     }
                 };
-                farewell.report = api_session(&args, &mut run).await?;
+                let (report, metrics) = api_session(&args, &mut run).await?;
+                farewell.report = report;
+                farewell.metrics = metrics;
                 return Ok(farewell);
             }
             _ => {
@@ -433,6 +440,7 @@ async fn run_interactive(
                     ui::Outcome::Edit => setup = true,
                     ui::Outcome::Quit => {
                         farewell.report = dashboard.report();
+                        farewell.metrics = Some(dashboard.metrics().clone());
                         return Ok(farewell);
                     }
                 }
@@ -441,8 +449,11 @@ async fn run_interactive(
     }
 }
 
-/// Ramp mode with `--json`: climb the steps, print what each measured
-async fn run_ramp_json(args: &Cli, plan: RampPlan) -> Result<(), Box<dyn std::error::Error>> {
+/// Climb the ramp's steps to its end, or Ctrl-C
+async fn climb(
+    args: &Cli,
+    plan: RampPlan,
+) -> Result<(Ramp, LoadHandle), Box<dyn std::error::Error>> {
     let request = args.request()?;
     let mut load = load::start(
         clients_for(&request, args, plan.peak() as usize)?.0,
@@ -473,6 +484,12 @@ async fn run_ramp_json(args: &Cli, plan: RampPlan) -> Result<(), Box<dyn std::er
         }
     }
     load.stop();
+    Ok((ramp, load))
+}
+
+/// Ramp mode with `--json`: climb the steps, print what each measured
+async fn run_ramp_json(args: &Cli, plan: RampPlan) -> Result<(), Box<dyn std::error::Error>> {
+    let (ramp, load) = climb(args, plan).await?;
     let mut report = ramp::json(&ramp);
     report["generator"] = serde_json::to_value(json_report::Generator {
         threads: load.threads(),
@@ -483,7 +500,102 @@ async fn run_ramp_json(args: &Cli, plan: RampPlan) -> Result<(), Box<dyn std::er
         rate_missed: None,
     })?;
     println!("{}", serde_json::to_string_pretty(&report)?);
+    exit_if_failed(args, &ramp.total);
     Ok(())
+}
+
+/// No terminal to draw on, and no `--json`: the run goes to its end and
+/// the report the dashboard would have left is printed, so a forgotten
+/// flag in a script costs nothing
+fn headless(args: &Cli) -> bool {
+    !(args.json || (stdin().is_terminal() && stdout().is_terminal()))
+}
+
+/// A dashboard mode without the dashboard: to the end, then the report
+async fn headless_dashboard(
+    args: &Cli,
+    mut dashboard: ui::Dashboard,
+    mut load: LoadHandle,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let check = update::Check::start();
+    dashboard.run_headless(&mut load).await?;
+    if let Some(report) = dashboard.report() {
+        print_report(&report);
+    }
+    say_if_newer(check).await;
+    exit_if_failed(args, dashboard.metrics());
+    Ok(())
+}
+
+/// A plain run or a ramp with no terminal
+async fn run_headless(
+    args: &Cli,
+    ramp: Option<cli::RampArgs>,
+) -> Result<(), Box<dyn std::error::Error>> {
+    if let Some(ramp) = ramp {
+        let plan = match RampPlan::from_args(&ramp) {
+            Ok(plan) => plan,
+            Err(e) => {
+                eprintln!("error: {e}");
+                std::process::exit(1);
+            }
+        };
+        let check = update::Check::start();
+        let (ramp, _load) = climb(args, plan).await?;
+        print_report(&ramp::report(args, &ramp));
+        say_if_newer(check).await;
+        exit_if_failed(args, &ramp.total);
+        return Ok(());
+    }
+    let (load, connects) = start_load(args, false)?;
+    let dashboard = ui::Dashboard::new(args.clone(), plan(args)).with_connects(connects);
+    headless_dashboard(args, dashboard, load).await
+}
+
+/// `--fail-if`: say which conditions the run crossed and end with exit
+/// code 4; nothing happens when none was, or none was given
+fn exit_if_failed(args: &Cli, metrics: &Metrics) {
+    let mut failed = false;
+    for text in &args.fail_if {
+        let Ok(condition) = ramp::Condition::parse(text) else {
+            continue;
+        };
+        if !condition.crossed(metrics) {
+            continue;
+        }
+        failed = true;
+        let was = match condition.measure {
+            ramp::Measure::Latency(p) => {
+                format!("p{p} was {}", ui::format::latency(metrics.percentile(p)))
+            }
+            ramp::Measure::Errors => format!("errors were {:.1}%", metrics.error_rate()),
+        };
+        eprintln!("✖ --fail-if {}: {was}", condition.text);
+    }
+    if failed {
+        std::process::exit(4);
+    }
+}
+
+/// The endpoints an API run is to send to, or an error saying how to pick
+/// some, since there is no plan screen to do it on
+fn endpoints_or_exit(run: &api::ApiRun) -> Vec<usize> {
+    let which = run.enabled();
+    if which.is_empty() {
+        let tags: Vec<&str> = run
+            .spec
+            .tags
+            .iter()
+            .map(|(name, _)| name.as_str())
+            .collect();
+        eprintln!(
+            "error: no endpoint to run. Pick some with --all, --tag NAME or --only PATTERN \
+             (tags: {}); --set gives parameters their values, --include-writes allows writes",
+            tags.join(", ")
+        );
+        std::process::exit(1);
+    }
+    which
 }
 
 /// API mode with `--json`: run the endpoints that are on, print one report
@@ -604,6 +716,7 @@ async fn run_api_json(args: &Cli, run: &api::ApiRun) -> Result<(), Box<dyn std::
         .collect();
     report["endpoints"] = serde_json::Value::Array(endpoints);
     println!("{}", serde_json::to_string_pretty(&report)?);
+    exit_if_failed(args, &total);
     Ok(())
 }
 
@@ -613,7 +726,7 @@ async fn run_api_json(args: &Cli, run: &api::ApiRun) -> Result<(), Box<dyn std::
 async fn api_session(
     args: &Cli,
     run: &mut api::ApiRun,
-) -> Result<Option<String>, Box<dyn std::error::Error>> {
+) -> Result<(Option<String>, Option<Metrics>), Box<dyn std::error::Error>> {
     // The dashboard's title shows the API rather than one URL
     let mut shown = args.clone();
     shown.method = "API".into();
@@ -623,7 +736,7 @@ async fn api_session(
         if planning {
             match ui::PlanScreen::new(run, &mut shown).run().await? {
                 ui::PlanOutcome::Start => planning = false,
-                ui::PlanOutcome::Quit => return Ok(None),
+                ui::PlanOutcome::Quit => return Ok((None, None)),
             }
             shown.url = run.spec.base_url.clone();
         }
@@ -650,7 +763,9 @@ async fn api_session(
         match outcome {
             ui::Outcome::Restart => {}
             ui::Outcome::Edit => planning = true,
-            ui::Outcome::Quit => return Ok(dashboard.report()),
+            ui::Outcome::Quit => {
+                return Ok((dashboard.report(), Some(dashboard.metrics().clone())))
+            }
         }
     }
 }
@@ -672,8 +787,26 @@ async fn run_flow(args: &Cli, what: &cli::FlowArgs) -> Result<(), Box<dyn std::e
     if args.json {
         return run_flow_json(&shown, flow).await;
     }
+    if headless(args) {
+        let (clients, connects) = flow_clients(&shown, &flow, shown.concurrency as usize)?;
+        let load = load::start_flow(
+            clients,
+            flow.clone(),
+            shown.concurrency as usize,
+            plan(&shown),
+            false,
+        );
+        load.set_rate(shown.rate);
+        if let Some(warmup) = shown.warmup() {
+            load.set_warmup(warmup);
+        }
+        let dashboard = ui::Dashboard::new(shown.clone(), plan(&shown))
+            .with_steps(flow.views())
+            .with_connects(connects);
+        return headless_dashboard(&shown, dashboard, load).await;
+    }
     let check = update::Check::start();
-    let report = {
+    let (report, metrics) = {
         let _watchdog = CtrlCWatchdog::arm();
         let _terminal = TerminalGuard::enter()?;
         flow_session(&mut shown, flow).await?
@@ -682,6 +815,9 @@ async fn run_flow(args: &Cli, what: &cli::FlowArgs) -> Result<(), Box<dyn std::e
         print_report(&report);
     }
     say_if_newer(check).await;
+    if let Some(metrics) = metrics {
+        exit_if_failed(&shown, &metrics);
+    }
     Ok(())
 }
 
@@ -705,7 +841,7 @@ fn flow_clients(
 async fn flow_session(
     shown: &mut Cli,
     flow: flow::Flow,
-) -> Result<Option<String>, Box<dyn std::error::Error>> {
+) -> Result<(Option<String>, Option<Metrics>), Box<dyn std::error::Error>> {
     loop {
         let (clients, connects) = flow_clients(shown, &flow, shown.concurrency as usize)?;
         let mut load = load::start_flow(
@@ -727,7 +863,9 @@ async fn flow_session(
         match outcome {
             // There is no setup screen for a flow: edit the file, run again
             ui::Outcome::Restart | ui::Outcome::Edit => {}
-            ui::Outcome::Quit => return Ok(dashboard.report()),
+            ui::Outcome::Quit => {
+                return Ok((dashboard.report(), Some(dashboard.metrics().clone())))
+            }
         }
     }
 }
@@ -824,6 +962,7 @@ async fn run_flow_json(args: &Cli, flow: flow::Flow) -> Result<(), Box<dyn std::
         "steps": steps,
     });
     println!("{}", serde_json::to_string_pretty(&report)?);
+    exit_if_failed(args, &total);
     Ok(())
 }
 
@@ -847,8 +986,26 @@ async fn run_replay(args: &Cli, what: &cli::ReplayArgs) -> Result<(), Box<dyn st
     if args.json {
         return run_replay_json(&shown, &replay, what).await;
     }
+    if headless(args) {
+        let (clients, connects) = replay_clients(&shown, &replay, shown.concurrency as usize)?;
+        let load = load::start_targets(
+            clients,
+            replay.targets(&shown, what.rows)?,
+            shown.concurrency as usize,
+            plan(&shown),
+            false,
+        );
+        load.set_rate(shown.rate);
+        if let Some(warmup) = shown.warmup() {
+            load.set_warmup(warmup);
+        }
+        let dashboard = ui::Dashboard::new(shown.clone(), plan(&shown))
+            .with_rows(ui::Rows::Urls, replay.views(what.rows))
+            .with_connects(connects);
+        return headless_dashboard(&shown, dashboard, load).await;
+    }
     let check = update::Check::start();
-    let report = {
+    let (report, metrics) = {
         let _watchdog = CtrlCWatchdog::arm();
         let _terminal = TerminalGuard::enter()?;
         replay_session(&mut shown, &replay, what).await?
@@ -857,6 +1014,9 @@ async fn run_replay(args: &Cli, what: &cli::ReplayArgs) -> Result<(), Box<dyn st
         print_report(&report);
     }
     say_if_newer(check).await;
+    if let Some(metrics) = metrics {
+        exit_if_failed(&shown, &metrics);
+    }
     Ok(())
 }
 
@@ -881,7 +1041,7 @@ async fn replay_session(
     shown: &mut Cli,
     replay: &replay::Replay,
     what: &cli::ReplayArgs,
-) -> Result<Option<String>, Box<dyn std::error::Error>> {
+) -> Result<(Option<String>, Option<Metrics>), Box<dyn std::error::Error>> {
     loop {
         let (clients, connects) = replay_clients(shown, replay, shown.concurrency as usize)?;
         let mut load = load::start_targets(
@@ -903,7 +1063,9 @@ async fn replay_session(
         match outcome {
             // There is no setup screen for a replay: the log is the setup
             ui::Outcome::Restart | ui::Outcome::Edit => {}
-            ui::Outcome::Quit => return Ok(dashboard.report()),
+            ui::Outcome::Quit => {
+                return Ok((dashboard.report(), Some(dashboard.metrics().clone())))
+            }
         }
     }
 }
@@ -1028,6 +1190,7 @@ async fn run_replay_json(
         "urls": urls,
     });
     println!("{}", serde_json::to_string_pretty(&report)?);
+    exit_if_failed(args, &total);
     Ok(())
 }
 
@@ -1103,7 +1266,8 @@ async fn run_logs(args: &Cli, what: &cli::LogsArgs) -> Result<(), Box<dyn std::e
             eprintln!("error: {trouble}");
         }
         if args.json {
-            let report = logs::json_report(&stats, &job, logs::wall(), window, what.rows);
+            let mut report = logs::json_report(&stats, &job, logs::wall(), window, what.rows);
+            report["schema_version"] = serde_json::json!(1);
             println!("{}", serde_json::to_string_pretty(&report)?);
         } else {
             print!(
@@ -1146,6 +1310,9 @@ async fn run_ping(
         eprintln!("error: {message}");
         std::process::exit(2);
     };
+    if !args.fail_if.is_empty() {
+        fail("--fail-if is for load runs; a ping's limits are --slo total=500,ttfb=200".into());
+    }
     let family = match (what.ipv4, what.ipv6) {
         (true, _) => Some(ping::Family::V4),
         (_, true) => Some(ping::Family::V6),
@@ -1427,9 +1594,32 @@ async fn run_api(args: &Cli, api: &cli::ApiArgs) -> Result<(), Box<dyn std::erro
     if args.json {
         return run_api_json(args, &run).await;
     }
+    if headless(args) {
+        let which = endpoints_or_exit(&run);
+        let targets = run.targets(args, &which)?;
+        let (clients, connects) = run.clients(args, shards(args, args.concurrency as usize))?;
+        let load = load::start_targets(
+            clients,
+            targets,
+            args.concurrency as usize,
+            plan(args),
+            false,
+        );
+        load.set_rate(args.rate);
+        if let Some(warmup) = args.warmup() {
+            load.set_warmup(warmup);
+        }
+        let mut shown = args.clone();
+        shown.method = "API".into();
+        shown.url = run.spec.base_url.clone();
+        let dashboard = ui::Dashboard::new(shown, plan(args))
+            .with_endpoints(run.views(args, &which))
+            .with_connects(connects);
+        return headless_dashboard(args, dashboard, load).await;
+    }
 
     let check = update::Check::start();
-    let report = {
+    let (report, metrics) = {
         let _watchdog = CtrlCWatchdog::arm();
         let _terminal = TerminalGuard::enter()?;
         api_session(args, &mut run).await?
@@ -1438,6 +1628,9 @@ async fn run_api(args: &Cli, api: &cli::ApiArgs) -> Result<(), Box<dyn std::erro
         print_report(&report);
     }
     say_if_newer(check).await;
+    if let Some(metrics) = metrics {
+        exit_if_failed(args, &metrics);
+    }
     Ok(())
 }
 
@@ -1486,6 +1679,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     if let Some(cli::Command::Completions(what)) = &args.command {
         return completions::run(what);
+    }
+    if let Some(cli::Command::Schema(what)) = &args.command {
+        return schema::print(Some(&what.which));
     }
 
     // Release builds abort on panic; restore the terminal first so a crash
@@ -1592,6 +1788,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     if args.json {
         return run_json(&args).await;
     }
+    if headless(&args) {
+        return run_headless(&args, ramp).await;
+    }
     run_screens(&args, setup).await
 }
 
@@ -1607,5 +1806,8 @@ async fn run_screens(args: &Cli, setup: bool) -> Result<(), Box<dyn std::error::
         println!("Run this again with:\n  {command}");
     }
     say_if_newer(check).await;
+    if let Some(metrics) = farewell.metrics {
+        exit_if_failed(args, &metrics);
+    }
     Ok(())
 }

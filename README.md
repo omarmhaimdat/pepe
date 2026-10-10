@@ -176,6 +176,7 @@ pepe self-update [--check]     update pepe
 | `--write-config <FILE>` | | Write the settings as given to a file and exit |
 | `--trace-header <NAME>` | | Response header holding the request id, if not one of the usual ones |
 | `--metrics <ADDR>` | | Serve the live numbers for Prometheus at `http://ADDR/metrics`, e.g. `:9100` (see [Prometheus metrics](#prometheus-metrics)) |
+| `--fail-if <CONDITION>` | | Exit 4 when the run crosses it: `'p99 > 300ms'`, `'errors > 1%'`; repeat for more (see [Thresholds that fail CI](#thresholds-that-fail-ci)) |
 
 ### Config file
 
@@ -507,9 +508,37 @@ pepe -c 500 --threads auto -z 30s http://localhost:8080/
 
 `--threads auto` starts with one and adds another whenever those sending are all past 90% of a core, a second apart, up to one a core. A thread that doesn't pay for itself (a third of what a thread is worth at best) is taken back and no other is tried: then the limit is the machine, as when the target runs on the same cores. It is the setting for a script or an agent, which can't read the footer: the run finds the threads the target needs, and `generator.threads` in the report says how many that was. In `pepe.toml` it is `threads = "auto"`.
 
+### Thresholds that fail CI
+
+`--fail-if` names what the run must not cross, in the ramp's words, and ends with exit code 4 when it does, the report still printed and the condition said on stderr. Repeat it for more than one; every mode that measures requests takes it (a plain run, a ramp, API mode, a flow, a replay, with or without `--json`). `pepe ping` has `--slo` for the same.
+
+```bash
+pepe --json -n 2000 -c 20 --fail-if 'p99 > 300ms' --fail-if 'errors > 1%' https://staging.example.com/api
+```
+
+```
+✖ --fail-if p99 > 300ms: p99 was 412.0ms
+```
+
+Exit codes, across pepe: 0 when the run went as asked, 1 when it couldn't start or nothing answered, 2 for a usage error, 4 when a limit was crossed (`--fail-if`, a ping's `--slo`), and `pepe compare --gate` exits 1 on a regression.
+
+### Without a terminal
+
+Piped, redirected, or run by a script, pepe doesn't try to draw: the run goes to its end and the report the dashboard would have left is printed, the same verdict and findings, so a forgotten `--json` costs nothing. `--snapshot` and `--metrics` work as they do on the dashboard. A ramp prints its steps and estimate; API mode needs its endpoints picked on the command line (`--all`, `--tag`, `--only`), since there is no plan screen to pick them on.
+
+```bash
+pepe -z 30s -c 20 https://example.com > run.txt
+pepe ramp https://example.com --to 200 | tee ramp.txt
+```
+
 ### JSON output
 
-`--json` skips the dashboard, runs to completion and prints a report to stdout. Press Ctrl-C to stop early; the report then has `"interrupted": true`.
+`--json` skips the dashboard, runs to completion and prints a report to stdout. Press Ctrl-C to stop early; the report then has `"interrupted": true`. Every report starts with `"schema_version": 1`: fields are added within a version and never renamed, and the JSON Schema of each report ships with every release and is printed by `pepe schema` (`run`, `ramp`, `ping` or `compare`), so a script or an agent can depend on the names.
+
+```bash
+pepe schema run > run.schema.json
+pepe schema ping | jq '.properties.targets.items.required'
+```
 
 ```bash
 pepe --json -n 1000 -c 20 https://example.com > results.json
@@ -518,6 +547,7 @@ jq '.summary.latency.p99_ms' results.json
 
 ```json
 {
+  "schema_version": 1,
   "target": { "mode": "run", "method": "GET", "url": "https://example.com", "concurrency": 20 },
   "summary": {
     "total_requests": 1000,
