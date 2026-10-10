@@ -2393,10 +2393,12 @@ mod tests {
         let mut settings = settings();
         settings.every = Duration::from_millis(10);
         settings.count = Some(2);
-        settings.timeout = Duration::from_secs(2);
+        // Windows takes a second or two to refuse a connection to a closed
+        // port; the refusal, not a timeout, is what this test wants
+        settings.timeout = Duration::from_secs(10);
         let targets = parse_target(&format!("http://127.0.0.1:{port}/"), false, 80).unwrap();
         let shared = start(targets, settings.clone());
-        for _ in 0..300 {
+        for _ in 0..2_000 {
             if shared.lock().done {
                 break;
             }

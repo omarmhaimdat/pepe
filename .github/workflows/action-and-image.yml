@@ -63,14 +63,16 @@ jobs:
           baseline: ${{ steps.pepe.outputs.report }}
           gate: true
           comment: true
-      - name: A verdict, and the comparison
+      - name: A verdict, the comparison and the card
         env:
           VERDICT: ${{ steps.again.outputs.verdict }}
           COMPARE: ${{ steps.again.outputs.compare }}
+          CARD: ${{ steps.again.outputs.card }}
         run: |
           echo "verdict=$VERDICT"
           case "$VERDICT" in faster|same|slower|better|worse) ;; *) exit 1 ;; esac
           jq -e '.changes | length > 0' "$COMPARE"
+          grep -q '</svg>' "$CARD"
       - name: A condition that must fail the step
         id: should-fail
         continue-on-error: true

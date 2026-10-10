@@ -437,6 +437,7 @@ fail\:"A failure"))' \
 ;;
 (compare)
 _arguments "${_arguments_options[@]}" : \
+'--svg=[Also write the verdict as a card, an SVG for a README or a page]:FILE:_files' \
 '-n+[Number of requests to perform]:NUMBER:_default' \
 '--number=[Number of requests to perform]:NUMBER:_default' \
 '-z+[Duration of the test, e.g. 10s, 3m, 2h (mutually exclusive with -n)]:DURATION:_default' \

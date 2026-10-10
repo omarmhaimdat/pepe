@@ -74,6 +74,9 @@ outputs:
   verdict:
     description: "The comparison's word: faster, same, slower, worse or better; empty without a baseline"
     value: ${{ steps.compare.outputs.verdict }}
+  card:
+    description: Path of the verdict drawn as an SVG card (pepe compare --svg); empty without a baseline
+    value: ${{ steps.compare.outputs.card }}
 
 runs:
   using: composite
@@ -166,9 +169,11 @@ runs:
           exit 1
         fi
         compare="${RUNNER_TEMP}/pepe-compare.json"
-        pepe --json compare "$before" "$REPORT" > "$compare"
+        card="${RUNNER_TEMP}/pepe-card.svg"
+        pepe --json compare "$before" "$REPORT" --svg "$card" > "$compare"
         {
           echo "compare=$compare"
+          echo "card=$card"
           echo "verdict=$(jq -r '.verdict' "$compare")"
         } >> "$GITHUB_OUTPUT"
         {
@@ -198,7 +203,19 @@ runs:
         path: ${{ runner.temp }}/pepe-baseline
         key: pepe-baseline-${{ github.ref_name }}-${{ github.run_id }}
 
-    # One comment per pull request, found again by its marker and updated
+    # The card, to download or to put on a page
+    - name: Keep the card
+      if: steps.compare.outputs.card != ''
+      uses: actions/upload-artifact@v7
+      with:
+        name: pepe-card
+        path: ${{ steps.compare.outputs.card }}
+        if-no-files-found: ignore
+
+    # One comment per pull request, found again by its marker and updated.
+    # A comment can only show an image by URL, so the verdict is a badge
+    # drawn by shields.io from the words pepe gives; the card is in the
+    # run's artifacts
     - name: Comment on the pull request
       if: always() && inputs.comment == 'true' && (github.event_name == 'pull_request' || github.event_name == 'pull_request_target') && steps.run.outputs.report != ''
       shell: bash
@@ -225,6 +242,10 @@ runs:
             esac
             word=$(jq -r '{better: "Better than", faster: "Faster than", same: "About the same as", slower: "Slower than", worse: "Worse than"}[.verdict]' "$COMPARE")
             echo "### pepe · $glyph $word \`$BASE\` · $URL"
+            echo
+            # shields.io's static badge: - and _ are its separators
+            badge=$(jq -r '.badge | def part: gsub("-"; "--") | gsub("_"; "__") | @uri; "https://img.shields.io/badge/\(.label | part)-\(.message | part)-\(.color)"' "$COMPARE")
+            echo "![$word $BASE]($badge)"
             echo
             echo "| | \`$BASE\` | this PR | |"
             echo "|---|---|---|---|"
@@ -255,7 +276,11 @@ runs:
             fi
           fi
           echo
-          echo "<sub>[pepe](https://github.com/omarmhaimdat/pepe) · [this run]($RUN_URL)</sub>"
+          if [ -n "$COMPARE" ] && [ -f "$COMPARE" ]; then
+            echo "<sub>[pepe](https://github.com/omarmhaimdat/pepe) · [this run]($RUN_URL), with the verdict as an SVG card in its artifacts</sub>"
+          else
+            echo "<sub>[pepe](https://github.com/omarmhaimdat/pepe) · [this run]($RUN_URL)</sub>"
+          fi
         } > "$body"
         existing=$(gh api "repos/$REPO/issues/$PR/comments" --paginate --jq '[.[] | select(.body | startswith("<!-- pepe-load-test -->"))][0].id // empty' 2>/dev/null || true)
         if [ -n "$existing" ]; then

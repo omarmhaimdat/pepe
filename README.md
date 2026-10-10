@@ -540,7 +540,11 @@ pepe · compare before.json → after.json
   ▲ A long tail is new: p99 is 5.4× the median, was 4.0×
 ```
 
-The verdict is one of **Faster**, **About the same**, **Slower**, and, when failures appeared or rose, **Worse** (or **Better** when they fell): failures outrank speed. Two reports of different targets or concurrency are compared all the same, with that said first. Ramp reports compare their capacity estimate and the level that held. `--gate` exits 1 on Slower or Worse, for CI, and `--json` prints the verdict, each number before and after with its change and the spread it was held against, and the findings.
+The verdict is one of **Faster**, **About the same**, **Slower**, and, when failures appeared or rose, **Worse** (or **Better** when they fell): failures outrank speed. Two reports of different targets or concurrency are compared all the same, with that said first. Ramp reports compare their capacity estimate and the level that held. `--gate` exits 1 on Slower or Worse, for CI, and `--json` prints the verdict, each number before and after with its change and the spread it was held against, the findings, and the verdict as a badge's three parts (`pepe | slower · p99 +38%`, in a colour) for shields.io and the like.
+
+`--svg card.svg` also draws the verdict as a card, the way the dashboard draws, for a README, a site or a report:
+
+<img src="assets/compare-card.svg" width="460" alt="pepe · compare: Slower. p99 10.14ms → 22.21ms, up 119%; median 6.51ms → 18.11ms, up 178%; throughput 1.2k → 439 req/s, down 63%; failed 0% → 0%">
 
 ### In GitHub Actions
 
@@ -584,7 +588,7 @@ steps:
 > - ▲ p99 up 38%: 120.0ms → 166.0ms
 > - ▲ A long tail is new: p99 is 5.4× the median, was 4.0×
 
-`baseline` can also name a report file, for a baseline kept in the repository or fetched from elsewhere. The comparison is in the job summary too, and in two more outputs: `verdict` (`faster`, `same`, `slower`, `better`, `worse`) and `compare`, the path of `pepe compare --json`'s output.
+`baseline` can also name a report file, for a baseline kept in the repository or fetched from elsewhere. The comparison is in the job summary too, and in three more outputs: `verdict` (`faster`, `same`, `slower`, `better`, `worse`), `compare`, the path of `pepe compare --json`'s output, and `card`, the verdict drawn as an SVG, which the run keeps in its artifacts. The comment carries the verdict as a badge, since a comment can only show an image by URL.
 
 ### Proxies
 
