@@ -6,6 +6,78 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+## [0.27.0](https://github.com/omarmhaimdat/pepe/compare/v0.26.0...v0.27.0) - 2026-10-10
+
+### Added
+
+- --metrics :9100 serves the live numbers for Prometheus ([#130](https://github.com/omarmhaimdat/pepe/pull/130))
+
+  ## What
+
+  `--metrics :9100` serves the live numbers at
+  `http://localhost:9100/metrics` while the run goes, in Prometheus's text
+  exposition form, so a soak run or a long ping shows up in Grafana next
+  to the server's own metrics.
+
+  ```bash
+  pepe -z 6h -c 50 --metrics :9100 https://example.com
+  pepe ping https://example.com --metrics 127.0.0.1:9100
+  curl -s localhost:9100/metrics
+  ```
+
+  ## Why
+
+  The roadmap's "Prometheus metrics" item: a soak run's numbers belong on
+  the same board as the server's. With `pepe ping` in, a long ping belongs
+  there too.
+
+  ## How
+
+  - `src/exporter.rs`: a server of a few dozen lines (tokio `TcpListener`,
+  the request line parsed by hand, one text answered) and a page writer
+  for gauges, counters and histograms. No new dependency. The page is
+  rendered once a second at most, whatever scrapes it; the scrape is
+  served from the last one. `--metrics` takes `:9100`, `9100` or
+  `host:port`.
+  - **Where it hooks in.** The dashboard publishes after each drain (so
+  every mode on the dashboard is covered: plain runs, API mode, flows,
+  replays); the `--json` loops of those modes publish on their pump tick;
+  a ping publishes from a task once a second. A ramp isn't served, its
+  steps being the point of it; said in the README.
+  - **A load run** has requests finished, succeeded, timed out and
+  errored, responses by status, failures by cause, bytes, cache hits,
+  throughput and errors over the last second, latency quantiles (0.5, 0.9,
+  0.95, 0.99) and first-byte quantiles, `pepe_request_duration_seconds`
+  with fixed buckets from 1 ms to 30 s so two runs' histograms add up, the
+  concurrency and the elapsed time. Every line carries `target="GET
+  https://…"`; API mode, flows and replays have the same again per `row`.
+  - **A ping** has sent, answered, lost, timed out, SLO breaks,
+  `pepe_ping_up`, the last ping's time, the loss ratio, latency quantiles,
+  jitter, each phase's median, responses by status, resumed TLS sessions,
+  `pepe_ping_cert_not_after_seconds` and a histogram, each per `target`.
+  - The address is printed to stderr at the start (`metrics:
+  http://127.0.0.1:9100/metrics`), so `--json` output stays valid JSON.
+
+  ## Where
+
+  - `src/exporter.rs`: the server, the page, the two renderers, and their
+  tests
+  - `src/main.rs`: starting it, and publishing from the headless loops and
+  the ping
+  - `src/ui/mod.rs`: publishing from the dashboard
+  - `src/cli.rs`: the flag, and `target_label()` shared by the runners
+  - README (options table and a section), ROADMAP, man page, completions
+
+  ## Checked
+
+  - `cargo test --locked`: 288 passed, including the page format
+  (cumulative buckets, escaping, one declaration per family), a run page
+  with rows, and a served page fetched over TCP; clippy with `-D warnings`
+  and `cargo fmt --check` clean
+  - Scraped a live `--json` run of example.com three seconds in, and a
+  live ping of example.com and a dead port, with `curl`
+
+
 ## [0.26.0](https://github.com/omarmhaimdat/pepe/compare/v0.25.0...v0.26.0) - 2026-10-10
 
 ### Added
