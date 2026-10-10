@@ -556,7 +556,7 @@ The verdict is one of **Faster**, **About the same**, **Slower**, and, when fail
 
 ```
 pepe · compare before.json → after.json
-▲ Slower · 600 → 600 requests · p99 50.00ms → 72.00ms
+▲ Slower · 600 → 600 pings · p99 50.00ms → 72.00ms
   ▲ Median up 50%: 40.00ms → 60.00ms
   ▲ Connect up 150%: 10.00ms → 25.00ms
   ▲ TLS handshake up 60%: 25.00ms → 40.00ms

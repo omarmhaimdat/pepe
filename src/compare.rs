@@ -646,9 +646,14 @@ impl Comparison {
     pub fn report(&self) -> String {
         let level = self.verdict.level();
         let mut head = vec![format!(
-            "{} → {} requests",
+            "{} → {} {}",
             format::count(self.before.requests),
-            format::count(self.after.requests)
+            format::count(self.after.requests),
+            if self.before.every_s.is_some() {
+                "pings"
+            } else {
+                "requests"
+            }
         )];
         if let (Some(a), Some(b)) = (self.before.p99_ms, self.after.p99_ms) {
             head.push(format!("p99 {} → {}", ms(a), ms(b)));
@@ -1115,7 +1120,7 @@ mod tests {
         assert_eq!(c.badge.message, "slower · connect +150%");
         assert!(
             c.report()
-                .contains("pepe · compare before.json → after.json"),
+                .contains("pepe · compare before.json → after.json\n▲ Slower · 600 → 600 pings"),
             "{}",
             c.report()
         );
