@@ -6,6 +6,97 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+## [0.25.0](https://github.com/omarmhaimdat/pepe/compare/v0.24.0...v0.25.0) - 2026-10-10
+
+### Added
+
+- *(ping)* pepe ping, a request a second split into DNS, connect, TLS, first byte and download, on a graph ([#124](https://github.com/omarmhaimdat/pepe/pull/124))
+
+  ## What
+
+  A new subcommand, `pepe ping`: ping, with HTTP instead of ICMP, and a
+  graph. One request a second to one target or several, each split into
+  where its time went, with the loss, jitter and percentiles of `ping`,
+  the phase breakdown of `httpstat`, and the graph of `gping`.
+
+  ```bash
+  pepe ping https://example.com
+  pepe ping api.example.com cdn.example.com --name api,cdn --every 500ms
+  pepe ping https://api.example.com/health --slo total=300,ttfb=100 --bell
+  pepe ping example.com --all-ips -4
+  pepe ping db.internal --tcp --port 5432
+  pepe ping 10.0.0.0/29:8080
+  pepe ping --cmd 'dig example.com'
+  pepe ping https://example.com --jsonl > pings.jsonl
+  ```
+
+  ## Why
+
+  A load test is run now and then; a latency check is run all day. This is
+  the same engine at one request a second, and the reason to have pepe
+  open. It was scoped from what gping and httpstat have and what their
+  issue trackers ask for: packet loss, text output when piped, stats over
+  the whole run, a fixed y axis, named and coloured targets, CSV,
+  thresholds with an alert, every address of a name, CIDR ranges, TCP
+  pings, SLO limits, certificate details, redirect chains, JSON, the IPs
+  at both ends, and full against resumed TLS handshakes.
+
+  ## How
+
+  - **Every phase, every ping.** Each ping opens its own connection, so
+  DNS, connect, TLS, first byte and download are measured every time. The
+  TLS session is still resumed when the server allows, and the report
+  gives full and resumed handshake medians apart. `--keep-alive` keeps the
+  connection, as a browser would. Redirects are followed, each hop with
+  its status and time.
+  - **Three views.** The graph (braille or dots, zoom, whole run, a floor
+  at zero, a log scale, failures and SLO breaks marked on top); the phases
+  of the picked target's last and median ping as a stacked bar, with
+  curl's running totals, the TLS version, cipher and ALPN, and the
+  certificate's subject, issuer and expiry; and the pings themselves, each
+  openable to its hops, headers, TLS and body.
+  - **The table.** last, min, avg, max, jitter, p95, p99, loss, timeouts
+  and sent, over what the graph shows or the whole run.
+  - **Targets.** URLs, bare hosts, host:port, `aws:REGION`, address
+  ranges, `--all-ips`, `--tcp` with `--tcp-rst`, `--cmd`; `-4`, `-6` and
+  `--interface`.
+  - **Limits and output.** `--slo total=500,ttfb=200,...` marks a ping and
+  sets the exit code to 4; `--bell` rings the terminal; exit 1 when
+  nothing ever answered. Piped, or with `--jsonl`, `--csv` or `--json`,
+  there is no screen. `--save` writes the JSON report, `--save-body` the
+  last body.
+  - A small X.509 reader (`src/cert.rs`) for the subject, issuer, validity
+  and DNS names, with no new dependency.
+  - Man page, completions, README section, roadmap entry, and an agent
+  skill under `skills/pepe/` (as httpstat ships).
+
+  ## Where
+
+  - `src/ping.rs`: targets, the engine, stats, and the text, JSON, JSON
+  Lines and CSV outputs
+  - `src/ui/ping.rs`: the screen
+  - `src/cert.rs`: the certificate reader
+  - `src/cli.rs`, `src/main.rs`: the subcommand and its wiring
+  - `src/direct.rs`: `tls_config` made `pub(crate)`, nothing else
+
+  ## Checked
+
+  - `cargo test`: 261 passed, including a live ping against a local server
+  with a redirect, a closed port, a TCP ping and a command; the screen
+  rendered at several sizes through `TestBackend`
+  - `cargo clippy --locked --all-targets -- -D warnings` and `cargo fmt
+  --check` clean
+  - The release binary against example.com in text, `--jsonl`, `--csv` and
+  `--json` modes; exit codes 4 (`--slo`) and 1 (nothing answered);
+  `--save` and `--save-body`; the live screen recorded in a
+  pseudo-terminal
+
+  Left out on purpose: packet size (meaningless for HTTP; `-d` sends a
+  body), shell completion of hostnames, an HTML report (on the roadmap
+  already), gping's `--clear` (pepe leaves only the summary), and HTTP/2
+  (the roadmap says not now).
+
+
 ## [0.24.0](https://github.com/omarmhaimdat/pepe/compare/v0.23.0...v0.24.0) - 2026-10-10
 
 ### Added
