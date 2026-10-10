@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OpenAPI · pepe docs</title>
+<meta name="description" content="pepe api reads an OpenAPI 3 (or Swagger 2) spec, from a file or a URL, in JSON or YAML, and turns its operations into requests. With nothing after it, it opens the setup screen and asks for the spec: type a path or a URL, or paste the whole document.">
+<link rel="canonical" href="https://pepe.mhaimdat.com/docs/api.html">
+<link rel="icon" href="../assets/logo.svg" type="image/svg+xml">
+<meta name="theme-color" content="#140f0d">
+<meta property="og:type" content="article">
+<meta property="og:title" content="OpenAPI · pepe docs">
+<meta property="og:description" content="pepe api reads an OpenAPI 3 (or Swagger 2) spec, from a file or a URL, in JSON or YAML, and turns its operations into requests. With nothing after it, it opens the setup screen and asks for the spec: type a path or a URL, or paste the whole document.">
+<meta property="og:image" content="https://pepe.mhaimdat.com/img/og.png">
+<link rel="stylesheet" href="docs.css">
+</head>
+<body>
+<div class="term">
+  <header class="title">
+    <a class="name" href="../">pepe</a><a href="index.html">docs</a>
+    <nav aria-label="Site"><a href="../">install</a><a href="https://github.com/omarmhaimdat/pepe">github</a><a href="https://github.com/omarmhaimdat/pepe/releases">releases</a></nav>
+  </header>
+  <div class="cols">
+    <aside class="side" aria-label="Pages"><a href="index.html">Overview</a><a href="install.html">Install</a><a href="load-test.html">Load testing</a><a href="dashboard.html">The dashboard</a><a href="ramp.html">Ramp</a><a href="api.html" class="on">OpenAPI</a><a href="flow.html">Flows</a><a href="replay.html">Replay</a><a href="ping.html">Ping</a><a href="logs.html">nginx logs</a><a href="compare.html">Compare</a><a href="output.html">Output and exit codes</a><a href="ci.html">CI and Docker</a><a href="agents.html">Agents and scripts</a><a href="benchmarks.html">Benchmarks</a><a href="reference.html">Command reference</a></aside>
+    <main>
+<h1>OpenAPI: load-testing a spec</h1>
+<p><img src="../assets/api.gif" alt="API mode: the endpoints of a spec picked on screen, then a dashboard with a row per endpoint"></p>
+<p><code>pepe api</code> reads an OpenAPI 3 (or Swagger 2) spec, from a file or a URL, in JSON or YAML, and turns its operations into requests. With nothing after it, it opens the setup screen and asks for the spec: type a path or a URL, or paste the whole document.</p>
+<pre class="lang-bash"><code>pepe api
+pepe api openapi.yaml
+pepe api https://api.example.com/openapi.json --auth bearer:$TOKEN -c 20 -z 1m
+pepe api openapi.yaml --tag Billing --set customer_id=1,2,3 --json &gt; billing.json</code></pre>
+<h2 id="the-plan-screen">The plan screen <a class="anchor" href="#the-plan-screen" aria-label="Link to this section">#</a></h2>
+<p>Once the spec is loaded, it opens on a plan screen. Nothing is sent, and no endpoint is switched on, until you say so.</p>
+<ul><li>Endpoints are listed under the spec's tags. <code>space</code> switches an endpoint on or off, or a whole tag; <code>/</code> filters the list.</li><li><code>enter</code> on an endpoint goes to its parameters: path, query, header and cookie parameters with their type, description and the values the spec allows, then the body and the endpoint's share of the traffic. <code>enter</code> edits one, <code>space</code> steps through the spec's values, <code>del</code> leaves it out. Several values (<code>a, b</code>) are sent in turn, or together for array parameters.</li><li>The request is shown as it will go out, and <code>t</code> sends it once and shows the answer.</li><li>If the spec declares authentication and none was given, pepe asks for it, checks it with one request, and shows credentials masked from then on.</li><li><code>c</code>, <code>n</code>, <code>z</code> change concurrency, requests and duration; <code>u</code> the server; <code>a</code> the credentials; <code>g</code> starts the run.</li><li>Endpoints that still need a value, and writes (POST, PUT, PATCH, DELETE), are never switched on in bulk: you switch those on one by one.</li><li><code>?</code> lists the keys; <code>esc</code> goes back a level, then quits.</li></ul>
+<h2 id="the-run">The run <a class="anchor" href="#the-run" aria-label="Link to this section">#</a></h2>
+<p>The run is the usual dashboard, with an <b>Endpoints</b> view in front: requests, throughput, p50, p99, errors and status codes for each endpoint. <code>enter</code> on one shows its requests, and <code>e</code> goes back to the plan. Bodies for writes come from the spec's examples and schemas; parameters rotate through the values given.</p>
+<h2 id="flags">Flags <a class="anchor" href="#flags" aria-label="Link to this section">#</a></h2>
+<p>Everything on the plan screen has a flag, so a run can be scripted:</p>
+<table><thead><tr><th>Flag</th><th>What it does</th></tr></thead><tbody><tr><td><code>--auth</code></td><td>Credentials: <code>bearer:TOKEN</code>, <code>basic:USER:PASSWORD</code>, <code>apikey:VALUE</code>, <code>header:NAME=VALUE</code> or <code>query:NAME=VALUE</code>; repeat for several</td></tr><tr><td><code>--server</code></td><td>Send requests here instead of the spec's server</td></tr><tr><td><code>--all</code></td><td>Switch on every endpoint that has the values it needs</td></tr><tr><td><code>--tag</code>, <code>--only</code></td><td>Switch on the endpoints with this tag, or matching a pattern such as <code>&#x27;GET /pets*&#x27;</code> or <code>&#x27;/pets/*&#x27;</code></td></tr><tr><td><code>--skip</code></td><td>Leave out endpoints matching a pattern</td></tr><tr><td><code>--set</code></td><td>Give a parameter its value(s) wherever it appears: <code>--set id=1,2,3</code></td></tr><tr><td><code>--include-writes</code></td><td>Let <code>--all</code>, <code>--tag</code> and <code>--only</code> switch on writes too</td></tr></tbody></table>
+<p>With <code>--json</code>, or piped, there is no screen, so name what to run with <code>--all</code>, <code>--tag</code> or <code>--only</code>; the report has a section per endpoint (<code>endpoints[]</code>, with requests, failures, throughput, median, p99 and status codes each). The <code>[api]</code> table of <code>pepe.toml</code> gives the same defaults (<a href="load-test.html#config-file">Config file</a>). <code>--metrics</code> serves a row per endpoint (<a href="output.html#prometheus-metrics">Output</a>).</p>
+    </main>
+    <aside class="toc" aria-label="On this page"><div class="lab">on this page</div><a href="#the-plan-screen" class="h2">The plan screen</a><a href="#the-run" class="h2">The run</a><a href="#flags" class="h2">Flags</a></aside>
+  </div>
+  <footer class="chips"><span><kbd>?</kbd>every screen lists its keys</span><span><kbd>q</kbd>leaves the report in your shell</span><span class="by">MIT · <a href="https://github.com/omarmhaimdat/pepe">omarmhaimdat/pepe</a></span></footer>
+</div>
+</body>
+</html>

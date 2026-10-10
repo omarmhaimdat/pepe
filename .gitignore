@@ -5,3 +5,4 @@ homebrew
 .vscode
 .DS_Store
 /bench/server/target
+/.claude

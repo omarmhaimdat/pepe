@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CI and Docker · pepe docs</title>
+<meta name="description" content="pepe in a pipeline: the GitHub Action, a pull request held against its base branch, thresholds, Docker, and what to read afterwards.">
+<link rel="canonical" href="https://pepe.mhaimdat.com/docs/ci.html">
+<link rel="icon" href="../assets/logo.svg" type="image/svg+xml">
+<meta name="theme-color" content="#140f0d">
+<meta property="og:type" content="article">
+<meta property="og:title" content="CI and Docker · pepe docs">
+<meta property="og:description" content="pepe in a pipeline: the GitHub Action, a pull request held against its base branch, thresholds, Docker, and what to read afterwards.">
+<meta property="og:image" content="https://pepe.mhaimdat.com/img/og.png">
+<link rel="stylesheet" href="docs.css">
+</head>
+<body>
+<div class="term">
+  <header class="title">
+    <a class="name" href="../">pepe</a><a href="index.html">docs</a>
+    <nav aria-label="Site"><a href="../">install</a><a href="https://github.com/omarmhaimdat/pepe">github</a><a href="https://github.com/omarmhaimdat/pepe/releases">releases</a></nav>
+  </header>
+  <div class="cols">
+    <aside class="side" aria-label="Pages"><a href="index.html">Overview</a><a href="install.html">Install</a><a href="load-test.html">Load testing</a><a href="dashboard.html">The dashboard</a><a href="ramp.html">Ramp</a><a href="api.html">OpenAPI</a><a href="flow.html">Flows</a><a href="replay.html">Replay</a><a href="ping.html">Ping</a><a href="logs.html">nginx logs</a><a href="compare.html">Compare</a><a href="output.html">Output and exit codes</a><a href="ci.html" class="on">CI and Docker</a><a href="agents.html">Agents and scripts</a><a href="benchmarks.html">Benchmarks</a><a href="reference.html">Command reference</a></aside>
+    <main>
+<h1>CI and Docker</h1>
+<p>pepe in a pipeline: the GitHub Action, a pull request held against its base branch, thresholds, Docker, and what to read afterwards.</p>
+<h2 id="the-github-action">The GitHub Action <a class="anchor" href="#the-github-action" aria-label="Link to this section">#</a></h2>
+<p>The repository is also an action: it installs a pinned release, runs <code>pepe --json</code>, puts the numbers in the job summary and in outputs, and can fail the job on a condition over the report.</p>
+<pre class="lang-yaml"><code>- uses: omarmhaimdat/pepe@v0
+  id: load
+  with:
+    url: https://staging.example.com/api/health
+    args: -z 30s -c 20 -H &#x27;Authorization: Bearer ${{ secrets.TOKEN }}&#x27;
+    fail-if: &quot;.summary.latency.p99_ms &gt; 300 or .summary.failed_requests &gt; 0&quot;
+- run: echo &quot;p99 was ${{ steps.load.outputs.p99_ms }} ms at ${{ steps.load.outputs.requests_per_second }} req/s&quot;</code></pre>
+<h3 id="inputs">Inputs <a class="anchor" href="#inputs" aria-label="Link to this section">#</a></h3>
+<table><thead><tr><th>Input</th><th>Default</th><th>What it does</th></tr></thead><tbody><tr><td><code>url</code></td><td></td><td>The URL to load-test; can be left empty when it is in <code>args</code></td></tr><tr><td><code>args</code></td><td><code>-n 100</code></td><td>pepe's flags, e.g. <code>-n 1000 -c 20 -H &#x27;Accept: application/json&#x27;</code>; don't pass <code>--json</code>, the action does</td></tr><tr><td><code>version</code></td><td><code>latest</code></td><td>The release to use, e.g. <code>0.9.0</code></td></tr><tr><td><code>fail-if</code></td><td></td><td>A <code>jq</code> condition on the JSON report; when true, the step fails. (pepe's own <code>--fail-if &#x27;p99 &gt; 300ms&#x27;</code> in <code>args</code> does the same with exit code 4.)</td></tr><tr><td><code>baseline</code></td><td></td><td><code>auto</code> keeps each branch's last report in the Actions cache and holds a pull request against its base branch's; a path names a report file to compare with</td></tr><tr><td><code>comment</code></td><td><code>false</code></td><td>On a pull request, post the result as a comment, updated on later runs; the job needs <code>pull-requests: write</code></td></tr><tr><td><code>gate</code></td><td><code>false</code></td><td>Fail the step when the comparison says Slower or Worse</td></tr></tbody></table>
+<h3 id="outputs">Outputs <a class="anchor" href="#outputs" aria-label="Link to this section">#</a></h3>
+<table><thead><tr><th>Output</th><th>What it is</th></tr></thead><tbody><tr><td><code>report</code></td><td>Path of the JSON report</td></tr><tr><td><code>total_requests</code>, <code>failed_requests</code>, <code>requests_per_second</code>, <code>p50_ms</code>, <code>p99_ms</code></td><td>The headline numbers</td></tr><tr><td><code>compare</code></td><td>Path of <code>pepe compare --json</code>'s output; empty without a baseline</td></tr><tr><td><code>verdict</code></td><td><code>faster</code>, <code>same</code>, <code>slower</code>, <code>better</code> or <code>worse</code>; empty without a baseline</td></tr><tr><td><code>card</code></td><td>Path of the verdict drawn as an SVG card, kept in the run's artifacts</td></tr></tbody></table>
+<p>Linux and macOS runners.</p>
+<h2 id="against-the-base-branch">Against the base branch <a class="anchor" href="#against-the-base-branch" aria-label="Link to this section">#</a></h2>
+<p>With <code>baseline: auto</code>, every run on a branch keeps its report in the Actions cache, and a pull request is held against its base branch's last one with <code>pepe compare</code>. <code>comment: true</code> posts the result on the pull request, one comment updated on every push, and <code>gate: true</code> fails the step when it says Slower or Worse. The first run on the base branch after this is added makes the baseline; until then a pull request's comment says so.</p>
+<pre class="lang-yaml"><code>permissions:
+  pull-requests: write
+steps:
+  - uses: omarmhaimdat/pepe@v0
+    with:
+      url: https://staging.example.com/api/health
+      args: -n 5000 -c 20
+      baseline: auto
+      comment: true
+      gate: true</code></pre>
+<blockquote><h3 id="pepe-slower-than-main-https-staging-example-com-api-health">pepe · ▲ Slower than <code>main</code> · https://staging.example.com/api/health <a class="anchor" href="#pepe-slower-than-main-https-staging-example-com-api-health" aria-label="Link to this section">#</a></h3>
+<table><thead><tr><th></th><th><code>main</code></th><th>this PR</th><th></th></tr></thead><tbody><tr><td>p99</td><td>120.0 ms</td><td>166.0 ms</td><td>▲ up 38%</td></tr><tr><td>median</td><td>30.0 ms</td><td>31.0 ms</td><td>within the usual spread (±5%)</td></tr><tr><td>throughput</td><td>260 req/s</td><td>252 req/s</td><td>within the usual spread (±5%)</td></tr><tr><td>failed</td><td>0%</td><td>0%</td><td></td></tr></tbody></table>
+<ul><li>▲ p99 up 38%: 120.0ms → 166.0ms</li><li>▲ A long tail is new: p99 is 5.4× the median, was 4.0×</li></ul></blockquote>
+<p><code>baseline</code> can also name a report file, for a baseline kept in the repository or fetched from elsewhere. The comparison is in the job summary too, and in the <code>verdict</code>, <code>compare</code> and <code>card</code> outputs. The comment carries the verdict as a badge, since a comment can only show an image by URL.</p>
+<h2 id="any-ci">Any CI <a class="anchor" href="#any-ci" aria-label="Link to this section">#</a></h2>
+<p>Without the action, pepe is one binary and a few lines. Run it with <code>--json</code> for the report, or piped for the text verdict; <code>--fail-if</code> sets the exit code; <code>pepe compare --gate</code> holds a report against a kept one.</p>
+<pre class="lang-bash"><code>curl -LsSf https://pepe.mhaimdat.com/install.sh | sh
+pepe --json -n 2000 -c 20 --fail-if &#x27;p99 &gt; 300ms&#x27; --fail-if &#x27;errors &gt; 1%&#x27; &quot;$URL&quot; &gt; report.json
+pepe compare baseline.json report.json --gate --svg card.svg</code></pre>
+<p><code>PEPE_NO_UPDATE_CHECK</code> is set by the action and worth setting elsewhere in CI, so no run ends with an update notice.</p>
+<h2 id="docker">Docker <a class="anchor" href="#docker" aria-label="Link to this section">#</a></h2>
+<pre class="lang-bash"><code>docker run --rm -it ghcr.io/omarmhaimdat/pepe -z 30s -c 50 https://example.com   # the dashboard needs -it
+docker run --rm ghcr.io/omarmhaimdat/pepe --json -n 1000 https://example.com     # for scripts
+docker run --rm -p 9100:9100 ghcr.io/omarmhaimdat/pepe --metrics :9100 -z 10m https://example.com</code></pre>
+<p>An empty image with the static binary in it, a few megabytes, for <code>linux/amd64</code> and <code>linux/arm64</code>; <code>:latest</code> and <code>:&lt;version&gt;</code> tags. Inside Docker Compose or Kubernetes, point it at the service's name; <code>--metrics</code> needs the port published.</p>
+<h2 id="soak-runs-in-the-background">Soak runs in the background <a class="anchor" href="#soak-runs-in-the-background" aria-label="Link to this section">#</a></h2>
+<p>For a long run on a server, <code>--snapshot</code> keeps the report current on disk and <code>--metrics</code> puts the numbers in Prometheus, so the run can be read from anywhere while it goes and after (<a href="output.html">Output</a>).</p>
+<pre class="lang-bash"><code>nohup pepe -z 12h -c 50 --snapshot soak.json --metrics :9100 https://example.com &gt; soak.txt 2&gt;&amp;1 &amp;</code></pre>
+    </main>
+    <aside class="toc" aria-label="On this page"><div class="lab">on this page</div><a href="#the-github-action" class="h2">The GitHub Action</a><a href="#inputs" class="h3">Inputs</a><a href="#outputs" class="h3">Outputs</a><a href="#against-the-base-branch" class="h2">Against the base branch</a><a href="#any-ci" class="h2">Any CI</a><a href="#docker" class="h2">Docker</a><a href="#soak-runs-in-the-background" class="h2">Soak runs in the background</a></aside>
+  </div>
+  <footer class="chips"><span><kbd>?</kbd>every screen lists its keys</span><span><kbd>q</kbd>leaves the report in your shell</span><span class="by">MIT · <a href="https://github.com/omarmhaimdat/pepe">omarmhaimdat/pepe</a></span></footer>
+</div>
+</body>
+</html>

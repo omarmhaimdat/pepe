@@ -8,7 +8,7 @@
 
 [![CI](https://github.com/omarmhaimdat/pepe/actions/workflows/CI.yaml/badge.svg)](https://github.com/omarmhaimdat/pepe/actions/workflows/CI.yaml) [![Release](https://img.shields.io/github/v/release/omarmhaimdat/pepe?display_name=tag&color=brightgreen)](https://github.com/omarmhaimdat/pepe/releases/latest) [![Downloads](https://img.shields.io/github/downloads/omarmhaimdat/pepe/total?color=blue)](https://github.com/omarmhaimdat/pepe/releases) [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE) ![Rust 1.85+](https://img.shields.io/badge/rust-1.85%2B-orange)
 
-[Install](#install) · [Quick start](#quick-start) · [Usage](#usage) · [Dashboard](#the-dashboard) · [How it compares](#how-pepe-compares) · [Roadmap](ROADMAP.md) · [Contributing](#contributing)
+[Install](#install) · [Quick start](#quick-start) · [Usage](#usage) · [Dashboard](#the-dashboard) · [How it compares](#how-pepe-compares) · [Documentation](https://pepe.mhaimdat.com/docs/) · [Roadmap](ROADMAP.md) · [Contributing](#contributing)
 
 </div>
 
@@ -724,6 +724,10 @@ Those are single-thread numbers for pepe on an Apple M4 Pro, where the loopback 
 | 10 million requests, 256 connections | **2.9 ms · 4.5 MB** · 343k req/s | 3.3 ms · 4.6 MB · 304k req/s | 6.5 ms · 2,404 MB · 316k req/s |
 
 Every workload, where pepe is level rather than ahead (a slow target at 1,000 connections, 16 KB bodies over TLS), what a glibc build changes, k6, the profiles and the method are in [bench/README.md](bench/README.md). Where a target can take more than one thread sends, pepe says so, and `--threads auto` adds them.
+
+## Documentation
+
+Everything here and more, page by page, at [pepe.mhaimdat.com/docs](https://pepe.mhaimdat.com/docs/): the sources are the Markdown files under [docs/](docs/), and `python3 site/build-docs.py` builds the site into `site/docs/` (CI checks it is current). The command reference there is generated from the command definition by `cargo test`.
 
 ## Contributing
 

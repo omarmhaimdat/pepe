@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ramp · pepe docs</title>
+<meta name="description" content="pepe ramp raises concurrency step by step, measures each step on its own, and says where the target holds, where it stops scaling and where it breaks.">
+<link rel="canonical" href="https://pepe.mhaimdat.com/docs/ramp.html">
+<link rel="icon" href="../assets/logo.svg" type="image/svg+xml">
+<meta name="theme-color" content="#140f0d">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Ramp · pepe docs">
+<meta property="og:description" content="pepe ramp raises concurrency step by step, measures each step on its own, and says where the target holds, where it stops scaling and where it breaks.">
+<meta property="og:image" content="https://pepe.mhaimdat.com/img/og.png">
+<link rel="stylesheet" href="docs.css">
+</head>
+<body>
+<div class="term">
+  <header class="title">
+    <a class="name" href="../">pepe</a><a href="index.html">docs</a>
+    <nav aria-label="Site"><a href="../">install</a><a href="https://github.com/omarmhaimdat/pepe">github</a><a href="https://github.com/omarmhaimdat/pepe/releases">releases</a></nav>
+  </header>
+  <div class="cols">
+    <aside class="side" aria-label="Pages"><a href="index.html">Overview</a><a href="install.html">Install</a><a href="load-test.html">Load testing</a><a href="dashboard.html">The dashboard</a><a href="ramp.html" class="on">Ramp</a><a href="api.html">OpenAPI</a><a href="flow.html">Flows</a><a href="replay.html">Replay</a><a href="ping.html">Ping</a><a href="logs.html">nginx logs</a><a href="compare.html">Compare</a><a href="output.html">Output and exit codes</a><a href="ci.html">CI and Docker</a><a href="agents.html">Agents and scripts</a><a href="benchmarks.html">Benchmarks</a><a href="reference.html">Command reference</a></aside>
+    <main>
+<h1>Ramp: finding where the target stops keeping up</h1>
+<p><img src="../assets/ramp.gif" alt="Ramp mode: concurrency raised step by step, with each step measured on its own"></p>
+<p><code>pepe ramp</code> raises concurrency step by step, measures each step on its own, and says where the target holds, where it stops scaling and where it breaks.</p>
+<pre class="lang-bash"><code>pepe ramp https://example.com --from 10 --to 200 --step 10 --every 15s
+pepe ramp https://example.com --until &#x27;p99 &gt; 500ms&#x27; --until &#x27;errors &gt; 1%&#x27;
+pepe ramp https://example.com --json &gt; ramp.json</code></pre>
+<h2 id="flags">Flags <a class="anchor" href="#flags" aria-label="Link to this section">#</a></h2>
+<table><thead><tr><th>Flag</th><th>Default</th><th>What it does</th></tr></thead><tbody><tr><td><code>--from</code>, <code>--to</code>, <code>--step</code></td><td>10, 100, 10</td><td>Concurrency of the first step, the last, and what's added between</td></tr><tr><td><code>--every &lt;TIME&gt;</code></td><td>10s</td><td>How long each step is held</td></tr><tr><td><code>--until &lt;CONDITION&gt;</code></td><td></td><td>End the ramp once a step crosses a limit: <code>p50 &gt; 100ms</code>, <code>p99 &gt; 2s</code>, <code>errors &gt; 1%</code>; repeat for several</td></tr></tbody></table>
+<p><code>-m</code>, <code>-d</code>, <code>-H</code> and the other request options work as they do without <code>ramp</code>; <code>-n</code>, <code>-z</code> and <code>-c</code> don't apply, since the ramp sets its own load and length. Without a URL, the setup screen opens in Ramp mode. The <code>[ramp]</code> table of <code>pepe.toml</code> gives the same defaults (<a href="load-test.html#config-file">Config file</a>).</p>
+<h2 id="the-screen">The screen <a class="anchor" href="#the-screen" aria-label="Link to this section">#</a></h2>
+<p>Each step is a row: throughput (successful responses per second), p50, p90, p99, the slowest request, errors, and a note when something changes. Below it, the run second by second, throughput and p99 at each concurrency, and the result: the level that held, where throughput stopped following the load, where it broke, and the command for a steady run at the level that held. Throughput counts successful responses only, so a target that sheds load quickly doesn't look fast.</p>
+<h2 id="the-capacity-estimate">The capacity estimate <a class="anchor" href="#the-capacity-estimate" aria-label="Link to this section">#</a></h2>
+<p>Once four clean steps are in, a saturation curve (the Universal Scalability Law) is fitted to throughput against concurrency, and the result states the capacity read off it: "Capacity about 3.0k req/s · reached around 30 concurrent · median latency doubles around 34". When the curve is still climbing at the last step but has begun to bend, the estimate says so ("Capacity beyond the ramp … past the ramp's 50"); when it hasn't bent at all, no number is given, because none would be honest. The estimate is kept only when the curve reproduces every measured step within 25%.</p>
+<h2 id="keys">Keys <a class="anchor" href="#keys" aria-label="Link to this section">#</a></h2>
+<table><thead><tr><th>Key</th><th>Action</th></tr></thead><tbody><tr><td><code>↑</code> <code>↓</code></td><td>Pick a step and see everything measured about it; <code>esc</code> goes back to following the run</td></tr><tr><td><code>space</code></td><td>Pause or resume; a step's clock stops while paused</td></tr><tr><td><code>n</code></td><td>End this step now and go on to the next</td></tr><tr><td><code>s</code></td><td>Stop the ramp here and keep the results</td></tr><tr><td><code>r</code> / <code>e</code></td><td>Run again / back to the setup screen</td></tr><tr><td><code>?</code></td><td>Show all keys</td></tr><tr><td><code>q</code> / <code>Ctrl-C</code></td><td>Quit; the table and the result are printed to your shell</td></tr></tbody></table>
+<h2 id="the-report">The report <a class="anchor" href="#the-report" aria-label="Link to this section">#</a></h2>
+<p><code>--json</code> runs the ramp without a screen and prints every step, the findings, and <code>capacity</code> (<code>requests_per_second</code>, <code>concurrency</code>, <code>extrapolated</code>, <code>latency_doubles_at_concurrency</code>; <code>null</code> when the curve hadn't bent), plus <code>holds_concurrency</code>, the level that held. Piped without <code>--json</code>, the table and the result are printed as text. <code>pepe schema ramp</code> prints the report's JSON Schema, and <code>pepe compare</code> holds two ramp reports against each other by their capacity and the level that held (<a href="compare.html">Compare</a>). <code>--fail-if</code> applies to the whole ramp's requests (<a href="output.html#thresholds-that-fail-ci">Output</a>).</p>
+    </main>
+    <aside class="toc" aria-label="On this page"><div class="lab">on this page</div><a href="#flags" class="h2">Flags</a><a href="#the-screen" class="h2">The screen</a><a href="#the-capacity-estimate" class="h2">The capacity estimate</a><a href="#keys" class="h2">Keys</a><a href="#the-report" class="h2">The report</a></aside>
+  </div>
+  <footer class="chips"><span><kbd>?</kbd>every screen lists its keys</span><span><kbd>q</kbd>leaves the report in your shell</span><span class="by">MIT · <a href="https://github.com/omarmhaimdat/pepe">omarmhaimdat/pepe</a></span></footer>
+</div>
+</body>
+</html>
