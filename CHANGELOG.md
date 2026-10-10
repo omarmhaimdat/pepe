@@ -6,6 +6,66 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+## [0.28.0](https://github.com/omarmhaimdat/pepe/compare/v0.27.0...v0.28.0) - 2026-10-10
+
+### Added
+
+- *(compare)* two ping reports compare, phase by phase ([#129](https://github.com/omarmhaimdat/pepe/pull/129))
+
+  ## What
+
+  `pepe compare` reads ping reports (`pepe ping --json`, or `--save
+  report.json`) and holds them against each other: the median, the p99,
+  the pings lost, and the median of each phase, so a slower connect or a
+  slower handshake is told from a slower server.
+
+  ```
+  pepe · compare before.json → after.json
+  ▲ Slower · 600 → 600 pings · p99 50.00ms → 72.00ms
+    ▲ Median up 50%: 40.00ms → 60.00ms
+    ▲ Connect up 150%: 10.00ms → 25.00ms
+    ▲ TLS handshake up 60%: 25.00ms → 40.00ms
+    ✔ First byte within the usual spread: 6.00ms → 6.00ms (±5%)
+  ```
+
+  ## Why
+
+  Ping reports were the one kind of report `pepe compare` refused. A
+  before-and-after of a deploy, a DNS change or a CDN move is exactly what
+  they are for, and the phases say which part moved.
+
+  ## How
+
+  - `Side::read` recognises `"mode": "ping"` and reads the first target:
+  `sent`, `lost`, the latencies, and each phase's median (`dns`,
+  `connect`, `tls_full`, `tls_resumed`, `ttfb`, `download`), plus
+  `every_s`.
+  - A lost ping is a failed request, so failures outrank speed as before;
+  the head and the findings say "lost" and "pings" for a ping report.
+  - A ping report has no latency spread, so the jitter (the mean
+  difference between one ping and the next) stands in for it, scaled to a
+  standard deviation, and the usual spread-based threshold applies. Small
+  runs get more room, as they do for load reports.
+  - Each phase is a `Change` of its own in the JSON, named in the badge
+  when it moved most (`slower · connect +150%`), and drawn on the SVG
+  card.
+  - A different target or a different interval is said first, as different
+  concurrency is.
+
+  ## Where
+
+  - `src/compare.rs`: `Side::of_ping`, the phase changes, the names, the
+  tests
+  - README: the compare section and a line in the ping section
+
+  ## Checked
+
+  - `cargo test --locked`: 285 passed; clippy with `-D warnings` and
+  `cargo fmt --check` clean
+  - Two real ping reports of example.com compared (https against http),
+  and a report against itself ("about the same")
+
+
 ## [0.27.0](https://github.com/omarmhaimdat/pepe/compare/v0.26.0...v0.27.0) - 2026-10-10
 
 ### Added
