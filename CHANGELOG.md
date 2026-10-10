@@ -6,6 +6,36 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+## [0.24.0](https://github.com/omarmhaimdat/pepe/compare/v0.23.0...v0.24.0) - 2026-10-10
+
+### Added
+
+- *(compare)* the verdict as an SVG card and as a badge ([#119](https://github.com/omarmhaimdat/pepe/pull/119))
+
+  Third of three, on top of #118 (the action's baseline and comment),
+  which is on top of #117 (`pepe compare`). Merge in that order.
+
+  - `pepe compare --svg card.svg` draws the verdict the way the dashboard
+  draws: the word in its colour, then p99, median, throughput, capacity
+  and failures before and after, each with what moved or the spread it
+  stayed within. Self-contained SVG in pepe's palette, for a README, a
+  site or a report. The README shows one:
+
+  <img
+  src="https://raw.githubusercontent.com/omarmhaimdat/pepe/feat/compare-card/assets/compare-card.svg"
+  width="460">
+
+  - The JSON gains `badge`: the verdict as a badge's three parts (`pepe`,
+  `slower · p99 +38%`, a colour) for shields.io and the like.
+  - The action's comment shows that badge under its heading, since a
+  comment can only show an image by URL and nothing in the action hosts a
+  file. The card goes to the run's artifacts, with a `card` output for its
+  path; a repository that wants the card itself on the comment can push it
+  to a branch and link it.
+
+  **Squash-merge with the title as it is.**
+
+
 ## [0.23.0](https://github.com/omarmhaimdat/pepe/compare/v0.22.1...v0.23.0) - 2026-10-09
 
 ### Added
