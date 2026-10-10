@@ -3,31 +3,36 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Command reference · pepe docs</title>
+<title>Command reference · pepe</title>
 <meta name="description" content="Every command and flag, as --help prints them. Generated from the command definition by cargo test, so it can&#x27;t drift from the binary; the pages before this one say what the flags are for.">
 <link rel="canonical" href="https://pepe.mhaimdat.com/docs/reference.html">
 <link rel="icon" href="../assets/logo.svg" type="image/svg+xml">
-<meta name="theme-color" content="#140f0d">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#121010" media="(prefers-color-scheme: dark)">
 <meta property="og:type" content="article">
-<meta property="og:title" content="Command reference · pepe docs">
+<meta property="og:title" content="Command reference · pepe">
 <meta property="og:description" content="Every command and flag, as --help prints them. Generated from the command definition by cargo test, so it can&#x27;t drift from the binary; the pages before this one say what the flags are for.">
 <meta property="og:image" content="https://pepe.mhaimdat.com/img/og.png">
 <link rel="stylesheet" href="docs.css">
+<script>try{var t=localStorage.getItem('pepe-theme');if(t)document.documentElement.dataset.theme=t;}catch(e){}</script>
 </head>
 <body>
-<div class="term">
-  <header class="title">
-    <a class="name" href="../">pepe</a><a href="index.html">docs</a>
-    <nav aria-label="Site"><a href="../">install</a><a href="https://github.com/omarmhaimdat/pepe">github</a><a href="https://github.com/omarmhaimdat/pepe/releases">releases</a></nav>
-  </header>
-  <div class="cols">
-    <aside class="side" aria-label="Pages"><a href="index.html">Overview</a><a href="install.html">Install</a><a href="load-test.html">Load testing</a><a href="dashboard.html">The dashboard</a><a href="ramp.html">Ramp</a><a href="api.html">OpenAPI</a><a href="flow.html">Flows</a><a href="replay.html">Replay</a><a href="ping.html">Ping</a><a href="logs.html">nginx logs</a><a href="compare.html">Compare</a><a href="output.html">Output and exit codes</a><a href="ci.html">CI and Docker</a><a href="agents.html">Agents and scripts</a><a href="benchmarks.html">Benchmarks</a><a href="reference.html" class="on">Command reference</a></aside>
-    <main>
+<header class="top">
+  <button type="button" class="menu" aria-label="Pages" aria-expanded="false">☰</button>
+  <a class="brand" href="index.html"><img src="../assets/logo.svg" alt="" width="22" height="24">pepe<span>docs</span></a>
+  <div class="search"><input type="search" placeholder="Search the docs…" aria-label="Search the docs" autocomplete="off"><div class="results" hidden></div></div>
+  <nav class="links"><a href="../">Install</a><a href="https://github.com/omarmhaimdat/pepe">GitHub</a><button type="button" class="theme" aria-label="Switch between light and dark">◐</button></nav>
+</header>
+<div class="shell">
+  <aside class="side" id="side"><div class="group">Start here</div><a href="index.html">Overview</a><a href="install.html">Install</a><div class="group">Modes</div><a href="load-test.html">Load testing</a><a href="dashboard.html">The dashboard</a><a href="ping.html">Ping</a><a href="ramp.html">Ramp</a><a href="api.html">OpenAPI</a><a href="flow.html">Flows</a><a href="replay.html">Replay</a><a href="logs.html">nginx logs</a><a href="compare.html">Compare</a><div class="group">Integrate</div><a href="output.html">Output and exit codes</a><a href="ci.html">CI and Docker</a><a href="agents.html">Agents and scripts</a><div class="group">Reference</div><a href="reference.html" aria-current="page">Command reference</a><a href="benchmarks.html">Benchmarks</a></aside>
+  <main class="main">
+    <article class="prose">
 <h1>Command reference</h1>
 <p>Every command and flag, as <code>--help</code> prints them. Generated from the command definition by <code>cargo test</code>, so it can't drift from the binary; the pages before this one say what the flags are for.</p>
 <p>The options under <code>pepe</code> are global: they work after any subcommand too (<code>pepe ping -H &#x27;Accept: text/html&#x27; …</code>), where they make sense.</p>
-<h2 id="pepe">pepe <a class="anchor" href="#pepe" aria-label="Link to this section">#</a></h2>
-<pre class="lang-text"><code>HTTP load generator
+<h2 id="pepe"><a href="#pepe">pepe</a></h2>
+<figure class="code"><div class="bar"><span>text</span><button type="button" class="copy" aria-label="Copy">copy</button></div><pre><code>HTTP load generator
 
 Usage: pepe [OPTIONS] [URL] [-- &lt;ARGS&gt;...] [COMMAND]
 
@@ -143,9 +148,9 @@ Options:
           Write the settings as they stand to this file, as a pepe.toml, and exit
 
   -V, --version
-          Print version</code></pre>
-<h2 id="pepe-ping">pepe ping <a class="anchor" href="#pepe-ping" aria-label="Link to this section">#</a></h2>
-<pre class="lang-text"><code>Ping a URL: a request a second, each split into DNS, connect, TLS, first byte and download, on a graph
+          Print version</code></pre></figure>
+<h2 id="pepe-ping"><a href="#pepe-ping">pepe ping</a></h2>
+<figure class="code"><div class="bar"><span>text</span><button type="button" class="copy" aria-label="Copy">copy</button></div><pre><code>Ping a URL: a request a second, each split into DNS, connect, TLS, first byte and download, on a graph
 
 Usage: pepe ping [OPTIONS] [TARGETS]...
 
@@ -322,9 +327,9 @@ Options:
           Read settings from this file instead of ./pepe.toml; flags on the command line win over it
 
       --write-config &lt;FILE&gt;
-          Write the settings as they stand to this file, as a pepe.toml, and exit</code></pre>
-<h2 id="pepe-ramp">pepe ramp <a class="anchor" href="#pepe-ramp" aria-label="Link to this section">#</a></h2>
-<pre class="lang-text"><code>Raise the load step by step to find where the target stops keeping up
+          Write the settings as they stand to this file, as a pepe.toml, and exit</code></pre></figure>
+<h2 id="pepe-ramp"><a href="#pepe-ramp">pepe ramp</a></h2>
+<figure class="code"><div class="bar"><span>text</span><button type="button" class="copy" aria-label="Copy">copy</button></div><pre><code>Raise the load step by step to find where the target stops keeping up
 
 Usage: pepe ramp [OPTIONS] [URL]
 
@@ -437,9 +442,9 @@ Options:
           Read settings from this file instead of ./pepe.toml; flags on the command line win over it
 
       --write-config &lt;FILE&gt;
-          Write the settings as they stand to this file, as a pepe.toml, and exit</code></pre>
-<h2 id="pepe-api">pepe api <a class="anchor" href="#pepe-api" aria-label="Link to this section">#</a></h2>
-<pre class="lang-text"><code>Load-test every endpoint of an OpenAPI spec
+          Write the settings as they stand to this file, as a pepe.toml, and exit</code></pre></figure>
+<h2 id="pepe-api"><a href="#pepe-api">pepe api</a></h2>
+<figure class="code"><div class="bar"><span>text</span><button type="button" class="copy" aria-label="Copy">copy</button></div><pre><code>Load-test every endpoint of an OpenAPI spec
 
 Usage: pepe api [OPTIONS] [SPEC]
 
@@ -553,9 +558,9 @@ Options:
           Read settings from this file instead of ./pepe.toml; flags on the command line win over it
 
       --write-config &lt;FILE&gt;
-          Write the settings as they stand to this file, as a pepe.toml, and exit</code></pre>
-<h2 id="pepe-replay">pepe replay <a class="anchor" href="#pepe-replay" aria-label="Link to this section">#</a></h2>
-<pre class="lang-text"><code>Send the URLs of an access log in their real proportions
+          Write the settings as they stand to this file, as a pepe.toml, and exit</code></pre></figure>
+<h2 id="pepe-replay"><a href="#pepe-replay">pepe replay</a></h2>
+<figure class="code"><div class="bar"><span>text</span><button type="button" class="copy" aria-label="Copy">copy</button></div><pre><code>Send the URLs of an access log in their real proportions
 
 Usage: pepe replay [OPTIONS] &lt;LOG&gt;
 
@@ -656,9 +661,9 @@ Options:
           Read settings from this file instead of ./pepe.toml; flags on the command line win over it
 
       --write-config &lt;FILE&gt;
-          Write the settings as they stand to this file, as a pepe.toml, and exit</code></pre>
-<h2 id="pepe-flow">pepe flow <a class="anchor" href="#pepe-flow" aria-label="Link to this section">#</a></h2>
-<pre class="lang-text"><code>Run a sequence of requests from a flow file, each step fed by the last
+          Write the settings as they stand to this file, as a pepe.toml, and exit</code></pre></figure>
+<h2 id="pepe-flow"><a href="#pepe-flow">pepe flow</a></h2>
+<figure class="code"><div class="bar"><span>text</span><button type="button" class="copy" aria-label="Copy">copy</button></div><pre><code>Run a sequence of requests from a flow file, each step fed by the last
 
 Usage: pepe flow [OPTIONS] &lt;FILE&gt;
 
@@ -748,9 +753,9 @@ Options:
           Read settings from this file instead of ./pepe.toml; flags on the command line win over it
 
       --write-config &lt;FILE&gt;
-          Write the settings as they stand to this file, as a pepe.toml, and exit</code></pre>
-<h2 id="pepe-logs">pepe logs <a class="anchor" href="#pepe-logs" aria-label="Link to this section">#</a></h2>
-<pre class="lang-text"><code>Read nginx logs: requests per second now, against each minute, hour and day
+          Write the settings as they stand to this file, as a pepe.toml, and exit</code></pre></figure>
+<h2 id="pepe-logs"><a href="#pepe-logs">pepe logs</a></h2>
+<figure class="code"><div class="bar"><span>text</span><button type="button" class="copy" aria-label="Copy">copy</button></div><pre><code>Read nginx logs: requests per second now, against each minute, hour and day
 
 Usage: pepe logs [OPTIONS] [FILES]...
 
@@ -862,9 +867,9 @@ Options:
           Read settings from this file instead of ./pepe.toml; flags on the command line win over it
 
       --write-config &lt;FILE&gt;
-          Write the settings as they stand to this file, as a pepe.toml, and exit</code></pre>
-<h2 id="pepe-compare">pepe compare <a class="anchor" href="#pepe-compare" aria-label="Link to this section">#</a></h2>
-<pre class="lang-text"><code>Hold a run&#x27;s JSON report against an earlier one and say what moved
+          Write the settings as they stand to this file, as a pepe.toml, and exit</code></pre></figure>
+<h2 id="pepe-compare"><a href="#pepe-compare">pepe compare</a></h2>
+<figure class="code"><div class="bar"><span>text</span><button type="button" class="copy" aria-label="Copy">copy</button></div><pre><code>Hold a run&#x27;s JSON report against an earlier one and say what moved
 
 Usage: pepe compare [OPTIONS] &lt;BEFORE&gt; &lt;AFTER&gt;
 
@@ -963,9 +968,9 @@ Options:
           Read settings from this file instead of ./pepe.toml; flags on the command line win over it
 
       --write-config &lt;FILE&gt;
-          Write the settings as they stand to this file, as a pepe.toml, and exit</code></pre>
-<h2 id="pepe-schema">pepe schema <a class="anchor" href="#pepe-schema" aria-label="Link to this section">#</a></h2>
-<pre class="lang-text"><code>Print the JSON Schema of a report: run (the default), ramp, ping or compare
+          Write the settings as they stand to this file, as a pepe.toml, and exit</code></pre></figure>
+<h2 id="pepe-schema"><a href="#pepe-schema">pepe schema</a></h2>
+<figure class="code"><div class="bar"><span>text</span><button type="button" class="copy" aria-label="Copy">copy</button></div><pre><code>Print the JSON Schema of a report: run (the default), ramp, ping or compare
 
 Usage: pepe schema [OPTIONS] [REPORT]
 
@@ -1057,9 +1062,9 @@ Options:
           Read settings from this file instead of ./pepe.toml; flags on the command line win over it
 
       --write-config &lt;FILE&gt;
-          Write the settings as they stand to this file, as a pepe.toml, and exit</code></pre>
-<h2 id="pepe-self-update">pepe self-update <a class="anchor" href="#pepe-self-update" aria-label="Link to this section">#</a></h2>
-<pre class="lang-text"><code>Update pepe to the latest release, or say what&#x27;s new in it
+          Write the settings as they stand to this file, as a pepe.toml, and exit</code></pre></figure>
+<h2 id="pepe-self-update"><a href="#pepe-self-update">pepe self-update</a></h2>
+<figure class="code"><div class="bar"><span>text</span><button type="button" class="copy" aria-label="Copy">copy</button></div><pre><code>Update pepe to the latest release, or say what&#x27;s new in it
 
 Usage: pepe self-update [OPTIONS]
 
@@ -1151,9 +1156,9 @@ Options:
           Read settings from this file instead of ./pepe.toml; flags on the command line win over it
 
       --write-config &lt;FILE&gt;
-          Write the settings as they stand to this file, as a pepe.toml, and exit</code></pre>
-<h2 id="pepe-completions">pepe completions <a class="anchor" href="#pepe-completions" aria-label="Link to this section">#</a></h2>
-<pre class="lang-text"><code>Tab completion for your shell: print the script, or --install it
+          Write the settings as they stand to this file, as a pepe.toml, and exit</code></pre></figure>
+<h2 id="pepe-completions"><a href="#pepe-completions">pepe completions</a></h2>
+<figure class="code"><div class="bar"><span>text</span><button type="button" class="copy" aria-label="Copy">copy</button></div><pre><code>Tab completion for your shell: print the script, or --install it
 
 Usage: pepe completions [OPTIONS] [SHELL]
 
@@ -1251,11 +1256,13 @@ Options:
           Read settings from this file instead of ./pepe.toml; flags on the command line win over it
 
       --write-config &lt;FILE&gt;
-          Write the settings as they stand to this file, as a pepe.toml, and exit</code></pre>
-    </main>
-    <aside class="toc" aria-label="On this page"><div class="lab">on this page</div><a href="#pepe" class="h2">pepe</a><a href="#pepe-ping" class="h2">pepe ping</a><a href="#pepe-ramp" class="h2">pepe ramp</a><a href="#pepe-api" class="h2">pepe api</a><a href="#pepe-replay" class="h2">pepe replay</a><a href="#pepe-flow" class="h2">pepe flow</a><a href="#pepe-logs" class="h2">pepe logs</a><a href="#pepe-compare" class="h2">pepe compare</a><a href="#pepe-schema" class="h2">pepe schema</a><a href="#pepe-self-update" class="h2">pepe self-update</a><a href="#pepe-completions" class="h2">pepe completions</a></aside>
-  </div>
-  <footer class="chips"><span><kbd>?</kbd>every screen lists its keys</span><span><kbd>q</kbd>leaves the report in your shell</span><span class="by">MIT · <a href="https://github.com/omarmhaimdat/pepe">omarmhaimdat/pepe</a></span></footer>
+          Write the settings as they stand to this file, as a pepe.toml, and exit</code></pre></figure>
+    </article>
+    <nav class="turn"><a class="prev" href="agents.html"><small>Previous</small>Agents and scripts</a><a class="next" href="benchmarks.html"><small>Next</small>Benchmarks</a></nav>
+    <p class="edit"><a href="https://github.com/omarmhaimdat/pepe/edit/master/docs/reference.md">Edit this page on GitHub</a></p>
+  </main>
+  <aside class="toc"><div class="label">On this page</div><a href="#pepe" class="h2">pepe</a><a href="#pepe-ping" class="h2">pepe ping</a><a href="#pepe-ramp" class="h2">pepe ramp</a><a href="#pepe-api" class="h2">pepe api</a><a href="#pepe-replay" class="h2">pepe replay</a><a href="#pepe-flow" class="h2">pepe flow</a><a href="#pepe-logs" class="h2">pepe logs</a><a href="#pepe-compare" class="h2">pepe compare</a><a href="#pepe-schema" class="h2">pepe schema</a><a href="#pepe-self-update" class="h2">pepe self-update</a><a href="#pepe-completions" class="h2">pepe completions</a></aside>
 </div>
+<script src="docs.js" defer></script>
 </body>
 </html>

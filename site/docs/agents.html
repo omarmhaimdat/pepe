@@ -3,57 +3,64 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Agents and scripts · pepe docs</title>
+<title>Agents and scripts · pepe</title>
 <meta name="description" content="pepe is built to be called by a program as readily as by a person: every mode runs without a screen, prints a versioned JSON report with a published schema, and says what went wrong in an exit code. This page is what a coding agent or a script needs to know; a skill file for agents is in the reposit">
 <link rel="canonical" href="https://pepe.mhaimdat.com/docs/agents.html">
 <link rel="icon" href="../assets/logo.svg" type="image/svg+xml">
-<meta name="theme-color" content="#140f0d">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#121010" media="(prefers-color-scheme: dark)">
 <meta property="og:type" content="article">
-<meta property="og:title" content="Agents and scripts · pepe docs">
+<meta property="og:title" content="Agents and scripts · pepe">
 <meta property="og:description" content="pepe is built to be called by a program as readily as by a person: every mode runs without a screen, prints a versioned JSON report with a published schema, and says what went wrong in an exit code. This page is what a coding agent or a script needs to know; a skill file for agents is in the reposit">
 <meta property="og:image" content="https://pepe.mhaimdat.com/img/og.png">
 <link rel="stylesheet" href="docs.css">
+<script>try{var t=localStorage.getItem('pepe-theme');if(t)document.documentElement.dataset.theme=t;}catch(e){}</script>
 </head>
 <body>
-<div class="term">
-  <header class="title">
-    <a class="name" href="../">pepe</a><a href="index.html">docs</a>
-    <nav aria-label="Site"><a href="../">install</a><a href="https://github.com/omarmhaimdat/pepe">github</a><a href="https://github.com/omarmhaimdat/pepe/releases">releases</a></nav>
-  </header>
-  <div class="cols">
-    <aside class="side" aria-label="Pages"><a href="index.html">Overview</a><a href="install.html">Install</a><a href="load-test.html">Load testing</a><a href="dashboard.html">The dashboard</a><a href="ramp.html">Ramp</a><a href="api.html">OpenAPI</a><a href="flow.html">Flows</a><a href="replay.html">Replay</a><a href="ping.html">Ping</a><a href="logs.html">nginx logs</a><a href="compare.html">Compare</a><a href="output.html">Output and exit codes</a><a href="ci.html">CI and Docker</a><a href="agents.html" class="on">Agents and scripts</a><a href="benchmarks.html">Benchmarks</a><a href="reference.html">Command reference</a></aside>
-    <main>
+<header class="top">
+  <button type="button" class="menu" aria-label="Pages" aria-expanded="false">☰</button>
+  <a class="brand" href="index.html"><img src="../assets/logo.svg" alt="" width="22" height="24">pepe<span>docs</span></a>
+  <div class="search"><input type="search" placeholder="Search the docs…" aria-label="Search the docs" autocomplete="off"><div class="results" hidden></div></div>
+  <nav class="links"><a href="../">Install</a><a href="https://github.com/omarmhaimdat/pepe">GitHub</a><button type="button" class="theme" aria-label="Switch between light and dark">◐</button></nav>
+</header>
+<div class="shell">
+  <aside class="side" id="side"><div class="group">Start here</div><a href="index.html">Overview</a><a href="install.html">Install</a><div class="group">Modes</div><a href="load-test.html">Load testing</a><a href="dashboard.html">The dashboard</a><a href="ping.html">Ping</a><a href="ramp.html">Ramp</a><a href="api.html">OpenAPI</a><a href="flow.html">Flows</a><a href="replay.html">Replay</a><a href="logs.html">nginx logs</a><a href="compare.html">Compare</a><div class="group">Integrate</div><a href="output.html">Output and exit codes</a><a href="ci.html">CI and Docker</a><a href="agents.html" aria-current="page">Agents and scripts</a><div class="group">Reference</div><a href="reference.html">Command reference</a><a href="benchmarks.html">Benchmarks</a></aside>
+  <main class="main">
+    <article class="prose">
 <h1>Agents and scripts</h1>
 <p>pepe is built to be called by a program as readily as by a person: every mode runs without a screen, prints a versioned JSON report with a published schema, and says what went wrong in an exit code. This page is what a coding agent or a script needs to know; a skill file for agents is in the repository under <code>skills/pepe/</code>.</p>
-<h2 id="the-rules">The rules <a class="anchor" href="#the-rules" aria-label="Link to this section">#</a></h2>
+<h2 id="the-rules"><a href="#the-rules">The rules</a></h2>
 <ul><li>Pass <code>--json</code> for a report, or let the output be piped for the text verdict; never expect a screen.</li><li>End the run: <code>-n</code> for a count or <code>-z</code> for a duration. A ping without either runs until stopped.</li><li>Read <code>schema_version</code> first; the field names it covers never change. <code>pepe schema run|ramp|ping|compare</code> prints the schema.</li><li>Use the exit code: 0 as asked, 1 couldn't start or nothing answered, 2 a usage error, 4 a limit crossed (<a href="output.html#exit-codes">Output: exit codes</a>).</li><li>Only point pepe at what you are allowed to load. A load test is traffic.</li></ul>
-<h2 id="diagnose-one-endpoint">Diagnose one endpoint <a class="anchor" href="#diagnose-one-endpoint" aria-label="Link to this section">#</a></h2>
-<pre class="lang-bash"><code>pepe ping https://api.example.com/health -n 5 --json</code></pre>
+<h2 id="diagnose-one-endpoint"><a href="#diagnose-one-endpoint">Diagnose one endpoint</a></h2>
+<figure class="code"><div class="bar"><span>bash</span><button type="button" class="copy" aria-label="Copy">copy</button></div><pre><code>pepe ping https://api.example.com/health -n 5 --json</code></pre></figure>
 <p>Read <code>targets[0]</code>: <code>latency_ms</code> (<code>min</code>, <code>avg</code>, <code>max</code>, <code>jitter</code>, <code>p50</code>, <code>p95</code>, <code>p99</code>); <code>phases_ms</code> (<code>dns</code>, <code>connect</code>, <code>tls_full</code>, <code>tls_resumed</code>, <code>ttfb</code>, <code>download</code>, each with <code>median_ms</code>, <code>p99_ms</code> and <code>max_ms</code>: the largest median is the bottleneck); <code>loss</code>, <code>timeouts</code> and <code>failures</code> by cause; <code>tls.cert.days_left</code> and <code>tls.cert.valid</code>; <code>status_codes</code>; and <code>findings</code>, what to look at, most serious first, each with a <code>level</code> (<code>bad</code>, <code>warn</code>, <code>note</code>, <code>good</code>) and a <code>text</code>. <code>--once</code> prints the same as a few lines of text.</p>
 <p><code>--slo total=500,ttfb=200</code> adds <code>slo.pass</code> and makes the exit code 4 when a limit was broken.</p>
-<h2 id="watch-it-over-time">Watch it over time <a class="anchor" href="#watch-it-over-time" aria-label="Link to this section">#</a></h2>
-<pre class="lang-bash"><code>pepe ping https://api.example.com/health --jsonl -z 5m &gt; pings.jsonl</code></pre>
+<h2 id="watch-it-over-time"><a href="#watch-it-over-time">Watch it over time</a></h2>
+<figure class="code"><div class="bar"><span>bash</span><button type="button" class="copy" aria-label="Copy">copy</button></div><pre><code>pepe ping https://api.example.com/health --jsonl -z 5m &gt; pings.jsonl</code></pre></figure>
 <p>One JSON object per ping (<code>timings_ms</code>, <code>status</code>, <code>error</code>, <code>tls</code>) as it happens; <code>--csv</code> does the same as CSV. <code>--metrics :9100</code> serves the live numbers for Prometheus.</p>
-<h2 id="load-test">Load-test <a class="anchor" href="#load-test" aria-label="Link to this section">#</a></h2>
-<pre class="lang-bash"><code>pepe --json -z 30s -c 50 --fail-if &#x27;p99 &gt; 500ms&#x27; --fail-if &#x27;errors &gt; 1%&#x27; https://api.example.com/health</code></pre>
+<h2 id="load-test"><a href="#load-test">Load-test</a></h2>
+<figure class="code"><div class="bar"><span>bash</span><button type="button" class="copy" aria-label="Copy">copy</button></div><pre><code>pepe --json -z 30s -c 50 --fail-if &#x27;p99 &gt; 500ms&#x27; --fail-if &#x27;errors &gt; 1%&#x27; https://api.example.com/health</code></pre></figure>
 <p>Read <code>summary</code>: <code>total_requests</code>, <code>failed_requests</code>, <code>requests_per_second</code>, <code>latency.median_ms</code>, <code>latency.p99_ms</code>, <code>latency.phases</code>, <code>status_codes</code>, <code>failures</code> with the first body of each cause, <code>anomalies</code>. Read <code>generator.peak_busy_percent</code>: near 100, pepe rather than the target was the limit, so add <code>--threads auto</code> and run again. <code>--fail-if</code> names what the run must not cross; the exit code says whether it did.</p>
-<h2 id="find-the-capacity">Find the capacity <a class="anchor" href="#find-the-capacity" aria-label="Link to this section">#</a></h2>
-<pre class="lang-bash"><code>pepe ramp --json https://api.example.com/health --to 200 --until &#x27;p99 &gt; 500ms&#x27;</code></pre>
+<h2 id="find-the-capacity"><a href="#find-the-capacity">Find the capacity</a></h2>
+<figure class="code"><div class="bar"><span>bash</span><button type="button" class="copy" aria-label="Copy">copy</button></div><pre><code>pepe ramp --json https://api.example.com/health --to 200 --until &#x27;p99 &gt; 500ms&#x27;</code></pre></figure>
 <p>Read <code>holds_concurrency</code> (the level that held), <code>capacity.requests_per_second</code> (the estimate, <code>null</code> when the curve hadn't bent; <code>extrapolated</code> when it was read past the ramp), each <code>steps[]</code> entry, and <code>findings</code>.</p>
-<h2 id="compare-before-and-after">Compare before and after <a class="anchor" href="#compare-before-and-after" aria-label="Link to this section">#</a></h2>
-<pre class="lang-bash"><code>pepe --json -n 5000 -c 20 &quot;$URL&quot; &gt; before.json
+<h2 id="compare-before-and-after"><a href="#compare-before-and-after">Compare before and after</a></h2>
+<figure class="code"><div class="bar"><span>bash</span><button type="button" class="copy" aria-label="Copy">copy</button></div><pre><code>pepe --json -n 5000 -c 20 &quot;$URL&quot; &gt; before.json
 # change something
 pepe --json -n 5000 -c 20 &quot;$URL&quot; &gt; after.json
-pepe compare before.json after.json --json --gate</code></pre>
+pepe compare before.json after.json --json --gate</code></pre></figure>
 <p>Read <code>verdict</code> (<code>faster</code>, <code>same</code>, <code>slower</code>, <code>better</code>, <code>worse</code>), <code>regression</code>, each <code>changes[]</code> entry with <code>significant</code> (moved more than two such runs wobble) and <code>noise_percent</code>, and <code>findings</code>. Ping reports compare too, phase by phase.</p>
-<h2 id="test-a-whole-api-or-a-journey">Test a whole API or a journey <a class="anchor" href="#test-a-whole-api-or-a-journey" aria-label="Link to this section">#</a></h2>
+<h2 id="test-a-whole-api-or-a-journey"><a href="#test-a-whole-api-or-a-journey">Test a whole API or a journey</a></h2>
 <p><code>pepe api openapi.yaml --all --json</code> runs every endpoint that has the values it needs (<code>--set id=1,2,3</code> gives values; writes need <code>--include-writes</code>), with <code>endpoints[]</code> in the report. <code>pepe flow checkout.toml --json</code> runs a sequence where each step feeds the next, with <code>flow.steps[]</code>. <code>pepe replay access.log --base-url &quot;$STAGING&quot; --json</code> sends a log's URLs in their real proportions, with <code>replay.urls[]</code>.</p>
-<h2 id="the-same-request-every-mode">The same request every mode <a class="anchor" href="#the-same-request-every-mode" aria-label="Link to this section">#</a></h2>
+<h2 id="the-same-request-every-mode"><a href="#the-same-request-every-mode">The same request every mode</a></h2>
 <p><code>-H &#x27;Name: value&#x27;</code>, <code>-m</code>, <code>-d</code>, <code>-u</code>, <code>-p</code>, <code>-k</code>, <code>-t</code>, <code>--disable-compression</code>, <code>--disable-keepalive</code> and <code>--disable-redirects</code> apply to every mode. <code>--curl -- curl ...</code> takes a request as a curl command. A <code>pepe.toml</code> next to the code holds a test's settings so that <code>pepe</code> alone runs it (<a href="load-test.html#config-file">Config file</a>).</p>
-    </main>
-    <aside class="toc" aria-label="On this page"><div class="lab">on this page</div><a href="#the-rules" class="h2">The rules</a><a href="#diagnose-one-endpoint" class="h2">Diagnose one endpoint</a><a href="#watch-it-over-time" class="h2">Watch it over time</a><a href="#load-test" class="h2">Load-test</a><a href="#find-the-capacity" class="h2">Find the capacity</a><a href="#compare-before-and-after" class="h2">Compare before and after</a><a href="#test-a-whole-api-or-a-journey" class="h2">Test a whole API or a journey</a><a href="#the-same-request-every-mode" class="h2">The same request every mode</a></aside>
-  </div>
-  <footer class="chips"><span><kbd>?</kbd>every screen lists its keys</span><span><kbd>q</kbd>leaves the report in your shell</span><span class="by">MIT · <a href="https://github.com/omarmhaimdat/pepe">omarmhaimdat/pepe</a></span></footer>
+    </article>
+    <nav class="turn"><a class="prev" href="ci.html"><small>Previous</small>CI and Docker</a><a class="next" href="reference.html"><small>Next</small>Command reference</a></nav>
+    <p class="edit"><a href="https://github.com/omarmhaimdat/pepe/edit/master/docs/agents.md">Edit this page on GitHub</a></p>
+  </main>
+  <aside class="toc"><div class="label">On this page</div><a href="#the-rules" class="h2">The rules</a><a href="#diagnose-one-endpoint" class="h2">Diagnose one endpoint</a><a href="#watch-it-over-time" class="h2">Watch it over time</a><a href="#load-test" class="h2">Load-test</a><a href="#find-the-capacity" class="h2">Find the capacity</a><a href="#compare-before-and-after" class="h2">Compare before and after</a><a href="#test-a-whole-api-or-a-journey" class="h2">Test a whole API or a journey</a><a href="#the-same-request-every-mode" class="h2">The same request every mode</a></aside>
 </div>
+<script src="docs.js" defer></script>
 </body>
 </html>

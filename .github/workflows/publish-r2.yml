@@ -84,6 +84,10 @@ jobs:
           done
           r2 ../repo/site/docs/docs.css "s3://$R2_BUCKET/docs/docs.css" \
             --content-type "text/css; charset=utf-8" --cache-control "public, max-age=300"
+          r2 ../repo/site/docs/docs.js "s3://$R2_BUCKET/docs/docs.js" \
+            --content-type "text/javascript; charset=utf-8" --cache-control "public, max-age=300"
+          r2 ../repo/site/docs/search.json "s3://$R2_BUCKET/docs/search.json" \
+            --content-type "application/json; charset=utf-8" --cache-control "public, max-age=300"
           r2 ../repo/assets/compare-card.svg "s3://$R2_BUCKET/assets/compare-card.svg" \
             --content-type "image/svg+xml" --cache-control "public, max-age=86400"
           # The JSON Schema of each report, for scripts and agents
@@ -103,7 +107,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          for path in index.html docs/index.html docs/ping.html docs/docs.css schema/run.schema.json img/run.png img/ramp.png img/api.png img/logs.png img/og.png install.sh install.ps1 latest/pepe-installer.sh latest/pepe-installer.ps1 "$TAG/sha256.sum"; do
+          for path in index.html docs/index.html docs/ping.html docs/docs.css docs/docs.js docs/search.json schema/run.schema.json img/run.png img/ramp.png img/api.png img/logs.png img/og.png install.sh install.ps1 latest/pepe-installer.sh latest/pepe-installer.ps1 "$TAG/sha256.sum"; do
             code=$(curl -s -o /dev/null -w '%{http_code}' "https://pepe.mhaimdat.com/$path")
             echo "$path -> $code"
             [ "$code" = "200" ]

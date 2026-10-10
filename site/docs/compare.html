@@ -3,61 +3,68 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Compare · pepe docs</title>
+<title>Compare · pepe</title>
 <meta name="description" content="pepe compare holds a report against an earlier one of the same test and says what moved, in the verdict&#x27;s words. A number is only called a change when it moved more than two runs like these wobble on their own: the run&#x27;s own latency spread, scaled by how many requests back the number, so a p99 from ">
 <link rel="canonical" href="https://pepe.mhaimdat.com/docs/compare.html">
 <link rel="icon" href="../assets/logo.svg" type="image/svg+xml">
-<meta name="theme-color" content="#140f0d">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#121010" media="(prefers-color-scheme: dark)">
 <meta property="og:type" content="article">
-<meta property="og:title" content="Compare · pepe docs">
+<meta property="og:title" content="Compare · pepe">
 <meta property="og:description" content="pepe compare holds a report against an earlier one of the same test and says what moved, in the verdict&#x27;s words. A number is only called a change when it moved more than two runs like these wobble on their own: the run&#x27;s own latency spread, scaled by how many requests back the number, so a p99 from ">
 <meta property="og:image" content="https://pepe.mhaimdat.com/img/og.png">
 <link rel="stylesheet" href="docs.css">
+<script>try{var t=localStorage.getItem('pepe-theme');if(t)document.documentElement.dataset.theme=t;}catch(e){}</script>
 </head>
 <body>
-<div class="term">
-  <header class="title">
-    <a class="name" href="../">pepe</a><a href="index.html">docs</a>
-    <nav aria-label="Site"><a href="../">install</a><a href="https://github.com/omarmhaimdat/pepe">github</a><a href="https://github.com/omarmhaimdat/pepe/releases">releases</a></nav>
-  </header>
-  <div class="cols">
-    <aside class="side" aria-label="Pages"><a href="index.html">Overview</a><a href="install.html">Install</a><a href="load-test.html">Load testing</a><a href="dashboard.html">The dashboard</a><a href="ramp.html">Ramp</a><a href="api.html">OpenAPI</a><a href="flow.html">Flows</a><a href="replay.html">Replay</a><a href="ping.html">Ping</a><a href="logs.html">nginx logs</a><a href="compare.html" class="on">Compare</a><a href="output.html">Output and exit codes</a><a href="ci.html">CI and Docker</a><a href="agents.html">Agents and scripts</a><a href="benchmarks.html">Benchmarks</a><a href="reference.html">Command reference</a></aside>
-    <main>
+<header class="top">
+  <button type="button" class="menu" aria-label="Pages" aria-expanded="false">☰</button>
+  <a class="brand" href="index.html"><img src="../assets/logo.svg" alt="" width="22" height="24">pepe<span>docs</span></a>
+  <div class="search"><input type="search" placeholder="Search the docs…" aria-label="Search the docs" autocomplete="off"><div class="results" hidden></div></div>
+  <nav class="links"><a href="../">Install</a><a href="https://github.com/omarmhaimdat/pepe">GitHub</a><button type="button" class="theme" aria-label="Switch between light and dark">◐</button></nav>
+</header>
+<div class="shell">
+  <aside class="side" id="side"><div class="group">Start here</div><a href="index.html">Overview</a><a href="install.html">Install</a><div class="group">Modes</div><a href="load-test.html">Load testing</a><a href="dashboard.html">The dashboard</a><a href="ping.html">Ping</a><a href="ramp.html">Ramp</a><a href="api.html">OpenAPI</a><a href="flow.html">Flows</a><a href="replay.html">Replay</a><a href="logs.html">nginx logs</a><a href="compare.html" aria-current="page">Compare</a><div class="group">Integrate</div><a href="output.html">Output and exit codes</a><a href="ci.html">CI and Docker</a><a href="agents.html">Agents and scripts</a><div class="group">Reference</div><a href="reference.html">Command reference</a><a href="benchmarks.html">Benchmarks</a></aside>
+  <main class="main">
+    <article class="prose">
 <h1>Comparing two runs</h1>
 <p><code>pepe compare</code> holds a report against an earlier one of the same test and says what moved, in the verdict's words. A number is only called a change when it moved more than two runs like these wobble on their own: the run's own latency spread, scaled by how many requests back the number, so a p99 from 200 requests is given more room than one from 20,000.</p>
-<pre class="lang-bash"><code>pepe --json -n 5000 -c 20 https://staging.example.com/api &gt; before.json
+<figure class="code"><div class="bar"><span>bash</span><button type="button" class="copy" aria-label="Copy">copy</button></div><pre><code>pepe --json -n 5000 -c 20 https://staging.example.com/api &gt; before.json
 # ... deploy ...
 pepe --json -n 5000 -c 20 https://staging.example.com/api &gt; after.json
-pepe compare before.json after.json</code></pre>
-<pre><code>pepe · compare before.json → after.json
+pepe compare before.json after.json</code></pre></figure>
+<figure class="code"><div class="bar"><span></span><button type="button" class="copy" aria-label="Copy">copy</button></div><pre><code>pepe · compare before.json → after.json
 ▲ Slower · 5,000 → 5,000 requests · p99 120.0ms → 166.0ms · 260 req/s → 252 req/s
   ▲ p99 up 38%: 120.0ms → 166.0ms
   ✔ Median within the usual spread: 30.00ms → 31.00ms (±5%)
   ✔ Throughput within the usual spread: 260 req/s → 252 req/s (±5%)
-  ▲ A long tail is new: p99 is 5.4× the median, was 4.0×</code></pre>
-<h2 id="the-verdict">The verdict <a class="anchor" href="#the-verdict" aria-label="Link to this section">#</a></h2>
-<p>One of <b>Faster</b>, <b>About the same</b>, <b>Slower</b>, and, when failures appeared or rose, <b>Worse</b> (or <b>Better</b> when they fell): failures outrank speed. What is compared: the p99, the median, the throughput (which, at fixed concurrency, follows the median and wobbles as much), the failure share, and the shape of the latency: a long tail that appeared or went is said. Two reports of different targets or concurrency are compared all the same, with that said first.</p>
-<h2 id="what-can-be-compared">What can be compared <a class="anchor" href="#what-can-be-compared" aria-label="Link to this section">#</a></h2>
-<table><thead><tr><th>Reports</th><th>Compared on</th></tr></thead><tbody><tr><td>Two runs (<code>pepe --json</code>, <code>--snapshot</code>, API mode, a flow, a replay)</td><td>p99, median, throughput, failures, the tail</td></tr><tr><td>Two ramps (<code>pepe ramp --json</code>)</td><td>The capacity estimate and the level that held, with failures</td></tr><tr><td>Two pings (<code>pepe ping --json</code>, <code>--save</code>)</td><td>p99, median, pings lost, and the median of each phase: DNS, connect, TLS (full and resumed), first byte, download; the interval is checked too</td></tr></tbody></table>
+  ▲ A long tail is new: p99 is 5.4× the median, was 4.0×</code></pre></figure>
+<h2 id="the-verdict"><a href="#the-verdict">The verdict</a></h2>
+<p>One of <strong>Faster</strong>, <strong>About the same</strong>, <strong>Slower</strong>, and, when failures appeared or rose, <strong>Worse</strong> (or <strong>Better</strong> when they fell): failures outrank speed. What is compared: the p99, the median, the throughput (which, at fixed concurrency, follows the median and wobbles as much), the failure share, and the shape of the latency: a long tail that appeared or went is said. Two reports of different targets or concurrency are compared all the same, with that said first.</p>
+<h2 id="what-can-be-compared"><a href="#what-can-be-compared">What can be compared</a></h2>
+<div class="table"><table><thead><tr><th>Reports</th><th>Compared on</th></tr></thead><tbody><tr><td>Two runs (<code>pepe --json</code>, <code>--snapshot</code>, API mode, a flow, a replay)</td><td>p99, median, throughput, failures, the tail</td></tr><tr><td>Two ramps (<code>pepe ramp --json</code>)</td><td>The capacity estimate and the level that held, with failures</td></tr><tr><td>Two pings (<code>pepe ping --json</code>, <code>--save</code>)</td><td>p99, median, pings lost, and the median of each phase: DNS, connect, TLS (full and resumed), first byte, download; the interval is checked too</td></tr></tbody></table></div>
 <p>A ping report has no latency spread, so its jitter stands in for it. For a ping, a slower connect or a slower handshake is told from a slower server:</p>
-<pre><code>pepe · compare before.json → after.json
+<figure class="code"><div class="bar"><span></span><button type="button" class="copy" aria-label="Copy">copy</button></div><pre><code>pepe · compare before.json → after.json
 ▲ Slower · 600 → 600 pings · p99 50.00ms → 72.00ms
   ▲ Median up 50%: 40.00ms → 60.00ms
   ▲ Connect up 150%: 10.00ms → 25.00ms
   ▲ TLS handshake up 60%: 25.00ms → 40.00ms
-  ✔ First byte within the usual spread: 6.00ms → 6.00ms (±5%)</code></pre>
-<h2 id="flags">Flags <a class="anchor" href="#flags" aria-label="Link to this section">#</a></h2>
-<table><thead><tr><th>Flag</th><th>What it does</th></tr></thead><tbody><tr><td><code>--gate</code></td><td>Exit 1 when the verdict is Slower or Worse, for CI</td></tr><tr><td><code>--json</code></td><td>The verdict, each number before and after with its change and the spread it was held against, the findings, and the verdict as a badge's three parts</td></tr><tr><td><code>--svg &lt;FILE&gt;</code></td><td>Draw the verdict as a card, the way the dashboard draws, for a README, a site or a report</td></tr></tbody></table>
+  ✔ First byte within the usual spread: 6.00ms → 6.00ms (±5%)</code></pre></figure>
+<h2 id="flags"><a href="#flags">Flags</a></h2>
+<div class="table"><table><thead><tr><th>Flag</th><th>What it does</th></tr></thead><tbody><tr><td><code>--gate</code></td><td>Exit 1 when the verdict is Slower or Worse, for CI</td></tr><tr><td><code>--json</code></td><td>The verdict, each number before and after with its change and the spread it was held against, the findings, and the verdict as a badge's three parts</td></tr><tr><td><code>--svg &lt;FILE&gt;</code></td><td>Draw the verdict as a card, the way the dashboard draws, for a README, a site or a report</td></tr></tbody></table></div>
 <p>The badge is <code>pepe | slower · p99 +38%</code>, in a colour, as shields.io and the like draw one. <code>pepe schema compare</code> prints the JSON's schema.</p>
-<h2 id="the-card">The card <a class="anchor" href="#the-card" aria-label="Link to this section">#</a></h2>
-<p><img src="../assets/compare-card.svg" alt="pepe · compare: Slower. p99 10.14ms → 22.21ms, up 119%; median 6.51ms → 18.11ms, up 178%; throughput 1.2k → 439 req/s, down 63%; failed 0% → 0%"></p>
+<h2 id="the-card"><a href="#the-card">The card</a></h2>
+<p><img src="../assets/compare-card.svg" alt="pepe · compare: Slower. p99 10.14ms → 22.21ms, up 119%; median 6.51ms → 18.11ms, up 178%; throughput 1.2k → 439 req/s, down 63%; failed 0% → 0%" loading="lazy"></p>
 <p>Self-contained SVG in pepe's palette: the word in its colour, then p99, median, throughput, capacity and failures before and after, each with what moved or the spread it stayed within.</p>
-<h2 id="in-ci">In CI <a class="anchor" href="#in-ci" aria-label="Link to this section">#</a></h2>
+<h2 id="in-ci"><a href="#in-ci">In CI</a></h2>
 <p>The <a href="ci.html">GitHub Action</a> keeps each branch's last report and holds a pull request against its base branch with <code>pepe compare</code>, posting the result as a comment and failing the step on a regression when asked.</p>
-    </main>
-    <aside class="toc" aria-label="On this page"><div class="lab">on this page</div><a href="#the-verdict" class="h2">The verdict</a><a href="#what-can-be-compared" class="h2">What can be compared</a><a href="#flags" class="h2">Flags</a><a href="#the-card" class="h2">The card</a><a href="#in-ci" class="h2">In CI</a></aside>
-  </div>
-  <footer class="chips"><span><kbd>?</kbd>every screen lists its keys</span><span><kbd>q</kbd>leaves the report in your shell</span><span class="by">MIT · <a href="https://github.com/omarmhaimdat/pepe">omarmhaimdat/pepe</a></span></footer>
+    </article>
+    <nav class="turn"><a class="prev" href="logs.html"><small>Previous</small>nginx logs</a><a class="next" href="output.html"><small>Next</small>Output and exit codes</a></nav>
+    <p class="edit"><a href="https://github.com/omarmhaimdat/pepe/edit/master/docs/compare.md">Edit this page on GitHub</a></p>
+  </main>
+  <aside class="toc"><div class="label">On this page</div><a href="#the-verdict" class="h2">The verdict</a><a href="#what-can-be-compared" class="h2">What can be compared</a><a href="#flags" class="h2">Flags</a><a href="#the-card" class="h2">The card</a><a href="#in-ci" class="h2">In CI</a></aside>
 </div>
+<script src="docs.js" defer></script>
 </body>
 </html>
