@@ -39,6 +39,8 @@ jobs:
             bench/server
       - run: cargo fmt --check
       - run: cargo clippy --locked --all-targets -- -D warnings
+      # The documentation site is built from docs/ and committed; it must be current
+      - run: python3 site/build-docs.py --check
       # The benchmarks' target server is a crate of its own (bench/server)
       - run: cargo fmt --check --manifest-path bench/server/Cargo.toml
       - run: cargo clippy --locked --manifest-path bench/server/Cargo.toml -- -D warnings

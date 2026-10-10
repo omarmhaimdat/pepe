@@ -40,6 +40,7 @@ Register-ArgumentCompleter -Native -CommandName 'pepe' -ScriptBlock {
             [CompletionResult]::new('--proxy', '--proxy', [CompletionResultType]::ParameterName, 'Proxy server URL: http://user:pass@host:port or socks5://host:port')
             [CompletionResult]::new('--trace-header', '--trace-header', [CompletionResultType]::ParameterName, 'Response header holding the request id to show for the slowest requests and in the inspector, so they can be found in the server''s logs; without it, X-Request-Id, traceparent, CF-Ray, X-Amzn-Trace-Id and other common ones are looked for')
             [CompletionResult]::new('--snapshot', '--snapshot', [CompletionResultType]::ParameterName, 'Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run''s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run')
+            [CompletionResult]::new('--fail-if', '--fail-if', [CompletionResultType]::ParameterName, 'End with exit code 4 when the run crosses this, for CI and scripts: ''p99 > 300ms'', ''errors > 1%''; repeat for more. The report is still printed. (pepe ping has --slo for the same.)')
             [CompletionResult]::new('--metrics', '--metrics', [CompletionResultType]::ParameterName, 'Serve the live numbers for Prometheus at http://ADDR/metrics while the run goes, e.g. :9100 or 127.0.0.1:9100, so a soak run or a long ping shows up in Grafana next to the server''s own')
             [CompletionResult]::new('--config', '--config', [CompletionResultType]::ParameterName, 'Read settings from this file instead of ./pepe.toml; flags on the command line win over it')
             [CompletionResult]::new('--write-config', '--write-config', [CompletionResultType]::ParameterName, 'Write the settings as they stand to this file, as a pepe.toml, and exit')
@@ -69,6 +70,7 @@ Register-ArgumentCompleter -Native -CommandName 'pepe' -ScriptBlock {
             [CompletionResult]::new('logs', 'logs', [CompletionResultType]::ParameterValue, 'Read nginx logs: requests per second now, against each minute, hour and day')
             [CompletionResult]::new('ping', 'ping', [CompletionResultType]::ParameterValue, 'Ping a URL: a request a second, each split into DNS, connect, TLS, first byte and download, on a graph')
             [CompletionResult]::new('compare', 'compare', [CompletionResultType]::ParameterValue, 'Hold a run''s JSON report against an earlier one and say what moved')
+            [CompletionResult]::new('schema', 'schema', [CompletionResultType]::ParameterValue, 'Print the JSON Schema of a report: run (the default), ramp, ping or compare')
             [CompletionResult]::new('help', 'help', [CompletionResultType]::ParameterValue, 'Print this message or the help of the given subcommand(s)')
             break
         }
@@ -92,6 +94,7 @@ Register-ArgumentCompleter -Native -CommandName 'pepe' -ScriptBlock {
             [CompletionResult]::new('--proxy', '--proxy', [CompletionResultType]::ParameterName, 'Proxy server URL: http://user:pass@host:port or socks5://host:port')
             [CompletionResult]::new('--trace-header', '--trace-header', [CompletionResultType]::ParameterName, 'Response header holding the request id to show for the slowest requests and in the inspector, so they can be found in the server''s logs; without it, X-Request-Id, traceparent, CF-Ray, X-Amzn-Trace-Id and other common ones are looked for')
             [CompletionResult]::new('--snapshot', '--snapshot', [CompletionResultType]::ParameterName, 'Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run''s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run')
+            [CompletionResult]::new('--fail-if', '--fail-if', [CompletionResultType]::ParameterName, 'End with exit code 4 when the run crosses this, for CI and scripts: ''p99 > 300ms'', ''errors > 1%''; repeat for more. The report is still printed. (pepe ping has --slo for the same.)')
             [CompletionResult]::new('--metrics', '--metrics', [CompletionResultType]::ParameterName, 'Serve the live numbers for Prometheus at http://ADDR/metrics while the run goes, e.g. :9100 or 127.0.0.1:9100, so a soak run or a long ping shows up in Grafana next to the server''s own')
             [CompletionResult]::new('--config', '--config', [CompletionResultType]::ParameterName, 'Read settings from this file instead of ./pepe.toml; flags on the command line win over it')
             [CompletionResult]::new('--write-config', '--write-config', [CompletionResultType]::ParameterName, 'Write the settings as they stand to this file, as a pepe.toml, and exit')
@@ -133,6 +136,7 @@ Register-ArgumentCompleter -Native -CommandName 'pepe' -ScriptBlock {
             [CompletionResult]::new('--proxy', '--proxy', [CompletionResultType]::ParameterName, 'Proxy server URL: http://user:pass@host:port or socks5://host:port')
             [CompletionResult]::new('--trace-header', '--trace-header', [CompletionResultType]::ParameterName, 'Response header holding the request id to show for the slowest requests and in the inspector, so they can be found in the server''s logs; without it, X-Request-Id, traceparent, CF-Ray, X-Amzn-Trace-Id and other common ones are looked for')
             [CompletionResult]::new('--snapshot', '--snapshot', [CompletionResultType]::ParameterName, 'Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run''s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run')
+            [CompletionResult]::new('--fail-if', '--fail-if', [CompletionResultType]::ParameterName, 'End with exit code 4 when the run crosses this, for CI and scripts: ''p99 > 300ms'', ''errors > 1%''; repeat for more. The report is still printed. (pepe ping has --slo for the same.)')
             [CompletionResult]::new('--metrics', '--metrics', [CompletionResultType]::ParameterName, 'Serve the live numbers for Prometheus at http://ADDR/metrics while the run goes, e.g. :9100 or 127.0.0.1:9100, so a soak run or a long ping shows up in Grafana next to the server''s own')
             [CompletionResult]::new('--config', '--config', [CompletionResultType]::ParameterName, 'Read settings from this file instead of ./pepe.toml; flags on the command line win over it')
             [CompletionResult]::new('--write-config', '--write-config', [CompletionResultType]::ParameterName, 'Write the settings as they stand to this file, as a pepe.toml, and exit')
@@ -180,6 +184,7 @@ Register-ArgumentCompleter -Native -CommandName 'pepe' -ScriptBlock {
             [CompletionResult]::new('--proxy', '--proxy', [CompletionResultType]::ParameterName, 'Proxy server URL: http://user:pass@host:port or socks5://host:port')
             [CompletionResult]::new('--trace-header', '--trace-header', [CompletionResultType]::ParameterName, 'Response header holding the request id to show for the slowest requests and in the inspector, so they can be found in the server''s logs; without it, X-Request-Id, traceparent, CF-Ray, X-Amzn-Trace-Id and other common ones are looked for')
             [CompletionResult]::new('--snapshot', '--snapshot', [CompletionResultType]::ParameterName, 'Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run''s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run')
+            [CompletionResult]::new('--fail-if', '--fail-if', [CompletionResultType]::ParameterName, 'End with exit code 4 when the run crosses this, for CI and scripts: ''p99 > 300ms'', ''errors > 1%''; repeat for more. The report is still printed. (pepe ping has --slo for the same.)')
             [CompletionResult]::new('--metrics', '--metrics', [CompletionResultType]::ParameterName, 'Serve the live numbers for Prometheus at http://ADDR/metrics while the run goes, e.g. :9100 or 127.0.0.1:9100, so a soak run or a long ping shows up in Grafana next to the server''s own')
             [CompletionResult]::new('--config', '--config', [CompletionResultType]::ParameterName, 'Read settings from this file instead of ./pepe.toml; flags on the command line win over it')
             [CompletionResult]::new('--write-config', '--write-config', [CompletionResultType]::ParameterName, 'Write the settings as they stand to this file, as a pepe.toml, and exit')
@@ -226,6 +231,7 @@ Register-ArgumentCompleter -Native -CommandName 'pepe' -ScriptBlock {
             [CompletionResult]::new('--proxy', '--proxy', [CompletionResultType]::ParameterName, 'Proxy server URL: http://user:pass@host:port or socks5://host:port')
             [CompletionResult]::new('--trace-header', '--trace-header', [CompletionResultType]::ParameterName, 'Response header holding the request id to show for the slowest requests and in the inspector, so they can be found in the server''s logs; without it, X-Request-Id, traceparent, CF-Ray, X-Amzn-Trace-Id and other common ones are looked for')
             [CompletionResult]::new('--snapshot', '--snapshot', [CompletionResultType]::ParameterName, 'Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run''s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run')
+            [CompletionResult]::new('--fail-if', '--fail-if', [CompletionResultType]::ParameterName, 'End with exit code 4 when the run crosses this, for CI and scripts: ''p99 > 300ms'', ''errors > 1%''; repeat for more. The report is still printed. (pepe ping has --slo for the same.)')
             [CompletionResult]::new('--metrics', '--metrics', [CompletionResultType]::ParameterName, 'Serve the live numbers for Prometheus at http://ADDR/metrics while the run goes, e.g. :9100 or 127.0.0.1:9100, so a soak run or a long ping shows up in Grafana next to the server''s own')
             [CompletionResult]::new('--config', '--config', [CompletionResultType]::ParameterName, 'Read settings from this file instead of ./pepe.toml; flags on the command line win over it')
             [CompletionResult]::new('--write-config', '--write-config', [CompletionResultType]::ParameterName, 'Write the settings as they stand to this file, as a pepe.toml, and exit')
@@ -267,6 +273,7 @@ Register-ArgumentCompleter -Native -CommandName 'pepe' -ScriptBlock {
             [CompletionResult]::new('--proxy', '--proxy', [CompletionResultType]::ParameterName, 'Proxy server URL: http://user:pass@host:port or socks5://host:port')
             [CompletionResult]::new('--trace-header', '--trace-header', [CompletionResultType]::ParameterName, 'Response header holding the request id to show for the slowest requests and in the inspector, so they can be found in the server''s logs; without it, X-Request-Id, traceparent, CF-Ray, X-Amzn-Trace-Id and other common ones are looked for')
             [CompletionResult]::new('--snapshot', '--snapshot', [CompletionResultType]::ParameterName, 'Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run''s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run')
+            [CompletionResult]::new('--fail-if', '--fail-if', [CompletionResultType]::ParameterName, 'End with exit code 4 when the run crosses this, for CI and scripts: ''p99 > 300ms'', ''errors > 1%''; repeat for more. The report is still printed. (pepe ping has --slo for the same.)')
             [CompletionResult]::new('--metrics', '--metrics', [CompletionResultType]::ParameterName, 'Serve the live numbers for Prometheus at http://ADDR/metrics while the run goes, e.g. :9100 or 127.0.0.1:9100, so a soak run or a long ping shows up in Grafana next to the server''s own')
             [CompletionResult]::new('--config', '--config', [CompletionResultType]::ParameterName, 'Read settings from this file instead of ./pepe.toml; flags on the command line win over it')
             [CompletionResult]::new('--write-config', '--write-config', [CompletionResultType]::ParameterName, 'Write the settings as they stand to this file, as a pepe.toml, and exit')
@@ -307,6 +314,7 @@ Register-ArgumentCompleter -Native -CommandName 'pepe' -ScriptBlock {
             [CompletionResult]::new('--proxy', '--proxy', [CompletionResultType]::ParameterName, 'Proxy server URL: http://user:pass@host:port or socks5://host:port')
             [CompletionResult]::new('--trace-header', '--trace-header', [CompletionResultType]::ParameterName, 'Response header holding the request id to show for the slowest requests and in the inspector, so they can be found in the server''s logs; without it, X-Request-Id, traceparent, CF-Ray, X-Amzn-Trace-Id and other common ones are looked for')
             [CompletionResult]::new('--snapshot', '--snapshot', [CompletionResultType]::ParameterName, 'Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run''s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run')
+            [CompletionResult]::new('--fail-if', '--fail-if', [CompletionResultType]::ParameterName, 'End with exit code 4 when the run crosses this, for CI and scripts: ''p99 > 300ms'', ''errors > 1%''; repeat for more. The report is still printed. (pepe ping has --slo for the same.)')
             [CompletionResult]::new('--metrics', '--metrics', [CompletionResultType]::ParameterName, 'Serve the live numbers for Prometheus at http://ADDR/metrics while the run goes, e.g. :9100 or 127.0.0.1:9100, so a soak run or a long ping shows up in Grafana next to the server''s own')
             [CompletionResult]::new('--config', '--config', [CompletionResultType]::ParameterName, 'Read settings from this file instead of ./pepe.toml; flags on the command line win over it')
             [CompletionResult]::new('--write-config', '--write-config', [CompletionResultType]::ParameterName, 'Write the settings as they stand to this file, as a pepe.toml, and exit')
@@ -350,6 +358,7 @@ Register-ArgumentCompleter -Native -CommandName 'pepe' -ScriptBlock {
             [CompletionResult]::new('--proxy', '--proxy', [CompletionResultType]::ParameterName, 'Proxy server URL: http://user:pass@host:port or socks5://host:port')
             [CompletionResult]::new('--trace-header', '--trace-header', [CompletionResultType]::ParameterName, 'Response header holding the request id to show for the slowest requests and in the inspector, so they can be found in the server''s logs; without it, X-Request-Id, traceparent, CF-Ray, X-Amzn-Trace-Id and other common ones are looked for')
             [CompletionResult]::new('--snapshot', '--snapshot', [CompletionResultType]::ParameterName, 'Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run''s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run')
+            [CompletionResult]::new('--fail-if', '--fail-if', [CompletionResultType]::ParameterName, 'End with exit code 4 when the run crosses this, for CI and scripts: ''p99 > 300ms'', ''errors > 1%''; repeat for more. The report is still printed. (pepe ping has --slo for the same.)')
             [CompletionResult]::new('--metrics', '--metrics', [CompletionResultType]::ParameterName, 'Serve the live numbers for Prometheus at http://ADDR/metrics while the run goes, e.g. :9100 or 127.0.0.1:9100, so a soak run or a long ping shows up in Grafana next to the server''s own')
             [CompletionResult]::new('--config', '--config', [CompletionResultType]::ParameterName, 'Read settings from this file instead of ./pepe.toml; flags on the command line win over it')
             [CompletionResult]::new('--write-config', '--write-config', [CompletionResultType]::ParameterName, 'Write the settings as they stand to this file, as a pepe.toml, and exit')
@@ -403,6 +412,7 @@ Register-ArgumentCompleter -Native -CommandName 'pepe' -ScriptBlock {
             [CompletionResult]::new('--proxy', '--proxy', [CompletionResultType]::ParameterName, 'Proxy server URL: http://user:pass@host:port or socks5://host:port')
             [CompletionResult]::new('--trace-header', '--trace-header', [CompletionResultType]::ParameterName, 'Response header holding the request id to show for the slowest requests and in the inspector, so they can be found in the server''s logs; without it, X-Request-Id, traceparent, CF-Ray, X-Amzn-Trace-Id and other common ones are looked for')
             [CompletionResult]::new('--snapshot', '--snapshot', [CompletionResultType]::ParameterName, 'Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run''s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run')
+            [CompletionResult]::new('--fail-if', '--fail-if', [CompletionResultType]::ParameterName, 'End with exit code 4 when the run crosses this, for CI and scripts: ''p99 > 300ms'', ''errors > 1%''; repeat for more. The report is still printed. (pepe ping has --slo for the same.)')
             [CompletionResult]::new('--metrics', '--metrics', [CompletionResultType]::ParameterName, 'Serve the live numbers for Prometheus at http://ADDR/metrics while the run goes, e.g. :9100 or 127.0.0.1:9100, so a soak run or a long ping shows up in Grafana next to the server''s own')
             [CompletionResult]::new('--config', '--config', [CompletionResultType]::ParameterName, 'Read settings from this file instead of ./pepe.toml; flags on the command line win over it')
             [CompletionResult]::new('--write-config', '--write-config', [CompletionResultType]::ParameterName, 'Write the settings as they stand to this file, as a pepe.toml, and exit')
@@ -457,6 +467,7 @@ Register-ArgumentCompleter -Native -CommandName 'pepe' -ScriptBlock {
             [CompletionResult]::new('--proxy', '--proxy', [CompletionResultType]::ParameterName, 'Proxy server URL: http://user:pass@host:port or socks5://host:port')
             [CompletionResult]::new('--trace-header', '--trace-header', [CompletionResultType]::ParameterName, 'Response header holding the request id to show for the slowest requests and in the inspector, so they can be found in the server''s logs; without it, X-Request-Id, traceparent, CF-Ray, X-Amzn-Trace-Id and other common ones are looked for')
             [CompletionResult]::new('--snapshot', '--snapshot', [CompletionResultType]::ParameterName, 'Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run''s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run')
+            [CompletionResult]::new('--fail-if', '--fail-if', [CompletionResultType]::ParameterName, 'End with exit code 4 when the run crosses this, for CI and scripts: ''p99 > 300ms'', ''errors > 1%''; repeat for more. The report is still printed. (pepe ping has --slo for the same.)')
             [CompletionResult]::new('--metrics', '--metrics', [CompletionResultType]::ParameterName, 'Serve the live numbers for Prometheus at http://ADDR/metrics while the run goes, e.g. :9100 or 127.0.0.1:9100, so a soak run or a long ping shows up in Grafana next to the server''s own')
             [CompletionResult]::new('--config', '--config', [CompletionResultType]::ParameterName, 'Read settings from this file instead of ./pepe.toml; flags on the command line win over it')
             [CompletionResult]::new('--write-config', '--write-config', [CompletionResultType]::ParameterName, 'Write the settings as they stand to this file, as a pepe.toml, and exit')
@@ -465,6 +476,46 @@ Register-ArgumentCompleter -Native -CommandName 'pepe' -ScriptBlock {
             [CompletionResult]::new('-u', '-u', [CompletionResultType]::ParameterName, 'User-Agent string, default is pepe/{version}')
             [CompletionResult]::new('--user-agent', '--user-agent', [CompletionResultType]::ParameterName, 'User-Agent string, default is pepe/{version}')
             [CompletionResult]::new('--gate', '--gate', [CompletionResultType]::ParameterName, 'Exit 1 when the verdict is Slower or Worse, for CI')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('-k', '-k', [CompletionResultType]::ParameterName, 'Accept invalid TLS certificates (self-signed, expired, wrong host)')
+            [CompletionResult]::new('--insecure', '--insecure', [CompletionResultType]::ParameterName, 'Accept invalid TLS certificates (self-signed, expired, wrong host)')
+            [CompletionResult]::new('--disable-compression', '--disable-compression', [CompletionResultType]::ParameterName, 'Disable HTTP compression, e.g. gzip')
+            [CompletionResult]::new('--disable-keepalive', '--disable-keepalive', [CompletionResultType]::ParameterName, 'Disable HTTP keepalive, e.g. Connection: close')
+            [CompletionResult]::new('--disable-redirects', '--disable-redirects', [CompletionResultType]::ParameterName, 'Prevent http redirects')
+            [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'Output results in JSON format')
+            [CompletionResult]::new('-i', '-i', [CompletionResultType]::ParameterName, 'Open the setup screen to review or change the settings before starting (it opens by itself when no URL is given)')
+            [CompletionResult]::new('--setup', '--setup', [CompletionResultType]::ParameterName, 'Open the setup screen to review or change the settings before starting (it opens by itself when no URL is given)')
+            break
+        }
+        'pepe;schema' {
+            [CompletionResult]::new('-n', '-n', [CompletionResultType]::ParameterName, 'Number of requests to perform')
+            [CompletionResult]::new('--number', '--number', [CompletionResultType]::ParameterName, 'Number of requests to perform')
+            [CompletionResult]::new('-z', '-z', [CompletionResultType]::ParameterName, 'Duration of the test, e.g. 10s, 3m, 2h (mutually exclusive with -n)')
+            [CompletionResult]::new('--duration', '--duration', [CompletionResultType]::ParameterName, 'Duration of the test, e.g. 10s, 3m, 2h (mutually exclusive with -n)')
+            [CompletionResult]::new('-m', '-m', [CompletionResultType]::ParameterName, 'HTTP method, e.g. GET, POST, PUT, DELETE')
+            [CompletionResult]::new('--method', '--method', [CompletionResultType]::ParameterName, 'HTTP method, e.g. GET, POST, PUT, DELETE')
+            [CompletionResult]::new('-H', '-H ', [CompletionResultType]::ParameterName, 'HTTP headers, e.g. -H ''Accept: application/json''')
+            [CompletionResult]::new('--headers', '--headers', [CompletionResultType]::ParameterName, 'HTTP headers, e.g. -H ''Accept: application/json''')
+            [CompletionResult]::new('-t', '-t', [CompletionResultType]::ParameterName, 'Time in seconds to wait for a response')
+            [CompletionResult]::new('--timeout', '--timeout', [CompletionResultType]::ParameterName, 'Time in seconds to wait for a response')
+            [CompletionResult]::new('--warmup', '--warmup', [CompletionResultType]::ParameterName, 'Send for this long before measuring, e.g. 5s: connections open, caches fill and JITs settle without counting against the run')
+            [CompletionResult]::new('--threads', '--threads', [CompletionResultType]::ParameterName, 'Threads sending requests (default 1), or "auto" to add one whenever those sending are all busy. One sends 100k requests a second or more; the dashboard says when it is the limit')
+            [CompletionResult]::new('--rate', '--rate', [CompletionResultType]::ParameterName, 'Start this many requests a second, spread evenly, instead of as many as the concurrency allows; -c is then the most in flight at once, and pepe says when it holds the rate back')
+            [CompletionResult]::new('-d', '-d', [CompletionResultType]::ParameterName, 'HTTP request body')
+            [CompletionResult]::new('--body', '--body', [CompletionResultType]::ParameterName, 'HTTP request body')
+            [CompletionResult]::new('-p', '-p', [CompletionResultType]::ParameterName, 'Proxy server URL: http://user:pass@host:port or socks5://host:port')
+            [CompletionResult]::new('--proxy', '--proxy', [CompletionResultType]::ParameterName, 'Proxy server URL: http://user:pass@host:port or socks5://host:port')
+            [CompletionResult]::new('--trace-header', '--trace-header', [CompletionResultType]::ParameterName, 'Response header holding the request id to show for the slowest requests and in the inspector, so they can be found in the server''s logs; without it, X-Request-Id, traceparent, CF-Ray, X-Amzn-Trace-Id and other common ones are looked for')
+            [CompletionResult]::new('--snapshot', '--snapshot', [CompletionResultType]::ParameterName, 'Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run''s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run')
+            [CompletionResult]::new('--fail-if', '--fail-if', [CompletionResultType]::ParameterName, 'End with exit code 4 when the run crosses this, for CI and scripts: ''p99 > 300ms'', ''errors > 1%''; repeat for more. The report is still printed. (pepe ping has --slo for the same.)')
+            [CompletionResult]::new('--metrics', '--metrics', [CompletionResultType]::ParameterName, 'Serve the live numbers for Prometheus at http://ADDR/metrics while the run goes, e.g. :9100 or 127.0.0.1:9100, so a soak run or a long ping shows up in Grafana next to the server''s own')
+            [CompletionResult]::new('--config', '--config', [CompletionResultType]::ParameterName, 'Read settings from this file instead of ./pepe.toml; flags on the command line win over it')
+            [CompletionResult]::new('--write-config', '--write-config', [CompletionResultType]::ParameterName, 'Write the settings as they stand to this file, as a pepe.toml, and exit')
+            [CompletionResult]::new('-c', '-c', [CompletionResultType]::ParameterName, 'Number of concurrent requests at a time')
+            [CompletionResult]::new('--concurrency', '--concurrency', [CompletionResultType]::ParameterName, 'Number of concurrent requests at a time')
+            [CompletionResult]::new('-u', '-u', [CompletionResultType]::ParameterName, 'User-Agent string, default is pepe/{version}')
+            [CompletionResult]::new('--user-agent', '--user-agent', [CompletionResultType]::ParameterName, 'User-Agent string, default is pepe/{version}')
             [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('-k', '-k', [CompletionResultType]::ParameterName, 'Accept invalid TLS certificates (self-signed, expired, wrong host)')
@@ -487,6 +538,7 @@ Register-ArgumentCompleter -Native -CommandName 'pepe' -ScriptBlock {
             [CompletionResult]::new('logs', 'logs', [CompletionResultType]::ParameterValue, 'Read nginx logs: requests per second now, against each minute, hour and day')
             [CompletionResult]::new('ping', 'ping', [CompletionResultType]::ParameterValue, 'Ping a URL: a request a second, each split into DNS, connect, TLS, first byte and download, on a graph')
             [CompletionResult]::new('compare', 'compare', [CompletionResultType]::ParameterValue, 'Hold a run''s JSON report against an earlier one and say what moved')
+            [CompletionResult]::new('schema', 'schema', [CompletionResultType]::ParameterValue, 'Print the JSON Schema of a report: run (the default), ramp, ping or compare')
             [CompletionResult]::new('help', 'help', [CompletionResultType]::ParameterValue, 'Print this message or the help of the given subcommand(s)')
             break
         }
@@ -515,6 +567,9 @@ Register-ArgumentCompleter -Native -CommandName 'pepe' -ScriptBlock {
             break
         }
         'pepe;help;compare' {
+            break
+        }
+        'pepe;help;schema' {
             break
         }
         'pepe;help;help' {

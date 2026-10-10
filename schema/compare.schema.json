@@ -1,0 +1,77 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://pepe.mhaimdat.com/schema/compare.schema.json",
+  "title": "pepe compare report",
+  "description": "What `pepe compare --json` prints: the verdict, each number before and after with its change and the spread it was held against, the findings, and the verdict as a badge. Fields are added over time and never renamed within a schema_version.",
+  "type": "object",
+  "required": ["schema_version", "verdict", "regression", "before", "after", "changes", "findings", "badge"],
+  "properties": {
+    "schema_version": { "type": "integer", "const": 1 },
+    "verdict": { "type": "string", "enum": ["better", "faster", "same", "slower", "worse"] },
+    "regression": { "type": "boolean", "description": "Slower or Worse: what --gate stops on" },
+    "before": { "$ref": "#/$defs/side" },
+    "after": { "$ref": "#/$defs/side" },
+    "changes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["metric", "before", "after", "noise_percent", "significant"],
+        "properties": {
+          "metric": { "type": "string", "description": "p99_ms, median_ms, requests_per_second, capacity_per_second, or a ping phase such as connect_ms" },
+          "before": { "type": "number" },
+          "after": { "type": "number" },
+          "change_percent": { "type": "number", "description": "Absent when `before` is zero" },
+          "noise_percent": { "type": "number", "description": "How much this number wobbles between two runs like these; a change inside it is not called a change" },
+          "significant": { "type": "boolean" }
+        }
+      }
+    },
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["level", "text"],
+        "properties": {
+          "level": { "type": "string", "enum": ["Healthy", "Degraded", "Failing"] },
+          "text": { "type": "string" }
+        }
+      }
+    },
+    "badge": {
+      "type": "object",
+      "description": "The verdict in a badge's three parts, for shields.io and the like",
+      "required": ["label", "message", "color"],
+      "properties": {
+        "label": { "type": "string" },
+        "message": { "type": "string" },
+        "color": { "type": "string", "description": "A hex colour without the #" }
+      }
+    }
+  },
+  "$defs": {
+    "side": {
+      "type": "object",
+      "description": "What a report says, in the numbers the comparison is made of",
+      "required": ["file", "requests", "failed_percent"],
+      "properties": {
+        "file": { "type": "string" },
+        "target": { "type": "string" },
+        "concurrency": { "type": "integer" },
+        "requests": { "type": "integer", "minimum": 0 },
+        "failed_percent": { "type": "number" },
+        "median_ms": { "type": "number" },
+        "p99_ms": { "type": "number" },
+        "requests_per_second": { "type": "number" },
+        "capacity_per_second": { "type": "number" },
+        "holds_concurrency": { "type": "integer" },
+        "every_s": { "type": "number", "description": "A ping's interval" },
+        "dns_ms": { "type": "number" },
+        "connect_ms": { "type": "number" },
+        "tls_ms": { "type": "number" },
+        "tls_resumed_ms": { "type": "number" },
+        "ttfb_ms": { "type": "number" },
+        "download_ms": { "type": "number" }
+      }
+    }
+  }
+}

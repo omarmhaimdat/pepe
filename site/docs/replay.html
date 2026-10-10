@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Replay · pepe docs</title>
+<meta name="description" content="Real traffic is not one URL. pepe replay reads an access log and sends its URLs in the proportions the log had: a path seen 3,000 times gets 30× the requests of one seen 100 times, mixed evenly rather than in bursts.">
+<link rel="canonical" href="https://pepe.mhaimdat.com/docs/replay.html">
+<link rel="icon" href="../assets/logo.svg" type="image/svg+xml">
+<meta name="theme-color" content="#140f0d">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Replay · pepe docs">
+<meta property="og:description" content="Real traffic is not one URL. pepe replay reads an access log and sends its URLs in the proportions the log had: a path seen 3,000 times gets 30× the requests of one seen 100 times, mixed evenly rather than in bursts.">
+<meta property="og:image" content="https://pepe.mhaimdat.com/img/og.png">
+<link rel="stylesheet" href="docs.css">
+</head>
+<body>
+<div class="term">
+  <header class="title">
+    <a class="name" href="../">pepe</a><a href="index.html">docs</a>
+    <nav aria-label="Site"><a href="../">install</a><a href="https://github.com/omarmhaimdat/pepe">github</a><a href="https://github.com/omarmhaimdat/pepe/releases">releases</a></nav>
+  </header>
+  <div class="cols">
+    <aside class="side" aria-label="Pages"><a href="index.html">Overview</a><a href="install.html">Install</a><a href="load-test.html">Load testing</a><a href="dashboard.html">The dashboard</a><a href="ramp.html">Ramp</a><a href="api.html">OpenAPI</a><a href="flow.html">Flows</a><a href="replay.html" class="on">Replay</a><a href="ping.html">Ping</a><a href="logs.html">nginx logs</a><a href="compare.html">Compare</a><a href="output.html">Output and exit codes</a><a href="ci.html">CI and Docker</a><a href="agents.html">Agents and scripts</a><a href="benchmarks.html">Benchmarks</a><a href="reference.html">Command reference</a></aside>
+    <main>
+<h1>Replaying an access log</h1>
+<p>Real traffic is not one URL. <code>pepe replay</code> reads an access log and sends its URLs in the proportions the log had: a path seen 3,000 times gets 30× the requests of one seen 100 times, mixed evenly rather than in bursts.</p>
+<pre class="lang-bash"><code>pepe replay access.log --base-url https://staging.example.com -c 50 -z 2m
+pepe replay access.log --base-url https://staging.example.com --include-writes --json &gt; replay.json</code></pre>
+<h2 id="what-is-read">What is read <a class="anchor" href="#what-is-read" aria-label="Link to this section">#</a></h2>
+<p>nginx and Apache logs (common and combined), Caddy's JSON lines, AWS ALB logs, and plain lists of one URL or path per line. Rotated files can be given too. Lines that can't be read are counted and said in the report.</p>
+<h2 id="flags">Flags <a class="anchor" href="#flags" aria-label="Link to this section">#</a></h2>
+<table><thead><tr><th>Flag</th><th>What it does</th></tr></thead><tbody><tr><td><code>--base-url &lt;URL&gt;</code></td><td>Goes in front of paths and replaces the host of full URLs, so production's log can be sent at staging; without it, full URLs are sent where they point and paths can't be sent at all</td></tr><tr><td><code>--include-writes</code></td><td>Replay POST, PUT, PATCH and DELETE too; only GET, HEAD and OPTIONS without it. Request bodies aren't in access logs, so writes go without one</td></tr><tr><td><code>--rows &lt;N&gt;</code></td><td>URLs that get a row of their own on the dashboard, most frequent first (20 by default); the rest share one</td></tr></tbody></table>
+<p><code>-c</code>, <code>-z</code>, <code>-n</code>, <code>-H</code>, <code>--rate</code>, <code>--warmup</code> and the other request options work as usual.</p>
+<h2 id="the-run">The run <a class="anchor" href="#the-run" aria-label="Link to this section">#</a></h2>
+<p>The dashboard's first tab lists the most frequent URLs with each one's share of the log, throughput, latency and statuses, and one row for all the rest. There is no setup screen for a replay: the log is the setup, and <code>r</code> runs it again. <code>--json</code> adds <code>replay</code>: what the log had, what was left out and why (unparsed lines, writes, paths with no host, URLs past the 5,000 most frequent), and the same per-URL numbers under <code>urls</code>. Piped, the verdict is printed. <code>--metrics</code> serves a row per URL.</p>
+    </main>
+    <aside class="toc" aria-label="On this page"><div class="lab">on this page</div><a href="#what-is-read" class="h2">What is read</a><a href="#flags" class="h2">Flags</a><a href="#the-run" class="h2">The run</a></aside>
+  </div>
+  <footer class="chips"><span><kbd>?</kbd>every screen lists its keys</span><span><kbd>q</kbd>leaves the report in your shell</span><span class="by">MIT · <a href="https://github.com/omarmhaimdat/pepe">omarmhaimdat/pepe</a></span></footer>
+</div>
+</body>
+</html>

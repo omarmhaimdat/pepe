@@ -1,0 +1,1261 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Command reference · pepe docs</title>
+<meta name="description" content="Every command and flag, as --help prints them. Generated from the command definition by cargo test, so it can&#x27;t drift from the binary; the pages before this one say what the flags are for.">
+<link rel="canonical" href="https://pepe.mhaimdat.com/docs/reference.html">
+<link rel="icon" href="../assets/logo.svg" type="image/svg+xml">
+<meta name="theme-color" content="#140f0d">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Command reference · pepe docs">
+<meta property="og:description" content="Every command and flag, as --help prints them. Generated from the command definition by cargo test, so it can&#x27;t drift from the binary; the pages before this one say what the flags are for.">
+<meta property="og:image" content="https://pepe.mhaimdat.com/img/og.png">
+<link rel="stylesheet" href="docs.css">
+</head>
+<body>
+<div class="term">
+  <header class="title">
+    <a class="name" href="../">pepe</a><a href="index.html">docs</a>
+    <nav aria-label="Site"><a href="../">install</a><a href="https://github.com/omarmhaimdat/pepe">github</a><a href="https://github.com/omarmhaimdat/pepe/releases">releases</a></nav>
+  </header>
+  <div class="cols">
+    <aside class="side" aria-label="Pages"><a href="index.html">Overview</a><a href="install.html">Install</a><a href="load-test.html">Load testing</a><a href="dashboard.html">The dashboard</a><a href="ramp.html">Ramp</a><a href="api.html">OpenAPI</a><a href="flow.html">Flows</a><a href="replay.html">Replay</a><a href="ping.html">Ping</a><a href="logs.html">nginx logs</a><a href="compare.html">Compare</a><a href="output.html">Output and exit codes</a><a href="ci.html">CI and Docker</a><a href="agents.html">Agents and scripts</a><a href="benchmarks.html">Benchmarks</a><a href="reference.html" class="on">Command reference</a></aside>
+    <main>
+<h1>Command reference</h1>
+<p>Every command and flag, as <code>--help</code> prints them. Generated from the command definition by <code>cargo test</code>, so it can't drift from the binary; the pages before this one say what the flags are for.</p>
+<p>The options under <code>pepe</code> are global: they work after any subcommand too (<code>pepe ping -H &#x27;Accept: text/html&#x27; …</code>), where they make sense.</p>
+<h2 id="pepe">pepe <a class="anchor" href="#pepe" aria-label="Link to this section">#</a></h2>
+<pre class="lang-text"><code>HTTP load generator
+
+Usage: pepe [OPTIONS] [URL] [-- &lt;ARGS&gt;...] [COMMAND]
+
+Commands:
+  self-update  Update pepe to the latest release, or say what&#x27;s new in it
+  completions  Tab completion for your shell: print the script, or --install it
+  api          Load-test every endpoint of an OpenAPI spec
+  ramp         Raise the load step by step to find where the target stops keeping up
+  replay       Send the URLs of an access log in their real proportions
+  flow         Run a sequence of requests from a flow file, each step fed by the last
+  logs         Read nginx logs: requests per second now, against each minute, hour and day
+  ping         Ping a URL: a request a second, each split into DNS, connect, TLS, first byte and download, on a graph
+  compare      Hold a run&#x27;s JSON report against an earlier one and say what moved
+  schema       Print the JSON Schema of a report: run (the default), ramp, ping or compare
+  help         Print this message or the help of the given subcommand(s)
+
+Arguments:
+  [URL]
+          HTTP url to request
+          
+          [default: &quot;&quot;]
+
+  [ARGS]...
+          List of arguments to pass to curl command
+          
+          [default: &quot;&quot;]
+
+Options:
+  -h, --help
+          Print help
+
+  -n, --number &lt;NUMBER&gt;
+          Number of requests to perform
+          
+          [default: 100]
+
+  -c, --concurrency &lt;CONCURRENCY&gt;
+          Number of concurrent requests at a time
+          
+          [default: &quot;one per core&quot;]
+
+  -z, --duration &lt;DURATION&gt;
+          Duration of the test, e.g. 10s, 3m, 2h (mutually exclusive with -n)
+
+      --curl
+          Load-test a curl command: pepe --curl -- curl -X POST http://localhost:8080, or pass it as one quoted string, as @file, or on stdin
+
+  -m, --method &lt;METHOD&gt;
+          HTTP method, e.g. GET, POST, PUT, DELETE
+          
+          [default: GET]
+
+  -H, --headers &lt;HEADERS&gt;
+          HTTP headers, e.g. -H &#x27;Accept: application/json&#x27;
+
+  -t, --timeout &lt;TIMEOUT&gt;
+          Time in seconds to wait for a response
+          
+          [default: 20]
+
+      --warmup &lt;TIME&gt;
+          Send for this long before measuring, e.g. 5s: connections open, caches fill and JITs settle without counting against the run
+
+      --threads &lt;N|auto&gt;
+          Threads sending requests (default 1), or &quot;auto&quot; to add one whenever those sending are all busy. One sends 100k requests a second or more; the dashboard says when it is the limit
+
+      --rate &lt;PER_SECOND&gt;
+          Start this many requests a second, spread evenly, instead of as many as the concurrency allows; -c is then the most in flight at once, and pepe says when it holds the rate back
+
+  -d, --body &lt;BODY&gt;
+          HTTP request body
+
+  -u, --user-agent &lt;USER_AGENT&gt;
+          User-Agent string, default is pepe/{version}
+
+  -p, --proxy &lt;PROXY&gt;
+          Proxy server URL: http://user:pass@host:port or socks5://host:port
+
+  -k, --insecure
+          Accept invalid TLS certificates (self-signed, expired, wrong host)
+
+      --disable-compression
+          Disable HTTP compression, e.g. gzip
+
+      --disable-keepalive
+          Disable HTTP keepalive, e.g. Connection: close
+
+      --disable-redirects
+          Prevent http redirects
+
+      --json
+          Output results in JSON format
+
+      --trace-header &lt;NAME&gt;
+          Response header holding the request id to show for the slowest requests and in the inspector, so they can be found in the server&#x27;s logs; without it, X-Request-Id, traceparent, CF-Ray, X-Amzn-Trace-Id and other common ones are looked for
+
+      --snapshot &lt;FILE&gt;
+          Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run&#x27;s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run
+
+      --fail-if &lt;CONDITION&gt;
+          End with exit code 4 when the run crosses this, for CI and scripts: &#x27;p99 &gt; 300ms&#x27;, &#x27;errors &gt; 1%&#x27;; repeat for more. The report is still printed. (pepe ping has --slo for the same.)
+
+      --metrics &lt;ADDR&gt;
+          Serve the live numbers for Prometheus at http://ADDR/metrics while the run goes, e.g. :9100 or 127.0.0.1:9100, so a soak run or a long ping shows up in Grafana next to the server&#x27;s own
+
+  -i, --setup
+          Open the setup screen to review or change the settings before starting (it opens by itself when no URL is given)
+
+      --config &lt;FILE&gt;
+          Read settings from this file instead of ./pepe.toml; flags on the command line win over it
+
+      --write-config &lt;FILE&gt;
+          Write the settings as they stand to this file, as a pepe.toml, and exit
+
+  -V, --version
+          Print version</code></pre>
+<h2 id="pepe-ping">pepe ping <a class="anchor" href="#pepe-ping" aria-label="Link to this section">#</a></h2>
+<pre class="lang-text"><code>Ping a URL: a request a second, each split into DNS, connect, TLS, first byte and download, on a graph
+
+Usage: pepe ping [OPTIONS] [TARGETS]...
+
+Arguments:
+  [TARGETS]...
+          What to ping: URLs or hosts (https unless a port is given), host:port, aws:REGION, a range like 10.0.0.0/29, or commands with --cmd; several are graphed together
+
+Options:
+      --every &lt;TIME&gt;
+          Time between pings, e.g. 1s, 500ms, 2m
+          
+          [default: 1s]
+
+      --window &lt;TIME&gt;
+          How much of the run the graph shows, e.g. 60s, 5m; + and - change it on screen, w shows the whole run
+          
+          [default: 60s]
+
+      --name &lt;NAME&gt;
+          What to call each target, in order: --name api --name cdn, or --name api,cdn
+
+      --color &lt;COLOR&gt;
+          A colour for each target&#x27;s line, in order: red, green, yellow, blue, magenta, cyan, white, gray, their light- forms, or #RRGGBB
+
+  -4
+          Resolve names to IPv4 addresses only
+
+  -6
+          Resolve names to IPv6 addresses only
+
+      --all-ips
+          Ping every address a name resolves to, each as a target of its own
+
+      --interface &lt;NAME|IP&gt;
+          Send from this interface (en0, eth0) or local address
+
+      --tcp
+          Only connect: a TCP ping of the port, with no request sent
+
+      --port &lt;PORT&gt;
+          With --tcp: the port of a target that names none
+          
+          [default: 80]
+
+  -h, --help
+          Print help
+
+      --tcp-rst &lt;TCP_RST&gt;
+          With --tcp: a connection refused counts as an answer (the host is there) rather than a failure
+
+          Possible values:
+          - pong: An answer: something is there to refuse
+          - fail: A failure
+          
+          [default: pong]
+
+      --cmd
+          The targets are commands: run each one every interval and graph how long it takes; its exit code is the status
+
+  -n, --number &lt;NUMBER&gt;
+          Number of requests to perform
+          
+          [default: 100]
+
+  -c, --concurrency &lt;CONCURRENCY&gt;
+          Number of concurrent requests at a time
+          
+          [default: &quot;one per core&quot;]
+
+      --keep-alive
+          Keep the connection between pings, as a browser would. The DNS, connect and TLS phases are then measured once; without it every ping measures all five
+
+      --slo &lt;KEY=MS,...&gt;
+          Limits a ping must meet, in milliseconds: total=500,ttfb=200, connect=100,dns=50,tls=150,download=100. Breaking one marks the ping, and the run exits 4 at the end
+
+  -z, --duration &lt;DURATION&gt;
+          Duration of the test, e.g. 10s, 3m, 2h (mutually exclusive with -n)
+
+      --bell
+          Ring the terminal bell when a ping fails or breaks the SLO
+
+  -m, --method &lt;METHOD&gt;
+          HTTP method, e.g. GET, POST, PUT, DELETE
+          
+          [default: GET]
+
+      --ymin &lt;MS&gt;
+          The graph&#x27;s floor, in milliseconds
+
+  -H, --headers &lt;HEADERS&gt;
+          HTTP headers, e.g. -H &#x27;Accept: application/json&#x27;
+
+      --ymax &lt;MS&gt;
+          The graph&#x27;s ceiling, in milliseconds; without it the graph fits what it shows
+
+  -0
+          Start the graph at zero (the same as --ymin 0)
+
+  -t, --timeout &lt;TIMEOUT&gt;
+          Time in seconds to wait for a response
+          
+          [default: 20]
+
+  -s, --simple-graphics
+          Draw the graph with dots rather than braille, for terminals and fonts that lack it
+
+      --warmup &lt;TIME&gt;
+          Send for this long before measuring, e.g. 5s: connections open, caches fill and JITs settle without counting against the run
+
+      --jsonl
+          No screen: one JSON object per ping on stdout, as it happens
+
+      --threads &lt;N|auto&gt;
+          Threads sending requests (default 1), or &quot;auto&quot; to add one whenever those sending are all busy. One sends 100k requests a second or more; the dashboard says when it is the limit
+
+      --csv
+          No screen: one CSV line per ping on stdout, under a header
+
+      --rate &lt;PER_SECOND&gt;
+          Start this many requests a second, spread evenly, instead of as many as the concurrency allows; -c is then the most in flight at once, and pepe says when it holds the rate back
+
+  -d, --body &lt;BODY&gt;
+          HTTP request body
+
+      --save &lt;FILE&gt;
+          Write the JSON report to this file when the run ends, whatever else is shown
+
+      --show-body
+          Keep the first kilobyte of each body for the inspector
+
+  -u, --user-agent &lt;USER_AGENT&gt;
+          User-Agent string, default is pepe/{version}
+
+  -p, --proxy &lt;PROXY&gt;
+          Proxy server URL: http://user:pass@host:port or socks5://host:port
+
+      --save-body &lt;FILE&gt;
+          Write the last body received to this file when the run ends
+
+  -k, --insecure
+          Accept invalid TLS certificates (self-signed, expired, wrong host)
+
+      --once
+          One diagnosis and out: three quick pings, then the last one&#x27;s phases, what answered, and what to look at; no screen
+
+      --disable-compression
+          Disable HTTP compression, e.g. gzip
+
+      --disable-keepalive
+          Disable HTTP keepalive, e.g. Connection: close
+
+      --disable-redirects
+          Prevent http redirects
+
+      --json
+          Output results in JSON format
+
+      --trace-header &lt;NAME&gt;
+          Response header holding the request id to show for the slowest requests and in the inspector, so they can be found in the server&#x27;s logs; without it, X-Request-Id, traceparent, CF-Ray, X-Amzn-Trace-Id and other common ones are looked for
+
+      --snapshot &lt;FILE&gt;
+          Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run&#x27;s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run
+
+      --fail-if &lt;CONDITION&gt;
+          End with exit code 4 when the run crosses this, for CI and scripts: &#x27;p99 &gt; 300ms&#x27;, &#x27;errors &gt; 1%&#x27;; repeat for more. The report is still printed. (pepe ping has --slo for the same.)
+
+      --metrics &lt;ADDR&gt;
+          Serve the live numbers for Prometheus at http://ADDR/metrics while the run goes, e.g. :9100 or 127.0.0.1:9100, so a soak run or a long ping shows up in Grafana next to the server&#x27;s own
+
+  -i, --setup
+          Open the setup screen to review or change the settings before starting (it opens by itself when no URL is given)
+
+      --config &lt;FILE&gt;
+          Read settings from this file instead of ./pepe.toml; flags on the command line win over it
+
+      --write-config &lt;FILE&gt;
+          Write the settings as they stand to this file, as a pepe.toml, and exit</code></pre>
+<h2 id="pepe-ramp">pepe ramp <a class="anchor" href="#pepe-ramp" aria-label="Link to this section">#</a></h2>
+<pre class="lang-text"><code>Raise the load step by step to find where the target stops keeping up
+
+Usage: pepe ramp [OPTIONS] [URL]
+
+Arguments:
+  [URL]
+          HTTP url to request; without one, the setup screen opens
+
+Options:
+      --from &lt;FROM&gt;
+          Concurrency of the first step
+          
+          [default: 10]
+
+      --to &lt;TO&gt;
+          Concurrency of the last step
+          
+          [default: 100]
+
+      --step &lt;STEP&gt;
+          Concurrency added at each step
+          
+          [default: 10]
+
+      --every &lt;EVERY&gt;
+          How long each step is held, e.g. 10s, 1m
+          
+          [default: 10s]
+
+      --until &lt;CONDITION&gt;
+          End the ramp once a step crosses this: &#x27;p99 &gt; 500ms&#x27;, &#x27;errors &gt; 1%&#x27;
+
+  -h, --help
+          Print help
+
+  -n, --number &lt;NUMBER&gt;
+          Number of requests to perform
+          
+          [default: 100]
+
+  -c, --concurrency &lt;CONCURRENCY&gt;
+          Number of concurrent requests at a time
+          
+          [default: &quot;one per core&quot;]
+
+  -z, --duration &lt;DURATION&gt;
+          Duration of the test, e.g. 10s, 3m, 2h (mutually exclusive with -n)
+
+  -m, --method &lt;METHOD&gt;
+          HTTP method, e.g. GET, POST, PUT, DELETE
+          
+          [default: GET]
+
+  -H, --headers &lt;HEADERS&gt;
+          HTTP headers, e.g. -H &#x27;Accept: application/json&#x27;
+
+  -t, --timeout &lt;TIMEOUT&gt;
+          Time in seconds to wait for a response
+          
+          [default: 20]
+
+      --warmup &lt;TIME&gt;
+          Send for this long before measuring, e.g. 5s: connections open, caches fill and JITs settle without counting against the run
+
+      --threads &lt;N|auto&gt;
+          Threads sending requests (default 1), or &quot;auto&quot; to add one whenever those sending are all busy. One sends 100k requests a second or more; the dashboard says when it is the limit
+
+      --rate &lt;PER_SECOND&gt;
+          Start this many requests a second, spread evenly, instead of as many as the concurrency allows; -c is then the most in flight at once, and pepe says when it holds the rate back
+
+  -d, --body &lt;BODY&gt;
+          HTTP request body
+
+  -u, --user-agent &lt;USER_AGENT&gt;
+          User-Agent string, default is pepe/{version}
+
+  -p, --proxy &lt;PROXY&gt;
+          Proxy server URL: http://user:pass@host:port or socks5://host:port
+
+  -k, --insecure
+          Accept invalid TLS certificates (self-signed, expired, wrong host)
+
+      --disable-compression
+          Disable HTTP compression, e.g. gzip
+
+      --disable-keepalive
+          Disable HTTP keepalive, e.g. Connection: close
+
+      --disable-redirects
+          Prevent http redirects
+
+      --json
+          Output results in JSON format
+
+      --trace-header &lt;NAME&gt;
+          Response header holding the request id to show for the slowest requests and in the inspector, so they can be found in the server&#x27;s logs; without it, X-Request-Id, traceparent, CF-Ray, X-Amzn-Trace-Id and other common ones are looked for
+
+      --snapshot &lt;FILE&gt;
+          Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run&#x27;s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run
+
+      --fail-if &lt;CONDITION&gt;
+          End with exit code 4 when the run crosses this, for CI and scripts: &#x27;p99 &gt; 300ms&#x27;, &#x27;errors &gt; 1%&#x27;; repeat for more. The report is still printed. (pepe ping has --slo for the same.)
+
+      --metrics &lt;ADDR&gt;
+          Serve the live numbers for Prometheus at http://ADDR/metrics while the run goes, e.g. :9100 or 127.0.0.1:9100, so a soak run or a long ping shows up in Grafana next to the server&#x27;s own
+
+  -i, --setup
+          Open the setup screen to review or change the settings before starting (it opens by itself when no URL is given)
+
+      --config &lt;FILE&gt;
+          Read settings from this file instead of ./pepe.toml; flags on the command line win over it
+
+      --write-config &lt;FILE&gt;
+          Write the settings as they stand to this file, as a pepe.toml, and exit</code></pre>
+<h2 id="pepe-api">pepe api <a class="anchor" href="#pepe-api" aria-label="Link to this section">#</a></h2>
+<pre class="lang-text"><code>Load-test every endpoint of an OpenAPI spec
+
+Usage: pepe api [OPTIONS] [SPEC]
+
+Arguments:
+  [SPEC]
+          The OpenAPI spec: a file, a URL or the document itself, JSON or YAML (or `spec` in pepe.toml). Without it, the setup screen asks
+
+Options:
+      --auth &lt;AUTH&gt;
+          Credentials: bearer:TOKEN, basic:USER:PASSWORD, apikey:VALUE, header:NAME=VALUE or query:NAME=VALUE
+
+      --server &lt;SERVER&gt;
+          Base URL to send requests to, instead of the spec&#x27;s server
+
+      --all
+          Run every endpoint that has the values it needs. Without --all, --tag or --only, nothing runs until it&#x27;s picked on the plan screen
+
+      --tag &lt;TAG&gt;
+          Run the endpoints with this tag, e.g. --tag Billing
+
+      --only &lt;ONLY&gt;
+          Run the endpoints matching this, e.g. &#x27;GET /pets*&#x27; or &#x27;/pets/*&#x27;
+
+      --skip &lt;SKIP&gt;
+          Leave out endpoints matching this
+
+      --set &lt;NAME=VALUE[,VALUE]&gt;
+          A parameter&#x27;s value(s), rotated through: --set id=1,2,3
+
+      --include-writes
+          Let --all, --tag and --only switch on POST, PUT, PATCH and DELETE too
+
+  -h, --help
+          Print help
+
+  -n, --number &lt;NUMBER&gt;
+          Number of requests to perform
+          
+          [default: 100]
+
+  -c, --concurrency &lt;CONCURRENCY&gt;
+          Number of concurrent requests at a time
+          
+          [default: &quot;one per core&quot;]
+
+  -z, --duration &lt;DURATION&gt;
+          Duration of the test, e.g. 10s, 3m, 2h (mutually exclusive with -n)
+
+  -m, --method &lt;METHOD&gt;
+          HTTP method, e.g. GET, POST, PUT, DELETE
+          
+          [default: GET]
+
+  -H, --headers &lt;HEADERS&gt;
+          HTTP headers, e.g. -H &#x27;Accept: application/json&#x27;
+
+  -t, --timeout &lt;TIMEOUT&gt;
+          Time in seconds to wait for a response
+          
+          [default: 20]
+
+      --warmup &lt;TIME&gt;
+          Send for this long before measuring, e.g. 5s: connections open, caches fill and JITs settle without counting against the run
+
+      --threads &lt;N|auto&gt;
+          Threads sending requests (default 1), or &quot;auto&quot; to add one whenever those sending are all busy. One sends 100k requests a second or more; the dashboard says when it is the limit
+
+      --rate &lt;PER_SECOND&gt;
+          Start this many requests a second, spread evenly, instead of as many as the concurrency allows; -c is then the most in flight at once, and pepe says when it holds the rate back
+
+  -d, --body &lt;BODY&gt;
+          HTTP request body
+
+  -u, --user-agent &lt;USER_AGENT&gt;
+          User-Agent string, default is pepe/{version}
+
+  -p, --proxy &lt;PROXY&gt;
+          Proxy server URL: http://user:pass@host:port or socks5://host:port
+
+  -k, --insecure
+          Accept invalid TLS certificates (self-signed, expired, wrong host)
+
+      --disable-compression
+          Disable HTTP compression, e.g. gzip
+
+      --disable-keepalive
+          Disable HTTP keepalive, e.g. Connection: close
+
+      --disable-redirects
+          Prevent http redirects
+
+      --json
+          Output results in JSON format
+
+      --trace-header &lt;NAME&gt;
+          Response header holding the request id to show for the slowest requests and in the inspector, so they can be found in the server&#x27;s logs; without it, X-Request-Id, traceparent, CF-Ray, X-Amzn-Trace-Id and other common ones are looked for
+
+      --snapshot &lt;FILE&gt;
+          Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run&#x27;s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run
+
+      --fail-if &lt;CONDITION&gt;
+          End with exit code 4 when the run crosses this, for CI and scripts: &#x27;p99 &gt; 300ms&#x27;, &#x27;errors &gt; 1%&#x27;; repeat for more. The report is still printed. (pepe ping has --slo for the same.)
+
+      --metrics &lt;ADDR&gt;
+          Serve the live numbers for Prometheus at http://ADDR/metrics while the run goes, e.g. :9100 or 127.0.0.1:9100, so a soak run or a long ping shows up in Grafana next to the server&#x27;s own
+
+  -i, --setup
+          Open the setup screen to review or change the settings before starting (it opens by itself when no URL is given)
+
+      --config &lt;FILE&gt;
+          Read settings from this file instead of ./pepe.toml; flags on the command line win over it
+
+      --write-config &lt;FILE&gt;
+          Write the settings as they stand to this file, as a pepe.toml, and exit</code></pre>
+<h2 id="pepe-replay">pepe replay <a class="anchor" href="#pepe-replay" aria-label="Link to this section">#</a></h2>
+<pre class="lang-text"><code>Send the URLs of an access log in their real proportions
+
+Usage: pepe replay [OPTIONS] &lt;LOG&gt;
+
+Arguments:
+  &lt;LOG&gt;
+          The log: nginx or Apache (common or combined), Caddy JSON, AWS ALB, or one URL or path per line
+
+Options:
+      --base-url &lt;URL&gt;
+          Where to send the requests: put in front of paths, and in place of the host of full URLs, e.g. https://staging.example.com
+
+      --include-writes
+          Replay POST, PUT, PATCH and DELETE too; only GET, HEAD and OPTIONS without it
+
+      --rows &lt;N&gt;
+          URLs that get a row of their own on the dashboard, most frequent first; the rest share one
+          
+          [default: 20]
+
+  -h, --help
+          Print help
+
+  -n, --number &lt;NUMBER&gt;
+          Number of requests to perform
+          
+          [default: 100]
+
+  -c, --concurrency &lt;CONCURRENCY&gt;
+          Number of concurrent requests at a time
+          
+          [default: &quot;one per core&quot;]
+
+  -z, --duration &lt;DURATION&gt;
+          Duration of the test, e.g. 10s, 3m, 2h (mutually exclusive with -n)
+
+  -m, --method &lt;METHOD&gt;
+          HTTP method, e.g. GET, POST, PUT, DELETE
+          
+          [default: GET]
+
+  -H, --headers &lt;HEADERS&gt;
+          HTTP headers, e.g. -H &#x27;Accept: application/json&#x27;
+
+  -t, --timeout &lt;TIMEOUT&gt;
+          Time in seconds to wait for a response
+          
+          [default: 20]
+
+      --warmup &lt;TIME&gt;
+          Send for this long before measuring, e.g. 5s: connections open, caches fill and JITs settle without counting against the run
+
+      --threads &lt;N|auto&gt;
+          Threads sending requests (default 1), or &quot;auto&quot; to add one whenever those sending are all busy. One sends 100k requests a second or more; the dashboard says when it is the limit
+
+      --rate &lt;PER_SECOND&gt;
+          Start this many requests a second, spread evenly, instead of as many as the concurrency allows; -c is then the most in flight at once, and pepe says when it holds the rate back
+
+  -d, --body &lt;BODY&gt;
+          HTTP request body
+
+  -u, --user-agent &lt;USER_AGENT&gt;
+          User-Agent string, default is pepe/{version}
+
+  -p, --proxy &lt;PROXY&gt;
+          Proxy server URL: http://user:pass@host:port or socks5://host:port
+
+  -k, --insecure
+          Accept invalid TLS certificates (self-signed, expired, wrong host)
+
+      --disable-compression
+          Disable HTTP compression, e.g. gzip
+
+      --disable-keepalive
+          Disable HTTP keepalive, e.g. Connection: close
+
+      --disable-redirects
+          Prevent http redirects
+
+      --json
+          Output results in JSON format
+
+      --trace-header &lt;NAME&gt;
+          Response header holding the request id to show for the slowest requests and in the inspector, so they can be found in the server&#x27;s logs; without it, X-Request-Id, traceparent, CF-Ray, X-Amzn-Trace-Id and other common ones are looked for
+
+      --snapshot &lt;FILE&gt;
+          Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run&#x27;s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run
+
+      --fail-if &lt;CONDITION&gt;
+          End with exit code 4 when the run crosses this, for CI and scripts: &#x27;p99 &gt; 300ms&#x27;, &#x27;errors &gt; 1%&#x27;; repeat for more. The report is still printed. (pepe ping has --slo for the same.)
+
+      --metrics &lt;ADDR&gt;
+          Serve the live numbers for Prometheus at http://ADDR/metrics while the run goes, e.g. :9100 or 127.0.0.1:9100, so a soak run or a long ping shows up in Grafana next to the server&#x27;s own
+
+  -i, --setup
+          Open the setup screen to review or change the settings before starting (it opens by itself when no URL is given)
+
+      --config &lt;FILE&gt;
+          Read settings from this file instead of ./pepe.toml; flags on the command line win over it
+
+      --write-config &lt;FILE&gt;
+          Write the settings as they stand to this file, as a pepe.toml, and exit</code></pre>
+<h2 id="pepe-flow">pepe flow <a class="anchor" href="#pepe-flow" aria-label="Link to this section">#</a></h2>
+<pre class="lang-text"><code>Run a sequence of requests from a flow file, each step fed by the last
+
+Usage: pepe flow [OPTIONS] &lt;FILE&gt;
+
+Arguments:
+  &lt;FILE&gt;
+          The flow: a TOML file of [[step]]s (see the README)
+
+Options:
+  -h, --help
+          Print help
+
+  -n, --number &lt;NUMBER&gt;
+          Number of requests to perform
+          
+          [default: 100]
+
+  -c, --concurrency &lt;CONCURRENCY&gt;
+          Number of concurrent requests at a time
+          
+          [default: &quot;one per core&quot;]
+
+  -z, --duration &lt;DURATION&gt;
+          Duration of the test, e.g. 10s, 3m, 2h (mutually exclusive with -n)
+
+  -m, --method &lt;METHOD&gt;
+          HTTP method, e.g. GET, POST, PUT, DELETE
+          
+          [default: GET]
+
+  -H, --headers &lt;HEADERS&gt;
+          HTTP headers, e.g. -H &#x27;Accept: application/json&#x27;
+
+  -t, --timeout &lt;TIMEOUT&gt;
+          Time in seconds to wait for a response
+          
+          [default: 20]
+
+      --warmup &lt;TIME&gt;
+          Send for this long before measuring, e.g. 5s: connections open, caches fill and JITs settle without counting against the run
+
+      --threads &lt;N|auto&gt;
+          Threads sending requests (default 1), or &quot;auto&quot; to add one whenever those sending are all busy. One sends 100k requests a second or more; the dashboard says when it is the limit
+
+      --rate &lt;PER_SECOND&gt;
+          Start this many requests a second, spread evenly, instead of as many as the concurrency allows; -c is then the most in flight at once, and pepe says when it holds the rate back
+
+  -d, --body &lt;BODY&gt;
+          HTTP request body
+
+  -u, --user-agent &lt;USER_AGENT&gt;
+          User-Agent string, default is pepe/{version}
+
+  -p, --proxy &lt;PROXY&gt;
+          Proxy server URL: http://user:pass@host:port or socks5://host:port
+
+  -k, --insecure
+          Accept invalid TLS certificates (self-signed, expired, wrong host)
+
+      --disable-compression
+          Disable HTTP compression, e.g. gzip
+
+      --disable-keepalive
+          Disable HTTP keepalive, e.g. Connection: close
+
+      --disable-redirects
+          Prevent http redirects
+
+      --json
+          Output results in JSON format
+
+      --trace-header &lt;NAME&gt;
+          Response header holding the request id to show for the slowest requests and in the inspector, so they can be found in the server&#x27;s logs; without it, X-Request-Id, traceparent, CF-Ray, X-Amzn-Trace-Id and other common ones are looked for
+
+      --snapshot &lt;FILE&gt;
+          Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run&#x27;s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run
+
+      --fail-if &lt;CONDITION&gt;
+          End with exit code 4 when the run crosses this, for CI and scripts: &#x27;p99 &gt; 300ms&#x27;, &#x27;errors &gt; 1%&#x27;; repeat for more. The report is still printed. (pepe ping has --slo for the same.)
+
+      --metrics &lt;ADDR&gt;
+          Serve the live numbers for Prometheus at http://ADDR/metrics while the run goes, e.g. :9100 or 127.0.0.1:9100, so a soak run or a long ping shows up in Grafana next to the server&#x27;s own
+
+  -i, --setup
+          Open the setup screen to review or change the settings before starting (it opens by itself when no URL is given)
+
+      --config &lt;FILE&gt;
+          Read settings from this file instead of ./pepe.toml; flags on the command line win over it
+
+      --write-config &lt;FILE&gt;
+          Write the settings as they stand to this file, as a pepe.toml, and exit</code></pre>
+<h2 id="pepe-logs">pepe logs <a class="anchor" href="#pepe-logs" aria-label="Link to this section">#</a></h2>
+<pre class="lang-text"><code>Read nginx logs: requests per second now, against each minute, hour and day
+
+Usage: pepe logs [OPTIONS] [FILES]...
+
+Arguments:
+  [FILES]...
+          Access and error logs, rotated ones too; `-` or nothing reads what is piped in, and with nothing at all nginx&#x27;s own in /var/log/nginx
+
+Options:
+      --format &lt;LOG_FORMAT&gt;
+          The access log&#x27;s log_format as nginx.conf has it, on one line, when it isn&#x27;t `combined`: &#x27;$remote_addr [$time_local] &quot;$request&quot; $status $request_time&#x27;
+
+      --window &lt;TIME&gt;
+          What &quot;now&quot; is measured over, e.g. 10s, 1m, 5m
+          
+          [default: 60s]
+
+      --since &lt;TIME&gt;
+          How far back to start, e.g. 90m, 24h, 7d. At a terminal a log that is being written is shown live, from five minutes back, without it
+
+      --all
+          Read all of the log before following it, however far back it goes
+
+      --exact-paths
+          Count /items/1 and /items/2 apart. Without it the numbers and ids in a path count as one, /items/*
+
+      --rows &lt;N&gt;
+          Rows in each table of the report
+          
+          [default: 10]
+
+  -h, --help
+          Print help
+
+  -n, --number &lt;NUMBER&gt;
+          Number of requests to perform
+          
+          [default: 100]
+
+  -c, --concurrency &lt;CONCURRENCY&gt;
+          Number of concurrent requests at a time
+          
+          [default: &quot;one per core&quot;]
+
+  -z, --duration &lt;DURATION&gt;
+          Duration of the test, e.g. 10s, 3m, 2h (mutually exclusive with -n)
+
+  -m, --method &lt;METHOD&gt;
+          HTTP method, e.g. GET, POST, PUT, DELETE
+          
+          [default: GET]
+
+  -H, --headers &lt;HEADERS&gt;
+          HTTP headers, e.g. -H &#x27;Accept: application/json&#x27;
+
+  -t, --timeout &lt;TIMEOUT&gt;
+          Time in seconds to wait for a response
+          
+          [default: 20]
+
+      --warmup &lt;TIME&gt;
+          Send for this long before measuring, e.g. 5s: connections open, caches fill and JITs settle without counting against the run
+
+      --threads &lt;N|auto&gt;
+          Threads sending requests (default 1), or &quot;auto&quot; to add one whenever those sending are all busy. One sends 100k requests a second or more; the dashboard says when it is the limit
+
+      --rate &lt;PER_SECOND&gt;
+          Start this many requests a second, spread evenly, instead of as many as the concurrency allows; -c is then the most in flight at once, and pepe says when it holds the rate back
+
+  -d, --body &lt;BODY&gt;
+          HTTP request body
+
+  -u, --user-agent &lt;USER_AGENT&gt;
+          User-Agent string, default is pepe/{version}
+
+  -p, --proxy &lt;PROXY&gt;
+          Proxy server URL: http://user:pass@host:port or socks5://host:port
+
+  -k, --insecure
+          Accept invalid TLS certificates (self-signed, expired, wrong host)
+
+      --disable-compression
+          Disable HTTP compression, e.g. gzip
+
+      --disable-keepalive
+          Disable HTTP keepalive, e.g. Connection: close
+
+      --disable-redirects
+          Prevent http redirects
+
+      --json
+          Output results in JSON format
+
+      --trace-header &lt;NAME&gt;
+          Response header holding the request id to show for the slowest requests and in the inspector, so they can be found in the server&#x27;s logs; without it, X-Request-Id, traceparent, CF-Ray, X-Amzn-Trace-Id and other common ones are looked for
+
+      --snapshot &lt;FILE&gt;
+          Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run&#x27;s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run
+
+      --fail-if &lt;CONDITION&gt;
+          End with exit code 4 when the run crosses this, for CI and scripts: &#x27;p99 &gt; 300ms&#x27;, &#x27;errors &gt; 1%&#x27;; repeat for more. The report is still printed. (pepe ping has --slo for the same.)
+
+      --metrics &lt;ADDR&gt;
+          Serve the live numbers for Prometheus at http://ADDR/metrics while the run goes, e.g. :9100 or 127.0.0.1:9100, so a soak run or a long ping shows up in Grafana next to the server&#x27;s own
+
+  -i, --setup
+          Open the setup screen to review or change the settings before starting (it opens by itself when no URL is given)
+
+      --config &lt;FILE&gt;
+          Read settings from this file instead of ./pepe.toml; flags on the command line win over it
+
+      --write-config &lt;FILE&gt;
+          Write the settings as they stand to this file, as a pepe.toml, and exit</code></pre>
+<h2 id="pepe-compare">pepe compare <a class="anchor" href="#pepe-compare" aria-label="Link to this section">#</a></h2>
+<pre class="lang-text"><code>Hold a run&#x27;s JSON report against an earlier one and say what moved
+
+Usage: pepe compare [OPTIONS] &lt;BEFORE&gt; &lt;AFTER&gt;
+
+Arguments:
+  &lt;BEFORE&gt;
+          The earlier report (`pepe --json`, `--snapshot`, or a ramp&#x27;s)
+
+  &lt;AFTER&gt;
+          The later one, of the same test
+
+Options:
+      --gate
+          Exit 1 when the verdict is Slower or Worse, for CI
+
+      --svg &lt;FILE&gt;
+          Also write the verdict as a card, an SVG for a README or a page
+
+  -h, --help
+          Print help
+
+  -n, --number &lt;NUMBER&gt;
+          Number of requests to perform
+          
+          [default: 100]
+
+  -c, --concurrency &lt;CONCURRENCY&gt;
+          Number of concurrent requests at a time
+          
+          [default: &quot;one per core&quot;]
+
+  -z, --duration &lt;DURATION&gt;
+          Duration of the test, e.g. 10s, 3m, 2h (mutually exclusive with -n)
+
+  -m, --method &lt;METHOD&gt;
+          HTTP method, e.g. GET, POST, PUT, DELETE
+          
+          [default: GET]
+
+  -H, --headers &lt;HEADERS&gt;
+          HTTP headers, e.g. -H &#x27;Accept: application/json&#x27;
+
+  -t, --timeout &lt;TIMEOUT&gt;
+          Time in seconds to wait for a response
+          
+          [default: 20]
+
+      --warmup &lt;TIME&gt;
+          Send for this long before measuring, e.g. 5s: connections open, caches fill and JITs settle without counting against the run
+
+      --threads &lt;N|auto&gt;
+          Threads sending requests (default 1), or &quot;auto&quot; to add one whenever those sending are all busy. One sends 100k requests a second or more; the dashboard says when it is the limit
+
+      --rate &lt;PER_SECOND&gt;
+          Start this many requests a second, spread evenly, instead of as many as the concurrency allows; -c is then the most in flight at once, and pepe says when it holds the rate back
+
+  -d, --body &lt;BODY&gt;
+          HTTP request body
+
+  -u, --user-agent &lt;USER_AGENT&gt;
+          User-Agent string, default is pepe/{version}
+
+  -p, --proxy &lt;PROXY&gt;
+          Proxy server URL: http://user:pass@host:port or socks5://host:port
+
+  -k, --insecure
+          Accept invalid TLS certificates (self-signed, expired, wrong host)
+
+      --disable-compression
+          Disable HTTP compression, e.g. gzip
+
+      --disable-keepalive
+          Disable HTTP keepalive, e.g. Connection: close
+
+      --disable-redirects
+          Prevent http redirects
+
+      --json
+          Output results in JSON format
+
+      --trace-header &lt;NAME&gt;
+          Response header holding the request id to show for the slowest requests and in the inspector, so they can be found in the server&#x27;s logs; without it, X-Request-Id, traceparent, CF-Ray, X-Amzn-Trace-Id and other common ones are looked for
+
+      --snapshot &lt;FILE&gt;
+          Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run&#x27;s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run
+
+      --fail-if &lt;CONDITION&gt;
+          End with exit code 4 when the run crosses this, for CI and scripts: &#x27;p99 &gt; 300ms&#x27;, &#x27;errors &gt; 1%&#x27;; repeat for more. The report is still printed. (pepe ping has --slo for the same.)
+
+      --metrics &lt;ADDR&gt;
+          Serve the live numbers for Prometheus at http://ADDR/metrics while the run goes, e.g. :9100 or 127.0.0.1:9100, so a soak run or a long ping shows up in Grafana next to the server&#x27;s own
+
+  -i, --setup
+          Open the setup screen to review or change the settings before starting (it opens by itself when no URL is given)
+
+      --config &lt;FILE&gt;
+          Read settings from this file instead of ./pepe.toml; flags on the command line win over it
+
+      --write-config &lt;FILE&gt;
+          Write the settings as they stand to this file, as a pepe.toml, and exit</code></pre>
+<h2 id="pepe-schema">pepe schema <a class="anchor" href="#pepe-schema" aria-label="Link to this section">#</a></h2>
+<pre class="lang-text"><code>Print the JSON Schema of a report: run (the default), ramp, ping or compare
+
+Usage: pepe schema [OPTIONS] [REPORT]
+
+Arguments:
+  [REPORT]
+          Which report: run, ramp, ping or compare
+          
+          [default: run]
+
+Options:
+  -h, --help
+          Print help
+
+  -n, --number &lt;NUMBER&gt;
+          Number of requests to perform
+          
+          [default: 100]
+
+  -c, --concurrency &lt;CONCURRENCY&gt;
+          Number of concurrent requests at a time
+          
+          [default: &quot;one per core&quot;]
+
+  -z, --duration &lt;DURATION&gt;
+          Duration of the test, e.g. 10s, 3m, 2h (mutually exclusive with -n)
+
+  -m, --method &lt;METHOD&gt;
+          HTTP method, e.g. GET, POST, PUT, DELETE
+          
+          [default: GET]
+
+  -H, --headers &lt;HEADERS&gt;
+          HTTP headers, e.g. -H &#x27;Accept: application/json&#x27;
+
+  -t, --timeout &lt;TIMEOUT&gt;
+          Time in seconds to wait for a response
+          
+          [default: 20]
+
+      --warmup &lt;TIME&gt;
+          Send for this long before measuring, e.g. 5s: connections open, caches fill and JITs settle without counting against the run
+
+      --threads &lt;N|auto&gt;
+          Threads sending requests (default 1), or &quot;auto&quot; to add one whenever those sending are all busy. One sends 100k requests a second or more; the dashboard says when it is the limit
+
+      --rate &lt;PER_SECOND&gt;
+          Start this many requests a second, spread evenly, instead of as many as the concurrency allows; -c is then the most in flight at once, and pepe says when it holds the rate back
+
+  -d, --body &lt;BODY&gt;
+          HTTP request body
+
+  -u, --user-agent &lt;USER_AGENT&gt;
+          User-Agent string, default is pepe/{version}
+
+  -p, --proxy &lt;PROXY&gt;
+          Proxy server URL: http://user:pass@host:port or socks5://host:port
+
+  -k, --insecure
+          Accept invalid TLS certificates (self-signed, expired, wrong host)
+
+      --disable-compression
+          Disable HTTP compression, e.g. gzip
+
+      --disable-keepalive
+          Disable HTTP keepalive, e.g. Connection: close
+
+      --disable-redirects
+          Prevent http redirects
+
+      --json
+          Output results in JSON format
+
+      --trace-header &lt;NAME&gt;
+          Response header holding the request id to show for the slowest requests and in the inspector, so they can be found in the server&#x27;s logs; without it, X-Request-Id, traceparent, CF-Ray, X-Amzn-Trace-Id and other common ones are looked for
+
+      --snapshot &lt;FILE&gt;
+          Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run&#x27;s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run
+
+      --fail-if &lt;CONDITION&gt;
+          End with exit code 4 when the run crosses this, for CI and scripts: &#x27;p99 &gt; 300ms&#x27;, &#x27;errors &gt; 1%&#x27;; repeat for more. The report is still printed. (pepe ping has --slo for the same.)
+
+      --metrics &lt;ADDR&gt;
+          Serve the live numbers for Prometheus at http://ADDR/metrics while the run goes, e.g. :9100 or 127.0.0.1:9100, so a soak run or a long ping shows up in Grafana next to the server&#x27;s own
+
+  -i, --setup
+          Open the setup screen to review or change the settings before starting (it opens by itself when no URL is given)
+
+      --config &lt;FILE&gt;
+          Read settings from this file instead of ./pepe.toml; flags on the command line win over it
+
+      --write-config &lt;FILE&gt;
+          Write the settings as they stand to this file, as a pepe.toml, and exit</code></pre>
+<h2 id="pepe-self-update">pepe self-update <a class="anchor" href="#pepe-self-update" aria-label="Link to this section">#</a></h2>
+<pre class="lang-text"><code>Update pepe to the latest release, or say what&#x27;s new in it
+
+Usage: pepe self-update [OPTIONS]
+
+Options:
+      --check
+          Only say whether a newer release exists (exit code 1 if so) and what&#x27;s in it; don&#x27;t install it
+
+      --verbose
+          Show the installer&#x27;s own output
+
+  -h, --help
+          Print help
+
+  -n, --number &lt;NUMBER&gt;
+          Number of requests to perform
+          
+          [default: 100]
+
+  -c, --concurrency &lt;CONCURRENCY&gt;
+          Number of concurrent requests at a time
+          
+          [default: &quot;one per core&quot;]
+
+  -z, --duration &lt;DURATION&gt;
+          Duration of the test, e.g. 10s, 3m, 2h (mutually exclusive with -n)
+
+  -m, --method &lt;METHOD&gt;
+          HTTP method, e.g. GET, POST, PUT, DELETE
+          
+          [default: GET]
+
+  -H, --headers &lt;HEADERS&gt;
+          HTTP headers, e.g. -H &#x27;Accept: application/json&#x27;
+
+  -t, --timeout &lt;TIMEOUT&gt;
+          Time in seconds to wait for a response
+          
+          [default: 20]
+
+      --warmup &lt;TIME&gt;
+          Send for this long before measuring, e.g. 5s: connections open, caches fill and JITs settle without counting against the run
+
+      --threads &lt;N|auto&gt;
+          Threads sending requests (default 1), or &quot;auto&quot; to add one whenever those sending are all busy. One sends 100k requests a second or more; the dashboard says when it is the limit
+
+      --rate &lt;PER_SECOND&gt;
+          Start this many requests a second, spread evenly, instead of as many as the concurrency allows; -c is then the most in flight at once, and pepe says when it holds the rate back
+
+  -d, --body &lt;BODY&gt;
+          HTTP request body
+
+  -u, --user-agent &lt;USER_AGENT&gt;
+          User-Agent string, default is pepe/{version}
+
+  -p, --proxy &lt;PROXY&gt;
+          Proxy server URL: http://user:pass@host:port or socks5://host:port
+
+  -k, --insecure
+          Accept invalid TLS certificates (self-signed, expired, wrong host)
+
+      --disable-compression
+          Disable HTTP compression, e.g. gzip
+
+      --disable-keepalive
+          Disable HTTP keepalive, e.g. Connection: close
+
+      --disable-redirects
+          Prevent http redirects
+
+      --json
+          Output results in JSON format
+
+      --trace-header &lt;NAME&gt;
+          Response header holding the request id to show for the slowest requests and in the inspector, so they can be found in the server&#x27;s logs; without it, X-Request-Id, traceparent, CF-Ray, X-Amzn-Trace-Id and other common ones are looked for
+
+      --snapshot &lt;FILE&gt;
+          Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run&#x27;s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run
+
+      --fail-if &lt;CONDITION&gt;
+          End with exit code 4 when the run crosses this, for CI and scripts: &#x27;p99 &gt; 300ms&#x27;, &#x27;errors &gt; 1%&#x27;; repeat for more. The report is still printed. (pepe ping has --slo for the same.)
+
+      --metrics &lt;ADDR&gt;
+          Serve the live numbers for Prometheus at http://ADDR/metrics while the run goes, e.g. :9100 or 127.0.0.1:9100, so a soak run or a long ping shows up in Grafana next to the server&#x27;s own
+
+  -i, --setup
+          Open the setup screen to review or change the settings before starting (it opens by itself when no URL is given)
+
+      --config &lt;FILE&gt;
+          Read settings from this file instead of ./pepe.toml; flags on the command line win over it
+
+      --write-config &lt;FILE&gt;
+          Write the settings as they stand to this file, as a pepe.toml, and exit</code></pre>
+<h2 id="pepe-completions">pepe completions <a class="anchor" href="#pepe-completions" aria-label="Link to this section">#</a></h2>
+<pre class="lang-text"><code>Tab completion for your shell: print the script, or --install it
+
+Usage: pepe completions [OPTIONS] [SHELL]
+
+Arguments:
+  [SHELL]
+          bash, zsh, fish or powershell; the current shell when left out
+          
+          [possible values: bash, zsh, fish, powershell]
+
+Options:
+      --install
+          Put the script and the man pages in place and add the line the shell&#x27;s startup file needs, so tab completion works in the next shell
+
+      --dry-run
+          With --install: say what would be done, and do nothing
+
+  -h, --help
+          Print help
+
+  -n, --number &lt;NUMBER&gt;
+          Number of requests to perform
+          
+          [default: 100]
+
+  -c, --concurrency &lt;CONCURRENCY&gt;
+          Number of concurrent requests at a time
+          
+          [default: &quot;one per core&quot;]
+
+  -z, --duration &lt;DURATION&gt;
+          Duration of the test, e.g. 10s, 3m, 2h (mutually exclusive with -n)
+
+  -m, --method &lt;METHOD&gt;
+          HTTP method, e.g. GET, POST, PUT, DELETE
+          
+          [default: GET]
+
+  -H, --headers &lt;HEADERS&gt;
+          HTTP headers, e.g. -H &#x27;Accept: application/json&#x27;
+
+  -t, --timeout &lt;TIMEOUT&gt;
+          Time in seconds to wait for a response
+          
+          [default: 20]
+
+      --warmup &lt;TIME&gt;
+          Send for this long before measuring, e.g. 5s: connections open, caches fill and JITs settle without counting against the run
+
+      --threads &lt;N|auto&gt;
+          Threads sending requests (default 1), or &quot;auto&quot; to add one whenever those sending are all busy. One sends 100k requests a second or more; the dashboard says when it is the limit
+
+      --rate &lt;PER_SECOND&gt;
+          Start this many requests a second, spread evenly, instead of as many as the concurrency allows; -c is then the most in flight at once, and pepe says when it holds the rate back
+
+  -d, --body &lt;BODY&gt;
+          HTTP request body
+
+  -u, --user-agent &lt;USER_AGENT&gt;
+          User-Agent string, default is pepe/{version}
+
+  -p, --proxy &lt;PROXY&gt;
+          Proxy server URL: http://user:pass@host:port or socks5://host:port
+
+  -k, --insecure
+          Accept invalid TLS certificates (self-signed, expired, wrong host)
+
+      --disable-compression
+          Disable HTTP compression, e.g. gzip
+
+      --disable-keepalive
+          Disable HTTP keepalive, e.g. Connection: close
+
+      --disable-redirects
+          Prevent http redirects
+
+      --json
+          Output results in JSON format
+
+      --trace-header &lt;NAME&gt;
+          Response header holding the request id to show for the slowest requests and in the inspector, so they can be found in the server&#x27;s logs; without it, X-Request-Id, traceparent, CF-Ray, X-Amzn-Trace-Id and other common ones are looked for
+
+      --snapshot &lt;FILE&gt;
+          Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run&#x27;s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run
+
+      --fail-if &lt;CONDITION&gt;
+          End with exit code 4 when the run crosses this, for CI and scripts: &#x27;p99 &gt; 300ms&#x27;, &#x27;errors &gt; 1%&#x27;; repeat for more. The report is still printed. (pepe ping has --slo for the same.)
+
+      --metrics &lt;ADDR&gt;
+          Serve the live numbers for Prometheus at http://ADDR/metrics while the run goes, e.g. :9100 or 127.0.0.1:9100, so a soak run or a long ping shows up in Grafana next to the server&#x27;s own
+
+  -i, --setup
+          Open the setup screen to review or change the settings before starting (it opens by itself when no URL is given)
+
+      --config &lt;FILE&gt;
+          Read settings from this file instead of ./pepe.toml; flags on the command line win over it
+
+      --write-config &lt;FILE&gt;
+          Write the settings as they stand to this file, as a pepe.toml, and exit</code></pre>
+    </main>
+    <aside class="toc" aria-label="On this page"><div class="lab">on this page</div><a href="#pepe" class="h2">pepe</a><a href="#pepe-ping" class="h2">pepe ping</a><a href="#pepe-ramp" class="h2">pepe ramp</a><a href="#pepe-api" class="h2">pepe api</a><a href="#pepe-replay" class="h2">pepe replay</a><a href="#pepe-flow" class="h2">pepe flow</a><a href="#pepe-logs" class="h2">pepe logs</a><a href="#pepe-compare" class="h2">pepe compare</a><a href="#pepe-schema" class="h2">pepe schema</a><a href="#pepe-self-update" class="h2">pepe self-update</a><a href="#pepe-completions" class="h2">pepe completions</a></aside>
+  </div>
+  <footer class="chips"><span><kbd>?</kbd>every screen lists its keys</span><span><kbd>q</kbd>leaves the report in your shell</span><span class="by">MIT · <a href="https://github.com/omarmhaimdat/pepe">omarmhaimdat/pepe</a></span></footer>
+</div>
+</body>
+</html>

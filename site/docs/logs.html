@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>nginx logs · pepe docs</title>
+<meta name="description" content="What the server already knows about its traffic: pepe logs reads nginx&#x27;s access and error logs and says how busy the server is now against how busy it has been.">
+<link rel="canonical" href="https://pepe.mhaimdat.com/docs/logs.html">
+<link rel="icon" href="../assets/logo.svg" type="image/svg+xml">
+<meta name="theme-color" content="#140f0d">
+<meta property="og:type" content="article">
+<meta property="og:title" content="nginx logs · pepe docs">
+<meta property="og:description" content="What the server already knows about its traffic: pepe logs reads nginx&#x27;s access and error logs and says how busy the server is now against how busy it has been.">
+<meta property="og:image" content="https://pepe.mhaimdat.com/img/og.png">
+<link rel="stylesheet" href="docs.css">
+</head>
+<body>
+<div class="term">
+  <header class="title">
+    <a class="name" href="../">pepe</a><a href="index.html">docs</a>
+    <nav aria-label="Site"><a href="../">install</a><a href="https://github.com/omarmhaimdat/pepe">github</a><a href="https://github.com/omarmhaimdat/pepe/releases">releases</a></nav>
+  </header>
+  <div class="cols">
+    <aside class="side" aria-label="Pages"><a href="index.html">Overview</a><a href="install.html">Install</a><a href="load-test.html">Load testing</a><a href="dashboard.html">The dashboard</a><a href="ramp.html">Ramp</a><a href="api.html">OpenAPI</a><a href="flow.html">Flows</a><a href="replay.html">Replay</a><a href="ping.html">Ping</a><a href="logs.html" class="on">nginx logs</a><a href="compare.html">Compare</a><a href="output.html">Output and exit codes</a><a href="ci.html">CI and Docker</a><a href="agents.html">Agents and scripts</a><a href="benchmarks.html">Benchmarks</a><a href="reference.html">Command reference</a></aside>
+    <main>
+<h1>Reading nginx logs</h1>
+<p><img src="../assets/logs.gif" alt="Reading nginx logs: the dashboard with the rate now and a verdict, then traffic by the hour, paths, errors and the log"></p>
+<p>What the server already knows about its traffic: <code>pepe logs</code> reads nginx's access and error logs and says how busy the server is now against how busy it has been.</p>
+<pre class="lang-bash"><code>pepe logs /var/log/nginx/access.log /var/log/nginx/error.log
+pepe logs                                      # nginx&#x27;s own, in /var/log/nginx
+zcat access.log.*.gz | pepe logs -
+docker compose logs -f -n 1000 nginx | pepe logs
+pepe logs access.log --since 24h --json &gt; traffic.json</code></pre>
+<h2 id="how-it-reads">How it reads <a class="anchor" href="#how-it-reads" aria-label="Link to this section">#</a></h2>
+<p>At a terminal a log that is being written is shown live: the screen starts five minutes back, so that now is right at once, and follows the files as they are written, through rotation. <code>--since 24h</code> starts further back and <code>--all</code> reads everything first; either way the place to start is found in the file without reading what is before it. A log whose last line is older than five minutes has no now, and is read whole. Piped out, or with <code>--json</code>, the files are read to the end and a report is printed.</p>
+<p>Lines are counted as a stream, so memory doesn't grow with the log: every second of the last hour, a day of minutes, ninety days of hours and ten years of days are kept, with capped tables of paths, clients and user agents. What a file already has is read by every core at once, some gigabytes a second, and what is appended after that by one. Rotated files can be given in any order. What is piped in is followed too, until its writer ends, and the <code>nginx-1  | </code> that <code>docker compose logs</code> puts in front of each line is left out, with the colour it writes into a pipe.</p>
+<h2 id="now-against-before">Now against before <a class="anchor" href="#now-against-before" aria-label="Link to this section">#</a></h2>
+<p><b>Now</b> is the request rate over the last minute (<code>--window</code>) of the log's own timestamps. A log whose last line is older than five minutes isn't being written, and is held at its last line instead of the clock. Each minute, hour and day has its requests, its rate, its busiest second, its 4xx and 5xx shares, its mean request time and its error log lines, and how now compares: <code>+12%</code>, <code>×3.4</code>, <code>÷2.5</code>. The cards on top say what a usual slot sees (the median), which was the busiest, and what the same minute an hour ago, the same hour a day ago or the same day a week ago saw.</p>
+<h2 id="views">Views <a class="anchor" href="#views" aria-label="Link to this section">#</a></h2>
+<table><thead><tr><th>View</th><th>Shows</th></tr></thead><tbody><tr><td><b>Dashboard</b></td><td>Opens first. The rate now, the share answering 5xx and the request time drawn large; a verdict in a word (Steady, Busy, Quiet, Degraded, Failing) with what fails and what the error log says of it; traffic as a bar for every few seconds of the last minutes or hour, 4xx and 5xx in their colours; the top paths, the status codes, the error log's messages and the newest lines</td></tr><tr><td><b>Traffic</b></td><td>A bar per slot with the rate now drawn across them, and the table of slots; <code>m</code>, <code>h</code>, <code>d</code> switch between minutes, hours and days</td></tr><tr><td><b>Paths</b></td><td>The paths by requests, 5xx, 4xx or mean time (<code>s</code>), with status codes, clients, user agents, methods and query parameter names beside them</td></tr><tr><td><b>Errors</b></td><td>The error log's messages grouped by cause, most frequent first, each with the first line that said it; the paths answering 5xx and 4xx</td></tr><tr><td><b>Log</b></td><td>The last 2,000 lines of all the files in time order; <code>x</code> keeps failures, <code>/</code> searches, <code>enter</code> shows everything read from a line, query parameters one by one</td></tr></tbody></table>
+<h3 id="keys">Keys <a class="anchor" href="#keys" aria-label="Link to this section">#</a></h3>
+<table><thead><tr><th>Key</th><th>Action</th></tr></thead><tbody><tr><td><code>tab</code> / <code>←</code> <code>→</code> / <code>1</code>-<code>5</code></td><td>Next or previous view, or one by number</td></tr><tr><td><code>m</code> <code>h</code> <code>d</code></td><td>Traffic per minute, hour or day; <code>g</code> goes round</td></tr><tr><td><code>↑</code> <code>↓</code> / <code>j</code> <code>k</code></td><td>Pick a slot, a message or a line; <code>PgUp</code> <code>PgDn</code> ten at a time, <code>home</code> <code>end</code> the ends</td></tr><tr><td><code>s</code></td><td>Paths: most requested, most 5xx, most 4xx, slowest</td></tr><tr><td><code>x</code></td><td>Log: only failed requests and error log lines</td></tr><tr><td><code>/</code></td><td>Log: search the lines; <code>c</code> clears the filters</td></tr><tr><td><code>enter</code></td><td>Log: everything read from the picked line</td></tr><tr><td><code>esc</code></td><td>Let go of the pick, then quit</td></tr><tr><td><code>?</code></td><td>Show all keys</td></tr><tr><td><code>q</code> / <code>Ctrl-C</code></td><td>Quit; the report is left in your shell</td></tr></tbody></table>
+<h2 id="formats">Formats <a class="anchor" href="#formats" aria-label="Link to this section">#</a></h2>
+<p>Access logs are read as nginx's <code>combined</code> format (Apache's too), with <code>rt=</code> and <code>urt=</code> timings after it if they are there, or as JSON lines under nginx's variable names or Caddy's. A log with a <code>log_format</code> of its own needs it said, as nginx.conf has it, on one line:</p>
+<pre class="lang-bash"><code>pepe logs access.log --format &#x27;$remote_addr [$time_local] &quot;$request&quot; $status $body_bytes_sent $request_time $upstream_response_time&#x27;</code></pre>
+<p><code>$time_local</code>, <code>$time_iso8601</code>, <code>$msec</code>, <code>$request</code> (or <code>$request_method</code> and <code>$request_uri</code>), <code>$status</code>, <code>$body_bytes_sent</code>, <code>$remote_addr</code>, <code>$host</code>, <code>$http_user_agent</code>, <code>$request_time</code> and <code>$upstream_response_time</code> are used; the rest are shown when a line is opened. Lines that couldn't be read are counted and the first is shown. Numbers and ids in a path count as one (<code>/items/*</code>) unless <code>--exact-paths</code> is given. The error log names no time zone, so its times are taken to be this machine's.</p>
+<h2 id="flags">Flags <a class="anchor" href="#flags" aria-label="Link to this section">#</a></h2>
+<table><thead><tr><th>Flag</th><th>Default</th><th>What it does</th></tr></thead><tbody><tr><td><code>FILES...</code></td><td>nginx's own</td><td>Access and error logs, rotated ones too; <code>-</code> reads what is piped in</td></tr><tr><td><code>--format &lt;LOG_FORMAT&gt;</code></td><td>combined</td><td>The access log's <code>log_format</code>, on one line</td></tr><tr><td><code>--window &lt;TIME&gt;</code></td><td>60s</td><td>What "now" is measured over</td></tr><tr><td><code>--since &lt;TIME&gt;</code></td><td></td><td>Leave out what is older than this: <code>90m</code>, <code>24h</code>, <code>7d</code></td></tr><tr><td><code>--all</code></td><td></td><td>Read everything before following, rather than starting five minutes back</td></tr><tr><td><code>--exact-paths</code></td><td></td><td>Count <code>/items/1</code> and <code>/items/2</code> apart</td></tr><tr><td><code>--rows &lt;N&gt;</code></td><td>10</td><td>Rows in each table of the report</td></tr></tbody></table>
+<p><code>--json</code> prints the report as JSON (with <code>schema_version</code>); piped, the text report.</p>
+    </main>
+    <aside class="toc" aria-label="On this page"><div class="lab">on this page</div><a href="#how-it-reads" class="h2">How it reads</a><a href="#now-against-before" class="h2">Now against before</a><a href="#views" class="h2">Views</a><a href="#keys" class="h3">Keys</a><a href="#formats" class="h2">Formats</a><a href="#flags" class="h2">Flags</a></aside>
+  </div>
+  <footer class="chips"><span><kbd>?</kbd>every screen lists its keys</span><span><kbd>q</kbd>leaves the report in your shell</span><span class="by">MIT · <a href="https://github.com/omarmhaimdat/pepe">omarmhaimdat/pepe</a></span></footer>
+</div>
+</body>
+</html>

@@ -225,7 +225,7 @@ fn main_page() -> String {
 }
 
 /// Each subcommand's page: (subcommand, page name, how it's typed)
-const SUBCOMMANDS: [(&str, &str, &str); 9] = [
+const SUBCOMMANDS: [(&str, &str, &str); 10] = [
     ("ping", "pepe-ping", "pepe ping"),
     ("ramp", "pepe-ramp", "pepe ramp"),
     ("api", "pepe-api", "pepe api"),
@@ -233,6 +233,7 @@ const SUBCOMMANDS: [(&str, &str, &str); 9] = [
     ("flow", "pepe-flow", "pepe flow"),
     ("logs", "pepe-logs", "pepe logs"),
     ("compare", "pepe-compare", "pepe compare"),
+    ("schema", "pepe-schema", "pepe schema"),
     ("self-update", "pepe-self-update", "pepe self-update"),
     ("completions", "pepe-completions", "pepe completions"),
 ];
@@ -263,6 +264,37 @@ fn subcommand_pages() -> Vec<(String, String)> {
         .collect()
 }
 
+/// `docs/reference.md`: every command's `--help`, for the documentation
+/// site (site/build-docs.py turns it into a page)
+fn reference_markdown() -> String {
+    let mut out = String::from(
+        "# Command reference\n\n\
+         Every command and flag, as `--help` prints them. Generated from the \
+         command definition by `cargo test`, so it can't drift from the \
+         binary; the pages before this one say what the flags are for.\n\n\
+         The options under `pepe` are global: they work after any \
+         subcommand too (`pepe ping -H 'Accept: text/html' …`), where \
+         they make sense.\n",
+    );
+    let mut command = command();
+    let mut pages = vec![("pepe".to_string(), command.render_long_help().to_string())];
+    for &(sub, _, typed) in &SUBCOMMANDS {
+        let mut page = command
+            .find_subcommand(sub)
+            .unwrap()
+            .clone()
+            .bin_name(typed);
+        pages.push((typed.to_string(), page.render_long_help().to_string()));
+    }
+    for (name, help) in pages {
+        out.push_str(&format!(
+            "\n## {name}\n\n```text\n{}\n```\n",
+            help.trim_end()
+        ));
+    }
+    out
+}
+
 /// Every file under contrib/, with its content
 fn files() -> Vec<(String, String)> {
     let mut files: Vec<(String, String)> = SHELLS
@@ -276,6 +308,22 @@ fn files() -> Vec<(String, String)> {
             .map(|(name, page)| (format!("man/{name}"), page)),
     );
     files
+}
+
+#[test]
+fn docs_reference_is_current() {
+    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("docs/reference.md");
+    let content = reference_markdown();
+    if std::env::var_os("UPDATE_CONTRIB").is_some() {
+        std::fs::write(&path, &content).unwrap();
+        return;
+    }
+    let current = std::fs::read_to_string(&path).unwrap_or_default();
+    assert_eq!(
+        current.replace("\r\n", "\n"),
+        content,
+        "docs/reference.md is out of date: run UPDATE_CONTRIB=1 cargo test contrib"
+    );
 }
 
 #[test]

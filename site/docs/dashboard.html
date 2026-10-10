@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The dashboard · pepe docs</title>
+<meta name="description" content="What a run shows while it goes, how to read it, and every key.">
+<link rel="canonical" href="https://pepe.mhaimdat.com/docs/dashboard.html">
+<link rel="icon" href="../assets/logo.svg" type="image/svg+xml">
+<meta name="theme-color" content="#140f0d">
+<meta property="og:type" content="article">
+<meta property="og:title" content="The dashboard · pepe docs">
+<meta property="og:description" content="What a run shows while it goes, how to read it, and every key.">
+<meta property="og:image" content="https://pepe.mhaimdat.com/img/og.png">
+<link rel="stylesheet" href="docs.css">
+</head>
+<body>
+<div class="term">
+  <header class="title">
+    <a class="name" href="../">pepe</a><a href="index.html">docs</a>
+    <nav aria-label="Site"><a href="../">install</a><a href="https://github.com/omarmhaimdat/pepe">github</a><a href="https://github.com/omarmhaimdat/pepe/releases">releases</a></nav>
+  </header>
+  <div class="cols">
+    <aside class="side" aria-label="Pages"><a href="index.html">Overview</a><a href="install.html">Install</a><a href="load-test.html">Load testing</a><a href="dashboard.html" class="on">The dashboard</a><a href="ramp.html">Ramp</a><a href="api.html">OpenAPI</a><a href="flow.html">Flows</a><a href="replay.html">Replay</a><a href="ping.html">Ping</a><a href="logs.html">nginx logs</a><a href="compare.html">Compare</a><a href="output.html">Output and exit codes</a><a href="ci.html">CI and Docker</a><a href="agents.html">Agents and scripts</a><a href="benchmarks.html">Benchmarks</a><a href="reference.html">Command reference</a></aside>
+    <main>
+<h1>The dashboard</h1>
+<p>What a run shows while it goes, how to read it, and every key.</p>
+<p><img src="../assets/run.gif" alt="pepe load-testing a server: the live dashboard, the request log, and the verdict"></p>
+<h2 id="views">Views <a class="anchor" href="#views" aria-label="Link to this section">#</a></h2>
+<p>Three views, four in API mode with <b>Endpoints</b> in front. <code>tab</code>, <code>←</code> <code>→</code> or <code>1</code> <code>2</code> <code>3</code> switch between them.</p>
+<ul><li><b>Live</b>: the headline numbers (requests, throughput, p50, p99, errors), a latency heatmap with time across and latency up (brighter cells mean more requests took that long) with p50 and p99 marked, throughput per second, and a panel with the detailed numbers. Pepe, the chili in the corner, reacts to how the run is going.</li><li><b>Stats</b>: every number pepe collects, the test setup, and the latency distribution. When the target sends <code>Server-Timing</code>, a card shows its own time against the median measured here and each segment's p50 and p99. Another lists the five slowest responses with their request ids, taken from <code>X-Request-Id</code>, <code>traceparent</code>, <code>CF-Ray</code>, <code>X-Amzn-Trace-Id</code> and other common headers, or the one named with <code>--trace-header</code>.</li><li><b>Requests</b>: the last 2,000 requests (and older failures, kept apart so a burst of successes can't push them out), filterable by status, latency and text. <code>enter</code> on one inspects it.</li><li><b>Endpoints</b> (API mode), <b>Steps</b> (a flow) or <b>URLs</b> (a replay): one row per endpoint, step or URL with requests, throughput, p50, p99, errors and status codes; <code>enter</code> on a row shows its requests.</li></ul>
+<h2 id="the-header-and-the-footer">The header and the footer <a class="anchor" href="#the-header-and-the-footer" aria-label="Link to this section">#</a></h2>
+<p>The header has the target, the concurrency, the elapsed time against the plan, and, during a warm-up, <code>warming up</code> with the time left. The footer has the keys that matter now, and notices as they happen: a change of concurrency, the sending thread past 90% of a core, a rate the concurrency can't carry ("behind the rate: 410 of 500 req/s · all 8 in flight; try -c 25"), and anomalies.</p>
+<h2 id="anomalies-and-the-verdict">Anomalies and the verdict <a class="anchor" href="#anomalies-and-the-verdict" aria-label="Link to this section">#</a></h2>
+<p>While the run goes, each second is compared with the thirty before it. A p99 that jumps, throughput that falls or errors that appear are called out in the footer as they happen ("p99 jumped 4.5× to 45ms at 26s"), repeated in the verdict and listed in the JSON report under <code>summary.anomalies</code>.</p>
+<p>When the run ends, the header turns into a verdict, <b>Healthy</b>, <b>Degraded</b> or <b>Failing</b>, with findings:</p>
+<ul><li>failed requests, by cause, with what the first response of each kind said;</li><li>two separate latency groups (a bimodal distribution), which usually means two paths, two backends or a cache;</li><li>a long tail: a p99 many times the median;</li><li>throughput or latency drifting over the run;</li><li>pepe's own thread being the limit, with <code>--threads</code> suggested;</li><li>a <code>--rate</code> that the concurrency couldn't carry, and what would.</li></ul>
+<p>The same summary is printed to your shell when you quit.</p>
+<h2 id="the-inspector">The inspector <a class="anchor" href="#the-inspector" aria-label="Link to this section">#</a></h2>
+<p><code>enter</code> on a request opens it: status, total time split into time to first byte and body download, how it ranks in the run, DNS, server address, protocol, cache status, the request as sent, and the full response headers and body, with JSON, HTML and XML indented and highlighted. <code>↑</code>/<code>↓</code>, the trackpad, <code>u</code>/<code>d</code> and <code>g</code>/<code>G</code> scroll the response; <code>v</code> switches between formatted and raw; <code>←</code>/<code>→</code> walk to the newer or older request; <code>esc</code> goes back.</p>
+<p>Up to 1,000 responses a second are kept in full, an even sample above that: those are marked <code>●</code>, and <code>[</code>/<code>]</code> jump to the nearest one kept in full. The memory the kept responses may use is bounded (32 MB), the oldest dropped first.</p>
+<h2 id="filters">Filters <a class="anchor" href="#filters" aria-label="Link to this section">#</a></h2>
+<p>On the Requests view: <code>f</code> cycles the status filter (2xx, 3xx, 4xx, 5xx, no response, failed), <code>l</code> the latency filter (at or above p50, p90 or p99, refreshed as results arrive), <code>/</code> searches the status and response text, <code>x</code> keeps only failed requests, and <code>c</code> clears every filter. <code>↑</code> <code>↓</code> (or <code>j</code> <code>k</code>), <code>PgUp</code> <code>PgDn</code>, <code>home</code> and <code>end</code> move through the log; the newest line is followed until you pick one, and <code>esc</code> lets go of the pick.</p>
+<h2 id="keys">Keys <a class="anchor" href="#keys" aria-label="Link to this section">#</a></h2>
+<table><thead><tr><th>Key</th><th>Action</th></tr></thead><tbody><tr><td><code>space</code> / <code>p</code></td><td>Pause or resume sending; a timed run's clock stops while paused</td></tr><tr><td><code>+</code> / <code>-</code></td><td>Raise or lower concurrency by about 10%, live</td></tr><tr><td><code>s</code> / <code>i</code></td><td>Stop sending and keep the results on screen</td></tr><tr><td><code>r</code></td><td>Restart with the same settings (and the current concurrency)</td></tr><tr><td><code>e</code></td><td>Back to the setup screen (or, in API mode, the plan), to change the settings and run again</td></tr><tr><td><code>tab</code> / <code>←</code> <code>→</code> / <code>1</code> <code>2</code> <code>3</code></td><td>Switch view</td></tr><tr><td><code>↑</code> <code>↓</code> / <code>j</code> <code>k</code>, <code>PgUp</code> <code>PgDn</code>, <code>home</code> <code>end</code></td><td>Select a request in the log (newer / older)</td></tr><tr><td><code>f</code></td><td>Filter requests by status: 2xx, 3xx, 4xx, 5xx, no response, failed</td></tr><tr><td><code>l</code></td><td>Filter requests by latency: at or above p50, p90 or p99</td></tr><tr><td><code>/</code></td><td>Search the status and response text</td></tr><tr><td><code>x</code> / <code>c</code></td><td>Show only failed requests / clear all filters</td></tr><tr><td><code>enter</code></td><td>Inspect the selected request: <code>↑</code>/<code>↓</code> (or the trackpad), <code>u</code>/<code>d</code> and <code>g</code>/<code>G</code> scroll the response, <code>←</code>/<code>→</code> walk to the newer/older request, <code>[</code>/<code>]</code> jump to the nearest one kept in full, <code>v</code> switches between formatted and raw, <code>esc</code> goes back</td></tr><tr><td><code>?</code></td><td>Show all keys, here and on the setup (<code>F1</code>), ramp, API and ping screens</td></tr><tr><td><code>q</code> / <code>esc</code> / <code>Ctrl-C</code></td><td>Quit; the verdict is left in your shell</td></tr></tbody></table>
+<p>The ramp, plan, logs and ping screens have keys of their own, on their pages: <a href="ramp.html#keys">Ramp</a>, <a href="api.html#the-plan-screen">OpenAPI</a>, <a href="logs.html#keys">nginx logs</a>, <a href="ping.html#keys">Ping</a>. The setup screen's are on <a href="load-test.html#the-setup-screen">Load testing</a>.</p>
+<h2 id="size-and-colour">Size and colour <a class="anchor" href="#size-and-colour" aria-label="Link to this section">#</a></h2>
+<p>The dashboard draws at any size from 60×18 up and says so below it; charts and tables take the room they get. It redraws ten times a second while live, on input only once the run is over, so it costs no CPU while idle, and it survives whatever else writes to the terminal. Colour follows the terminal: pepe's own palette where true colour is available, the terminal's 256 colours otherwise, <code>PEPE_THEME=light</code> for a light background, <code>NO_COLOR</code> for none (<a href="install.html#themes-and-colour">Install: themes</a>).</p>
+<h2 id="without-a-terminal">Without a terminal <a class="anchor" href="#without-a-terminal" aria-label="Link to this section">#</a></h2>
+<p>Piped or redirected, there is no dashboard: the run goes to its end and the same verdict is printed. <code>--json</code> prints the report instead. See <a href="output.html">Output and exit codes</a>.</p>
+    </main>
+    <aside class="toc" aria-label="On this page"><div class="lab">on this page</div><a href="#views" class="h2">Views</a><a href="#the-header-and-the-footer" class="h2">The header and the footer</a><a href="#anomalies-and-the-verdict" class="h2">Anomalies and the verdict</a><a href="#the-inspector" class="h2">The inspector</a><a href="#filters" class="h2">Filters</a><a href="#keys" class="h2">Keys</a><a href="#size-and-colour" class="h2">Size and colour</a><a href="#without-a-terminal" class="h2">Without a terminal</a></aside>
+  </div>
+  <footer class="chips"><span><kbd>?</kbd>every screen lists its keys</span><span><kbd>q</kbd>leaves the report in your shell</span><span class="by">MIT · <a href="https://github.com/omarmhaimdat/pepe">omarmhaimdat/pepe</a></span></footer>
+</div>
+</body>
+</html>

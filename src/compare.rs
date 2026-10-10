@@ -85,6 +85,8 @@ pub struct Finding {
 
 #[derive(Debug, Clone, Serialize)]
 pub struct Comparison {
+    /// The shape of this report (see `pepe schema compare`)
+    pub schema_version: u32,
     pub verdict: Outcome,
     pub regression: bool,
     pub before: Side,
@@ -581,6 +583,7 @@ pub fn compare(before: &Side, after: &Side) -> Comparison {
     }
     let badge = badge(outcome, &changes, before, after);
     Comparison {
+        schema_version: 1,
         verdict: outcome,
         regression: outcome.is_regression(),
         before: before.clone(),
