@@ -284,7 +284,13 @@ pub fn verdict(m: &Metrics, samples: &[Sample], interrupted: bool) -> Verdict {
         }
     }
 
-    // Trends. The first and last buckets are ramp-up and drain; skip them.
+    // Trends. The first and last buckets are ramp-up and drain; skip them,
+    // and whatever empty seconds trail the last request
+    let end = samples
+        .iter()
+        .rposition(|s| s.rps > 0.0)
+        .map_or(0, |i| i + 1);
+    let samples = &samples[..end];
     let steady = samples
         .get(1..samples.len().saturating_sub(1))
         .unwrap_or_default();
@@ -350,6 +356,92 @@ pub fn verdict(m: &Metrics, samples: &[Sample], interrupted: bool) -> Verdict {
         notes.push(note(Level::Healthy, "Stopped early".into()));
     }
     finish(notes)
+}
+
+/// A phase's share of the request worth a word
+const PHASE_SHARE: f64 = 0.25;
+/// DNS lookups slower than this are slow whatever the rest takes
+const SLOW_DNS: Duration = Duration::from_millis(50);
+/// Bodies this long are worth a word when downloading them is the time
+const LARGE_BODY: f64 = 32.0 * 1024.0;
+/// Connections opened per unit of concurrency past which they aren't
+/// being kept
+const RECONNECTS: u64 = 3;
+/// Share of responses from a cache past which the origin wasn't measured
+const CACHED: f64 = 0.5;
+
+/// Where the time went, said when it is somewhere worth knowing: opening
+/// connections, DNS, the download, a cache answering. `connects` is how
+/// long the run's connections took to open, when it was measured.
+pub fn phase_notes(
+    m: &Metrics,
+    connects: Option<&Histogram>,
+    keepalive: bool,
+    concurrency: usize,
+) -> Vec<Note> {
+    let mut notes = Vec::new();
+    if m.total == 0 || m.success == 0 {
+        return notes;
+    }
+    let note = |level, text: String| Note { level, text };
+    let p50 = m.percentile(50.0).as_micros() as f64;
+    if let Some(connects) = connects.filter(|c| c.count() > 0) {
+        let connect = connects.percentile(50.0) as f64;
+        if !keepalive && p50 > 0.0 && connect / p50 >= PHASE_SHARE {
+            notes.push(note(
+                Level::Healthy,
+                format!(
+                    "Connecting is {} of each request: every request opens a connection (--disable-keepalive)",
+                    pct(connect / p50 * 100.0)
+                ),
+            ));
+        } else if keepalive
+            && connects.count() >= RECONNECTS * concurrency as u64
+            && connects.count() >= 20
+        {
+            notes.push(note(
+                Level::Degraded,
+                format!(
+                    "{} connections opened for {} in flight: the server closes them, so keep-alive isn't holding",
+                    format::count(connects.count()),
+                    concurrency
+                ),
+            ));
+        }
+    }
+    let dns = m.avg_dns_lookup();
+    if dns >= SLOW_DNS {
+        notes.push(note(
+            Level::Degraded,
+            format!("DNS lookups take {} on average", format::latency(dns)),
+        ));
+    }
+    let download = m.phase(crate::metrics::Phase::Download);
+    let per_response = m.bytes as f64 / m.success as f64;
+    if download.count() > 0 && p50 > 0.0 {
+        let share = download.percentile(50.0) as f64 / p50;
+        if share >= PHASE_SHARE && per_response >= LARGE_BODY {
+            notes.push(note(
+                Level::Healthy,
+                format!(
+                    "Downloading {} bodies is {} of each request",
+                    format::bytes(per_response),
+                    pct(share * 100.0)
+                ),
+            ));
+        }
+    }
+    let cached = m.cache_hits as f64 / m.total as f64;
+    if cached >= CACHED {
+        notes.push(note(
+            Level::Healthy,
+            format!(
+                "{} of responses came from a cache, by their headers: the origin wasn't measured for those",
+                pct(cached * 100.0)
+            ),
+        ));
+    }
+    notes
 }
 
 fn finish(notes: Vec<Note>) -> Verdict {
@@ -516,6 +608,65 @@ fn rate(v: f64) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn phase_notes_say_where_the_time_went() {
+        use crate::cache::CacheStatus;
+        use crate::response::ResponseStats;
+        let mut m = Metrics::default();
+        for _ in 0..100 {
+            m.record(&ResponseStats {
+                duration: Duration::from_millis(40),
+                status_code: Some(reqwest::StatusCode::OK),
+                ttfb: Some(Duration::from_millis(10)),
+                body_bytes: 100_000,
+                cache_status: Some(CacheStatus::Hit),
+                ..Default::default()
+            });
+        }
+        let mut connects = Histogram::default();
+        for _ in 0..100 {
+            connects.record(15_000);
+        }
+        // A new connection per request: connecting is a share of each
+        let texts = |notes: Vec<Note>| notes.into_iter().map(|n| n.text).collect::<Vec<_>>();
+        let notes = texts(phase_notes(&m, Some(&connects), false, 10));
+        assert!(
+            notes
+                .iter()
+                .any(|t| t.starts_with("Connecting is") && t.contains("--disable-keepalive")),
+            "{notes:?}"
+        );
+        assert!(
+            notes
+                .iter()
+                .any(|t| t.starts_with("Downloading") && t.contains("of each request")),
+            "{notes:?}"
+        );
+        assert!(
+            notes.iter().any(|t| t.contains("came from a cache")),
+            "{notes:?}"
+        );
+        // Kept alive, yet a connection per request: the server closes them
+        let notes = texts(phase_notes(&m, Some(&connects), true, 10));
+        assert!(
+            notes
+                .iter()
+                .any(|t| t.starts_with("100 connections opened for 10 in flight")),
+            "{notes:?}"
+        );
+        // Ten connections for ten in flight is as it should be
+        let mut few = Histogram::default();
+        for _ in 0..10 {
+            few.record(15_000);
+        }
+        let notes = texts(phase_notes(&m, Some(&few), true, 10));
+        assert!(
+            !notes.iter().any(|t| t.contains("connections opened")),
+            "{notes:?}"
+        );
+        assert!(phase_notes(&Metrics::default(), None, true, 1).is_empty());
+    }
     use crate::response::{ErrorKind, ResponseStats};
     use reqwest::StatusCode;
     use std::time::Duration;

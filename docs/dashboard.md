@@ -27,6 +27,7 @@ When the run ends, the header turns into a verdict, **Healthy**, **Degraded** or
 - two separate latency groups (a bimodal distribution), which usually means two paths, two backends or a cache;
 - a long tail: a p99 many times the median;
 - throughput or latency drifting over the run;
+- where the time went, when it is somewhere worth knowing: connecting being a quarter or more of each request when every request opens a connection; connections opened many times over the concurrency, so the server closes them and keep-alive isn't holding; slow DNS lookups; downloading large bodies being the time; half or more of the responses answered by a cache, so the origin wasn't measured;
 - pepe's own thread being the limit, with `--threads` suggested;
 - a `--rate` that the concurrency couldn't carry, and what would.
 
