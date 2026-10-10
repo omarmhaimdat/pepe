@@ -12,6 +12,7 @@ on:
       - "docs/**"
       - "assets/**"
       - "schema/**"
+      - "llms.txt"
       - ".github/workflows/publish-site.yml"
   workflow_dispatch:
 
@@ -41,7 +42,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          for path in index.html docs/index.html docs/ping.html docs/docs.css docs/docs.js docs/search.json schema/run.schema.json assets/home.gif; do
+          for path in index.html docs/index.html docs/ping.html docs/docs.css docs/docs.js docs/search.json schema/run.schema.json assets/home.gif llms.txt; do
             code=$(curl -s -o /dev/null -w '%{http_code}' "https://pepe.mhaimdat.com/$path?t=$(date +%s)")
             echo "$path -> $code"
             [ "$code" = "200" ]

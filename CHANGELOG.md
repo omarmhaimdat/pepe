@@ -6,6 +6,189 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+## [0.30.0](https://github.com/omarmhaimdat/pepe/compare/v0.29.0...v0.30.0) - 2026-10-10
+
+### Added
+
+- guardrails for scripts and agents, and what an agent reads first ([#138](https://github.com/omarmhaimdat/pepe/pull/138))
+
+  ## What
+
+  Two roadmap items under *Agents*.
+
+  ### Guardrails
+
+  Where a run may be pointed and how much it may send, checked in every
+  mode (a run, a ramp, API mode, a flow, a replay, a ping) before anything
+  is sent. A refusal is exit code 2 with the reason on stderr.
+
+  | Flag | Holds |
+  | --- | --- |
+  | `--allow-host .example.com` | Every target's host must be
+  `example.com` or under it; `api.example.com` is that host exactly;
+  repeat for more. A flow step whose host comes from a capture, and a ping
+  of a command (`--cmd`), are refused under it. |
+  | `--max-requests N` | `-n` must be under it; `-z` needs a `--rate` that
+  bounds it; a ping needs `-n` or `-z`; a ramp is refused, having no
+  bound. |
+  | `--max-rate N` | `--rate` must be under it, and must be given: without
+  it a run sends as fast as the target answers. A ping's targets over its
+  interval count. |
+  | `--max-concurrency N` | `-c`, and a ramp's top step. |
+  | `--dry-run` | What would be sent, to where and how much, with secrets
+  in headers masked, and nothing sent; `--json` gives it as JSON with
+  `"sent": 0`. |
+
+  The same four keys work in `pepe.toml` (`allow-host`, `max-requests`,
+  `max-rate`, `max-concurrency`), where leaving a flag off the command
+  line can't loosen them.
+
+  ```
+  $ pepe --allow-host .example.com --max-requests 100 --max-concurrency 8 -n 50 -c 4 --dry-run -H 'Authorization: Bearer abc' https://api.example.com/health
+  pepe · dry run · nothing sent
+    mode      run
+    target    https://api.example.com/health
+    method    GET
+    headers   Authorization: Bearer ••••
+    load      50 requests, 4 at a time, each sent as soon as the last answered
+    settings  timeout 20s · connections kept alive · redirects followed
+    guard     hosts .example.com · at most 100 requests · at most 8 in flight
+  ```
+
+  ### What an agent reads first
+
+  `AGENTS.md` in the repository, `llms.txt` at the site's root (published
+  with the site), the agents page on the docs site, and the skill file,
+  all saying the same: the flags to always pass, the fields to read in
+  each report, the exit codes, and the guardrails.
+
+  ## How
+
+  `src/guard.rs` holds the checks (`Guard`) and the plan (`Plan`); each
+  mode's runner calls them after loading what it needs (a spec's base URL,
+  a flow's steps rendered with its `[vars]`, a replay's URLs, a ping's
+  targets) and before starting. Host matching strips ports and brackets
+  and ignores case; `.example.com` and `*.example.com` mean the same.
+
+  ## Checked
+
+  - `cargo test --locked`: 299 passed, including host matching, each cap,
+  and the plan's masking; clippy with `-D warnings` and `cargo fmt
+  --check` clean
+  - By hand: a URL outside the allowed hosts refused, `--max-requests`
+  against a timed run without `--rate`, a ping over its cap, a ramp over
+  `--max-concurrency`, and dry runs as text and JSON for a run, a ramp and
+  a ping
+
+
+
+### Other
+
+- *(readme)* -d takes the body itself; only a curl command reads @file ([#137](https://github.com/omarmhaimdat/pepe/pull/137))
+
+  The README's example sent `-d @payload.json`, which pepe's own `-d`
+  doesn't read as a file (a curl command's `-d @file` is read, through
+  `--curl`). The docs site already had it right; the README now does too.
+
+  Looked at the install page's four screenshots while here and left them:
+  they are hand-made 2896×1836 captures of a worked scenario with matching
+  captions and alt text, and frames cut from the 1280×720 recordings would
+  be a step down.
+
+
+- every recording made again, one for the home page, and the site published on its own ([#136](https://github.com/omarmhaimdat/pepe/pull/136))
+
+  ## What
+
+  - **Every recording, again**, with the current screens: the run, the
+  setup screen, the ramp, API mode and the logs, and four new ones:
+  - `ping.gif`: two targets on the graph (example.com and a local
+  service), then the phases of one with its TLS session, certificate and
+  findings, then the pings with one opened;
+  - `flow.gif`: a three-step flow against `assets/demo/checkout.toml`,
+  each step fed by the one before, each a row on the dashboard;
+  - `compare.gif`: two reports under the same load, the second of a slower
+  endpoint, then what moved (Slower, with the p99, the median and the
+  throughput);
+  - `home.gif`, for the docs' home page: `pepe ping URL --once` saying
+  where the time goes, then a run with the dashboard, ended with the
+  verdict in the shell.
+  `assets/record.sh` records them all from `assets/tapes/`, against the
+  local target it starts, as before.
+  - **The site goes out on its own.** It was published only by a release,
+  and a docs change never makes one, so the documentation site merged in
+  #133 and #135 had not been deployed. `publish-site.yml` uploads the
+  install page, the docs, the recordings and the schemas whenever any of
+  them change on master (and on request), checks the built site is current
+  first, and verifies the public URLs afterwards. The release workflow
+  uploads the same files through the same script, `site/publish.sh`, so
+  the two can't drift.
+  - The ping, flow and compare pages and the README's ping section show
+  their recordings; the home page shows its own.
+
+  ## Checked
+
+  - Each recording's frames looked at: the home page's two halves, the
+  ping's graph and phases, the flow's three rows all answering, the
+  compare's verdict; the compare tape re-recorded once with longer pauses
+  after its runs overlapped the typing
+  - The demo flow completes its chains against the local server (5 of 5,
+  every step 200)
+  - `python3 site/build-docs.py --check` clean; the contrib and
+  docs-reference tests pass
+  - Recordings total 13 MB, in line with the five there were
+
+  Merging this triggers the first deployment of the documentation site.
+
+
+- the site as a documentation site, not a terminal ([#135](https://github.com/omarmhaimdat/pepe/pull/135))
+
+  ## What
+
+  The docs pages were the install page's terminal look stretched over long
+  prose: one monospace face for everything, dark only, dense, hard to
+  scan. This rebuilds them as a documentation site.
+
+  - **Type and colour.** Prose in a proportional face, code in a monospace
+  one. Light by default, dark when the system or the switch in the top bar
+  says so; the choice is remembered. The accent stays the dashboard's
+  ember.
+  - **Finding things.** A top bar with search over every page (an index is
+  written beside the pages at build time, loaded on first use; `/` focuses
+  the box, arrows pick a result, results say which page and section), a
+  sidebar grouped into Start here, Modes, Integrate and Reference, an "on
+  this page" column that follows the scroll, and previous/next links at
+  the bottom of each page.
+  - **Reading.** A 76-character measure, headings with room around them
+  and anchors on hover, code blocks with the language and a copy button,
+  tables with borders and a hover, callouts, framed images, an
+  edit-on-GitHub link.
+  - **The landing page.** A card per page with what it is for, and where
+  to start.
+  - **Phones.** The sidebar behind a menu button, the search in the bar,
+  tables that wrap, no horizontal scroll.
+
+  ## How
+
+  Same Markdown sources under `docs/`. `site/build-docs.py` gets the new
+  frame, two small blocks of its own (`:::cards` and `:::note`), the
+  search index (`search.json`), and the sidebar groups.
+  `site/docs/docs.css` is the new stylesheet and `site/docs/docs.js` the
+  page's few behaviours (theme, menu, copy, search, the scroll-following
+  list). No dependency anywhere. The release workflow publishes the script
+  and the index with the pages, and the Lint job's check of the built site
+  is unchanged.
+
+  ## Checked
+
+  - `python3 site/build-docs.py --check` clean; the built site is
+  committed
+  - Served locally and checked in the browser: the landing page and its
+  cards, a long page with its tables and code blocks, search (results for
+  `slo` across pages), the theme switch and that it is remembered, the
+  phone layout with its menu, and no horizontal scroll at 375px
+
+
 ## [0.29.0](https://github.com/omarmhaimdat/pepe/compare/v0.28.0...v0.29.0) - 2026-10-10
 
 ### Added
