@@ -225,7 +225,7 @@
     <a href="#install"><kbd>i</kbd><span>install</span></a>
     <a href="#screens"><kbd>1-4</kbd><span>screens</span></a>
     <a href="https://github.com/omarmhaimdat/pepe" class="wide"><kbd>g</kbd><span>github</span></a>
-    <a href="https://github.com/omarmhaimdat/pepe#usage" class="wide"><kbd>d</kbd><span>docs</span></a>
+    <a href="docs/" class="wide"><kbd>d</kbd><span>docs</span></a>
     <a href="#" id="help" class="wide"><kbd>?</kbd><span>keys</span></a>
     <span class="by">MIT · made by <a href="https://github.com/omarmhaimdat">Omar Mhaimdat</a></span>
   </footer>
@@ -279,7 +279,7 @@
     else if (e.key === "i") document.getElementById("install").scrollIntoView({ block: "center" });
     else if (e.key === "c") copy(document.querySelector(".how.on .chip"));
     else if (e.key === "g") go("https://github.com/omarmhaimdat/pepe");
-    else if (e.key === "d") go("https://github.com/omarmhaimdat/pepe#usage");
+    else if (e.key === "d") go("docs/");
     else if (e.key === "b") go("https://github.com/omarmhaimdat/pepe/blob/master/bench/README.md");
     else if (e.key === "?") keys.open ? keys.close() : keys.showModal();
   });
