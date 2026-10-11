@@ -28,8 +28,8 @@ formula = "pepe"
 npm-package = "pepe-http"
 # npm is dist's own job. The Homebrew job is ours (publish-homebrew.yml):
 # dist's would not install the completions and man pages where Homebrew
-# activates them. PyPI is ours too (publish-pypi.yml): dist has none.
-publish-jobs = ["npm", "./publish-homebrew", "./publish-r2", "./publish-docker", "./publish-action", "./publish-pypi"]
+# activates them. PyPI is ours too, a plain job in release.yml: dist has none.
+publish-jobs = ["npm", "./publish-homebrew", "./publish-r2", "./publish-docker", "./publish-action"]
 # Signed build provenance (`gh attestation verify`)
 github-attestations = true
 # `pepe self-update` is built in via axoupdater, no separate updater binary
