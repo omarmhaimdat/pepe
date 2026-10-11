@@ -24,7 +24,7 @@ import urllib.request
 import zipfile
 
 # pepe's version: the release this package downloads. The publish job
-# (.github/workflows/publish-pypi.yml) sets it from the release tag.
+# (the publish-pypi job in .github/workflows/release.yml) sets it from the release tag.
 __version__ = "0.33.0"
 
 REPO = "omarmhaimdat/pepe"

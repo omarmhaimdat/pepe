@@ -2,7 +2,7 @@
 # package is a few lines of Python that download the pepe release of the
 # same version from GitHub on first run and run it: see pepe_http/__init__.py.
 # The version is pepe's, read from pepe_http.__version__; the publish job
-# (.github/workflows/publish-pypi.yml) sets it from the release tag, so a
+# (the publish-pypi job in .github/workflows/release.yml) sets it from the release tag, so a
 # published package always fetches its own release.
 [build-system]
 requires = ["setuptools>=77"]
