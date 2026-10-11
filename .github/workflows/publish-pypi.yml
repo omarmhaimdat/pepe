@@ -1,12 +1,12 @@
 # Custom dist publish job (see `publish-jobs` in dist-workspace.toml).
-# Publishes packaging/pypi as `pepe-load` on PyPI: a small Python package
+# Publishes packaging/pypi as `pepe-http` on PyPI: a small Python package
 # whose `pepe` command downloads the release of the same version from
 # GitHub on first run and runs it. The version is set from the release
 # tag here, so a published package always fetches its own release, and the
 # built wheel is installed and run once before it is published, against
 # the release the host job has just created.
 #
-# Publishing is by PyPI trusted publishing, no token: the pepe-load project
+# Publishing is by PyPI trusted publishing, no token: the pepe-http project
 # on PyPI must trust this repository and this workflow file,
 # publish-pypi.yml (https://docs.pypi.org/trusted-publishers/).
 name: Publish to PyPI
@@ -39,8 +39,8 @@ jobs:
         run: |
           set -euo pipefail
           version=$(echo "$PLAN" | jq -r '.releases[] | select(.app_name == "pepe") | .app_version')
-          sed -i "s/^__version__ = \".*\"/__version__ = \"${version}\"/" packaging/pypi/pepe_load/__init__.py
-          grep -n '^__version__' packaging/pypi/pepe_load/__init__.py
+          sed -i "s/^__version__ = \".*\"/__version__ = \"${version}\"/" packaging/pypi/pepe_http/__init__.py
+          grep -n '^__version__' packaging/pypi/pepe_http/__init__.py
 
       - name: Build
         shell: bash

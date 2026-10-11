@@ -7,8 +7,8 @@ carries, keeps the binary in a per-user cache directory, and runs it with
 the arguments given; every later run only runs it. Nothing but the standard
 library is used.
 
-    PEPE_LOAD_CACHE_DIR   where the binary is kept (default: the user's
-                          cache directory, under pepe-load/)
+    PEPE_HTTP_CACHE_DIR   where the binary is kept (default: the user's
+                          cache directory, under pepe-http/)
 """
 
 import hashlib
@@ -61,18 +61,18 @@ def target():
 
 def cache_dir():
     """Where the binary is kept: the user's cache directory, as the platform
-    has it, unless PEPE_LOAD_CACHE_DIR says otherwise."""
-    override = os.environ.get("PEPE_LOAD_CACHE_DIR")
+    has it, unless PEPE_HTTP_CACHE_DIR says otherwise."""
+    override = os.environ.get("PEPE_HTTP_CACHE_DIR")
     if override:
         return override
     home = os.path.expanduser("~")
     if sys.platform == "win32":
         base = os.environ.get("LOCALAPPDATA") or os.path.join(home, "AppData", "Local")
-        return os.path.join(base, "pepe-load", "Cache")
+        return os.path.join(base, "pepe-http", "Cache")
     if sys.platform == "darwin":
-        return os.path.join(home, "Library", "Caches", "pepe-load")
+        return os.path.join(home, "Library", "Caches", "pepe-http")
     base = os.environ.get("XDG_CACHE_HOME") or os.path.join(home, ".cache")
-    return os.path.join(base, "pepe-load")
+    return os.path.join(base, "pepe-http")
 
 
 def binary_path():
@@ -85,7 +85,7 @@ def binary_path():
 
 def fetch(url):
     """The bytes at a URL, or a Problem that says why not."""
-    request = urllib.request.Request(url, headers={"User-Agent": "pepe-load/" + __version__})
+    request = urllib.request.Request(url, headers={"User-Agent": "pepe-http/" + __version__})
     try:
         with urllib.request.urlopen(request, timeout=60) as response:
             return response.read()
@@ -134,7 +134,7 @@ def download(path):
     triple, extension = target()
     asset = "pepe-%s.%s" % (triple, extension)
     url = RELEASE_URL.format(version=__version__, asset=asset)
-    sys.stderr.write("pepe-load: downloading pepe v%s for %s\n" % (__version__, triple))
+    sys.stderr.write("pepe-http: downloading pepe v%s for %s\n" % (__version__, triple))
     sys.stderr.flush()
     archive = fetch(url)
     verify(archive, fetch(url + ".sha256"), asset)
@@ -173,7 +173,7 @@ def main(argv=None):
     try:
         exe = ensure()
     except Problem as problem:
-        sys.stderr.write("pepe-load: %s\n" % problem)
+        sys.stderr.write("pepe-http: %s\n" % problem)
         return 1
     if os.name == "posix":
         os.execv(exe, [exe] + args)

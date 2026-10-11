@@ -8,7 +8,7 @@ access log), `pepe compare` (two reports). The documentation is at
 [pepe.mhaimdat.com/docs](https://pepe.mhaimdat.com/docs/).
 
 ```bash
-pipx install pepe-load    # or: pip install pepe-load
+pipx install pepe-http    # or: pip install pepe-http
 pepe https://example.com
 ```
 
@@ -17,12 +17,12 @@ fetches it: the first run downloads the release of the same version for
 your platform (macOS, Linux, Windows) from
 [GitHub releases](https://github.com/omarmhaimdat/pepe/releases), checks
 it against the SHA-256 the release carries, keeps it in your cache
-directory (`~/.cache/pepe-load`, `~/Library/Caches/pepe-load` on macOS,
-`%LOCALAPPDATA%\pepe-load\Cache` on Windows; `PEPE_LOAD_CACHE_DIR` moves
+directory (`~/.cache/pepe-http`, `~/Library/Caches/pepe-http` on macOS,
+`%LOCALAPPDATA%\pepe-http\Cache` on Windows; `PEPE_HTTP_CACHE_DIR` moves
 it) and runs it; every later run only runs it. There are no dependencies.
-`python -m pepe_load` is the same command.
+`python -m pepe_http` is the same command.
 
-Upgrade with `pipx upgrade pepe-load` or `pip install -U pepe-load`: each
+Upgrade with `pipx upgrade pepe-http` or `pip install -U pepe-http`: each
 version of the package runs the pepe of that version, so `pepe
 self-update` does not apply here. The other ways to install, with tab
 completion and man pages, are on the
