@@ -45,8 +45,9 @@
 npx pepe-http -n 100 https://example.com  # try it without installing</code></pre></figure>
 <p>The package is <code>pepe-http</code> (<code>pepe-cli</code> was taken); it downloads the binary for your platform when it installs.</p>
 <h2 id="pypi"><a href="#pypi">PyPI</a></h2>
-<figure class="code"><div class="bar"><span>bash</span><button type="button" class="copy" aria-label="Copy">copy</button></div><pre><code>pipx install pepe-http   # or: pip install pepe-http</code></pre></figure>
-<p>The same name and the same <code>pepe</code>. The package is a few lines of Python with no dependencies: the first run downloads the release of the same version for your platform from GitHub, checks its SHA-256, keeps it in your cache directory (<code>~/.cache/pepe-http</code>, <code>~/Library/Caches/pepe-http</code> on macOS, <code>%LOCALAPPDATA%\pepe-http\Cache</code> on Windows; <code>PEPE_HTTP_CACHE_DIR</code> moves it) and runs it; every later run only runs it.</p>
+<figure class="code"><div class="bar"><span>bash</span><button type="button" class="copy" aria-label="Copy">copy</button></div><pre><code>pipx install pepe-http                   # or: pip install pepe-http
+uvx pepe-http -n 100 https://example.com  # try it without installing</code></pre></figure>
+<p>The same name and the same <code>pepe</code> (<code>pepe-http</code> runs it too, which is what <code>uvx</code> calls). The package is a few lines of Python with no dependencies: the first run downloads the release of the same version for your platform from GitHub, checks its SHA-256, keeps it in your cache directory (<code>~/.cache/pepe-http</code>, <code>~/Library/Caches/pepe-http</code> on macOS, <code>%LOCALAPPDATA%\pepe-http\Cache</code> on Windows; <code>PEPE_HTTP_CACHE_DIR</code> moves it) and runs it; every later run only runs it.</p>
 <h2 id="nix"><a href="#nix">Nix</a></h2>
 <figure class="code"><div class="bar"><span>bash</span><button type="button" class="copy" aria-label="Copy">copy</button></div><pre><code>nix run github:omarmhaimdat/pepe -- https://example.com   # try it without installing
 nix profile install github:omarmhaimdat/pepe              # install it</code></pre></figure>
@@ -54,6 +55,7 @@ nix profile install github:omarmhaimdat/pepe              # install it</code></p
 <figure class="code"><div class="bar"><span>bash</span><button type="button" class="copy" aria-label="Copy">copy</button></div><pre><code>docker run --rm -it ghcr.io/omarmhaimdat/pepe -z 30s -c 50 https://example.com   # the dashboard needs -it
 docker run --rm ghcr.io/omarmhaimdat/pepe --json -n 1000 https://example.com     # for scripts</code></pre></figure>
 <p>An empty image with the static binary in it, for <code>linux/amd64</code> and <code>linux/arm64</code>, with <code>:latest</code> and <code>:&lt;version&gt;</code> tags. <code>docker build -t pepe .</code> in a checkout builds the same from source.</p>
+<p>The PyPI package and the image are also how the <a href="https://registry.modelcontextprotocol.io">MCP registry</a> starts pepe's MCP server, <code>io.github.omarmhaimdat/pepe</code>: see <a href="agents.html#as-an-mcp-server">Agents and scripts</a>.</p>
 <h2 id="prebuilt-binaries"><a href="#prebuilt-binaries">Prebuilt binaries</a></h2>
 <p>Every <a href="https://github.com/omarmhaimdat/pepe/releases">release</a> ships binaries for each platform with SHA-256 checksums and signed build provenance:</p>
 <figure class="code"><div class="bar"><span>bash</span><button type="button" class="copy" aria-label="Copy">copy</button></div><pre><code>gh attestation verify pepe-x86_64-unknown-linux-musl.tar.xz --repo omarmhaimdat/pepe</code></pre></figure>
