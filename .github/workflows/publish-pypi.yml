@@ -7,8 +7,9 @@
 # the release the host job has just created.
 #
 # Publishing is by PyPI trusted publishing, no token: the pepe-http project
-# on PyPI must trust this repository and this workflow file,
-# publish-pypi.yml (https://docs.pypi.org/trusted-publishers/).
+# on PyPI must trust this repository and the workflow that calls this one,
+# release.yml, since PyPI reads the calling workflow's name off the OIDC
+# token, not this file's (https://docs.pypi.org/trusted-publishers/).
 name: Publish to PyPI
 
 on:
