@@ -6,6 +6,83 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+## [0.36.1](https://github.com/omarmhaimdat/pepe/compare/v0.36.0...v0.36.1) - 2026-10-11
+
+### Fixed
+
+- *(agents)* the registry listing names the image by its canonical reference alone ([#165](https://github.com/omarmhaimdat/pepe/pull/165))
+
+  The v0.36.0 release's `publish-mcp-registry` job was refused by the
+  registry: an OCI package must not carry `registryBaseUrl`, since the
+  identifier (`ghcr.io/omarmhaimdat/pepe:0.36.0`) already says where the
+  image is. The field is removed from the OCI entry; the PyPI entry keeps
+  its, which the registry wants. `server.json` still validates against the
+  registry's schema. Everything else in that release shipped.
+
+  A `fix`, so the release it brings makes the first registry publish.
+
+
+
+### Other
+
+- *(smoke)* the npm and PyPI packages, tested after each release like the installers ([#163](https://github.com/omarmhaimdat/pepe/pull/163))
+
+  pepe is on npm (`pepe-http`, cargo-dist's package) and on PyPI
+  (`pepe-http`, the wrapper in `packaging/pypi`). The post-release smoke
+  workflow covered the shell and PowerShell installers and the Homebrew
+  formula; this adds the two packages, so a release that publishes but
+  doesn't install or run shows up within minutes, like the others.
+
+  ## What the jobs do
+
+  Both run on ubuntu, macos and windows, after the `expected` job, so
+  `workflow_dispatch` with a version still works for them.
+
+  **npm** (`actions/setup-node@v6`, node 22)
+  - `npx -y pepe-http@$EXPECTED --version` must print the expected
+  version. The registry can take a minute to serve a just-published
+  version, so the call is retried up to 10 times, 30s apart.
+  - `npx -y pepe-http@$EXPECTED self-update --check` must exit 0 and say
+  "installed with npm" (the update path from #160).
+  - On ubuntu only: `npm install -g pepe-http@$EXPECTED`, then `pepe
+  --version`, to cover the global install and the `pepe` command.
+
+  **PyPI** (`actions/setup-python@v6`, python 3.x)
+  - `pipx install pepe-http==$EXPECTED`, with the same retry for PyPI's
+  propagation delay; pipx is installed with pip first if the runner lacks
+  it, and pipx's bin directory is added to `GITHUB_PATH` in case a runner
+  doesn't have it on PATH.
+  - `pepe --version` must print the expected version (the first run
+  downloads and checks the release binary), and `pepe self-update --check`
+  must exit 0 and say "installed with pip".
+  - `pipx run --spec pepe-http==$EXPECTED pepe --json --dry-run -n 10
+  https://example.com` must report `sent: 0` with that target. `--spec`
+  because the package is `pepe-http` and the command is `pepe`; a plain
+  `pipx run pepe-http==X` looks for a `pepe-http` app and fails.
+
+  Windows steps use `shell: bash`, as the workflow does elsewhere.
+
+  ## Verified
+
+  The workflow itself could not be run from here; it runs on the next
+  release or by hand with `workflow_dispatch`. What was checked locally,
+  on macOS, against 0.35.1:
+
+  - The YAML parses (Ruby's YAML) and the job graph is the one above.
+  - `npx -y pepe-http@0.35.1 --version` prints `pepe 0.35.1`, and
+  `self-update --check` says "installed with npm".
+  - `pip install pepe-http==0.35.1` in a fresh venv, then `pepe
+  --version`: downloads the binary, prints `pepe 0.35.1`.
+  - `pipx run --spec pepe-http==0.35.1 pepe --json --dry-run -n 10
+  https://example.com` prints the dry-run report with `"sent": 0`.
+  - The new steps' shell, run verbatim with `EXPECTED=0.35.1`: every
+  assertion passes, and the retry loop gives up as it should on a version
+  that doesn't exist.
+
+  Not checked here: the Windows and Linux runners themselves (pipx's bin
+  dir on PATH, `npx` under Git Bash).
+
+
 ## [0.36.0](https://github.com/omarmhaimdat/pepe/compare/v0.35.1...v0.36.0) - 2026-10-11
 
 ### Added
