@@ -1716,7 +1716,7 @@ mod tests {
         assert!(s
             .to_cli()
             .unwrap_err()
-            .contains("Concurrency cannot be greater"));
+            .contains("is more than the 10 requests"));
         s.by_duration = true;
         s.duration = "soon".into();
         assert!(s.to_cli().is_err());
@@ -1836,7 +1836,7 @@ mod tests {
         press(&mut s, KeyCode::Down);
         type_text(&mut s, "http://localhost:3000");
         // The steady load is back, and checked again
-        assert!(s.to_cli().unwrap_err().contains("Concurrency"));
+        assert!(s.to_cli().unwrap_err().contains("is more than"));
         // A concurrency that is the default on no machine, since the card
         // leaves out flags at their default
         let concurrency = crate::utils::num_of_cores() + 1;

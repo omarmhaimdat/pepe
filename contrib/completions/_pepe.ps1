@@ -66,21 +66,33 @@ Register-ArgumentCompleter -Native -CommandName 'pepe' -ScriptBlock {
             [CompletionResult]::new('--setup', '--setup', [CompletionResultType]::ParameterName, 'Open the setup screen to review or change the settings before starting (it opens by itself when no URL is given)')
             [CompletionResult]::new('-V', '-V ', [CompletionResultType]::ParameterName, 'Print version')
             [CompletionResult]::new('--version', '--version', [CompletionResultType]::ParameterName, 'Print version')
-            [CompletionResult]::new('self-update', 'self-update', [CompletionResultType]::ParameterValue, 'Update pepe to the latest release, or say what''s new in it')
-            [CompletionResult]::new('completions', 'completions', [CompletionResultType]::ParameterValue, 'Tab completion for your shell: print the script, or --install it')
-            [CompletionResult]::new('api', 'api', [CompletionResultType]::ParameterValue, 'Load-test every endpoint of an OpenAPI spec')
-            [CompletionResult]::new('ramp', 'ramp', [CompletionResultType]::ParameterValue, 'Raise the load step by step to find where the target stops keeping up')
-            [CompletionResult]::new('replay', 'replay', [CompletionResultType]::ParameterValue, 'Send the URLs of an access log in their real proportions')
-            [CompletionResult]::new('flow', 'flow', [CompletionResultType]::ParameterValue, 'Run a sequence of requests from a flow file, each step fed by the last')
-            [CompletionResult]::new('logs', 'logs', [CompletionResultType]::ParameterValue, 'Read nginx logs: requests per second now, against each minute, hour and day')
             [CompletionResult]::new('ping', 'ping', [CompletionResultType]::ParameterValue, 'Ping a URL: a request a second, each split into DNS, connect, TLS, first byte and download, on a graph')
+            [CompletionResult]::new('ramp', 'ramp', [CompletionResultType]::ParameterValue, 'Raise the load step by step to find where the target stops keeping up')
             [CompletionResult]::new('compare', 'compare', [CompletionResultType]::ParameterValue, 'Hold a run''s JSON report against an earlier one and say what moved')
+            [CompletionResult]::new('api', 'api', [CompletionResultType]::ParameterValue, 'Load-test every endpoint of an OpenAPI spec')
+            [CompletionResult]::new('flow', 'flow', [CompletionResultType]::ParameterValue, 'Run a sequence of requests from a flow file, each step fed by the last')
+            [CompletionResult]::new('replay', 'replay', [CompletionResultType]::ParameterValue, 'Send the URLs of an access log in their real proportions')
+            [CompletionResult]::new('logs', 'logs', [CompletionResultType]::ParameterValue, 'Read nginx logs: requests per second now, against each minute, hour and day')
             [CompletionResult]::new('schema', 'schema', [CompletionResultType]::ParameterValue, 'Print the JSON Schema of a report: run (the default), ramp, ping or compare')
             [CompletionResult]::new('mcp', 'mcp', [CompletionResultType]::ParameterValue, 'Serve pepe''s modes as tools for an agent over stdio (the Model Context Protocol); the guardrail flags given here hold for every call')
+            [CompletionResult]::new('self-update', 'self-update', [CompletionResultType]::ParameterValue, 'Update pepe to the latest release, or say what''s new in it')
+            [CompletionResult]::new('completions', 'completions', [CompletionResultType]::ParameterValue, 'Tab completion for your shell: print the script, or --install it')
             [CompletionResult]::new('help', 'help', [CompletionResultType]::ParameterValue, 'Print this message or the help of the given subcommand(s)')
             break
         }
-        'pepe;self-update' {
+        'pepe;ping' {
+            [CompletionResult]::new('--every', '--every', [CompletionResultType]::ParameterName, 'Time between pings, e.g. 1s, 500ms, 2m')
+            [CompletionResult]::new('--window', '--window', [CompletionResultType]::ParameterName, 'How much of the run the graph shows, e.g. 60s, 5m; + and - change it on screen, w shows the whole run')
+            [CompletionResult]::new('--name', '--name', [CompletionResultType]::ParameterName, 'What to call each target, in order: --name api --name cdn, or --name api,cdn')
+            [CompletionResult]::new('--color', '--color', [CompletionResultType]::ParameterName, 'A colour for each target''s line, in order: red, green, yellow, blue, magenta, cyan, white, gray, their light- forms, or #RRGGBB')
+            [CompletionResult]::new('--interface', '--interface', [CompletionResultType]::ParameterName, 'Send from this interface (en0, eth0) or local address')
+            [CompletionResult]::new('--port', '--port', [CompletionResultType]::ParameterName, 'With --tcp: the port of a target that names none')
+            [CompletionResult]::new('--tcp-rst', '--tcp-rst', [CompletionResultType]::ParameterName, 'With --tcp: a connection refused counts as an answer (the host is there) rather than a failure')
+            [CompletionResult]::new('--slo', '--slo', [CompletionResultType]::ParameterName, 'Limits a ping must meet, in milliseconds: total=500,ttfb=200, connect=100,dns=50,tls=150,download=100. Breaking one marks the ping, and the run exits 4 at the end')
+            [CompletionResult]::new('--ymin', '--ymin', [CompletionResultType]::ParameterName, 'The graph''s floor, in milliseconds')
+            [CompletionResult]::new('--ymax', '--ymax', [CompletionResultType]::ParameterName, 'The graph''s ceiling, in milliseconds; without it the graph fits what it shows')
+            [CompletionResult]::new('--save', '--save', [CompletionResultType]::ParameterName, 'Write the JSON report to this file when the run ends, whatever else is shown')
+            [CompletionResult]::new('--save-body', '--save-body', [CompletionResultType]::ParameterName, 'Write the last body received to this file when the run ends')
             [CompletionResult]::new('-n', '-n', [CompletionResultType]::ParameterName, 'Number of requests to perform')
             [CompletionResult]::new('--number', '--number', [CompletionResultType]::ParameterName, 'Number of requests to perform')
             [CompletionResult]::new('-z', '-z', [CompletionResultType]::ParameterName, 'Duration of the test, e.g. 10s, 3m, 2h (mutually exclusive with -n)')
@@ -112,8 +124,21 @@ Register-ArgumentCompleter -Native -CommandName 'pepe' -ScriptBlock {
             [CompletionResult]::new('--concurrency', '--concurrency', [CompletionResultType]::ParameterName, 'Number of concurrent requests at a time')
             [CompletionResult]::new('-u', '-u', [CompletionResultType]::ParameterName, 'User-Agent string, default is pepe/{version}')
             [CompletionResult]::new('--user-agent', '--user-agent', [CompletionResultType]::ParameterName, 'User-Agent string, default is pepe/{version}')
-            [CompletionResult]::new('--check', '--check', [CompletionResultType]::ParameterName, 'Only say whether a newer release exists (exit code 1 if so) and what''s in it; don''t install it')
-            [CompletionResult]::new('--verbose', '--verbose', [CompletionResultType]::ParameterName, 'Show the installer''s own output')
+            [CompletionResult]::new('-4', '-4', [CompletionResultType]::ParameterName, 'Resolve names to IPv4 addresses only')
+            [CompletionResult]::new('-6', '-6', [CompletionResultType]::ParameterName, 'Resolve names to IPv6 addresses only')
+            [CompletionResult]::new('--all-ips', '--all-ips', [CompletionResultType]::ParameterName, 'Ping every address a name resolves to, each as a target of its own')
+            [CompletionResult]::new('--tcp', '--tcp', [CompletionResultType]::ParameterName, 'Only connect: a TCP ping of the port, with no request sent')
+            [CompletionResult]::new('--cmd', '--cmd', [CompletionResultType]::ParameterName, 'The targets are commands: run each one every interval and graph how long it takes; its exit code is the status')
+            [CompletionResult]::new('--keep-alive', '--keep-alive', [CompletionResultType]::ParameterName, 'Keep the connection between pings, as a browser would. The DNS, connect and TLS phases are then measured once; without it every ping measures all five')
+            [CompletionResult]::new('--bell', '--bell', [CompletionResultType]::ParameterName, 'Ring the terminal bell when a ping fails or breaks the SLO')
+            [CompletionResult]::new('-0', '-0', [CompletionResultType]::ParameterName, 'Start the graph at zero (the same as --ymin 0)')
+            [CompletionResult]::new('-s', '-s', [CompletionResultType]::ParameterName, 'Draw the graph with dots rather than braille, for terminals and fonts that lack it')
+            [CompletionResult]::new('--simple-graphics', '--simple-graphics', [CompletionResultType]::ParameterName, 'Draw the graph with dots rather than braille, for terminals and fonts that lack it')
+            [CompletionResult]::new('--jsonl', '--jsonl', [CompletionResultType]::ParameterName, 'No screen: one JSON object per ping on stdout, as it happens')
+            [CompletionResult]::new('--csv', '--csv', [CompletionResultType]::ParameterName, 'No screen: one CSV line per ping on stdout, under a header')
+            [CompletionResult]::new('--show-body', '--show-body', [CompletionResultType]::ParameterName, 'Keep the first kilobyte of each body for the inspector')
+            [CompletionResult]::new('--http1', '--http1', [CompletionResultType]::ParameterName, 'Speak HTTP/1.1 even when the server offers HTTP/2; without it a ping takes h2 when the server offers it through ALPN')
+            [CompletionResult]::new('--once', '--once', [CompletionResultType]::ParameterName, 'One diagnosis and out: three quick pings, then the last one''s phases, what answered, and what to look at; no screen')
             [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('-k', '-k', [CompletionResultType]::ParameterName, 'Accept invalid TLS certificates (self-signed, expired, wrong host)')
@@ -127,7 +152,12 @@ Register-ArgumentCompleter -Native -CommandName 'pepe' -ScriptBlock {
             [CompletionResult]::new('--setup', '--setup', [CompletionResultType]::ParameterName, 'Open the setup screen to review or change the settings before starting (it opens by itself when no URL is given)')
             break
         }
-        'pepe;completions' {
+        'pepe;ramp' {
+            [CompletionResult]::new('--from', '--from', [CompletionResultType]::ParameterName, 'Concurrency of the first step')
+            [CompletionResult]::new('--to', '--to', [CompletionResultType]::ParameterName, 'Concurrency of the last step')
+            [CompletionResult]::new('--step', '--step', [CompletionResultType]::ParameterName, 'Concurrency added at each step')
+            [CompletionResult]::new('--every', '--every', [CompletionResultType]::ParameterName, 'How long each step is held, e.g. 10s, 1m')
+            [CompletionResult]::new('--until', '--until', [CompletionResultType]::ParameterName, 'End the ramp once a step crosses this: ''p99 > 500ms'', ''errors > 1%''')
             [CompletionResult]::new('-n', '-n', [CompletionResultType]::ParameterName, 'Number of requests to perform')
             [CompletionResult]::new('--number', '--number', [CompletionResultType]::ParameterName, 'Number of requests to perform')
             [CompletionResult]::new('-z', '-z', [CompletionResultType]::ParameterName, 'Duration of the test, e.g. 10s, 3m, 2h (mutually exclusive with -n)')
@@ -159,8 +189,6 @@ Register-ArgumentCompleter -Native -CommandName 'pepe' -ScriptBlock {
             [CompletionResult]::new('--concurrency', '--concurrency', [CompletionResultType]::ParameterName, 'Number of concurrent requests at a time')
             [CompletionResult]::new('-u', '-u', [CompletionResultType]::ParameterName, 'User-Agent string, default is pepe/{version}')
             [CompletionResult]::new('--user-agent', '--user-agent', [CompletionResultType]::ParameterName, 'User-Agent string, default is pepe/{version}')
-            [CompletionResult]::new('--install', '--install', [CompletionResultType]::ParameterName, 'Put the script and the man pages in place and add the line the shell''s startup file needs, so tab completion works in the next shell')
-            [CompletionResult]::new('--dry-run', '--dry-run', [CompletionResultType]::ParameterName, 'With --install: say what would be done, and do nothing')
             [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('-k', '-k', [CompletionResultType]::ParameterName, 'Accept invalid TLS certificates (self-signed, expired, wrong host)')
@@ -169,6 +197,54 @@ Register-ArgumentCompleter -Native -CommandName 'pepe' -ScriptBlock {
             [CompletionResult]::new('--disable-keepalive', '--disable-keepalive', [CompletionResultType]::ParameterName, 'Disable HTTP keepalive, e.g. Connection: close')
             [CompletionResult]::new('--disable-redirects', '--disable-redirects', [CompletionResultType]::ParameterName, 'Prevent http redirects')
             [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'Output results in JSON format')
+            [CompletionResult]::new('--dry-run', '--dry-run', [CompletionResultType]::ParameterName, 'Say what would be sent, to where and how much, and send nothing; as JSON with --json')
+            [CompletionResult]::new('-i', '-i', [CompletionResultType]::ParameterName, 'Open the setup screen to review or change the settings before starting (it opens by itself when no URL is given)')
+            [CompletionResult]::new('--setup', '--setup', [CompletionResultType]::ParameterName, 'Open the setup screen to review or change the settings before starting (it opens by itself when no URL is given)')
+            break
+        }
+        'pepe;compare' {
+            [CompletionResult]::new('--svg', '--svg', [CompletionResultType]::ParameterName, 'Also write the verdict as a card, an SVG for a README or a page')
+            [CompletionResult]::new('-n', '-n', [CompletionResultType]::ParameterName, 'Number of requests to perform')
+            [CompletionResult]::new('--number', '--number', [CompletionResultType]::ParameterName, 'Number of requests to perform')
+            [CompletionResult]::new('-z', '-z', [CompletionResultType]::ParameterName, 'Duration of the test, e.g. 10s, 3m, 2h (mutually exclusive with -n)')
+            [CompletionResult]::new('--duration', '--duration', [CompletionResultType]::ParameterName, 'Duration of the test, e.g. 10s, 3m, 2h (mutually exclusive with -n)')
+            [CompletionResult]::new('-m', '-m', [CompletionResultType]::ParameterName, 'HTTP method, e.g. GET, POST, PUT, DELETE')
+            [CompletionResult]::new('--method', '--method', [CompletionResultType]::ParameterName, 'HTTP method, e.g. GET, POST, PUT, DELETE')
+            [CompletionResult]::new('-H', '-H ', [CompletionResultType]::ParameterName, 'HTTP headers, e.g. -H ''Accept: application/json''')
+            [CompletionResult]::new('--headers', '--headers', [CompletionResultType]::ParameterName, 'HTTP headers, e.g. -H ''Accept: application/json''')
+            [CompletionResult]::new('-t', '-t', [CompletionResultType]::ParameterName, 'Time in seconds to wait for a response')
+            [CompletionResult]::new('--timeout', '--timeout', [CompletionResultType]::ParameterName, 'Time in seconds to wait for a response')
+            [CompletionResult]::new('--warmup', '--warmup', [CompletionResultType]::ParameterName, 'Send for this long before measuring, e.g. 5s: connections open, caches fill and JITs settle without counting against the run')
+            [CompletionResult]::new('--threads', '--threads', [CompletionResultType]::ParameterName, 'Threads sending requests (default 1), or "auto" to add one whenever those sending are all busy. One sends 100k requests a second or more; the dashboard says when it is the limit')
+            [CompletionResult]::new('--rate', '--rate', [CompletionResultType]::ParameterName, 'Start this many requests a second, spread evenly, instead of as many as the concurrency allows; -c is then the most in flight at once, and pepe says when it holds the rate back')
+            [CompletionResult]::new('-d', '-d', [CompletionResultType]::ParameterName, 'HTTP request body')
+            [CompletionResult]::new('--body', '--body', [CompletionResultType]::ParameterName, 'HTTP request body')
+            [CompletionResult]::new('-p', '-p', [CompletionResultType]::ParameterName, 'Proxy server URL: http://user:pass@host:port or socks5://host:port')
+            [CompletionResult]::new('--proxy', '--proxy', [CompletionResultType]::ParameterName, 'Proxy server URL: http://user:pass@host:port or socks5://host:port')
+            [CompletionResult]::new('--trace-header', '--trace-header', [CompletionResultType]::ParameterName, 'Response header holding the request id to show for the slowest requests and in the inspector, so they can be found in the server''s logs; without it, X-Request-Id, traceparent, CF-Ray, X-Amzn-Trace-Id and other common ones are looked for')
+            [CompletionResult]::new('--snapshot', '--snapshot', [CompletionResultType]::ParameterName, 'Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run''s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run')
+            [CompletionResult]::new('--allow-host', '--allow-host', [CompletionResultType]::ParameterName, 'Refuse to send anywhere but these hosts: api.example.com exactly, or .example.com for it and its subdomains; repeat for more. Every target is checked before anything is sent')
+            [CompletionResult]::new('--max-requests', '--max-requests', [CompletionResultType]::ParameterName, 'Refuse a run that would send more requests than this: -n above it, or -z without a --rate that bounds it')
+            [CompletionResult]::new('--max-rate', '--max-rate', [CompletionResultType]::ParameterName, 'Refuse a --rate above this, and a run with no --rate at all, which sends as fast as the target answers')
+            [CompletionResult]::new('--max-concurrency', '--max-concurrency', [CompletionResultType]::ParameterName, 'Refuse a concurrency above this')
+            [CompletionResult]::new('--fail-if', '--fail-if', [CompletionResultType]::ParameterName, 'End with exit code 4 when the run crosses this, for CI and scripts: ''p99 > 300ms'', ''errors > 1%''; repeat for more. The report is still printed. (pepe ping has --slo for the same.)')
+            [CompletionResult]::new('--metrics', '--metrics', [CompletionResultType]::ParameterName, 'Serve the live numbers for Prometheus at http://ADDR/metrics while the run goes, e.g. :9100 or 127.0.0.1:9100, so a soak run or a long ping shows up in Grafana next to the server''s own')
+            [CompletionResult]::new('--config', '--config', [CompletionResultType]::ParameterName, 'Read settings from this file instead of ./pepe.toml; flags on the command line win over it')
+            [CompletionResult]::new('--write-config', '--write-config', [CompletionResultType]::ParameterName, 'Write the settings as they stand to this file, as a pepe.toml, and exit')
+            [CompletionResult]::new('-c', '-c', [CompletionResultType]::ParameterName, 'Number of concurrent requests at a time')
+            [CompletionResult]::new('--concurrency', '--concurrency', [CompletionResultType]::ParameterName, 'Number of concurrent requests at a time')
+            [CompletionResult]::new('-u', '-u', [CompletionResultType]::ParameterName, 'User-Agent string, default is pepe/{version}')
+            [CompletionResult]::new('--user-agent', '--user-agent', [CompletionResultType]::ParameterName, 'User-Agent string, default is pepe/{version}')
+            [CompletionResult]::new('--gate', '--gate', [CompletionResultType]::ParameterName, 'Exit 1 when the verdict is Slower or Worse, for CI')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('-k', '-k', [CompletionResultType]::ParameterName, 'Accept invalid TLS certificates (self-signed, expired, wrong host)')
+            [CompletionResult]::new('--insecure', '--insecure', [CompletionResultType]::ParameterName, 'Accept invalid TLS certificates (self-signed, expired, wrong host)')
+            [CompletionResult]::new('--disable-compression', '--disable-compression', [CompletionResultType]::ParameterName, 'Disable HTTP compression, e.g. gzip')
+            [CompletionResult]::new('--disable-keepalive', '--disable-keepalive', [CompletionResultType]::ParameterName, 'Disable HTTP keepalive, e.g. Connection: close')
+            [CompletionResult]::new('--disable-redirects', '--disable-redirects', [CompletionResultType]::ParameterName, 'Prevent http redirects')
+            [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'Output results in JSON format')
+            [CompletionResult]::new('--dry-run', '--dry-run', [CompletionResultType]::ParameterName, 'Say what would be sent, to where and how much, and send nothing; as JSON with --json')
             [CompletionResult]::new('-i', '-i', [CompletionResultType]::ParameterName, 'Open the setup screen to review or change the settings before starting (it opens by itself when no URL is given)')
             [CompletionResult]::new('--setup', '--setup', [CompletionResultType]::ParameterName, 'Open the setup screen to review or change the settings before starting (it opens by itself when no URL is given)')
             break
@@ -226,12 +302,7 @@ Register-ArgumentCompleter -Native -CommandName 'pepe' -ScriptBlock {
             [CompletionResult]::new('--setup', '--setup', [CompletionResultType]::ParameterName, 'Open the setup screen to review or change the settings before starting (it opens by itself when no URL is given)')
             break
         }
-        'pepe;ramp' {
-            [CompletionResult]::new('--from', '--from', [CompletionResultType]::ParameterName, 'Concurrency of the first step')
-            [CompletionResult]::new('--to', '--to', [CompletionResultType]::ParameterName, 'Concurrency of the last step')
-            [CompletionResult]::new('--step', '--step', [CompletionResultType]::ParameterName, 'Concurrency added at each step')
-            [CompletionResult]::new('--every', '--every', [CompletionResultType]::ParameterName, 'How long each step is held, e.g. 10s, 1m')
-            [CompletionResult]::new('--until', '--until', [CompletionResultType]::ParameterName, 'End the ramp once a step crosses this: ''p99 > 500ms'', ''errors > 1%''')
+        'pepe;flow' {
             [CompletionResult]::new('-n', '-n', [CompletionResultType]::ParameterName, 'Number of requests to perform')
             [CompletionResult]::new('--number', '--number', [CompletionResultType]::ParameterName, 'Number of requests to perform')
             [CompletionResult]::new('-z', '-z', [CompletionResultType]::ParameterName, 'Duration of the test, e.g. 10s, 3m, 2h (mutually exclusive with -n)')
@@ -324,51 +395,6 @@ Register-ArgumentCompleter -Native -CommandName 'pepe' -ScriptBlock {
             [CompletionResult]::new('--setup', '--setup', [CompletionResultType]::ParameterName, 'Open the setup screen to review or change the settings before starting (it opens by itself when no URL is given)')
             break
         }
-        'pepe;flow' {
-            [CompletionResult]::new('-n', '-n', [CompletionResultType]::ParameterName, 'Number of requests to perform')
-            [CompletionResult]::new('--number', '--number', [CompletionResultType]::ParameterName, 'Number of requests to perform')
-            [CompletionResult]::new('-z', '-z', [CompletionResultType]::ParameterName, 'Duration of the test, e.g. 10s, 3m, 2h (mutually exclusive with -n)')
-            [CompletionResult]::new('--duration', '--duration', [CompletionResultType]::ParameterName, 'Duration of the test, e.g. 10s, 3m, 2h (mutually exclusive with -n)')
-            [CompletionResult]::new('-m', '-m', [CompletionResultType]::ParameterName, 'HTTP method, e.g. GET, POST, PUT, DELETE')
-            [CompletionResult]::new('--method', '--method', [CompletionResultType]::ParameterName, 'HTTP method, e.g. GET, POST, PUT, DELETE')
-            [CompletionResult]::new('-H', '-H ', [CompletionResultType]::ParameterName, 'HTTP headers, e.g. -H ''Accept: application/json''')
-            [CompletionResult]::new('--headers', '--headers', [CompletionResultType]::ParameterName, 'HTTP headers, e.g. -H ''Accept: application/json''')
-            [CompletionResult]::new('-t', '-t', [CompletionResultType]::ParameterName, 'Time in seconds to wait for a response')
-            [CompletionResult]::new('--timeout', '--timeout', [CompletionResultType]::ParameterName, 'Time in seconds to wait for a response')
-            [CompletionResult]::new('--warmup', '--warmup', [CompletionResultType]::ParameterName, 'Send for this long before measuring, e.g. 5s: connections open, caches fill and JITs settle without counting against the run')
-            [CompletionResult]::new('--threads', '--threads', [CompletionResultType]::ParameterName, 'Threads sending requests (default 1), or "auto" to add one whenever those sending are all busy. One sends 100k requests a second or more; the dashboard says when it is the limit')
-            [CompletionResult]::new('--rate', '--rate', [CompletionResultType]::ParameterName, 'Start this many requests a second, spread evenly, instead of as many as the concurrency allows; -c is then the most in flight at once, and pepe says when it holds the rate back')
-            [CompletionResult]::new('-d', '-d', [CompletionResultType]::ParameterName, 'HTTP request body')
-            [CompletionResult]::new('--body', '--body', [CompletionResultType]::ParameterName, 'HTTP request body')
-            [CompletionResult]::new('-p', '-p', [CompletionResultType]::ParameterName, 'Proxy server URL: http://user:pass@host:port or socks5://host:port')
-            [CompletionResult]::new('--proxy', '--proxy', [CompletionResultType]::ParameterName, 'Proxy server URL: http://user:pass@host:port or socks5://host:port')
-            [CompletionResult]::new('--trace-header', '--trace-header', [CompletionResultType]::ParameterName, 'Response header holding the request id to show for the slowest requests and in the inspector, so they can be found in the server''s logs; without it, X-Request-Id, traceparent, CF-Ray, X-Amzn-Trace-Id and other common ones are looked for')
-            [CompletionResult]::new('--snapshot', '--snapshot', [CompletionResultType]::ParameterName, 'Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run''s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run')
-            [CompletionResult]::new('--allow-host', '--allow-host', [CompletionResultType]::ParameterName, 'Refuse to send anywhere but these hosts: api.example.com exactly, or .example.com for it and its subdomains; repeat for more. Every target is checked before anything is sent')
-            [CompletionResult]::new('--max-requests', '--max-requests', [CompletionResultType]::ParameterName, 'Refuse a run that would send more requests than this: -n above it, or -z without a --rate that bounds it')
-            [CompletionResult]::new('--max-rate', '--max-rate', [CompletionResultType]::ParameterName, 'Refuse a --rate above this, and a run with no --rate at all, which sends as fast as the target answers')
-            [CompletionResult]::new('--max-concurrency', '--max-concurrency', [CompletionResultType]::ParameterName, 'Refuse a concurrency above this')
-            [CompletionResult]::new('--fail-if', '--fail-if', [CompletionResultType]::ParameterName, 'End with exit code 4 when the run crosses this, for CI and scripts: ''p99 > 300ms'', ''errors > 1%''; repeat for more. The report is still printed. (pepe ping has --slo for the same.)')
-            [CompletionResult]::new('--metrics', '--metrics', [CompletionResultType]::ParameterName, 'Serve the live numbers for Prometheus at http://ADDR/metrics while the run goes, e.g. :9100 or 127.0.0.1:9100, so a soak run or a long ping shows up in Grafana next to the server''s own')
-            [CompletionResult]::new('--config', '--config', [CompletionResultType]::ParameterName, 'Read settings from this file instead of ./pepe.toml; flags on the command line win over it')
-            [CompletionResult]::new('--write-config', '--write-config', [CompletionResultType]::ParameterName, 'Write the settings as they stand to this file, as a pepe.toml, and exit')
-            [CompletionResult]::new('-c', '-c', [CompletionResultType]::ParameterName, 'Number of concurrent requests at a time')
-            [CompletionResult]::new('--concurrency', '--concurrency', [CompletionResultType]::ParameterName, 'Number of concurrent requests at a time')
-            [CompletionResult]::new('-u', '-u', [CompletionResultType]::ParameterName, 'User-Agent string, default is pepe/{version}')
-            [CompletionResult]::new('--user-agent', '--user-agent', [CompletionResultType]::ParameterName, 'User-Agent string, default is pepe/{version}')
-            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
-            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
-            [CompletionResult]::new('-k', '-k', [CompletionResultType]::ParameterName, 'Accept invalid TLS certificates (self-signed, expired, wrong host)')
-            [CompletionResult]::new('--insecure', '--insecure', [CompletionResultType]::ParameterName, 'Accept invalid TLS certificates (self-signed, expired, wrong host)')
-            [CompletionResult]::new('--disable-compression', '--disable-compression', [CompletionResultType]::ParameterName, 'Disable HTTP compression, e.g. gzip')
-            [CompletionResult]::new('--disable-keepalive', '--disable-keepalive', [CompletionResultType]::ParameterName, 'Disable HTTP keepalive, e.g. Connection: close')
-            [CompletionResult]::new('--disable-redirects', '--disable-redirects', [CompletionResultType]::ParameterName, 'Prevent http redirects')
-            [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'Output results in JSON format')
-            [CompletionResult]::new('--dry-run', '--dry-run', [CompletionResultType]::ParameterName, 'Say what would be sent, to where and how much, and send nothing; as JSON with --json')
-            [CompletionResult]::new('-i', '-i', [CompletionResultType]::ParameterName, 'Open the setup screen to review or change the settings before starting (it opens by itself when no URL is given)')
-            [CompletionResult]::new('--setup', '--setup', [CompletionResultType]::ParameterName, 'Open the setup screen to review or change the settings before starting (it opens by itself when no URL is given)')
-            break
-        }
         'pepe;logs' {
             [CompletionResult]::new('--format', '--format', [CompletionResultType]::ParameterName, 'The access log''s log_format as nginx.conf has it, on one line, when it isn''t `combined`: ''$remote_addr [$time_local] "$request" $status $request_time''')
             [CompletionResult]::new('--window', '--window', [CompletionResultType]::ParameterName, 'What "now" is measured over, e.g. 10s, 1m, 5m')
@@ -407,125 +433,6 @@ Register-ArgumentCompleter -Native -CommandName 'pepe' -ScriptBlock {
             [CompletionResult]::new('--user-agent', '--user-agent', [CompletionResultType]::ParameterName, 'User-Agent string, default is pepe/{version}')
             [CompletionResult]::new('--all', '--all', [CompletionResultType]::ParameterName, 'Read all of the log before following it, however far back it goes')
             [CompletionResult]::new('--exact-paths', '--exact-paths', [CompletionResultType]::ParameterName, 'Count /items/1 and /items/2 apart. Without it the numbers and ids in a path count as one, /items/*')
-            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
-            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
-            [CompletionResult]::new('-k', '-k', [CompletionResultType]::ParameterName, 'Accept invalid TLS certificates (self-signed, expired, wrong host)')
-            [CompletionResult]::new('--insecure', '--insecure', [CompletionResultType]::ParameterName, 'Accept invalid TLS certificates (self-signed, expired, wrong host)')
-            [CompletionResult]::new('--disable-compression', '--disable-compression', [CompletionResultType]::ParameterName, 'Disable HTTP compression, e.g. gzip')
-            [CompletionResult]::new('--disable-keepalive', '--disable-keepalive', [CompletionResultType]::ParameterName, 'Disable HTTP keepalive, e.g. Connection: close')
-            [CompletionResult]::new('--disable-redirects', '--disable-redirects', [CompletionResultType]::ParameterName, 'Prevent http redirects')
-            [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'Output results in JSON format')
-            [CompletionResult]::new('--dry-run', '--dry-run', [CompletionResultType]::ParameterName, 'Say what would be sent, to where and how much, and send nothing; as JSON with --json')
-            [CompletionResult]::new('-i', '-i', [CompletionResultType]::ParameterName, 'Open the setup screen to review or change the settings before starting (it opens by itself when no URL is given)')
-            [CompletionResult]::new('--setup', '--setup', [CompletionResultType]::ParameterName, 'Open the setup screen to review or change the settings before starting (it opens by itself when no URL is given)')
-            break
-        }
-        'pepe;ping' {
-            [CompletionResult]::new('--every', '--every', [CompletionResultType]::ParameterName, 'Time between pings, e.g. 1s, 500ms, 2m')
-            [CompletionResult]::new('--window', '--window', [CompletionResultType]::ParameterName, 'How much of the run the graph shows, e.g. 60s, 5m; + and - change it on screen, w shows the whole run')
-            [CompletionResult]::new('--name', '--name', [CompletionResultType]::ParameterName, 'What to call each target, in order: --name api --name cdn, or --name api,cdn')
-            [CompletionResult]::new('--color', '--color', [CompletionResultType]::ParameterName, 'A colour for each target''s line, in order: red, green, yellow, blue, magenta, cyan, white, gray, their light- forms, or #RRGGBB')
-            [CompletionResult]::new('--interface', '--interface', [CompletionResultType]::ParameterName, 'Send from this interface (en0, eth0) or local address')
-            [CompletionResult]::new('--port', '--port', [CompletionResultType]::ParameterName, 'With --tcp: the port of a target that names none')
-            [CompletionResult]::new('--tcp-rst', '--tcp-rst', [CompletionResultType]::ParameterName, 'With --tcp: a connection refused counts as an answer (the host is there) rather than a failure')
-            [CompletionResult]::new('--slo', '--slo', [CompletionResultType]::ParameterName, 'Limits a ping must meet, in milliseconds: total=500,ttfb=200, connect=100,dns=50,tls=150,download=100. Breaking one marks the ping, and the run exits 4 at the end')
-            [CompletionResult]::new('--ymin', '--ymin', [CompletionResultType]::ParameterName, 'The graph''s floor, in milliseconds')
-            [CompletionResult]::new('--ymax', '--ymax', [CompletionResultType]::ParameterName, 'The graph''s ceiling, in milliseconds; without it the graph fits what it shows')
-            [CompletionResult]::new('--save', '--save', [CompletionResultType]::ParameterName, 'Write the JSON report to this file when the run ends, whatever else is shown')
-            [CompletionResult]::new('--save-body', '--save-body', [CompletionResultType]::ParameterName, 'Write the last body received to this file when the run ends')
-            [CompletionResult]::new('-n', '-n', [CompletionResultType]::ParameterName, 'Number of requests to perform')
-            [CompletionResult]::new('--number', '--number', [CompletionResultType]::ParameterName, 'Number of requests to perform')
-            [CompletionResult]::new('-z', '-z', [CompletionResultType]::ParameterName, 'Duration of the test, e.g. 10s, 3m, 2h (mutually exclusive with -n)')
-            [CompletionResult]::new('--duration', '--duration', [CompletionResultType]::ParameterName, 'Duration of the test, e.g. 10s, 3m, 2h (mutually exclusive with -n)')
-            [CompletionResult]::new('-m', '-m', [CompletionResultType]::ParameterName, 'HTTP method, e.g. GET, POST, PUT, DELETE')
-            [CompletionResult]::new('--method', '--method', [CompletionResultType]::ParameterName, 'HTTP method, e.g. GET, POST, PUT, DELETE')
-            [CompletionResult]::new('-H', '-H ', [CompletionResultType]::ParameterName, 'HTTP headers, e.g. -H ''Accept: application/json''')
-            [CompletionResult]::new('--headers', '--headers', [CompletionResultType]::ParameterName, 'HTTP headers, e.g. -H ''Accept: application/json''')
-            [CompletionResult]::new('-t', '-t', [CompletionResultType]::ParameterName, 'Time in seconds to wait for a response')
-            [CompletionResult]::new('--timeout', '--timeout', [CompletionResultType]::ParameterName, 'Time in seconds to wait for a response')
-            [CompletionResult]::new('--warmup', '--warmup', [CompletionResultType]::ParameterName, 'Send for this long before measuring, e.g. 5s: connections open, caches fill and JITs settle without counting against the run')
-            [CompletionResult]::new('--threads', '--threads', [CompletionResultType]::ParameterName, 'Threads sending requests (default 1), or "auto" to add one whenever those sending are all busy. One sends 100k requests a second or more; the dashboard says when it is the limit')
-            [CompletionResult]::new('--rate', '--rate', [CompletionResultType]::ParameterName, 'Start this many requests a second, spread evenly, instead of as many as the concurrency allows; -c is then the most in flight at once, and pepe says when it holds the rate back')
-            [CompletionResult]::new('-d', '-d', [CompletionResultType]::ParameterName, 'HTTP request body')
-            [CompletionResult]::new('--body', '--body', [CompletionResultType]::ParameterName, 'HTTP request body')
-            [CompletionResult]::new('-p', '-p', [CompletionResultType]::ParameterName, 'Proxy server URL: http://user:pass@host:port or socks5://host:port')
-            [CompletionResult]::new('--proxy', '--proxy', [CompletionResultType]::ParameterName, 'Proxy server URL: http://user:pass@host:port or socks5://host:port')
-            [CompletionResult]::new('--trace-header', '--trace-header', [CompletionResultType]::ParameterName, 'Response header holding the request id to show for the slowest requests and in the inspector, so they can be found in the server''s logs; without it, X-Request-Id, traceparent, CF-Ray, X-Amzn-Trace-Id and other common ones are looked for')
-            [CompletionResult]::new('--snapshot', '--snapshot', [CompletionResultType]::ParameterName, 'Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run''s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run')
-            [CompletionResult]::new('--allow-host', '--allow-host', [CompletionResultType]::ParameterName, 'Refuse to send anywhere but these hosts: api.example.com exactly, or .example.com for it and its subdomains; repeat for more. Every target is checked before anything is sent')
-            [CompletionResult]::new('--max-requests', '--max-requests', [CompletionResultType]::ParameterName, 'Refuse a run that would send more requests than this: -n above it, or -z without a --rate that bounds it')
-            [CompletionResult]::new('--max-rate', '--max-rate', [CompletionResultType]::ParameterName, 'Refuse a --rate above this, and a run with no --rate at all, which sends as fast as the target answers')
-            [CompletionResult]::new('--max-concurrency', '--max-concurrency', [CompletionResultType]::ParameterName, 'Refuse a concurrency above this')
-            [CompletionResult]::new('--fail-if', '--fail-if', [CompletionResultType]::ParameterName, 'End with exit code 4 when the run crosses this, for CI and scripts: ''p99 > 300ms'', ''errors > 1%''; repeat for more. The report is still printed. (pepe ping has --slo for the same.)')
-            [CompletionResult]::new('--metrics', '--metrics', [CompletionResultType]::ParameterName, 'Serve the live numbers for Prometheus at http://ADDR/metrics while the run goes, e.g. :9100 or 127.0.0.1:9100, so a soak run or a long ping shows up in Grafana next to the server''s own')
-            [CompletionResult]::new('--config', '--config', [CompletionResultType]::ParameterName, 'Read settings from this file instead of ./pepe.toml; flags on the command line win over it')
-            [CompletionResult]::new('--write-config', '--write-config', [CompletionResultType]::ParameterName, 'Write the settings as they stand to this file, as a pepe.toml, and exit')
-            [CompletionResult]::new('-c', '-c', [CompletionResultType]::ParameterName, 'Number of concurrent requests at a time')
-            [CompletionResult]::new('--concurrency', '--concurrency', [CompletionResultType]::ParameterName, 'Number of concurrent requests at a time')
-            [CompletionResult]::new('-u', '-u', [CompletionResultType]::ParameterName, 'User-Agent string, default is pepe/{version}')
-            [CompletionResult]::new('--user-agent', '--user-agent', [CompletionResultType]::ParameterName, 'User-Agent string, default is pepe/{version}')
-            [CompletionResult]::new('-4', '-4', [CompletionResultType]::ParameterName, 'Resolve names to IPv4 addresses only')
-            [CompletionResult]::new('-6', '-6', [CompletionResultType]::ParameterName, 'Resolve names to IPv6 addresses only')
-            [CompletionResult]::new('--all-ips', '--all-ips', [CompletionResultType]::ParameterName, 'Ping every address a name resolves to, each as a target of its own')
-            [CompletionResult]::new('--tcp', '--tcp', [CompletionResultType]::ParameterName, 'Only connect: a TCP ping of the port, with no request sent')
-            [CompletionResult]::new('--cmd', '--cmd', [CompletionResultType]::ParameterName, 'The targets are commands: run each one every interval and graph how long it takes; its exit code is the status')
-            [CompletionResult]::new('--keep-alive', '--keep-alive', [CompletionResultType]::ParameterName, 'Keep the connection between pings, as a browser would. The DNS, connect and TLS phases are then measured once; without it every ping measures all five')
-            [CompletionResult]::new('--bell', '--bell', [CompletionResultType]::ParameterName, 'Ring the terminal bell when a ping fails or breaks the SLO')
-            [CompletionResult]::new('-0', '-0', [CompletionResultType]::ParameterName, 'Start the graph at zero (the same as --ymin 0)')
-            [CompletionResult]::new('-s', '-s', [CompletionResultType]::ParameterName, 'Draw the graph with dots rather than braille, for terminals and fonts that lack it')
-            [CompletionResult]::new('--simple-graphics', '--simple-graphics', [CompletionResultType]::ParameterName, 'Draw the graph with dots rather than braille, for terminals and fonts that lack it')
-            [CompletionResult]::new('--jsonl', '--jsonl', [CompletionResultType]::ParameterName, 'No screen: one JSON object per ping on stdout, as it happens')
-            [CompletionResult]::new('--csv', '--csv', [CompletionResultType]::ParameterName, 'No screen: one CSV line per ping on stdout, under a header')
-            [CompletionResult]::new('--show-body', '--show-body', [CompletionResultType]::ParameterName, 'Keep the first kilobyte of each body for the inspector')
-            [CompletionResult]::new('--http1', '--http1', [CompletionResultType]::ParameterName, 'Speak HTTP/1.1 even when the server offers HTTP/2; without it a ping takes h2 when the server offers it through ALPN')
-            [CompletionResult]::new('--once', '--once', [CompletionResultType]::ParameterName, 'One diagnosis and out: three quick pings, then the last one''s phases, what answered, and what to look at; no screen')
-            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
-            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
-            [CompletionResult]::new('-k', '-k', [CompletionResultType]::ParameterName, 'Accept invalid TLS certificates (self-signed, expired, wrong host)')
-            [CompletionResult]::new('--insecure', '--insecure', [CompletionResultType]::ParameterName, 'Accept invalid TLS certificates (self-signed, expired, wrong host)')
-            [CompletionResult]::new('--disable-compression', '--disable-compression', [CompletionResultType]::ParameterName, 'Disable HTTP compression, e.g. gzip')
-            [CompletionResult]::new('--disable-keepalive', '--disable-keepalive', [CompletionResultType]::ParameterName, 'Disable HTTP keepalive, e.g. Connection: close')
-            [CompletionResult]::new('--disable-redirects', '--disable-redirects', [CompletionResultType]::ParameterName, 'Prevent http redirects')
-            [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'Output results in JSON format')
-            [CompletionResult]::new('--dry-run', '--dry-run', [CompletionResultType]::ParameterName, 'Say what would be sent, to where and how much, and send nothing; as JSON with --json')
-            [CompletionResult]::new('-i', '-i', [CompletionResultType]::ParameterName, 'Open the setup screen to review or change the settings before starting (it opens by itself when no URL is given)')
-            [CompletionResult]::new('--setup', '--setup', [CompletionResultType]::ParameterName, 'Open the setup screen to review or change the settings before starting (it opens by itself when no URL is given)')
-            break
-        }
-        'pepe;compare' {
-            [CompletionResult]::new('--svg', '--svg', [CompletionResultType]::ParameterName, 'Also write the verdict as a card, an SVG for a README or a page')
-            [CompletionResult]::new('-n', '-n', [CompletionResultType]::ParameterName, 'Number of requests to perform')
-            [CompletionResult]::new('--number', '--number', [CompletionResultType]::ParameterName, 'Number of requests to perform')
-            [CompletionResult]::new('-z', '-z', [CompletionResultType]::ParameterName, 'Duration of the test, e.g. 10s, 3m, 2h (mutually exclusive with -n)')
-            [CompletionResult]::new('--duration', '--duration', [CompletionResultType]::ParameterName, 'Duration of the test, e.g. 10s, 3m, 2h (mutually exclusive with -n)')
-            [CompletionResult]::new('-m', '-m', [CompletionResultType]::ParameterName, 'HTTP method, e.g. GET, POST, PUT, DELETE')
-            [CompletionResult]::new('--method', '--method', [CompletionResultType]::ParameterName, 'HTTP method, e.g. GET, POST, PUT, DELETE')
-            [CompletionResult]::new('-H', '-H ', [CompletionResultType]::ParameterName, 'HTTP headers, e.g. -H ''Accept: application/json''')
-            [CompletionResult]::new('--headers', '--headers', [CompletionResultType]::ParameterName, 'HTTP headers, e.g. -H ''Accept: application/json''')
-            [CompletionResult]::new('-t', '-t', [CompletionResultType]::ParameterName, 'Time in seconds to wait for a response')
-            [CompletionResult]::new('--timeout', '--timeout', [CompletionResultType]::ParameterName, 'Time in seconds to wait for a response')
-            [CompletionResult]::new('--warmup', '--warmup', [CompletionResultType]::ParameterName, 'Send for this long before measuring, e.g. 5s: connections open, caches fill and JITs settle without counting against the run')
-            [CompletionResult]::new('--threads', '--threads', [CompletionResultType]::ParameterName, 'Threads sending requests (default 1), or "auto" to add one whenever those sending are all busy. One sends 100k requests a second or more; the dashboard says when it is the limit')
-            [CompletionResult]::new('--rate', '--rate', [CompletionResultType]::ParameterName, 'Start this many requests a second, spread evenly, instead of as many as the concurrency allows; -c is then the most in flight at once, and pepe says when it holds the rate back')
-            [CompletionResult]::new('-d', '-d', [CompletionResultType]::ParameterName, 'HTTP request body')
-            [CompletionResult]::new('--body', '--body', [CompletionResultType]::ParameterName, 'HTTP request body')
-            [CompletionResult]::new('-p', '-p', [CompletionResultType]::ParameterName, 'Proxy server URL: http://user:pass@host:port or socks5://host:port')
-            [CompletionResult]::new('--proxy', '--proxy', [CompletionResultType]::ParameterName, 'Proxy server URL: http://user:pass@host:port or socks5://host:port')
-            [CompletionResult]::new('--trace-header', '--trace-header', [CompletionResultType]::ParameterName, 'Response header holding the request id to show for the slowest requests and in the inspector, so they can be found in the server''s logs; without it, X-Request-Id, traceparent, CF-Ray, X-Amzn-Trace-Id and other common ones are looked for')
-            [CompletionResult]::new('--snapshot', '--snapshot', [CompletionResultType]::ParameterName, 'Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run''s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run')
-            [CompletionResult]::new('--allow-host', '--allow-host', [CompletionResultType]::ParameterName, 'Refuse to send anywhere but these hosts: api.example.com exactly, or .example.com for it and its subdomains; repeat for more. Every target is checked before anything is sent')
-            [CompletionResult]::new('--max-requests', '--max-requests', [CompletionResultType]::ParameterName, 'Refuse a run that would send more requests than this: -n above it, or -z without a --rate that bounds it')
-            [CompletionResult]::new('--max-rate', '--max-rate', [CompletionResultType]::ParameterName, 'Refuse a --rate above this, and a run with no --rate at all, which sends as fast as the target answers')
-            [CompletionResult]::new('--max-concurrency', '--max-concurrency', [CompletionResultType]::ParameterName, 'Refuse a concurrency above this')
-            [CompletionResult]::new('--fail-if', '--fail-if', [CompletionResultType]::ParameterName, 'End with exit code 4 when the run crosses this, for CI and scripts: ''p99 > 300ms'', ''errors > 1%''; repeat for more. The report is still printed. (pepe ping has --slo for the same.)')
-            [CompletionResult]::new('--metrics', '--metrics', [CompletionResultType]::ParameterName, 'Serve the live numbers for Prometheus at http://ADDR/metrics while the run goes, e.g. :9100 or 127.0.0.1:9100, so a soak run or a long ping shows up in Grafana next to the server''s own')
-            [CompletionResult]::new('--config', '--config', [CompletionResultType]::ParameterName, 'Read settings from this file instead of ./pepe.toml; flags on the command line win over it')
-            [CompletionResult]::new('--write-config', '--write-config', [CompletionResultType]::ParameterName, 'Write the settings as they stand to this file, as a pepe.toml, and exit')
-            [CompletionResult]::new('-c', '-c', [CompletionResultType]::ParameterName, 'Number of concurrent requests at a time')
-            [CompletionResult]::new('--concurrency', '--concurrency', [CompletionResultType]::ParameterName, 'Number of concurrent requests at a time')
-            [CompletionResult]::new('-u', '-u', [CompletionResultType]::ParameterName, 'User-Agent string, default is pepe/{version}')
-            [CompletionResult]::new('--user-agent', '--user-agent', [CompletionResultType]::ParameterName, 'User-Agent string, default is pepe/{version}')
-            [CompletionResult]::new('--gate', '--gate', [CompletionResultType]::ParameterName, 'Exit 1 when the verdict is Slower or Worse, for CI')
             [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
             [CompletionResult]::new('-k', '-k', [CompletionResultType]::ParameterName, 'Accept invalid TLS certificates (self-signed, expired, wrong host)')
@@ -629,52 +536,145 @@ Register-ArgumentCompleter -Native -CommandName 'pepe' -ScriptBlock {
             [CompletionResult]::new('--setup', '--setup', [CompletionResultType]::ParameterName, 'Open the setup screen to review or change the settings before starting (it opens by itself when no URL is given)')
             break
         }
+        'pepe;self-update' {
+            [CompletionResult]::new('-n', '-n', [CompletionResultType]::ParameterName, 'Number of requests to perform')
+            [CompletionResult]::new('--number', '--number', [CompletionResultType]::ParameterName, 'Number of requests to perform')
+            [CompletionResult]::new('-z', '-z', [CompletionResultType]::ParameterName, 'Duration of the test, e.g. 10s, 3m, 2h (mutually exclusive with -n)')
+            [CompletionResult]::new('--duration', '--duration', [CompletionResultType]::ParameterName, 'Duration of the test, e.g. 10s, 3m, 2h (mutually exclusive with -n)')
+            [CompletionResult]::new('-m', '-m', [CompletionResultType]::ParameterName, 'HTTP method, e.g. GET, POST, PUT, DELETE')
+            [CompletionResult]::new('--method', '--method', [CompletionResultType]::ParameterName, 'HTTP method, e.g. GET, POST, PUT, DELETE')
+            [CompletionResult]::new('-H', '-H ', [CompletionResultType]::ParameterName, 'HTTP headers, e.g. -H ''Accept: application/json''')
+            [CompletionResult]::new('--headers', '--headers', [CompletionResultType]::ParameterName, 'HTTP headers, e.g. -H ''Accept: application/json''')
+            [CompletionResult]::new('-t', '-t', [CompletionResultType]::ParameterName, 'Time in seconds to wait for a response')
+            [CompletionResult]::new('--timeout', '--timeout', [CompletionResultType]::ParameterName, 'Time in seconds to wait for a response')
+            [CompletionResult]::new('--warmup', '--warmup', [CompletionResultType]::ParameterName, 'Send for this long before measuring, e.g. 5s: connections open, caches fill and JITs settle without counting against the run')
+            [CompletionResult]::new('--threads', '--threads', [CompletionResultType]::ParameterName, 'Threads sending requests (default 1), or "auto" to add one whenever those sending are all busy. One sends 100k requests a second or more; the dashboard says when it is the limit')
+            [CompletionResult]::new('--rate', '--rate', [CompletionResultType]::ParameterName, 'Start this many requests a second, spread evenly, instead of as many as the concurrency allows; -c is then the most in flight at once, and pepe says when it holds the rate back')
+            [CompletionResult]::new('-d', '-d', [CompletionResultType]::ParameterName, 'HTTP request body')
+            [CompletionResult]::new('--body', '--body', [CompletionResultType]::ParameterName, 'HTTP request body')
+            [CompletionResult]::new('-p', '-p', [CompletionResultType]::ParameterName, 'Proxy server URL: http://user:pass@host:port or socks5://host:port')
+            [CompletionResult]::new('--proxy', '--proxy', [CompletionResultType]::ParameterName, 'Proxy server URL: http://user:pass@host:port or socks5://host:port')
+            [CompletionResult]::new('--trace-header', '--trace-header', [CompletionResultType]::ParameterName, 'Response header holding the request id to show for the slowest requests and in the inspector, so they can be found in the server''s logs; without it, X-Request-Id, traceparent, CF-Ray, X-Amzn-Trace-Id and other common ones are looked for')
+            [CompletionResult]::new('--snapshot', '--snapshot', [CompletionResultType]::ParameterName, 'Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run''s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run')
+            [CompletionResult]::new('--allow-host', '--allow-host', [CompletionResultType]::ParameterName, 'Refuse to send anywhere but these hosts: api.example.com exactly, or .example.com for it and its subdomains; repeat for more. Every target is checked before anything is sent')
+            [CompletionResult]::new('--max-requests', '--max-requests', [CompletionResultType]::ParameterName, 'Refuse a run that would send more requests than this: -n above it, or -z without a --rate that bounds it')
+            [CompletionResult]::new('--max-rate', '--max-rate', [CompletionResultType]::ParameterName, 'Refuse a --rate above this, and a run with no --rate at all, which sends as fast as the target answers')
+            [CompletionResult]::new('--max-concurrency', '--max-concurrency', [CompletionResultType]::ParameterName, 'Refuse a concurrency above this')
+            [CompletionResult]::new('--fail-if', '--fail-if', [CompletionResultType]::ParameterName, 'End with exit code 4 when the run crosses this, for CI and scripts: ''p99 > 300ms'', ''errors > 1%''; repeat for more. The report is still printed. (pepe ping has --slo for the same.)')
+            [CompletionResult]::new('--metrics', '--metrics', [CompletionResultType]::ParameterName, 'Serve the live numbers for Prometheus at http://ADDR/metrics while the run goes, e.g. :9100 or 127.0.0.1:9100, so a soak run or a long ping shows up in Grafana next to the server''s own')
+            [CompletionResult]::new('--config', '--config', [CompletionResultType]::ParameterName, 'Read settings from this file instead of ./pepe.toml; flags on the command line win over it')
+            [CompletionResult]::new('--write-config', '--write-config', [CompletionResultType]::ParameterName, 'Write the settings as they stand to this file, as a pepe.toml, and exit')
+            [CompletionResult]::new('-c', '-c', [CompletionResultType]::ParameterName, 'Number of concurrent requests at a time')
+            [CompletionResult]::new('--concurrency', '--concurrency', [CompletionResultType]::ParameterName, 'Number of concurrent requests at a time')
+            [CompletionResult]::new('-u', '-u', [CompletionResultType]::ParameterName, 'User-Agent string, default is pepe/{version}')
+            [CompletionResult]::new('--user-agent', '--user-agent', [CompletionResultType]::ParameterName, 'User-Agent string, default is pepe/{version}')
+            [CompletionResult]::new('--check', '--check', [CompletionResultType]::ParameterName, 'Only say whether a newer release exists (exit code 1 if so) and what''s in it; don''t install it')
+            [CompletionResult]::new('--verbose', '--verbose', [CompletionResultType]::ParameterName, 'Show the installer''s own output')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('-k', '-k', [CompletionResultType]::ParameterName, 'Accept invalid TLS certificates (self-signed, expired, wrong host)')
+            [CompletionResult]::new('--insecure', '--insecure', [CompletionResultType]::ParameterName, 'Accept invalid TLS certificates (self-signed, expired, wrong host)')
+            [CompletionResult]::new('--disable-compression', '--disable-compression', [CompletionResultType]::ParameterName, 'Disable HTTP compression, e.g. gzip')
+            [CompletionResult]::new('--disable-keepalive', '--disable-keepalive', [CompletionResultType]::ParameterName, 'Disable HTTP keepalive, e.g. Connection: close')
+            [CompletionResult]::new('--disable-redirects', '--disable-redirects', [CompletionResultType]::ParameterName, 'Prevent http redirects')
+            [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'Output results in JSON format')
+            [CompletionResult]::new('--dry-run', '--dry-run', [CompletionResultType]::ParameterName, 'Say what would be sent, to where and how much, and send nothing; as JSON with --json')
+            [CompletionResult]::new('-i', '-i', [CompletionResultType]::ParameterName, 'Open the setup screen to review or change the settings before starting (it opens by itself when no URL is given)')
+            [CompletionResult]::new('--setup', '--setup', [CompletionResultType]::ParameterName, 'Open the setup screen to review or change the settings before starting (it opens by itself when no URL is given)')
+            break
+        }
+        'pepe;completions' {
+            [CompletionResult]::new('-n', '-n', [CompletionResultType]::ParameterName, 'Number of requests to perform')
+            [CompletionResult]::new('--number', '--number', [CompletionResultType]::ParameterName, 'Number of requests to perform')
+            [CompletionResult]::new('-z', '-z', [CompletionResultType]::ParameterName, 'Duration of the test, e.g. 10s, 3m, 2h (mutually exclusive with -n)')
+            [CompletionResult]::new('--duration', '--duration', [CompletionResultType]::ParameterName, 'Duration of the test, e.g. 10s, 3m, 2h (mutually exclusive with -n)')
+            [CompletionResult]::new('-m', '-m', [CompletionResultType]::ParameterName, 'HTTP method, e.g. GET, POST, PUT, DELETE')
+            [CompletionResult]::new('--method', '--method', [CompletionResultType]::ParameterName, 'HTTP method, e.g. GET, POST, PUT, DELETE')
+            [CompletionResult]::new('-H', '-H ', [CompletionResultType]::ParameterName, 'HTTP headers, e.g. -H ''Accept: application/json''')
+            [CompletionResult]::new('--headers', '--headers', [CompletionResultType]::ParameterName, 'HTTP headers, e.g. -H ''Accept: application/json''')
+            [CompletionResult]::new('-t', '-t', [CompletionResultType]::ParameterName, 'Time in seconds to wait for a response')
+            [CompletionResult]::new('--timeout', '--timeout', [CompletionResultType]::ParameterName, 'Time in seconds to wait for a response')
+            [CompletionResult]::new('--warmup', '--warmup', [CompletionResultType]::ParameterName, 'Send for this long before measuring, e.g. 5s: connections open, caches fill and JITs settle without counting against the run')
+            [CompletionResult]::new('--threads', '--threads', [CompletionResultType]::ParameterName, 'Threads sending requests (default 1), or "auto" to add one whenever those sending are all busy. One sends 100k requests a second or more; the dashboard says when it is the limit')
+            [CompletionResult]::new('--rate', '--rate', [CompletionResultType]::ParameterName, 'Start this many requests a second, spread evenly, instead of as many as the concurrency allows; -c is then the most in flight at once, and pepe says when it holds the rate back')
+            [CompletionResult]::new('-d', '-d', [CompletionResultType]::ParameterName, 'HTTP request body')
+            [CompletionResult]::new('--body', '--body', [CompletionResultType]::ParameterName, 'HTTP request body')
+            [CompletionResult]::new('-p', '-p', [CompletionResultType]::ParameterName, 'Proxy server URL: http://user:pass@host:port or socks5://host:port')
+            [CompletionResult]::new('--proxy', '--proxy', [CompletionResultType]::ParameterName, 'Proxy server URL: http://user:pass@host:port or socks5://host:port')
+            [CompletionResult]::new('--trace-header', '--trace-header', [CompletionResultType]::ParameterName, 'Response header holding the request id to show for the slowest requests and in the inspector, so they can be found in the server''s logs; without it, X-Request-Id, traceparent, CF-Ray, X-Amzn-Trace-Id and other common ones are looked for')
+            [CompletionResult]::new('--snapshot', '--snapshot', [CompletionResultType]::ParameterName, 'Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run''s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run')
+            [CompletionResult]::new('--allow-host', '--allow-host', [CompletionResultType]::ParameterName, 'Refuse to send anywhere but these hosts: api.example.com exactly, or .example.com for it and its subdomains; repeat for more. Every target is checked before anything is sent')
+            [CompletionResult]::new('--max-requests', '--max-requests', [CompletionResultType]::ParameterName, 'Refuse a run that would send more requests than this: -n above it, or -z without a --rate that bounds it')
+            [CompletionResult]::new('--max-rate', '--max-rate', [CompletionResultType]::ParameterName, 'Refuse a --rate above this, and a run with no --rate at all, which sends as fast as the target answers')
+            [CompletionResult]::new('--max-concurrency', '--max-concurrency', [CompletionResultType]::ParameterName, 'Refuse a concurrency above this')
+            [CompletionResult]::new('--fail-if', '--fail-if', [CompletionResultType]::ParameterName, 'End with exit code 4 when the run crosses this, for CI and scripts: ''p99 > 300ms'', ''errors > 1%''; repeat for more. The report is still printed. (pepe ping has --slo for the same.)')
+            [CompletionResult]::new('--metrics', '--metrics', [CompletionResultType]::ParameterName, 'Serve the live numbers for Prometheus at http://ADDR/metrics while the run goes, e.g. :9100 or 127.0.0.1:9100, so a soak run or a long ping shows up in Grafana next to the server''s own')
+            [CompletionResult]::new('--config', '--config', [CompletionResultType]::ParameterName, 'Read settings from this file instead of ./pepe.toml; flags on the command line win over it')
+            [CompletionResult]::new('--write-config', '--write-config', [CompletionResultType]::ParameterName, 'Write the settings as they stand to this file, as a pepe.toml, and exit')
+            [CompletionResult]::new('-c', '-c', [CompletionResultType]::ParameterName, 'Number of concurrent requests at a time')
+            [CompletionResult]::new('--concurrency', '--concurrency', [CompletionResultType]::ParameterName, 'Number of concurrent requests at a time')
+            [CompletionResult]::new('-u', '-u', [CompletionResultType]::ParameterName, 'User-Agent string, default is pepe/{version}')
+            [CompletionResult]::new('--user-agent', '--user-agent', [CompletionResultType]::ParameterName, 'User-Agent string, default is pepe/{version}')
+            [CompletionResult]::new('--install', '--install', [CompletionResultType]::ParameterName, 'Put the script and the man pages in place and add the line the shell''s startup file needs, so tab completion works in the next shell')
+            [CompletionResult]::new('--dry-run', '--dry-run', [CompletionResultType]::ParameterName, 'With --install: say what would be done, and do nothing')
+            [CompletionResult]::new('-h', '-h', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('--help', '--help', [CompletionResultType]::ParameterName, 'Print help')
+            [CompletionResult]::new('-k', '-k', [CompletionResultType]::ParameterName, 'Accept invalid TLS certificates (self-signed, expired, wrong host)')
+            [CompletionResult]::new('--insecure', '--insecure', [CompletionResultType]::ParameterName, 'Accept invalid TLS certificates (self-signed, expired, wrong host)')
+            [CompletionResult]::new('--disable-compression', '--disable-compression', [CompletionResultType]::ParameterName, 'Disable HTTP compression, e.g. gzip')
+            [CompletionResult]::new('--disable-keepalive', '--disable-keepalive', [CompletionResultType]::ParameterName, 'Disable HTTP keepalive, e.g. Connection: close')
+            [CompletionResult]::new('--disable-redirects', '--disable-redirects', [CompletionResultType]::ParameterName, 'Prevent http redirects')
+            [CompletionResult]::new('--json', '--json', [CompletionResultType]::ParameterName, 'Output results in JSON format')
+            [CompletionResult]::new('-i', '-i', [CompletionResultType]::ParameterName, 'Open the setup screen to review or change the settings before starting (it opens by itself when no URL is given)')
+            [CompletionResult]::new('--setup', '--setup', [CompletionResultType]::ParameterName, 'Open the setup screen to review or change the settings before starting (it opens by itself when no URL is given)')
+            break
+        }
         'pepe;help' {
-            [CompletionResult]::new('self-update', 'self-update', [CompletionResultType]::ParameterValue, 'Update pepe to the latest release, or say what''s new in it')
-            [CompletionResult]::new('completions', 'completions', [CompletionResultType]::ParameterValue, 'Tab completion for your shell: print the script, or --install it')
-            [CompletionResult]::new('api', 'api', [CompletionResultType]::ParameterValue, 'Load-test every endpoint of an OpenAPI spec')
-            [CompletionResult]::new('ramp', 'ramp', [CompletionResultType]::ParameterValue, 'Raise the load step by step to find where the target stops keeping up')
-            [CompletionResult]::new('replay', 'replay', [CompletionResultType]::ParameterValue, 'Send the URLs of an access log in their real proportions')
-            [CompletionResult]::new('flow', 'flow', [CompletionResultType]::ParameterValue, 'Run a sequence of requests from a flow file, each step fed by the last')
-            [CompletionResult]::new('logs', 'logs', [CompletionResultType]::ParameterValue, 'Read nginx logs: requests per second now, against each minute, hour and day')
             [CompletionResult]::new('ping', 'ping', [CompletionResultType]::ParameterValue, 'Ping a URL: a request a second, each split into DNS, connect, TLS, first byte and download, on a graph')
+            [CompletionResult]::new('ramp', 'ramp', [CompletionResultType]::ParameterValue, 'Raise the load step by step to find where the target stops keeping up')
             [CompletionResult]::new('compare', 'compare', [CompletionResultType]::ParameterValue, 'Hold a run''s JSON report against an earlier one and say what moved')
+            [CompletionResult]::new('api', 'api', [CompletionResultType]::ParameterValue, 'Load-test every endpoint of an OpenAPI spec')
+            [CompletionResult]::new('flow', 'flow', [CompletionResultType]::ParameterValue, 'Run a sequence of requests from a flow file, each step fed by the last')
+            [CompletionResult]::new('replay', 'replay', [CompletionResultType]::ParameterValue, 'Send the URLs of an access log in their real proportions')
+            [CompletionResult]::new('logs', 'logs', [CompletionResultType]::ParameterValue, 'Read nginx logs: requests per second now, against each minute, hour and day')
             [CompletionResult]::new('schema', 'schema', [CompletionResultType]::ParameterValue, 'Print the JSON Schema of a report: run (the default), ramp, ping or compare')
             [CompletionResult]::new('mcp', 'mcp', [CompletionResultType]::ParameterValue, 'Serve pepe''s modes as tools for an agent over stdio (the Model Context Protocol); the guardrail flags given here hold for every call')
+            [CompletionResult]::new('self-update', 'self-update', [CompletionResultType]::ParameterValue, 'Update pepe to the latest release, or say what''s new in it')
+            [CompletionResult]::new('completions', 'completions', [CompletionResultType]::ParameterValue, 'Tab completion for your shell: print the script, or --install it')
             [CompletionResult]::new('help', 'help', [CompletionResultType]::ParameterValue, 'Print this message or the help of the given subcommand(s)')
-            break
-        }
-        'pepe;help;self-update' {
-            break
-        }
-        'pepe;help;completions' {
-            break
-        }
-        'pepe;help;api' {
-            break
-        }
-        'pepe;help;ramp' {
-            break
-        }
-        'pepe;help;replay' {
-            break
-        }
-        'pepe;help;flow' {
-            break
-        }
-        'pepe;help;logs' {
             break
         }
         'pepe;help;ping' {
             break
         }
+        'pepe;help;ramp' {
+            break
+        }
         'pepe;help;compare' {
+            break
+        }
+        'pepe;help;api' {
+            break
+        }
+        'pepe;help;flow' {
+            break
+        }
+        'pepe;help;replay' {
+            break
+        }
+        'pepe;help;logs' {
             break
         }
         'pepe;help;schema' {
             break
         }
         'pepe;help;mcp' {
+            break
+        }
+        'pepe;help;self-update' {
+            break
+        }
+        'pepe;help;completions' {
             break
         }
         'pepe;help;help' {

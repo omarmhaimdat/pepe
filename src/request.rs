@@ -174,13 +174,18 @@ pub struct Request {
 
 /// Parse a `Name: value` header, as passed to `-H`
 pub fn parse_header(header: &str) -> Result<(HeaderName, HeaderValue), String> {
-    let (name, value) = header
-        .split_once(':')
-        .ok_or_else(|| format!("Invalid header {header:?}: expected 'Name: value'"))?;
-    let name = HeaderName::from_bytes(name.trim().as_bytes())
-        .map_err(|_| format!("Invalid header name in {header:?}"))?;
-    let value = HeaderValue::from_str(value.trim())
-        .map_err(|_| format!("Invalid header value in {header:?}"))?;
+    let (name, value) = header.split_once(':').ok_or_else(|| {
+        format!("header {header:?}: a header is Name: value, as in -H 'Accept: application/json'")
+    })?;
+    let name = HeaderName::from_bytes(name.trim().as_bytes()).map_err(|_| {
+        format!(
+            "header {header:?}: {:?} is not a header name; letters, digits and dashes",
+            name.trim()
+        )
+    })?;
+    let value = HeaderValue::from_str(value.trim()).map_err(|_| {
+        format!("header {header:?}: the value has a character a header can't carry")
+    })?;
     Ok((name, value))
 }
 

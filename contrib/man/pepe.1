@@ -122,38 +122,38 @@ List of arguments to pass to curl command
 .el .ds Aq '
 .SH SUBCOMMANDS
 .TP
-pepe\-self\-update(1)
-Update pepe to the latest release, or say what\*(Aqs new in it
-.TP
-pepe\-completions(1)
-Tab completion for your shell: print the script, or \-\-install it
-.TP
-pepe\-api(1)
-Load\-test every endpoint of an OpenAPI spec
+pepe\-ping(1)
+Ping a URL: a request a second, each split into DNS, connect, TLS, first byte and download, on a graph
 .TP
 pepe\-ramp(1)
 Raise the load step by step to find where the target stops keeping up
 .TP
-pepe\-replay(1)
-Send the URLs of an access log in their real proportions
+pepe\-compare(1)
+Hold a run\*(Aqs JSON report against an earlier one and say what moved
+.TP
+pepe\-api(1)
+Load\-test every endpoint of an OpenAPI spec
 .TP
 pepe\-flow(1)
 Run a sequence of requests from a flow file, each step fed by the last
 .TP
+pepe\-replay(1)
+Send the URLs of an access log in their real proportions
+.TP
 pepe\-logs(1)
 Read nginx logs: requests per second now, against each minute, hour and day
-.TP
-pepe\-ping(1)
-Ping a URL: a request a second, each split into DNS, connect, TLS, first byte and download, on a graph
-.TP
-pepe\-compare(1)
-Hold a run\*(Aqs JSON report against an earlier one and say what moved
 .TP
 pepe\-schema(1)
 Print the JSON Schema of a report: run (the default), ramp, ping or compare
 .TP
 pepe\-mcp(1)
 Serve pepe\*(Aqs modes as tools for an agent over stdio (the Model Context Protocol); the guardrail flags given here hold for every call
+.TP
+pepe\-self\-update(1)
+Update pepe to the latest release, or say what\*(Aqs new in it
+.TP
+pepe\-completions(1)
+Tab completion for your shell: print the script, or \-\-install it
 .TP
 pepe\-help(1)
 Print this message or the help of the given subcommand(s)
