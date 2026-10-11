@@ -207,6 +207,37 @@ these build on them.
       library, for Rust harnesses and agents that would rather not start
       a process.
 
+## 1.0
+
+What 1.0 means: the parts a script, a CI job or an agent depends on
+stop changing without a major version. It is a promise about surfaces,
+not a feature. It is tagged when every box below is ticked.
+
+Frozen at 1.0:
+
+- **The reports.** `schema_version` stays 1 for the run, ramp, ping and
+  compare reports; fields are only ever added. The JSON Schemas in
+  `schema/` are the contract.
+- **The exit codes.** 0, 1, 2 and 4 as documented in
+  [Output and exit codes](docs/output.md#exit-codes).
+- **The flags.** Every flag in `pepe --help` and the subcommands' help
+  keeps its name and meaning; a flag may be added, never removed or
+  renamed without a major version. The same for the keys in `pepe.toml`.
+- **The MCP tools.** The names and inputs of `pepe mcp`'s tools.
+- **The install lines.** The installer URLs, the Homebrew tap, the
+  Docker image name, the GitHub Action's inputs.
+
+Before the tag:
+
+- [x] **Agent docs, guardrails and the MCP server** (section 7)
+- [x] **A versioned report with a published schema** (section 5)
+- [x] **`cargo audit` in CI** and Dependabot on
+- [ ] **A month without a schema or flag change** on master, so the
+      freeze is a description rather than a wish
+- [ ] **The data-driven requests** (`--vars`, section 4), the one flag
+      still likely to shape the config file's keys
+- [ ] **A release note that says it**, with the frozen list above
+
 ## Not now
 
 Considered and set aside, so they aren't re-argued every month:
