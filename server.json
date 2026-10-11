@@ -1,0 +1,114 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.omarmhaimdat/pepe",
+  "title": "pepe",
+  "description": "Load-test a URL, ping it by phase, ramp to find the capacity, compare runs: JSON reports, guardrails",
+  "repository": {
+    "url": "https://github.com/omarmhaimdat/pepe",
+    "source": "github"
+  },
+  "websiteUrl": "https://pepe.mhaimdat.com/docs/agents.html",
+  "version": "0.35.1",
+  "packages": [
+    {
+      "registryType": "pypi",
+      "registryBaseUrl": "https://pypi.org",
+      "identifier": "pepe-http",
+      "version": "0.35.1",
+      "runtimeHint": "uvx",
+      "transport": {
+        "type": "stdio"
+      },
+      "packageArguments": [
+        {
+          "type": "positional",
+          "value": "mcp",
+          "valueHint": "mcp",
+          "description": "Serve pepe's modes as tools over stdio"
+        },
+        {
+          "type": "named",
+          "name": "--allow-host",
+          "description": "Every target's host must be this host or under it (.example.com); repeat for more. Without it, a tool call may be pointed anywhere.",
+          "format": "string",
+          "isRequired": false,
+          "isRepeated": true,
+          "valueHint": ".example.com"
+        },
+        {
+          "type": "named",
+          "name": "--max-requests",
+          "description": "The most requests one call may send",
+          "format": "number",
+          "isRequired": false,
+          "default": "10000"
+        },
+        {
+          "type": "named",
+          "name": "--max-rate",
+          "description": "The highest requests per second one call may ask for",
+          "format": "number",
+          "isRequired": false,
+          "default": "500"
+        },
+        {
+          "type": "named",
+          "name": "--max-concurrency",
+          "description": "The most requests in flight at once",
+          "format": "number",
+          "isRequired": false,
+          "default": "64"
+        }
+      ]
+    },
+    {
+      "registryType": "oci",
+      "registryBaseUrl": "https://ghcr.io",
+      "identifier": "ghcr.io/omarmhaimdat/pepe:0.35.1",
+      "transport": {
+        "type": "stdio"
+      },
+      "runtimeArguments": [
+        {
+          "type": "named",
+          "name": "--network",
+          "value": "host",
+          "description": "So the tools can reach services on the host"
+        }
+      ],
+      "packageArguments": [
+        {
+          "type": "positional",
+          "value": "mcp",
+          "valueHint": "mcp",
+          "description": "Serve pepe's modes as tools over stdio"
+        },
+        {
+          "type": "named",
+          "name": "--allow-host",
+          "description": "Every target's host must be this host or under it (.example.com); repeat for more",
+          "format": "string",
+          "isRequired": false,
+          "isRepeated": true,
+          "valueHint": ".example.com"
+        },
+        {
+          "type": "named",
+          "name": "--max-requests",
+          "description": "The most requests one call may send",
+          "format": "number",
+          "isRequired": false,
+          "default": "10000"
+        },
+        {
+          "type": "named",
+          "name": "--max-rate",
+          "description": "The highest requests per second one call may ask for",
+          "format": "number",
+          "isRequired": false,
+          "default": "500"
+        }
+      ]
+    }
+  ]
+}

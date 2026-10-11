@@ -433,6 +433,50 @@ jobs:
         with:
           packages-dir: packaging/pypi/dist/
 
+  # Hand-edited from what dist generates (allow-dirty = ["ci"] keeps it).
+  # Lists the release in the MCP registry (registry.modelcontextprotocol.io)
+  # as io.github.omarmhaimdat/pepe, from server.json with the version put
+  # in: the PyPI package and the ghcr.io image of this release, so it runs
+  # after both are up, since the registry checks that each carries the
+  # server's name (the comment in the PyPI README, the label on the image).
+  # The io.github namespace is proven by the job's OIDC token: no secret.
+  publish-mcp-registry:
+    needs:
+      - plan
+      - host
+      - publish-pypi
+      - custom-publish-docker
+    if: ${{ !fromJson(needs.plan.outputs.val).announcement_is_prerelease || fromJson(needs.plan.outputs.val).publish_prereleases }}
+    runs-on: "ubuntu-22.04"
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      PLAN: ${{ needs.plan.outputs.val }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Install mcp-publisher
+        run: |
+          curl -L "https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_$(uname -s | tr '[:upper:]' '[:lower:]')_$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/').tar.gz" | tar xz mcp-publisher
+          ./mcp-publisher --help | head -3
+      - name: Put the release's version in server.json
+        shell: bash
+        run: |
+          set -euo pipefail
+          version=$(echo "$PLAN" | jq -r '.releases[] | select(.app_name == "pepe") | .app_version')
+          jq --arg v "$version" '
+            .version = $v
+            | .packages |= map(
+                if .registryType == "pypi" then .version = $v
+                elif .registryType == "oci" then .identifier = (.identifier | sub(":[^:]+$"; ":" + $v))
+                else . end)
+          ' server.json > server.tmp && mv server.tmp server.json
+          jq '{version, packages: [.packages[] | {registryType, identifier, version}]}' server.json
+      - run: ./mcp-publisher login github-oidc
+      - run: ./mcp-publisher publish
+
   announce:
     needs:
       - plan
@@ -443,10 +487,11 @@ jobs:
       - custom-publish-docker
       - custom-publish-action
       - publish-pypi
+      - publish-mcp-registry
     # use "always() && ..." to allow us to wait for all publish jobs while
     # still allowing individual publish jobs to skip themselves (for prereleases).
     # "host" however must run to completion, no skipping allowed!
-    if: ${{ always() && needs.host.result == 'success' && (needs.publish-npm.result == 'skipped' || needs.publish-npm.result == 'success') && (needs.custom-publish-homebrew.result == 'skipped' || needs.custom-publish-homebrew.result == 'success') && (needs.custom-publish-r2.result == 'skipped' || needs.custom-publish-r2.result == 'success') && (needs.custom-publish-docker.result == 'skipped' || needs.custom-publish-docker.result == 'success') && (needs.custom-publish-action.result == 'skipped' || needs.custom-publish-action.result == 'success') && (needs.publish-pypi.result == 'skipped' || needs.publish-pypi.result == 'success') }}
+    if: ${{ always() && needs.host.result == 'success' && (needs.publish-npm.result == 'skipped' || needs.publish-npm.result == 'success') && (needs.custom-publish-homebrew.result == 'skipped' || needs.custom-publish-homebrew.result == 'success') && (needs.custom-publish-r2.result == 'skipped' || needs.custom-publish-r2.result == 'success') && (needs.custom-publish-docker.result == 'skipped' || needs.custom-publish-docker.result == 'success') && (needs.custom-publish-action.result == 'skipped' || needs.custom-publish-action.result == 'success') && (needs.publish-pypi.result == 'skipped' || needs.publish-pypi.result == 'success') && (needs.publish-mcp-registry.result == 'skipped' || needs.publish-mcp-registry.result == 'success') }}
     runs-on: "ubuntu-22.04"
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
