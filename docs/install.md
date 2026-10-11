@@ -40,10 +40,11 @@ The package is `pepe-http` (`pepe-cli` was taken); it downloads the binary for y
 ## PyPI
 
 ```bash
-pipx install pepe-http   # or: pip install pepe-http
+pipx install pepe-http                   # or: pip install pepe-http
+uvx pepe-http -n 100 https://example.com  # try it without installing
 ```
 
-The same name and the same `pepe`. The package is a few lines of Python with no dependencies: the first run downloads the release of the same version for your platform from GitHub, checks its SHA-256, keeps it in your cache directory (`~/.cache/pepe-http`, `~/Library/Caches/pepe-http` on macOS, `%LOCALAPPDATA%\pepe-http\Cache` on Windows; `PEPE_HTTP_CACHE_DIR` moves it) and runs it; every later run only runs it.
+The same name and the same `pepe` (`pepe-http` runs it too, which is what `uvx` calls). The package is a few lines of Python with no dependencies: the first run downloads the release of the same version for your platform from GitHub, checks its SHA-256, keeps it in your cache directory (`~/.cache/pepe-http`, `~/Library/Caches/pepe-http` on macOS, `%LOCALAPPDATA%\pepe-http\Cache` on Windows; `PEPE_HTTP_CACHE_DIR` moves it) and runs it; every later run only runs it.
 
 ## Nix
 
@@ -60,6 +61,8 @@ docker run --rm ghcr.io/omarmhaimdat/pepe --json -n 1000 https://example.com    
 ```
 
 An empty image with the static binary in it, for `linux/amd64` and `linux/arm64`, with `:latest` and `:<version>` tags. `docker build -t pepe .` in a checkout builds the same from source.
+
+The PyPI package and the image are also how the [MCP registry](https://registry.modelcontextprotocol.io) starts pepe's MCP server, `io.github.omarmhaimdat/pepe`: see [Agents and scripts](agents.md#as-an-mcp-server).
 
 ## Prebuilt binaries
 

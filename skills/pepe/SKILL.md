@@ -17,6 +17,8 @@ curl -LsSf https://pepe.mhaimdat.com/install.sh | sh    # macOS and Linux
 brew install omarmhaimdat/pepe/pepe                     # Homebrew
 npx pepe-http --version                                 # npm, no install
 pipx install pepe-http                                  # PyPI
+uvx pepe-http --version                                 # PyPI, no install
+docker run --rm ghcr.io/omarmhaimdat/pepe --version     # Docker
 ```
 
 ## Always
@@ -75,3 +77,22 @@ Read `summary` (counts, `latency`, `failures`, `anomalies`) and
 `holds_concurrency` and `capacity`; a compare's `verdict`, `changes[]`
 and `findings`. The same `-H`, `-m`, `-d`, `-k` and `-t` apply to every
 mode.
+
+## As an MCP server
+
+`pepe mcp` serves the modes as tools over stdio: `run`, `ping`, `ramp`,
+`api`, `flow`, `replay` and `compare`, each returning the JSON report.
+The guardrail flags given to `pepe mcp` hold for every call, and a call
+can't loosen them; a `ping` without `count` or `duration` sends five.
+
+```bash
+claude mcp add pepe -- pepe mcp --allow-host .staging.example.com --max-requests 10000 --max-rate 500
+```
+
+Without an install, from the MCP registry (`io.github.omarmhaimdat/pepe`):
+`uvx pepe-http mcp`, or `docker run -i --rm --network host
+ghcr.io/omarmhaimdat/pepe mcp`, each with the guardrail flags after `mcp`.
+As a Claude Code plugin (`claude plugin marketplace add omarmhaimdat/pepe`,
+`claude plugin install pepe@pepe`) the server comes capped at 10000
+requests, 500 a second and 64 connections; the `allow-host` goes in the
+project's `pepe.toml`.
