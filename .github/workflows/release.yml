@@ -380,19 +380,58 @@ jobs:
     permissions:
       "contents": "write"
 
-  custom-publish-pypi:
+  # Hand-edited from what dist generates (allow-dirty = ["ci"] keeps it).
+  # Publishes packaging/pypi as `pepe-http` on PyPI by trusted publishing,
+  # no token: the pepe-http project on PyPI trusts this repository and this
+  # workflow, release.yml. A plain job rather than a reusable workflow,
+  # since PyPI reads the called workflow's name at the token exchange and
+  # the calling workflow's name when it checks the attestation, so a
+  # reusable one can never satisfy both. The version is set from the
+  # release tag, so a published package always fetches its own release,
+  # and the built wheel is installed and run once before it is published.
+  publish-pypi:
     needs:
       - plan
       - host
     if: ${{ !fromJson(needs.plan.outputs.val).announcement_is_prerelease || fromJson(needs.plan.outputs.val).publish_prereleases }}
-    uses: ./.github/workflows/publish-pypi.yml
-    with:
-      plan: ${{ needs.plan.outputs.val }}
-    secrets: inherit
-    # publish jobs get escalated permissions
+    runs-on: "ubuntu-22.04"
     permissions:
-      "id-token": "write"
-      "packages": "write"
+      contents: read
+      id-token: write
+    env:
+      PLAN: ${{ needs.plan.outputs.val }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.x"
+      - name: Set the version from the release
+        shell: bash
+        run: |
+          set -euo pipefail
+          version=$(echo "$PLAN" | jq -r '.releases[] | select(.app_name == "pepe") | .app_version')
+          sed -i "s/^__version__ = \".*\"/__version__ = \"${version}\"/" packaging/pypi/pepe_http/__init__.py
+          grep -n '^__version__' packaging/pypi/pepe_http/__init__.py
+      - name: Build
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --upgrade build
+          python -m build packaging/pypi
+          ls -la packaging/pypi/dist
+      - name: Install the wheel and run it
+        shell: bash
+        run: |
+          set -euo pipefail
+          version=$(echo "$PLAN" | jq -r '.releases[] | select(.app_name == "pepe") | .app_version')
+          python -m pip install packaging/pypi/dist/*.whl
+          pepe --version | tee version.txt
+          grep -q "${version}" version.txt
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: packaging/pypi/dist/
 
   announce:
     needs:
@@ -403,11 +442,11 @@ jobs:
       - custom-publish-r2
       - custom-publish-docker
       - custom-publish-action
-      - custom-publish-pypi
+      - publish-pypi
     # use "always() && ..." to allow us to wait for all publish jobs while
     # still allowing individual publish jobs to skip themselves (for prereleases).
     # "host" however must run to completion, no skipping allowed!
-    if: ${{ always() && needs.host.result == 'success' && (needs.publish-npm.result == 'skipped' || needs.publish-npm.result == 'success') && (needs.custom-publish-homebrew.result == 'skipped' || needs.custom-publish-homebrew.result == 'success') && (needs.custom-publish-r2.result == 'skipped' || needs.custom-publish-r2.result == 'success') && (needs.custom-publish-docker.result == 'skipped' || needs.custom-publish-docker.result == 'success') && (needs.custom-publish-action.result == 'skipped' || needs.custom-publish-action.result == 'success') && (needs.custom-publish-pypi.result == 'skipped' || needs.custom-publish-pypi.result == 'success') }}
+    if: ${{ always() && needs.host.result == 'success' && (needs.publish-npm.result == 'skipped' || needs.publish-npm.result == 'success') && (needs.custom-publish-homebrew.result == 'skipped' || needs.custom-publish-homebrew.result == 'success') && (needs.custom-publish-r2.result == 'skipped' || needs.custom-publish-r2.result == 'success') && (needs.custom-publish-docker.result == 'skipped' || needs.custom-publish-docker.result == 'success') && (needs.custom-publish-action.result == 'skipped' || needs.custom-publish-action.result == 'success') && (needs.publish-pypi.result == 'skipped' || needs.publish-pypi.result == 'success') }}
     runs-on: "ubuntu-22.04"
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
