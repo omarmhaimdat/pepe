@@ -125,6 +125,17 @@ td:first-child { white-space: nowrap; }
 td:first-child code { white-space: nowrap; }
 tbody tr:hover { background: var(--bg-2); }
 
+/* The overview's opening */
+.hero { text-align: center; padding: 20px 0 28px; }
+.hero img { display: inline-block; margin: 0; border: 0; border-radius: 0; }
+.hero h1 { font-size: 48px; margin: 10px 0 6px; }
+.hero p { font-size: 19px; color: var(--text-2); max-width: 56ch; margin: 0 auto 22px; }
+.hero .buttons { display: flex; justify-content: center; flex-wrap: wrap; gap: 10px; margin-bottom: 0; }
+.hero .buttons a { display: inline-block; padding: 9px 18px; border: 1px solid var(--line-2); border-radius: 8px; font-weight: 600; font-size: 15px; color: var(--text); }
+.hero .buttons a:hover { border-color: var(--accent); text-decoration: none; }
+.hero .buttons a:first-child { background: var(--accent); border-color: var(--accent); color: #fff; }
+.hero .buttons a:first-child:hover { background: var(--accent-2); border-color: var(--accent-2); }
+
 /* Cards, on the overview */
 .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; margin: 8px 0 20px; }
 .card { display: block; padding: 14px 16px; border: 1px solid var(--line); border-radius: 10px; color: var(--text); background: var(--bg); }
@@ -157,6 +168,8 @@ tbody tr:hover { background: var(--bg-2); }
   .side.open { display: block; }
   .main { padding: 24px 0 48px; }
   .prose h1 { font-size: 30px; }
+  .hero h1 { font-size: 38px; }
+  .hero p { font-size: 17px; }
   .prose h2 { font-size: 21px; }
   .turn { grid-template-columns: 1fr; }
   .turn .next { text-align: left; }

@@ -1,6 +1,9 @@
-# pepe documentation
-
-pepe is an HTTP load generator with a live dashboard, built to cost less than the server it tests. One binary for macOS, Linux and Windows: load-test a URL and watch, ping it and see where the time goes, ramp to find the capacity, replay a log, test a whole OpenAPI spec, and read the result as a verdict in plain words or as a versioned JSON report.
+:::hero
+![pepe](assets/logo.svg)
+# pepe
+An HTTP load generator with a live dashboard, built to cost less than the server it tests. Load-test a URL, ping it to see where the time goes, ramp to find the capacity, and read the result as a verdict or a JSON report.
+[Get started](install.md) [Read the docs](load-test.md) [View on GitHub](https://github.com/omarmhaimdat/pepe)
+:::
 
 ```bash
 curl -LsSf https://pepe.mhaimdat.com/install.sh | sh
@@ -8,8 +11,6 @@ pepe https://example.com
 ```
 
 ![pepe: a ping that says where the time goes, then a run with the live dashboard and the verdict it leaves](assets/home.gif)
-
-## Pick a page
 
 :::cards
 - [Install](install.md) — The installer, Homebrew, Nix, Docker, prebuilt binaries, updates, completions.
@@ -34,13 +35,5 @@ pepe https://example.com
 2. Run `pepe https://your.service/health` and read the [dashboard](dashboard.md); `q` leaves the verdict in your shell.
 3. Leave `pepe ping https://your.service/health` open while you deploy, or run `pepe ping URL --once` to see why it is slow ([Ping](ping.md)).
 4. Put the test next to the code as a `pepe.toml` ([config file](load-test.md#config-file)) and run it in CI with the [GitHub Action](ci.md) or `--fail-if` ([Output](output.md#thresholds-that-fail-ci)).
-
-## Why pepe
-
-- **A verdict, not just numbers.** Healthy, Degraded or Failing, with findings such as two latency groups, a long tail, throughput drifting, or what a 503 actually said. Anomalies are called out as they happen.
-- **Everything live and in hand.** Pause, raise or lower the concurrency, open any request, filter the log, restart.
-- **Any request.** Headers, bodies and methods; a curl command from a browser's "Copy as cURL"; an OpenAPI spec; a flow file; an access log.
-- **Light.** One thread sends 160k requests a second on an Apple M4 Pro and 400k on Linux, at less CPU and memory per request than wrk, oha, vegeta or k6, and pepe says when it rather than the target is the limit ([Benchmarks](benchmarks.md)).
-- **Made for scripts and agents too.** Every mode runs without a screen, prints a versioned JSON report with a published schema, and says what went wrong in an exit code.
 
 The plan for what comes next is in [ROADMAP.md](ROADMAP.md), and what changed in each release in [CHANGELOG.md](CHANGELOG.md).
