@@ -360,11 +360,15 @@ impl Config {
 
     /// The file's text, with a line on how it's used
     pub fn to_toml(&self) -> String {
+        self.to_toml_with(&format!(
+            "# pepe load test · run it with `pepe` in this directory, or `pepe --config {DEFAULT_PATH}`"
+        ))
+    }
+
+    /// The file's text, under `heading`, a comment line saying how it's run
+    pub fn to_toml_with(&self, heading: &str) -> String {
         let body = toml::to_string(self).unwrap_or_default();
-        format!(
-            "# pepe load test · run it with `pepe` in this directory, or `pepe --config {DEFAULT_PATH}`\n\
-             # flags on the command line win over this file\n\n{body}"
-        )
+        format!("{heading}\n# flags on the command line win over this file\n\n{body}")
     }
 }
 

@@ -15,7 +15,9 @@ use ratatui::{
     Frame, Terminal,
 };
 
-use super::kit::{about_line, caption, chips_fit, help, marker, panel, tabs, FAINT, SELECTED};
+use super::kit::{
+    about_line, caption, chips_fit, help, marker, panel, tabs, TextInput, FAINT, SELECTED,
+};
 use super::view::{label, status_color, truncate, value, ACCENT, BAD, GOOD, LABEL, RULE, WARN};
 use super::{body, format, mascot, theme};
 use crate::cli::{ApiArgs, Command, RampArgs};
@@ -24,6 +26,7 @@ use crate::load::Plan;
 use crate::openapi;
 use crate::ramp::RampPlan;
 use crate::response::ResponseStats;
+use crate::store::{self, Store};
 use crate::Cli;
 
 const METHODS: [&str; 7] = ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"];
@@ -115,9 +118,16 @@ enum Field {
 enum Action {
     Start,
     Try,
-    /// Write the form to the config file
+    /// Save the form under the name in the prompt
     Save,
     Quit,
+}
+
+/// The prompt ctrl-s opens: the name the form is saved under
+struct Naming {
+    input: TextInput,
+    /// The name is taken and replacing it was said once; enter again does
+    replace: bool,
 }
 
 /// A card of the form: its rows, and which one has the caret
@@ -171,8 +181,12 @@ pub struct Setup {
     fresher: Option<String>,
     /// The last "try once" response
     tried: Option<ResponseStats>,
-    /// Where ctrl-s writes the form: the config read, or ./pepe.toml
-    config_path: std::path::PathBuf,
+    /// The project's saved tests, where ctrl-s writes the form
+    store: Store,
+    /// The name this form was loaded from or last saved as, offered again
+    saved_as: Option<String>,
+    /// The name prompt, while it's open
+    naming: Option<Naming>,
     /// The keys overlay is open
     show_help: bool,
 }
@@ -192,6 +206,7 @@ impl Setup {
             Some(Command::Api(_)) => Mode::Api,
             _ => Mode::Single,
         };
+        let store = Store::local();
         let mut setup = Setup {
             base: cli.clone(),
             mode,
@@ -238,11 +253,13 @@ impl Setup {
             message: None,
             fresher: crate::update::known().map(|v| v.to_string()),
             tried: None,
-            config_path: cli
+            saved_as: cli
                 .config
-                .clone()
-                .or_else(|| cli.config_loaded.clone())
-                .unwrap_or_else(|| crate::config::DEFAULT_PATH.into()),
+                .as_ref()
+                .or(cli.config_loaded.as_ref())
+                .and_then(|path| store.name_of(path)),
+            store,
+            naming: None,
             show_help: false,
         };
         let first = setup.focused();
@@ -462,6 +479,20 @@ impl Setup {
             }
             return None;
         }
+        if let Some(naming) = &mut self.naming {
+            match key.code {
+                KeyCode::Char('c') if ctrl => return Some(Action::Quit),
+                KeyCode::Esc => self.naming = None,
+                KeyCode::Enter => return Some(Action::Save),
+                _ => {
+                    if naming.input.key(key) {
+                        naming.replace = false;
+                    }
+                }
+            }
+            self.message = None;
+            return None;
+        }
         match key.code {
             KeyCode::Char('c') if ctrl => return Some(Action::Quit),
             // `?` is typed into a text field (URLs have them): F1 always works
@@ -470,7 +501,7 @@ impl Setup {
             KeyCode::Esc => return Some(Action::Quit),
             KeyCode::Enter => return Some(Action::Start),
             KeyCode::Char('t') if ctrl => return Some(Action::Try),
-            KeyCode::Char('s') if ctrl => return Some(Action::Save),
+            KeyCode::Char('s') if ctrl => self.open_naming(),
             KeyCode::Tab => self.switch_mode(1),
             KeyCode::BackTab => self.switch_mode(-1),
             KeyCode::Up => self.move_focus(-1),
@@ -495,9 +526,59 @@ impl Setup {
         None
     }
 
+    /// ctrl-s: ask for the name, offering the one it had or one from the URL
+    fn open_naming(&mut self) {
+        let offered = self.saved_as.clone().unwrap_or_else(|| {
+            store::suggest_name(if self.mode == Mode::Api {
+                &self.spec
+            } else {
+                &self.url
+            })
+        });
+        self.naming = Some(Naming {
+            input: TextInput::new(&offered),
+            replace: false,
+        });
+    }
+
+    /// Enter in the name prompt: save the form under the name, once a
+    /// taken name has been confirmed; what to say under the form
+    fn save(&mut self) -> (String, bool) {
+        let Some(naming) = &mut self.naming else {
+            return ("press ctrl-s to save".into(), true);
+        };
+        let name = naming.input.text().trim().to_string();
+        if let Err(e) = store::validate_name(&name) {
+            return (e, true);
+        }
+        if self.store.has(&name) && !naming.replace && self.saved_as.as_deref() != Some(&name) {
+            naming.replace = true;
+            return (
+                format!("`{name}` is saved already · enter replaces it, esc keeps it"),
+                true,
+            );
+        }
+        match self.to_cli().and_then(|cli| self.store.save(&name, &cli)) {
+            Ok(path) => {
+                self.saved_as = Some(name.clone());
+                self.naming = None;
+                (
+                    format!("saved {} · `pepe --load {name}` runs it", path.display()),
+                    false,
+                )
+            }
+            Err(e) => (e, true),
+        }
+    }
+
     /// Pasted text: a curl command fills the whole form, an OpenAPI
     /// document is the spec, anything else goes into the focused field
     fn paste(&mut self, text: &str) {
+        if let Some(naming) = &mut self.naming {
+            naming.input.insert(text.trim());
+            naming.replace = false;
+            return;
+        }
         if self.mode == Mode::Api && openapi::is_document(text) {
             self.spec = text.trim().to_string();
             self.focus = 0;
@@ -760,22 +841,7 @@ impl Setup {
                         Err(e) => self.message = Some((e, true)),
                     }
                 }
-                Some(Action::Save) => {
-                    self.message = Some(
-                        match self.to_cli().and_then(|cli| {
-                            crate::config::write(&self.config_path, &cli).map(|()| cli)
-                        }) {
-                            Ok(_) => (
-                                format!(
-                                    "saved {} · `pepe` here runs it",
-                                    self.config_path.display()
-                                ),
-                                false,
-                            ),
-                            Err(e) => (e, true),
-                        },
-                    );
-                }
+                Some(Action::Save) => self.message = Some(self.save()),
                 Some(Action::Try) => {
                     self.message = Some(("sending one request…".into(), false));
                     terminal.draw(|f| theme::draw(f, |f| self.render(f)))?;
@@ -806,7 +872,9 @@ impl Setup {
         self.render_form(f, main);
         self.render_command(f, command);
 
-        let line = if let Some((text, error)) = &self.message {
+        let line = if let Some(naming) = &self.naming {
+            self.naming_line(naming, status.width)
+        } else if let Some((text, error)) = &self.message {
             Line::from(vec![
                 if *error {
                     value(" ! ", WARN)
@@ -840,22 +908,21 @@ impl Setup {
         } else {
             "start"
         };
-        f.render_widget(
-            Paragraph::new(chips_fit(
-                &[
-                    ("enter", start),
-                    ("ctrl-t", "try once"),
-                    ("↑↓", "move"),
-                    ("←→", "change"),
-                    ("tab", "mode"),
-                    ("ctrl-s", "save pepe.toml"),
-                    ("F1", "keys"),
-                    ("esc", "quit"),
-                ],
-                footer.width,
-            )),
-            footer,
-        );
+        let chips: &[(&str, &str)] = if self.naming.is_some() {
+            &[("enter", "save"), ("esc", "cancel"), ("ctrl-c", "quit")]
+        } else {
+            &[
+                ("enter", start),
+                ("ctrl-t", "try once"),
+                ("↑↓", "move"),
+                ("←→", "change"),
+                ("tab", "mode"),
+                ("ctrl-s", "save as…"),
+                ("F1", "keys"),
+                ("esc", "quit"),
+            ]
+        };
+        f.render_widget(Paragraph::new(chips_fit(chips, footer.width)), footer);
         if self.show_help {
             help(
                 f,
@@ -866,7 +933,7 @@ impl Setup {
                     ("↑ ↓", "move between fields"),
                     ("← →", "change a choice, or move in the text"),
                     ("tab", "switch mode: single URL, ramp, API"),
-                    ("ctrl-s", "save the form as pepe.toml"),
+                    ("ctrl-s", "save the form as a named test, in .pepe/tests"),
                     ("F1 / ?", "this help (? where you can't type)"),
                     ("esc", "quit"),
                 ],
@@ -879,6 +946,33 @@ impl Setup {
                 ],
             );
         }
+    }
+
+    /// The status line while the name prompt is open: the name being
+    /// typed, then what enter does, or what's wrong with the name
+    fn naming_line(&self, naming: &Naming, width: u16) -> Line<'static> {
+        let lead = " save as ";
+        let hint = match &self.message {
+            Some((text, _)) => format!("  {text}"),
+            None => format!(
+                "  enter saves to {} · esc cancels",
+                self.store.tests_dir().display()
+            ),
+        };
+        let room = (width as usize)
+            .saturating_sub(lead.chars().count() + hint.chars().count())
+            .max(12);
+        let mut spans = vec![value(lead, ACCENT)];
+        spans.extend(naming.input.spans(room, false));
+        spans.push(Span::styled(
+            hint,
+            Style::new().fg(if matches!(&self.message, Some((_, true))) {
+                WARN
+            } else {
+                LABEL
+            }),
+        ));
+        Line::from(spans)
     }
 
     fn render_header(&self, f: &mut Frame, area: Rect, tall: bool) {
@@ -1558,6 +1652,124 @@ mod tests {
         }
     }
 
+    fn ctrl(s: &mut Setup, c: char) -> Option<Action> {
+        s.key(KeyEvent::new(KeyCode::Char(c), KeyModifiers::CONTROL))
+    }
+
+    /// A store of its own, so tests don't touch ./.pepe or each other
+    fn temp_store(tag: &str) -> Store {
+        let root = std::env::temp_dir().join(format!("pepe-setup-{tag}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        Store::at(root)
+    }
+
+    fn naming_text(s: &Setup) -> Option<String> {
+        s.naming.as_ref().map(|n| n.input.text())
+    }
+
+    #[test]
+    fn ctrl_s_asks_for_a_name_taken_from_the_url() {
+        let mut s = setup(&["pepe", "https://api.example.com/v1/health"]);
+        assert!(ctrl(&mut s, 's').is_none());
+        assert_eq!(
+            naming_text(&s).as_deref(),
+            Some("api.example.com-v1-health")
+        );
+        // Keys go to the name, not the form
+        press(&mut s, KeyCode::Backspace);
+        type_text(&mut s, "z");
+        assert_eq!(
+            naming_text(&s).as_deref(),
+            Some("api.example.com-v1-healtz")
+        );
+        assert_eq!(s.url, "https://api.example.com/v1/health");
+        // Esc keeps the form and closes the prompt; enter would save
+        assert!(press(&mut s, KeyCode::Esc).is_none());
+        assert!(s.naming.is_none());
+        ctrl(&mut s, 's');
+        assert!(matches!(press(&mut s, KeyCode::Enter), Some(Action::Save)));
+        // ctrl-c still quits from the prompt
+        assert!(matches!(ctrl(&mut s, 'c'), Some(Action::Quit)));
+    }
+
+    #[test]
+    fn a_bad_name_is_refused_and_the_prompt_stays() {
+        let mut s = setup(&["pepe", "https://x.io/items"]);
+        s.store = temp_store("bad-name");
+        ctrl(&mut s, 's');
+        ctrl(&mut s, 'u');
+        type_text(&mut s, "my test");
+        let (text, error) = s.save();
+        assert!(error && text.contains("space"), "{text}");
+        assert!(s.naming.is_some());
+        ctrl(&mut s, 'u');
+        let (text, error) = s.save();
+        assert!(error && text.contains("name"), "{text}");
+        assert!(s.store.names().is_empty());
+    }
+
+    #[test]
+    fn a_name_saves_the_form_and_a_taken_one_asks_first() {
+        let mut s = setup(&["pepe", "-c", "7", "https://x.io/items"]);
+        s.store = temp_store("saves");
+        ctrl(&mut s, 's');
+        ctrl(&mut s, 'u');
+        type_text(&mut s, "items");
+        let (text, error) = s.save();
+        assert!(!error && text.contains("pepe --load items"), "{text}");
+        assert!(s.naming.is_none());
+        assert_eq!(s.saved_as.as_deref(), Some("items"));
+        let (_, config) = s.store.load("items").unwrap();
+        assert_eq!(
+            (config.url.as_deref(), config.concurrency),
+            (Some("https://x.io/items"), Some(7))
+        );
+
+        // Saving again under its own name goes straight through
+        s.concurrency = "9".into();
+        ctrl(&mut s, 's');
+        assert_eq!(naming_text(&s).as_deref(), Some("items"));
+        assert!(!s.save().1);
+        assert_eq!(s.store.load("items").unwrap().1.concurrency, Some(9));
+
+        // Another form taking that name is asked once, then replaces it
+        let mut other = setup(&["pepe", "https://y.io/"]);
+        other.store = s.store.clone();
+        ctrl(&mut other, 's');
+        ctrl(&mut other, 'u');
+        type_text(&mut other, "items");
+        let (text, error) = other.save();
+        assert!(error && text.contains("replaces"), "{text}");
+        assert!(other.naming.is_some());
+        let (text, error) = other.save();
+        assert!(!error, "{text}");
+        assert_eq!(
+            s.store.load("items").unwrap().1.url.as_deref(),
+            Some("https://y.io/")
+        );
+        // Editing the name after the warning asks again for the new name
+        ctrl(&mut other, 's');
+        type_text(&mut other, "2");
+        assert!(!other.save().1);
+        assert_eq!(s.store.names(), ["items", "items2"]);
+        let _ = std::fs::remove_dir_all(s.store.tests_dir().parent().unwrap());
+    }
+
+    #[test]
+    fn a_form_loaded_from_the_store_offers_its_name() {
+        let store = temp_store("loaded");
+        let cli = Cli::parse_from(["pepe", "https://x.io/"]);
+        let path = store.save("checkout", &cli).unwrap();
+        let mut cli = Cli::parse_from(["pepe", "https://x.io/"]);
+        cli.config_loaded = Some(path);
+        let mut s = Setup::new(&cli);
+        s.store = store.clone();
+        s.saved_as = store.name_of(cli.config_loaded.as_ref().unwrap());
+        ctrl(&mut s, 's');
+        assert_eq!(naming_text(&s).as_deref(), Some("checkout"));
+        let _ = std::fs::remove_dir_all(store.tests_dir().parent().unwrap());
+    }
+
     #[test]
     fn flags_prefill_the_form_and_come_back_unchanged() {
         let argv = [
@@ -1886,6 +2098,24 @@ mod tests {
             }
             s.message = Some(("something to say".into(), true));
             terminal.draw(|f| s.render(f)).unwrap();
+            s.message = None;
+        }
+    }
+
+    #[test]
+    fn the_name_prompt_takes_the_status_line() {
+        let mut s = setup(&["pepe", "http://example.com/"]);
+        ctrl(&mut s, 's');
+        for (w, h) in [(40, 12), (80, 24), (120, 40)] {
+            let mut terminal = Terminal::new(TestBackend::new(w, h)).unwrap();
+            terminal.draw(|f| s.render(f)).unwrap();
+            let screen = terminal.backend().to_string();
+            assert!(screen.contains("save as"), "{w}x{h}:\n{screen}");
+            assert!(screen.contains("example.com"), "{w}x{h}:\n{screen}");
+            // A refused name is said in the same line
+            s.message = Some(("give the test a name".into(), true));
+            terminal.draw(|f| s.render(f)).unwrap();
+            assert!(terminal.backend().to_string().contains("give the test"));
             s.message = None;
         }
     }

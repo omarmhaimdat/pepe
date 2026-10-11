@@ -138,6 +138,9 @@ Options:
       --write-config <FILE>
           Write the settings as they stand to this file, as a pepe.toml, and exit
 
+      --load <NAME>
+          Run a test saved on the setup screen (ctrl-s): ./.pepe/tests/NAME.toml; flags on the command line win over it
+
   -V, --version
           Print version
 ```
@@ -341,6 +344,9 @@ Options:
 
       --write-config <FILE>
           Write the settings as they stand to this file, as a pepe.toml, and exit
+
+      --load <NAME>
+          Run a test saved on the setup screen (ctrl-s): ./.pepe/tests/NAME.toml; flags on the command line win over it
 ```
 
 ## pepe ramp
@@ -475,6 +481,9 @@ Options:
 
       --write-config <FILE>
           Write the settings as they stand to this file, as a pepe.toml, and exit
+
+      --load <NAME>
+          Run a test saved on the setup screen (ctrl-s): ./.pepe/tests/NAME.toml; flags on the command line win over it
 ```
 
 ## pepe compare
@@ -595,6 +604,9 @@ Options:
 
       --write-config <FILE>
           Write the settings as they stand to this file, as a pepe.toml, and exit
+
+      --load <NAME>
+          Run a test saved on the setup screen (ctrl-s): ./.pepe/tests/NAME.toml; flags on the command line win over it
 ```
 
 ## pepe api
@@ -730,6 +742,9 @@ Options:
 
       --write-config <FILE>
           Write the settings as they stand to this file, as a pepe.toml, and exit
+
+      --load <NAME>
+          Run a test saved on the setup screen (ctrl-s): ./.pepe/tests/NAME.toml; flags on the command line win over it
 ```
 
 ## pepe flow
@@ -841,6 +856,9 @@ Options:
 
       --write-config <FILE>
           Write the settings as they stand to this file, as a pepe.toml, and exit
+
+      --load <NAME>
+          Run a test saved on the setup screen (ctrl-s): ./.pepe/tests/NAME.toml; flags on the command line win over it
 ```
 
 ## pepe replay
@@ -963,6 +981,9 @@ Options:
 
       --write-config <FILE>
           Write the settings as they stand to this file, as a pepe.toml, and exit
+
+      --load <NAME>
+          Run a test saved on the setup screen (ctrl-s): ./.pepe/tests/NAME.toml; flags on the command line win over it
 ```
 
 ## pepe logs
@@ -1096,6 +1117,9 @@ Options:
 
       --write-config <FILE>
           Write the settings as they stand to this file, as a pepe.toml, and exit
+
+      --load <NAME>
+          Run a test saved on the setup screen (ctrl-s): ./.pepe/tests/NAME.toml; flags on the command line win over it
 ```
 
 ## pepe schema
@@ -1209,6 +1233,9 @@ Options:
 
       --write-config <FILE>
           Write the settings as they stand to this file, as a pepe.toml, and exit
+
+      --load <NAME>
+          Run a test saved on the setup screen (ctrl-s): ./.pepe/tests/NAME.toml; flags on the command line win over it
 ```
 
 ## pepe mcp
@@ -1316,6 +1343,9 @@ Options:
 
       --write-config <FILE>
           Write the settings as they stand to this file, as a pepe.toml, and exit
+
+      --load <NAME>
+          Run a test saved on the setup screen (ctrl-s): ./.pepe/tests/NAME.toml; flags on the command line win over it
 ```
 
 ## pepe self-update
@@ -1429,6 +1459,9 @@ Options:
 
       --write-config <FILE>
           Write the settings as they stand to this file, as a pepe.toml, and exit
+
+      --load <NAME>
+          Run a test saved on the setup screen (ctrl-s): ./.pepe/tests/NAME.toml; flags on the command line win over it
 ```
 
 ## pepe completions
@@ -1545,4 +1578,7 @@ Options:
 
       --write-config <FILE>
           Write the settings as they stand to this file, as a pepe.toml, and exit
+
+      --load <NAME>
+          Run a test saved on the setup screen (ctrl-s): ./.pepe/tests/NAME.toml; flags on the command line win over it
 ```
