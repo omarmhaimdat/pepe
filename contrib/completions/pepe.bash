@@ -95,7 +95,7 @@ _pepe() {
 
     case "${cmd}" in
         pepe)
-            opts="-h -n -z -m -H -t -d -p -k -i -c -u -V --help --number --duration --curl --method --headers --timeout --warmup --threads --rate --body --proxy --insecure --disable-compression --disable-keepalive --disable-redirects --json --trace-header --snapshot --allow-host --max-requests --max-rate --max-concurrency --dry-run --fail-if --metrics --setup --config --write-config --concurrency --user-agent --version self-update completions api ramp replay flow logs ping compare schema mcp help"
+            opts="-h -n -z -m -H -t -d -p -k -i -c -u -V --help --number --duration --curl --method --headers --timeout --warmup --threads --rate --body --proxy --insecure --disable-compression --disable-keepalive --disable-redirects --json --trace-header --snapshot --allow-host --max-requests --max-rate --max-concurrency --dry-run --fail-if --metrics --setup --config --write-config --concurrency --user-agent --version ping ramp compare api flow replay logs schema mcp self-update completions help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 1 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -813,7 +813,7 @@ _pepe() {
             return 0
             ;;
         pepe__subcmd__help)
-            opts="self-update completions api ramp replay flow logs ping compare schema mcp help"
+            opts="ping ramp compare api flow replay logs schema mcp self-update completions help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0

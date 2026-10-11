@@ -128,8 +128,12 @@ impl RampPlan {
     }
 
     pub fn from_args(args: &RampArgs) -> Result<RampPlan, String> {
-        let every = Cli::parse_duration(&args.every)
-            .map_err(|_| format!("--every {:?}: expected e.g. 10s, 1m", args.every))?;
+        let every = Cli::parse_duration(&args.every).map_err(|_| {
+            format!(
+                "--every {:?}: how long each step is held, a number and a unit, as in --every 10s",
+                args.every
+            )
+        })?;
         if every == 0 {
             return Err("--every must be longer than zero".into());
         }
