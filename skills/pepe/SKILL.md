@@ -15,6 +15,8 @@ time went, with a JSON report an agent can read. The repository's
 ```bash
 curl -LsSf https://pepe.mhaimdat.com/install.sh | sh    # macOS and Linux
 brew install omarmhaimdat/pepe/pepe                     # Homebrew
+npx pepe-http --version                                 # npm, no install
+pipx install pepe-http                                  # PyPI
 ```
 
 ## Always
