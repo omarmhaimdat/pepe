@@ -27,3 +27,8 @@ version of the package runs the pepe of that version, so `pepe
 self-update` does not apply here. The other ways to install, with tab
 completion and man pages, are on the
 [install page](https://pepe.mhaimdat.com/docs/install.html).
+
+As an MCP server, `uvx pepe-http mcp` (or `pepe mcp`) serves pepe's modes
+as tools; it is listed in the MCP registry as `io.github.omarmhaimdat/pepe`.
+
+<!-- mcp-name: io.github.omarmhaimdat/pepe -->

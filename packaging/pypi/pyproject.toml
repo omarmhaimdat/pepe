@@ -40,6 +40,9 @@ Issues = "https://github.com/omarmhaimdat/pepe/issues"
 
 [project.scripts]
 pepe = "pepe_http:main"
+# The same command under the package's name, so `uvx pepe-http mcp` runs
+# without naming the command: uvx runs the script named like the package
+pepe-http = "pepe_http:main"
 
 [tool.setuptools]
 packages = ["pepe_http"]

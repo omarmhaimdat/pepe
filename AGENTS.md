@@ -121,7 +121,9 @@ disk every minute.
 
 `pepe mcp` serves the modes above as tools over stdio (`run`, `ping`,
 `ramp`, `compare`, `api`, `flow`, `replay`), each returning the JSON
-report. Guardrail flags given to `pepe mcp` apply to every call.
+report. Guardrail flags given to `pepe mcp` apply to every call. It is
+in the MCP registry as `io.github.omarmhaimdat/pepe` (`uvx pepe-http
+mcp`, or the `ghcr.io/omarmhaimdat/pepe` image).
 
 As a Claude Code plugin, `claude plugin marketplace add omarmhaimdat/pepe`
 then `claude plugin install pepe@pepe` brings the skill and this server,

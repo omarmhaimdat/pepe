@@ -48,6 +48,8 @@ pepe · dry run · nothing sent
 pepe mcp --allow-host .staging.example.com --max-requests 10000 --max-rate 500 --max-concurrency 64
 ```
 
+pepe is listed in the [MCP registry](https://registry.modelcontextprotocol.io) as `io.github.omarmhaimdat/pepe`, as the PyPI package and the Docker image, so a client that reads the registry can start it without an install: `uvx pepe-http mcp`, or `docker run -i --rm --network host ghcr.io/omarmhaimdat/pepe mcp`, each with the guardrail flags after `mcp`.
+
 For Claude Code:
 
 ```bash
