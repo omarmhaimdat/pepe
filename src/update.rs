@@ -280,6 +280,10 @@ enum InstallMethod {
     Homebrew,
     Nix,
     Cargo,
+    /// The pepe-http package on npm: the binary lives under node_modules
+    Npm,
+    /// The pepe-http package on PyPI: the binary lives in the package's cache
+    Pip,
     Unknown,
 }
 
@@ -296,6 +300,9 @@ impl InstallMethod {
         if exe.contains("/Cellar/") || exe.contains("/homebrew/") || exe.contains("/linuxbrew/") {
             return Self::Homebrew;
         }
+        if let Some(method) = Self::from_package_path(&exe) {
+            return method;
+        }
         if installer_updater().is_some() {
             return Self::Installer;
         }
@@ -305,11 +312,25 @@ impl InstallMethod {
         Self::Unknown
     }
 
+    /// The npm and PyPI packages each put the binary somewhere that names
+    /// them: under a node_modules directory, or in a pepe-http cache
+    fn from_package_path(exe: &str) -> Option<Self> {
+        if exe.contains("/node_modules/") || exe.contains("\\node_modules\\") {
+            return Some(Self::Npm);
+        }
+        if exe.contains("/pepe-http/") || exe.contains("\\pepe-http\\") {
+            return Some(Self::Pip);
+        }
+        None
+    }
+
     fn update_command(self) -> &'static str {
         match self {
             Self::Installer => "pepe self-update",
             Self::Homebrew => "brew upgrade pepe",
             Self::Nix => "nix profile upgrade pepe",
+            Self::Npm => "npm update -g pepe-http",
+            Self::Pip => "pipx upgrade pepe-http",
             Self::Cargo => {
                 "cargo install --locked --force --git https://github.com/omarmhaimdat/pepe"
             }
@@ -325,6 +346,8 @@ impl InstallMethod {
             Self::Homebrew => "installed with Homebrew",
             Self::Nix => "installed with Nix",
             Self::Cargo => "installed with cargo",
+            Self::Npm => "installed with npm",
+            Self::Pip => "installed with pip",
             Self::Unknown => "not installed by the pepe installer",
         }
     }
@@ -877,6 +900,47 @@ mod tests {
     }
 
     #[test]
+    fn the_packages_are_told_apart_by_where_the_binary_is() {
+        let npm = "/usr/local/lib/node_modules/pepe-http/node_modules/.bin/pepe";
+        assert_eq!(
+            InstallMethod::from_package_path(npm),
+            Some(InstallMethod::Npm)
+        );
+        let npm_win = "C:\\Users\\o\\AppData\\Roaming\\npm\\node_modules\\pepe-http\\pepe.exe";
+        assert_eq!(
+            InstallMethod::from_package_path(npm_win),
+            Some(InstallMethod::Npm)
+        );
+        for pip in [
+            "/Users/o/Library/Caches/pepe-http/v0.35.0/pepe",
+            "/home/o/.cache/pepe-http/v0.35.0/pepe",
+            "C:\\Users\\o\\AppData\\Local\\pepe-http\\Cache\\v0.35.0\\pepe.exe",
+        ] {
+            assert_eq!(
+                InstallMethod::from_package_path(pip),
+                Some(InstallMethod::Pip),
+                "{pip}"
+            );
+        }
+        assert_eq!(
+            InstallMethod::from_package_path("/opt/homebrew/bin/pepe"),
+            None
+        );
+        assert_eq!(
+            InstallMethod::from_package_path("/home/o/.local/bin/pepe"),
+            None
+        );
+        assert_eq!(
+            InstallMethod::Npm.update_command(),
+            "npm update -g pepe-http"
+        );
+        assert_eq!(
+            InstallMethod::Pip.update_command(),
+            "pipx upgrade pepe-http"
+        );
+    }
+
+    #[test]
     fn commands_wrap_at_spaces_and_still_paste() {
         let short = wrap_command("pepe self-update", 56);
         assert_eq!(short, ["  pepe self-update"]);
@@ -892,6 +956,8 @@ mod tests {
             InstallMethod::Unknown,
             InstallMethod::Homebrew,
             InstallMethod::Nix,
+            InstallMethod::Npm,
+            InstallMethod::Pip,
         ] {
             for line in wrap_command(method.update_command(), 56) {
                 assert!(line.chars().count() <= 56, "{line:?}");
