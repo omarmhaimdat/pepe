@@ -1,0 +1,15 @@
+{
+  "name": "pepe",
+  "owner": {
+    "name": "Omar Mhaimdat"
+  },
+  "plugins": [
+    {
+      "name": "pepe",
+      "source": ".",
+      "description": "HTTP load generator and latency tool: a skill that says how to call pepe and read its reports, and pepe's MCP server under guardrails.",
+      "category": "developer-tools",
+      "tags": ["http", "load-testing", "latency", "benchmark", "mcp"]
+    }
+  ]
+}
