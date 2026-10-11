@@ -6,6 +6,123 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+## [0.35.0](https://github.com/omarmhaimdat/pepe/compare/v0.34.0...v0.35.0) - 2026-10-11
+
+### Added
+
+- *(install)* pepe-http on npm and PyPI ([#154](https://github.com/omarmhaimdat/pepe/pull/154))
+
+  pepe installs from npm and from PyPI, both as `pepe-http`, both giving
+  the command `pepe`.
+
+  ```bash
+  npm install -g pepe-http      # or: npx pepe-http -n 100 https://example.com
+  pipx install pepe-http        # or: pip install pepe-http
+  ```
+
+  ## The name
+
+  `pepe-cli` is taken on both registries (on npm by ttoss/pepe, on PyPI by
+  a protein-embedding tool), and `pepe` itself is taken on PyPI.
+  `pepe-http` is free on both, says what pepe is, and reads the same
+  everywhere: `npx pepe-http`, `pipx install pepe-http`, the command
+  `pepe`. The Python module is `pepe_http` to match.
+
+  ## npm
+
+  dist's built-in npm installer: `installers` gains `"npm"`, `npm-package
+  = "pepe-http"` (no scope), and `publish-jobs` gains `"npm"`. `dist
+  generate` (0.33.0, the pinned version) regenerated
+  `.github/workflows/release.yml`; since `allow-dirty = ["ci"]` keeps dist
+  from touching the file, I ran it with that line off and then put back
+  the two hand edits the setting protects: Dependabot's
+  `actions/checkout@v7` (dist writes v6) and `contents: write` on the
+  action job. The diff of release.yml is additions only: the `publish-npm`
+  job, the `custom-publish-pypi` job, and both in `announce`. `dist plan`
+  lists `pepe-npm-package.tar.gz`. The npm package takes `description` and
+  `homepage` from Cargo.toml.
+
+  ## PyPI
+
+  There is no dist installer for PyPI, so `packaging/pypi/` is a small
+  pure-Python package: `pepe_http/__init__.py`, with `__main__.py`,
+  `pyproject.toml`, `README.md` and the root `LICENSE` copied. Standard
+  library only, Python 3.9+. On first run it maps the platform to a
+  release target (macOS arm64/x86_64, Linux x86_64/aarch64 musl, Windows
+  x86_64; Windows on ARM gets the x86_64 build), downloads
+  `pepe-<triple>.tar.xz`/`.zip` and its `.sha256` from the GitHub release
+  of the package's own version, refuses a mismatch, reads only the
+  `pepe`/`pepe.exe` member out of the archive, writes it next to its place
+  and moves it in, under `~/.cache/pepe-http`
+  (`~/Library/Caches/pepe-http` on macOS, `%LOCALAPPDATA%\pepe-http\Cache`
+  on Windows; `PEPE_HTTP_CACHE_DIR` overrides), then `os.execv`s it (on
+  Windows, a subprocess whose exit code is passed on). Every later run
+  only runs it.
+
+  The version lives in `pepe_http.__version__` (what `pyproject.toml`
+  reads through `dynamic`), so it works from a checkout too;
+  `.github/workflows/publish-pypi.yml`, a custom dist publish job like
+  `publish-homebrew.yml`, sets it from the release tag, builds with
+  `python -m build`, installs the wheel and runs `pepe --version` against
+  the release the host job has just created, and publishes with
+  `pypa/gh-action-pypi-publish@release/v1` under `id-token: write`
+  (trusted publishing, no token).
+
+
+
+### Other
+
+- main.rs split by mode, the help in order of use, usage errors that say what to do ([#153](https://github.com/omarmhaimdat/pepe/pull/153))
+
+  Three things in one pass over the same files.
+
+  **The split.** `src/main.rs` was 2,100 lines with every mode's runner in
+  it. It is now the dispatch alone (270 lines); the modes are in
+  `src/modes/`, one file each (run, ping, ramp, compare, api, flow,
+  replay, logs), what they share in `modes/mod.rs`, and the terminal
+  handling (raw mode, Ctrl-C, the way out when the terminal stops reading)
+  in `src/terminal.rs`. A pure move: no behaviour changed.
+
+  **The help.** `pepe --help` lists the commands in the order people reach
+  for them: ping, ramp, compare, api, flow, replay, logs, then schema and
+  mcp, then self-update and completions. Man pages, completions and the
+  reference page regenerated.
+
+  **The errors.** Every usage error names the flag and says what to give
+  instead. Before and after:
+
+  ```
+  Duration must have a unit (s, m, h). Examples: 10s, 5m, 2h
+  -z "10" is not a duration: a number and a unit, as in 10s, 5m or 2h
+
+  Concurrency cannot be greater than the number of requests. -c 50 -n 10
+  -c 50 is more than the 10 requests of -n: lower -c, raise -n, or run for a time instead with -z 30s
+
+  Invalid header "Nope": expected 'Name: value'
+  header "Nope": a header is Name: value, as in -H 'Accept: application/json'
+  ```
+
+  Same for the timeout, the method, the proxy, the rate, `--trace-header`,
+  `--every` and `--warmup`. A pepe with nothing to run and no terminal
+  says so in one line instead of printing the whole help.
+
+  `cargo test`, clippy with `-D warnings`, and the site check pass.
+
+
+- *(site)* the front page in the docs' style ([#152](https://github.com/omarmhaimdat/pepe/pull/152))
+
+  pepe.mhaimdat.com was a page of its own, a terminal in monospace, beside
+  a documentation site that looked nothing like it. It is now one site in
+  one style: the front page opens like the docs' overview (logo, name, one
+  sentence, three buttons), then the install line with a tab per platform,
+  the home recording, a card per mode, the three benchmark numbers and a
+  footer, using the docs' stylesheet and script, light and dark.
+
+  The four dashboard screenshots the old page showed are removed with it
+  (the recordings show the same); the publish job's URL check no longer
+  lists them. Checked in the browser at phone and desktop widths.
+
+
 ## [0.34.0](https://github.com/omarmhaimdat/pepe/compare/v0.33.0...v0.34.0) - 2026-10-11
 
 ### Added
