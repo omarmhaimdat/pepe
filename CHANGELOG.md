@@ -6,6 +6,67 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+## [0.35.1](https://github.com/omarmhaimdat/pepe/compare/v0.35.0...v0.35.1) - 2026-10-11
+
+### Fixed
+
+- *(update)* a pepe from npm or PyPI is told to update through them ([#160](https://github.com/omarmhaimdat/pepe/pull/160))
+
+  The daily update notice and `pepe self-update` told every copy the
+  installer had not put in place to run `pepe self-update`, which is the
+  wrong tool for the npm and PyPI packages: each version of those runs the
+  pepe of that version, so the package is what gets updated. The install
+  method detection now recognises both by where the binary lives (under
+  `node_modules`, or in the `pepe-http` cache the PyPI package keeps on
+  each platform) and says `npm update -g pepe-http` or `pipx upgrade
+  pepe-http`, with a test for the paths on macOS, Linux and Windows.
+
+  The skill file and `llms.txt` list the two packages among the ways to
+  install, as the install page already does.
+
+  This is a `fix`, so release-plz opens the release pull request; merging
+  that is what publishes pepe-http to PyPI for the first time (through the
+  plain `publish-pypi` job from #159) and validates npm's trusted
+  publisher.
+
+
+
+### Other
+
+- *(pypi)* the publish as a plain job in release.yml, so trusted publishing can match it ([#159](https://github.com/omarmhaimdat/pepe/pull/159))
+
+- npm through trusted publishing, and the PyPI publisher's workflow name ([#158](https://github.com/omarmhaimdat/pepe/pull/158))
+
+  Two fixes from the v0.35.0 release run, whose npm and PyPI jobs failed
+  while everything else shipped.
+
+  **npm.** The change moving `publish-npm` to npm's trusted publishing was
+  pushed to the packaging branch after #154 had been merged, so master
+  still had the token-based job and no `NPM_TOKEN`, hence `ENEEDAUTH`.
+  This lands it: the job gets `id-token: write`, updates npm (trusted
+  publishing wants 11.5.1 or newer), and publishes with no secret. The
+  trusted publisher on npmjs.com already names `release.yml`.
+
+  **PyPI.** `publish-pypi.yml` is a reusable workflow called from
+  `release.yml`, and PyPI reads the calling workflow's name off the OIDC
+  token, so a publisher set to `publish-pypi.yml` can never match (the
+  run's error says exactly that). The publisher on pypi.org must name
+  `release.yml`; the workflow's comment now says so. No code change is
+  needed for that job: once the publisher is corrected, the failed job can
+  be rerun on its own.
+
+
+- *(roadmap)* what 1.0 means and what comes before it ([#155](https://github.com/omarmhaimdat/pepe/pull/155))
+
+  A section in ROADMAP.md naming what 1.0 freezes: the reports'
+  `schema_version` and fields, the exit codes, every flag's name and
+  meaning, `pepe.toml`'s keys, the MCP tools' names and inputs, and the
+  install lines. Then the boxes to tick before the tag: a month without a
+  schema or flag change on master, the data-driven requests flag (the one
+  still likely to shape the config file), and a release note that states
+  the freeze.
+
+
 ## [0.35.0](https://github.com/omarmhaimdat/pepe/compare/v0.34.0...v0.35.0) - 2026-10-11
 
 ### Added
