@@ -1,8 +1,8 @@
 # After every release: install pepe the ways a user would, from the published
-# locations, and check what they'd get. A broken installer, formula or
-# completion step shows up here within minutes of a release instead of in
-# someone's terminal. Run it by hand with workflow_dispatch to check an
-# older release or re-check the latest.
+# locations, and check what they'd get. A broken installer, formula, npm or
+# PyPI package or completion step shows up here within minutes of a release
+# instead of in someone's terminal. Run it by hand with workflow_dispatch to
+# check an older release or re-check the latest.
 name: Installer smoke tests
 
 on:
@@ -157,3 +157,107 @@ jobs:
           test -f "$prefix/share/fish/vendor_completions.d/pepe.fish"
           test -f "$prefix/share/man/man1/pepe.1"
           man -w pepe
+
+  npm:
+    name: npx pepe-http on ${{ matrix.os }}
+    needs: expected
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    env:
+      EXPECTED: ${{ needs.expected.outputs.version }}
+      PEPE_GITHUB_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+
+      - name: npx runs the release we expect
+        shell: bash
+        run: |
+          set -euo pipefail
+          # The registry can take a minute to serve a version just published
+          for attempt in $(seq 1 10); do
+            npx -y "pepe-http@$EXPECTED" --version > version.txt && break
+            [ "$attempt" -lt 10 ] || { echo "::error::npx pepe-http@$EXPECTED --version did not succeed in 10 tries"; exit 1; }
+            echo "try $attempt: pepe-http@$EXPECTED not served yet; again in 30s"
+            sleep 30
+          done
+          got=$(awk '/^pepe /{print $2}' version.txt)
+          echo "ran pepe $got"
+          [ "$got" = "$EXPECTED" ] || { echo "::error::ran $got, expected $EXPECTED"; cat version.txt; exit 1; }
+
+      - name: It knows it is up to date, and that npm updates it
+        shell: bash
+        run: |
+          set -euo pipefail
+          npx -y "pepe-http@$EXPECTED" self-update --check 2>&1 | tee check.txt
+          grep -q "installed with npm" check.txt
+
+      # The global install is the other way in, and the one that gives a
+      # `pepe` command; one runner covers it
+      - name: npm install -g gives a pepe command
+        if: matrix.os == 'ubuntu-latest'
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm install -g "pepe-http@$EXPECTED"
+          got=$(pepe --version | awk '{print $2}')
+          echo "installed pepe $got"
+          [ "$got" = "$EXPECTED" ] || { echo "::error::installed $got, expected $EXPECTED"; exit 1; }
+
+  pypi:
+    name: pipx install pepe-http on ${{ matrix.os }}
+    needs: expected
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    env:
+      EXPECTED: ${{ needs.expected.outputs.version }}
+      PEPE_GITHUB_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.x"
+
+      - name: pipx install pepe-http
+        shell: bash
+        run: |
+          set -euo pipefail
+          # The runners come with pipx; a bare image would not
+          command -v pipx >/dev/null || python -m pip install pipx
+          # PyPI can take a minute to serve a version just published
+          for attempt in $(seq 1 10); do
+            pipx install "pepe-http==$EXPECTED" && break
+            [ "$attempt" -lt 10 ] || { echo "::error::pipx install pepe-http==$EXPECTED did not succeed in 10 tries"; exit 1; }
+            echo "try $attempt: pepe-http==$EXPECTED not served yet; again in 30s"
+            sleep 30
+          done
+          # pipx's bin directory is on the runners' PATH already; this holds
+          # on a runner where it isn't
+          pipx environment --value PIPX_BIN_DIR >> "$GITHUB_PATH"
+
+      # The first run downloads the release binary and checks its SHA-256
+      - name: It is the release we expect, and pipx updates it
+        shell: bash
+        run: |
+          set -euo pipefail
+          got=$(pepe --version | awk '{print $2}')
+          echo "installed pepe $got"
+          [ "$got" = "$EXPECTED" ] || { echo "::error::installed $got, expected $EXPECTED"; exit 1; }
+          pepe self-update --check 2>&1 | tee check.txt
+          grep -q "installed with pip" check.txt
+
+      # pipx run is the other way in: a throwaway environment of the version
+      # asked for. The package is pepe-http and the command pepe, hence --spec
+      - name: pipx run does a dry run
+        shell: bash
+        run: |
+          set -euo pipefail
+          pipx run --spec "pepe-http==$EXPECTED" pepe --json --dry-run -n 10 https://example.com > out.json
+          jq -e '.sent == 0 and .targets == ["https://example.com"]' out.json >/dev/null \
+            || { echo "::error::the dry run did not say what it would send"; cat out.json; exit 1; }
