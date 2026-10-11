@@ -1,0 +1,12 @@
+{
+  "name": "pepe",
+  "description": "HTTP load generator and latency tool: a skill that says how to call pepe and read its reports, and pepe's MCP server under guardrails.",
+  "author": {
+    "name": "Omar Mhaimdat",
+    "url": "https://github.com/omarmhaimdat"
+  },
+  "homepage": "https://pepe.mhaimdat.com/docs/agents.html",
+  "repository": "https://github.com/omarmhaimdat/pepe",
+  "license": "MIT",
+  "keywords": ["http", "load-testing", "latency", "benchmark", "mcp"]
+}

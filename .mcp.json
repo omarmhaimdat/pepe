@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "pepe": {
+      "command": "pepe",
+      "args": ["mcp", "--max-requests", "10000", "--max-rate", "500", "--max-concurrency", "64"]
+    }
+  }
+}

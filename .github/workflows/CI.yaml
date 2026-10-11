@@ -45,6 +45,21 @@ jobs:
       - run: cargo fmt --check --manifest-path bench/server/Cargo.toml
       - run: cargo clippy --locked --manifest-path bench/server/Cargo.toml -- -D warnings
 
+  audit:
+    name: Audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-audit
+      # Known vulnerabilities in what Cargo.lock pins, for pepe and for the
+      # benchmarks' target server, so a Dependabot alert is caught in a PR
+      - run: cargo audit --deny warnings
+      - run: cargo audit --deny warnings --file bench/server/Cargo.lock
+
   check:
     name: Check (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
