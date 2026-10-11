@@ -1,0 +1,48 @@
+# pepe on PyPI (`pip install pepe-load`; `pepe-cli` is taken there). The
+# package is a few lines of Python that download the pepe release of the
+# same version from GitHub on first run and run it: see pepe_load/__init__.py.
+# The version is pepe's, read from pepe_load.__version__; the publish job
+# (.github/workflows/publish-pypi.yml) sets it from the release tag, so a
+# published package always fetches its own release.
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pepe-load"
+dynamic = ["version"]
+description = "HTTP load generator and latency tool: a load test, a ping split into phases, a ramp to the capacity, an OpenAPI spec, a flow, an access log"
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+requires-python = ">=3.9"
+keywords = ["http", "load-testing", "benchmark", "latency", "ping", "openapi", "cli"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Operating System :: MacOS",
+    "Operating System :: POSIX :: Linux",
+    "Operating System :: Microsoft :: Windows",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Rust",
+    "Topic :: Internet :: WWW/HTTP",
+    "Topic :: Software Development :: Testing :: Traffic Generation",
+    "Topic :: System :: Benchmark",
+]
+
+[project.urls]
+Homepage = "https://pepe.mhaimdat.com"
+Documentation = "https://pepe.mhaimdat.com/docs/"
+Source = "https://github.com/omarmhaimdat/pepe"
+Changelog = "https://github.com/omarmhaimdat/pepe/blob/master/CHANGELOG.md"
+Issues = "https://github.com/omarmhaimdat/pepe/issues"
+
+[project.scripts]
+pepe = "pepe_load:main"
+
+[tool.setuptools]
+packages = ["pepe_load"]
+
+[tool.setuptools.dynamic]
+version = {attr = "pepe_load.__version__"}

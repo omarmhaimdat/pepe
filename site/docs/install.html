@@ -40,6 +40,13 @@
 <p>macOS and Linux:</p>
 <figure class="code"><div class="bar"><span>bash</span><button type="button" class="copy" aria-label="Copy">copy</button></div><pre><code>brew install omarmhaimdat/pepe/pepe</code></pre></figure>
 <p>The formula puts the completions and man pages where Homebrew activates them.</p>
+<h2 id="npm"><a href="#npm">npm</a></h2>
+<figure class="code"><div class="bar"><span>bash</span><button type="button" class="copy" aria-label="Copy">copy</button></div><pre><code>npm install -g pepe-load                  # install it: the command is `pepe`
+npx pepe-load -n 100 https://example.com  # try it without installing</code></pre></figure>
+<p>The package is <code>pepe-load</code> (<code>pepe-cli</code> was taken); it downloads the binary for your platform when it installs.</p>
+<h2 id="pypi"><a href="#pypi">PyPI</a></h2>
+<figure class="code"><div class="bar"><span>bash</span><button type="button" class="copy" aria-label="Copy">copy</button></div><pre><code>pipx install pepe-load   # or: pip install pepe-load</code></pre></figure>
+<p>The same name and the same <code>pepe</code>. The package is a few lines of Python with no dependencies: the first run downloads the release of the same version for your platform from GitHub, checks its SHA-256, keeps it in your cache directory (<code>~/.cache/pepe-load</code>, <code>~/Library/Caches/pepe-load</code> on macOS, <code>%LOCALAPPDATA%\pepe-load\Cache</code> on Windows; <code>PEPE_LOAD_CACHE_DIR</code> moves it) and runs it; every later run only runs it.</p>
 <h2 id="nix"><a href="#nix">Nix</a></h2>
 <figure class="code"><div class="bar"><span>bash</span><button type="button" class="copy" aria-label="Copy">copy</button></div><pre><code>nix run github:omarmhaimdat/pepe -- https://example.com   # try it without installing
 nix profile install github:omarmhaimdat/pepe              # install it</code></pre></figure>
@@ -58,7 +65,7 @@ docker run --rm ghcr.io/omarmhaimdat/pepe --json -n 1000 https://example.com    
 <p>pepe looks for a newer release once a day and says so when a run ends, with what changed and the command that updates your copy. Installer-based installs update themselves:</p>
 <figure class="code"><div class="bar"><span>bash</span><button type="button" class="copy" aria-label="Copy">copy</button></div><pre><code>pepe self-update            # install the latest release
 pepe self-update --check    # only say whether there is one (exit code 1 if so)</code></pre></figure>
-<p>Homebrew and Nix installs update with <code>brew upgrade pepe</code> and <code>nix profile upgrade pepe</code>. Set <code>PEPE_NO_UPDATE_CHECK=1</code> to turn the daily check off; it is off in CI already. <code>PEPE_GITHUB_TOKEN</code> gives <code>self-update</code> a GitHub token, for forks or rate-limited CI, and <code>PEPE_CACHE_DIR</code> is where the check keeps its answer.</p>
+<p>Homebrew and Nix installs update with <code>brew upgrade pepe</code> and <code>nix profile upgrade pepe</code>, npm and PyPI installs with <code>npm update -g pepe-load</code> and <code>pipx upgrade pepe-load</code> (each version of those packages runs the pepe of that version). Set <code>PEPE_NO_UPDATE_CHECK=1</code> to turn the daily check off; it is off in CI already. <code>PEPE_GITHUB_TOKEN</code> gives <code>self-update</code> a GitHub token, for forks or rate-limited CI, and <code>PEPE_CACHE_DIR</code> is where the check keeps its answer.</p>
 <h2 id="tab-completion-and-man-pages"><a href="#tab-completion-and-man-pages">Tab completion and man pages</a></h2>
 <p>Bash, zsh, fish and PowerShell completions and <code>man pepe</code> (and <code>man pepe-ping</code>, <code>pepe-ramp</code>, …) come with the installer and the Homebrew formula. Installed another way:</p>
 <figure class="code"><div class="bar"><span>bash</span><button type="button" class="copy" aria-label="Copy">copy</button></div><pre><code>pepe completions --install            # for the shell you&#x27;re in
@@ -71,7 +78,7 @@ pepe completions zsh                  # print the script, for packagers and dotf
     <nav class="turn"><a class="prev" href="index.html"><small>Previous</small>Overview</a><a class="next" href="load-test.html"><small>Next</small>Load testing</a></nav>
     <p class="edit"><a href="https://github.com/omarmhaimdat/pepe/edit/master/docs/install.md">Edit this page on GitHub</a></p>
   </main>
-  <aside class="toc"><div class="label">On this page</div><a href="#the-installer" class="h2">The installer</a><a href="#homebrew" class="h2">Homebrew</a><a href="#nix" class="h2">Nix</a><a href="#docker" class="h2">Docker</a><a href="#prebuilt-binaries" class="h2">Prebuilt binaries</a><a href="#from-source" class="h2">From source</a><a href="#staying-up-to-date" class="h2">Staying up to date</a><a href="#tab-completion-and-man-pages" class="h2">Tab completion and man pages</a><a href="#themes-and-colour" class="h2">Themes and colour</a></aside>
+  <aside class="toc"><div class="label">On this page</div><a href="#the-installer" class="h2">The installer</a><a href="#homebrew" class="h2">Homebrew</a><a href="#npm" class="h2">npm</a><a href="#pypi" class="h2">PyPI</a><a href="#nix" class="h2">Nix</a><a href="#docker" class="h2">Docker</a><a href="#prebuilt-binaries" class="h2">Prebuilt binaries</a><a href="#from-source" class="h2">From source</a><a href="#staying-up-to-date" class="h2">Staying up to date</a><a href="#tab-completion-and-man-pages" class="h2">Tab completion and man pages</a><a href="#themes-and-colour" class="h2">Themes and colour</a></aside>
 </div>
 <script src="docs.js" defer></script>
 </body>

@@ -28,6 +28,23 @@ brew install omarmhaimdat/pepe/pepe
 
 The formula puts the completions and man pages where Homebrew activates them.
 
+## npm
+
+```bash
+npm install -g pepe-load                  # install it: the command is `pepe`
+npx pepe-load -n 100 https://example.com  # try it without installing
+```
+
+The package is `pepe-load` (`pepe-cli` was taken); it downloads the binary for your platform when it installs.
+
+## PyPI
+
+```bash
+pipx install pepe-load   # or: pip install pepe-load
+```
+
+The same name and the same `pepe`. The package is a few lines of Python with no dependencies: the first run downloads the release of the same version for your platform from GitHub, checks its SHA-256, keeps it in your cache directory (`~/.cache/pepe-load`, `~/Library/Caches/pepe-load` on macOS, `%LOCALAPPDATA%\pepe-load\Cache` on Windows; `PEPE_LOAD_CACHE_DIR` moves it) and runs it; every later run only runs it.
+
 ## Nix
 
 ```bash
@@ -71,7 +88,7 @@ pepe self-update            # install the latest release
 pepe self-update --check    # only say whether there is one (exit code 1 if so)
 ```
 
-Homebrew and Nix installs update with `brew upgrade pepe` and `nix profile upgrade pepe`. Set `PEPE_NO_UPDATE_CHECK=1` to turn the daily check off; it is off in CI already. `PEPE_GITHUB_TOKEN` gives `self-update` a GitHub token, for forks or rate-limited CI, and `PEPE_CACHE_DIR` is where the check keeps its answer.
+Homebrew and Nix installs update with `brew upgrade pepe` and `nix profile upgrade pepe`, npm and PyPI installs with `npm update -g pepe-load` and `pipx upgrade pepe-load` (each version of those packages runs the pepe of that version). Set `PEPE_NO_UPDATE_CHECK=1` to turn the daily check off; it is off in CI already. `PEPE_GITHUB_TOKEN` gives `self-update` a GitHub token, for forks or rate-limited CI, and `PEPE_CACHE_DIR` is where the check keeps its answer.
 
 ## Tab completion and man pages
 

@@ -15,7 +15,7 @@ targets = [
     "aarch64-unknown-linux-musl",
     "x86_64-pc-windows-msvc",
 ]
-installers = ["shell", "powershell", "homebrew"]
+installers = ["shell", "powershell", "homebrew", "npm"]
 # Where the shell/PowerShell installers put the binary
 install-path = ["$XDG_BIN_HOME/", "~/.local/bin"]
 # Shell completions and man pages, generated from the command definition
@@ -23,9 +23,13 @@ install-path = ["$XDG_BIN_HOME/", "~/.local/bin"]
 include = ["contrib/completions", "contrib/man", "schema"]
 tap = "omarmhaimdat/homebrew-pepe"
 formula = "pepe"
-# The Homebrew job is ours (publish-homebrew.yml): dist's would not install
-# the completions and man pages where Homebrew activates them
-publish-jobs = ["./publish-homebrew", "./publish-r2", "./publish-docker", "./publish-action"]
+# The npm package (`npm install -g pepe-load`, `npx pepe-load`): `pepe-cli`
+# is taken on npm. No scope. The publish job needs an NPM_TOKEN secret.
+npm-package = "pepe-load"
+# npm is dist's own job. The Homebrew job is ours (publish-homebrew.yml):
+# dist's would not install the completions and man pages where Homebrew
+# activates them. PyPI is ours too (publish-pypi.yml): dist has none.
+publish-jobs = ["npm", "./publish-homebrew", "./publish-r2", "./publish-docker", "./publish-action", "./publish-pypi"]
 # Signed build provenance (`gh attestation verify`)
 github-attestations = true
 # `pepe self-update` is built in via axoupdater, no separate updater binary
