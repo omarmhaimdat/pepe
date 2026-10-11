@@ -6,6 +6,41 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+## [0.36.0](https://github.com/omarmhaimdat/pepe/compare/v0.35.1...v0.36.0) - 2026-10-11
+
+### Added
+
+- *(agents)* pepe in the MCP registry, as the PyPI package and the Docker image ([#162](https://github.com/omarmhaimdat/pepe/pull/162))
+
+  `server.json` at the root describes `pepe mcp` for the official MCP
+  registry (registry.modelcontextprotocol.io) as
+  `io.github.omarmhaimdat/pepe`, with two packages:
+
+  - **PyPI** `pepe-http`, run as `uvx pepe-http mcp`. uvx runs the command
+  named like the package, so the package gains a `pepe-http` command
+  alongside `pepe` (same entry point). The README carries the registry's
+  ownership mark, `<!-- mcp-name: io.github.omarmhaimdat/pepe -->`.
+  - **Docker** `ghcr.io/omarmhaimdat/pepe:<version>`, run with `--network
+  host` so the tools reach services on the host. The image gains the
+  `io.modelcontextprotocol.server.name` label, which is how the registry
+  checks ownership of an image.
+
+  The npm package is not listed, because its `package.json` is generated
+  by cargo-dist and cannot carry the `mcpName` field the registry requires
+  there.
+
+  Both packages take the guardrail flags as arguments after `mcp`,
+  described in the listing with their defaults.
+
+  **Publishing** is a new `publish-mcp-registry` job at the end of
+  `release.yml` (a hand edit that `allow-dirty` keeps), after
+  `publish-pypi` and the Docker job, since the registry checks the live
+  package and image. It puts the release's version into `server.json` with
+  jq, authenticates with the job's OIDC token (the `io.github` namespace
+  needs no secret), and publishes. `announce` waits for it like the other
+  publish jobs.
+
+
 ## [0.35.1](https://github.com/omarmhaimdat/pepe/compare/v0.35.0...v0.35.1) - 2026-10-11
 
 ### Fixed
