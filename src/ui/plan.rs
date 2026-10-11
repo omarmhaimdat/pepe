@@ -2608,7 +2608,7 @@ mod tests {
         assert_eq!((s.cli.number, s.cli.concurrency), (5000, 40));
         // More at once than there are requests: refused, with the reason
         retype(&mut s, 'c', "9000");
-        assert!(matches!(&s.message, Some((m, true)) if m.contains("Concurrency")));
+        assert!(matches!(&s.message, Some((m, true)) if m.contains("is more than")));
         assert_eq!(s.cli.concurrency, 40);
         press(&mut s, KeyCode::Esc);
 

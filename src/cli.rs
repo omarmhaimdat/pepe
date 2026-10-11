@@ -206,28 +206,28 @@ pub struct CompletionsArgs {
 
 #[derive(Subcommand, Debug, Clone)]
 pub enum Command {
-    /// Update pepe to the latest release, or say what's new in it
-    SelfUpdate(SelfUpdateArgs),
-    /// Tab completion for your shell: print the script, or --install it
-    Completions(CompletionsArgs),
-    /// Load-test every endpoint of an OpenAPI spec
-    Api(ApiArgs),
-    /// Raise the load step by step to find where the target stops keeping up
-    Ramp(RampArgs),
-    /// Send the URLs of an access log in their real proportions
-    Replay(ReplayArgs),
-    /// Run a sequence of requests from a flow file, each step fed by the last
-    Flow(FlowArgs),
-    /// Read nginx logs: requests per second now, against each minute, hour and day
-    Logs(LogsArgs),
     /// Ping a URL: a request a second, each split into DNS, connect, TLS, first byte and download, on a graph
     Ping(PingArgs),
+    /// Raise the load step by step to find where the target stops keeping up
+    Ramp(RampArgs),
     /// Hold a run's JSON report against an earlier one and say what moved
     Compare(CompareArgs),
+    /// Load-test every endpoint of an OpenAPI spec
+    Api(ApiArgs),
+    /// Run a sequence of requests from a flow file, each step fed by the last
+    Flow(FlowArgs),
+    /// Send the URLs of an access log in their real proportions
+    Replay(ReplayArgs),
+    /// Read nginx logs: requests per second now, against each minute, hour and day
+    Logs(LogsArgs),
     /// Print the JSON Schema of a report: run (the default), ramp, ping or compare
     Schema(SchemaArgs),
     /// Serve pepe's modes as tools for an agent over stdio (the Model Context Protocol); the guardrail flags given here hold for every call
     Mcp(McpArgs),
+    /// Update pepe to the latest release, or say what's new in it
+    SelfUpdate(SelfUpdateArgs),
+    /// Tab completion for your shell: print the script, or --install it
+    Completions(CompletionsArgs),
 }
 
 #[derive(clap::Args, Debug, Clone, PartialEq, Default)]
@@ -539,13 +539,15 @@ pub struct ApiArgs {
 impl Cli {
     pub fn validate(&mut self) -> Result<(), Error> {
         if let Some(warmup) = &self.warmup {
-            Self::parse_duration(warmup)?;
+            Self::parse_duration_for("--warmup", warmup)?;
         }
         if let Some(rate) = self.rate {
             if !(rate > 0.0 && rate.is_finite()) {
                 return Err(Error::raw(
                     clap::error::ErrorKind::ValueValidation,
-                    format!("--rate {rate} is not a number of requests per second"),
+                    format!(
+                        "--rate {rate}: the rate is requests per second, above 0, as in --rate 500"
+                    ),
                 ));
             }
         }
@@ -553,7 +555,7 @@ impl Cli {
             if !(max > 0.0 && max.is_finite()) {
                 return Err(Error::raw(
                     clap::error::ErrorKind::ValueValidation,
-                    format!("--max-rate {max} is not a number of requests per second"),
+                    format!("--max-rate {max}: the cap is requests per second, above 0, as in --max-rate 500"),
                 ));
             }
         }
@@ -569,7 +571,7 @@ impl Cli {
             if reqwest::header::HeaderName::from_bytes(name.as_bytes()).is_err() {
                 return Err(Error::raw(
                     clap::error::ErrorKind::ValueValidation,
-                    format!("--trace-header {name:?} is not a valid header name"),
+                    format!("--trace-header {name:?} is not a header name; letters, digits and dashes, as in X-Request-Id"),
                 ));
             }
         }
@@ -583,7 +585,7 @@ impl Cli {
             return Err(Error::raw(
                 clap::error::ErrorKind::ValueValidation,
                 format!(
-                    "Concurrency cannot be greater than the number of requests. -c {} -n {}",
+                    "-c {} is more than the {} requests of -n: lower -c, raise -n, or run for a time instead with -z 30s",
                     self.concurrency, self.number
                 ),
             ));
@@ -592,20 +594,23 @@ impl Cli {
         if !self.curl && self.url.is_empty() && self.command.is_none() {
             return Err(Error::raw(
                 clap::error::ErrorKind::ValueValidation,
-                "URL is required",
+                "a URL is needed: pepe https://example.com, pepe --curl -- curl ... for a curl command, or pepe alone at a terminal for the setup screen",
             ));
         }
 
         if self.timeout == 0 || self.timeout > 120 {
             return Err(Error::raw(
                 clap::error::ErrorKind::ValueValidation,
-                "Timeout must be between 1 and 120 seconds",
+                format!(
+                    "-t {}: the timeout is in seconds, from 1 to 120, as in -t 30",
+                    self.timeout
+                ),
             ));
         }
 
         // Validate and parse duration if provided
         if let Some(ref duration_str) = self.duration {
-            Self::parse_duration(duration_str)?;
+            Self::parse_duration_for("-z", duration_str)?;
         }
 
         if self.curl {
@@ -632,7 +637,10 @@ impl Cli {
         if method.is_err() {
             return Err(Error::raw(
                 clap::error::ErrorKind::ValueValidation,
-                format!("Invalid method: {}", self.method),
+                format!(
+                    "-m {}: not an HTTP method; GET, POST, PUT, PATCH, DELETE, HEAD or OPTIONS",
+                    self.method
+                ),
             ));
         }
 
@@ -640,13 +648,13 @@ impl Cli {
             if proxy.starts_with("socks4") {
                 return Err(Error::raw(
                     clap::error::ErrorKind::ValueValidation,
-                    "Socks4 proxy is not supported by reqwest.",
+                    format!("-p {proxy}: SOCKS4 isn't supported; use socks5://host:port or http://host:port"),
                 ));
             }
             if Proxy::all(proxy).is_err() {
                 return Err(Error::raw(
                     clap::error::ErrorKind::ValueValidation,
-                    format!("Invalid proxy URL: {}", proxy),
+                    format!("-p {proxy} is not a proxy URL; http://host:port or socks5://host:port, with a user:password@ in front if it needs one"),
                 ));
             }
         }
@@ -690,24 +698,37 @@ impl Cli {
         }
     }
 
+    /// `parse_duration`, with the flag the value came from in front of
+    /// what's wrong with it
+    pub fn parse_duration_for(flag: &str, duration_str: &str) -> Result<u64, Error> {
+        Self::duration_ms(duration_str).map_err(|what| {
+            Error::raw(
+                clap::error::ErrorKind::ValueValidation,
+                format!("{flag} {what}"),
+            )
+        })
+    }
+
     /// Parse duration string like "10s", "5m", "2h" into milliseconds
     pub fn parse_duration(duration_str: &str) -> Result<u64, Error> {
+        Self::duration_ms(duration_str)
+            .map_err(|what| Error::raw(clap::error::ErrorKind::ValueValidation, what))
+    }
+
+    /// The milliseconds in "10s", "5m" or "2h", or what is wrong with it
+    fn duration_ms(duration_str: &str) -> Result<u64, String> {
         let duration_str = duration_str.trim().to_lowercase();
 
         let (num_str, unit) = if let Some(idx) = duration_str.find(|c: char| c.is_alphabetic()) {
             duration_str.split_at(idx)
         } else {
-            return Err(Error::raw(
-                clap::error::ErrorKind::ValueValidation,
-                "Duration must have a unit (s, m, h). Examples: 10s, 5m, 2h",
+            return Err(format!(
+                "{duration_str:?} is not a duration: a number and a unit, as in 10s, 5m or 2h"
             ));
         };
 
         let num: u64 = num_str.trim().parse().map_err(|_| {
-            Error::raw(
-                clap::error::ErrorKind::ValueValidation,
-                format!("Invalid duration number: {}", num_str),
-            )
+            format!("{duration_str:?} is not a duration: a whole number and a unit, as in 10s, 5m or 2h")
         })?;
 
         let unit_ms: u64 = match unit {
@@ -715,23 +736,18 @@ impl Cli {
             "m" | "min" | "minute" | "minutes" => 60 * 1000,
             "h" | "hour" | "hours" => 60 * 60 * 1000,
             _ => {
-                return Err(Error::raw(
-                    clap::error::ErrorKind::ValueValidation,
-                    format!("Invalid duration unit: {}. Valid units: s, m, h", unit),
+                return Err(format!(
+                    "{duration_str:?}: the unit is s, m or h, as in 10s, 5m or 2h"
                 ))
             }
         };
         let milliseconds = num.checked_mul(unit_ms).ok_or_else(|| {
-            Error::raw(
-                clap::error::ErrorKind::ValueValidation,
-                format!("Duration is too long: {}", duration_str),
-            )
+            format!("{duration_str:?} is longer than a run can be; -z 8h is a long one")
         })?;
 
         if milliseconds == 0 {
-            return Err(Error::raw(
-                clap::error::ErrorKind::ValueValidation,
-                "Duration must be greater than 0",
+            return Err(format!(
+                "{duration_str:?}: a duration is more than 0, as in 10s"
             ));
         }
 
@@ -1200,7 +1216,7 @@ mod tests {
             bare.contains("\"foo\" isn't a URL, nor a command"),
             "{bare}"
         );
-        assert!(bare.contains("api, ramp, replay, flow, logs"), "{bare}");
+        assert!(bare.contains("ping, ramp, compare, api, flow"), "{bare}");
         assert!(bare.contains("pepe self-update"), "{bare}");
         let host = trouble("example.com/x");
         assert!(host.contains("has no scheme"), "{host}");

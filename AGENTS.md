@@ -122,3 +122,8 @@ disk every minute.
 `pepe mcp` serves the modes above as tools over stdio (`run`, `ping`,
 `ramp`, `compare`, `api`, `flow`, `replay`), each returning the JSON
 report. Guardrail flags given to `pepe mcp` apply to every call.
+
+As a Claude Code plugin, `claude plugin marketplace add omarmhaimdat/pepe`
+then `claude plugin install pepe@pepe` brings the skill and this server,
+capped at 10000 requests, 500 a second and 64 connections; the
+`allow-host` goes in the project's `pepe.toml`.

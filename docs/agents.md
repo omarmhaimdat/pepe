@@ -69,6 +69,17 @@ For a client configured with JSON (Claude Desktop, Cursor and the like):
 
 A tool call that pepe refuses (a host outside the allowed, a cap crossed) comes back as an error with pepe's reason; a limit crossed during the run (`fail_if`, a ping's `slo`) comes back as the report with a note, since the report is the answer. A `ping` without `count` or `duration` sends five pings, so no call runs forever.
 
+### As a Claude Code plugin
+
+The repository is also a Claude Code plugin. Installing it brings the `pepe` skill (how to call pepe and what to read in each report) and the MCP server above, started as `pepe mcp --max-requests 10000 --max-rate 500 --max-concurrency 64`. The plugin does not install pepe: the binary must be on `PATH` first.
+
+```bash
+claude plugin marketplace add omarmhaimdat/pepe
+claude plugin install pepe@pepe
+```
+
+The server ships with no `--allow-host`, since a host it is allowed to load is yours to name. Put one in a `pepe.toml` next to the code (see [Guardrails](#guardrails)); pepe reads it in every mode, the MCP server included.
+
 ## Diagnose one endpoint
 
 ```bash

@@ -1,0 +1,14 @@
+# What `cargo audit` (the Audit job in CI) may pass over. Vulnerabilities
+# are never listed here; these are warnings about crates pepe doesn't
+# use directly, each with where it comes from and what retires it.
+[advisories]
+ignore = [
+  # paste is unmaintained; a build-time macro crate pulled in by ratatui
+  # 0.29. Goes with the ratatui upgrade.
+  "RUSTSEC-2024-0436",
+  # lru 0.12 is "unsound" in LruCache::pop and IterMut under panics and
+  # Stacked Borrows; ratatui 0.29 uses it for its text cache and pepe
+  # never calls either. Goes with the ratatui upgrade.
+  "RUSTSEC-2026-0253",
+  "RUSTSEC-2026-0002",
+]

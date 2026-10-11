@@ -6,6 +6,130 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+## [0.34.0](https://github.com/omarmhaimdat/pepe/compare/v0.33.0...v0.34.0) - 2026-10-11
+
+### Added
+
+- *(agents)* pepe as a Claude Code plugin ([#151](https://github.com/omarmhaimdat/pepe/pull/151))
+
+  The repository installs as a Claude Code plugin.
+
+  ```bash
+  claude plugin marketplace add omarmhaimdat/pepe
+  claude plugin install pepe@pepe
+  ```
+
+  What the plugin brings:
+
+  - The `pepe` skill (`skills/pepe/SKILL.md`, unchanged): how to call pepe
+  and what to read in each report.
+  - The MCP server, from `.mcp.json`: `pepe mcp --max-requests 10000
+  --max-rate 500 --max-concurrency 64`. No `--allow-host` is shipped,
+  since a placeholder would refuse every target; a project names its hosts
+  in `pepe.toml`, which the server's subprocess reads from the working
+  directory like every other mode.
+  - The binary is not installed by the plugin; it must be on `PATH`.
+
+
+
+### Other
+
+- cargo audit on every PR, and the bench server past its time advisory ([#150](https://github.com/omarmhaimdat/pepe/pull/150))
+
+  Dependabot's alert 13 is the `time` crate pinned by
+  `bench/server/Cargo.lock` (GHSA-r6v5-fh4h-64xc, stack exhaustion). It is
+  now 0.3.55, which wants Rust 1.88; the bench server is built with stable
+  and is not under the MSRV job, so that is fine.
+
+  An `Audit` job in CI runs `cargo audit --deny warnings` on both lock
+  files, so the next advisory fails a pull request instead of arriving by
+  email.
+
+
+- the overview opens like a landing page ([#149](https://github.com/omarmhaimdat/pepe/pull/149))
+
+  The docs' first page now opens like a landing page: the logo, the name,
+  one sentence and three buttons (Get started, Read the docs, View on
+  GitHub), then the install lines, the home recording and the cards. The
+  site's generator learns a `:::hero` block for it and takes the page
+  description from the hero's sentence; the CSS adds a few lines for the
+  hero. The rest of the site is unchanged.
+
+  Checked with `python3 site/build-docs.py --check` and in the browser at
+  phone and desktop widths, light and dark.
+
+
+- the leftover scripts out, and the standard files in ([#148](https://github.com/omarmhaimdat/pepe/pull/148))
+
+  ## What
+
+  - **Leftovers removed.** `quick_check.sh` and `test_simple.sh` were from
+  v0.3 and checked for files that no longer exist (`release.yaml`, the old
+  install script); `.vscode/` was one editor's launch config. All gone;
+  `.gitignore` already kept new copies out, these were just tracked from
+  before.
+  - **`SECURITY.md`**: how to report a vulnerability privately (GitHub's
+  private advisories, or email), what is in scope (the binary and its
+  inputs, the installers and release artifacts, the action, the MCP
+  server), what isn't, and the guardrails for what pepe is pointed at.
+  - **Issue templates**: a bug form (version, platform, the exact command
+  with a note that `--dry-run` is safe to paste, expected, actual, the
+  terminal's size for a screen) and a feature form that asks for the
+  situation before the feature, with a pointer to the roadmap. The chooser
+  links to the docs, discussions and private security reporting.
+  - **A pull request template** that explains the conventional title the
+  changelog and the release are built from, and asks what was checked,
+  including the generated files.
+
+  ## Also worth doing, by hand
+
+  Two repository settings are off and don't come from a file: Dependabot
+  security updates and secret scanning with push protection (Settings →
+  Code security). Both are free for a public repository and both are
+  things listing reviewers look at.
+
+  ## Checked
+
+  - The three YAML templates parse; the forms render in GitHub's chooser
+  once merged
+  - Nothing referenced the removed scripts
+
+
+- *(readme)* a front page, with the manual on the site ([#146](https://github.com/omarmhaimdat/pepe/pull/146))
+
+  ## What
+
+  The README was 769 lines: the whole manual, which since #133 and #135
+  lives on the docs site. This makes it a front page: the pitch, the
+  recording, install, a quick start, a table of the modes with a line and
+  a link each, what makes pepe usable from scripts, CI and agents (the
+  JSON report and its schema, the exit codes, the guardrails, the action,
+  the metrics, the MCP server), the benchmark tables, and where the
+  documentation, the changelog and the roadmap are. 100 lines.
+
+  What was stale went with it: "160+ tests" (there are 300), the roadmap
+  paragraph that still listed things that shipped, and the `-d @file`
+  example fixed in #137.
+
+  - `CONTRIBUTING.md` holds what the Contributing section had, and more:
+  the build and the checks, the generated files and how to regenerate
+  them, the recordings, the benchmarks, the Windows checklist, commits and
+  releases, and a map of the source tree.
+  - The install page's "docs" links point at the docs site rather than the
+  README's old Usage section.
+  - The modes table names the long flags, as the review in #13 asked; that
+  issue is answered point by point and closed.
+
+  Nothing in the manual is lost: every section the README had is a page on
+  the site, written from it.
+
+  ## Checked
+
+  - Every file the README links to exists; the docs-site check is clean
+  - No source or workflow linked into README sections (the action's
+  listing shows the README's front page, which is the intent)
+
+
 ## [0.33.0](https://github.com/omarmhaimdat/pepe/compare/v0.32.0...v0.33.0) - 2026-10-10
 
 ### Added
