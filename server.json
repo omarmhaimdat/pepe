@@ -63,7 +63,6 @@
     },
     {
       "registryType": "oci",
-      "registryBaseUrl": "https://ghcr.io",
       "identifier": "ghcr.io/omarmhaimdat/pepe:0.35.1",
       "transport": {
         "type": "stdio"
