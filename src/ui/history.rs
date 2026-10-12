@@ -39,7 +39,7 @@ pub struct HistoryScreen {
 
 impl HistoryScreen {
     pub fn new(store: Store, name: &str, mut runs: Vec<Recorded>) -> Self {
-        runs.sort_by(|a, b| b.run.when.cmp(&a.run.when));
+        runs.sort_by_key(|r| std::cmp::Reverse(r.run.when));
         HistoryScreen {
             store,
             name: name.to_string(),
