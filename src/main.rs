@@ -80,7 +80,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
     match loaded {
         Ok(Some((path, file))) => {
-            file.apply(&mut args, &matches);
+            if args.load.is_some() {
+                file.apply_test(&mut args, &matches);
+            } else {
+                file.apply(&mut args, &matches);
+            }
             args.config_loaded = Some(path);
         }
         Ok(None) => {}

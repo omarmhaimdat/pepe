@@ -851,10 +851,7 @@ fn render_tabs(d: &Dashboard, f: &mut Frame, area: Rect) {
             format!("{} {}", i + 1, title)
         })
         .collect();
-    f.render_widget(
-        Paragraph::new(kit::tabs(&titles, d.tab.index(d.tabs()))),
-        area,
-    );
+    kit::tab_bar(f, area, &titles, d.tab.index(d.tabs()));
 }
 
 fn render_footer(d: &Dashboard, f: &mut Frame, area: Rect) {
@@ -918,12 +915,13 @@ fn render_footer(d: &Dashboard, f: &mut Frame, area: Rect) {
         format!(" {} ", truncate(&notice, room))
     });
     let notice_width = notice.as_ref().map_or(0, |n| n.chars().count() + 1);
-    f.render_widget(
-        Paragraph::new(kit::chips_fit(
-            &hints,
-            width.saturating_sub(notice_width) as u16,
-        )),
-        area,
+    kit::footer(
+        f,
+        Rect {
+            width: width.saturating_sub(notice_width) as u16,
+            ..area
+        },
+        &hints,
     );
     if let Some(notice) = notice {
         f.render_widget(
@@ -2389,6 +2387,16 @@ fn render_endpoints(d: &Dashboard, f: &mut Frame, area: Rect) {
         .filter(|_| d.endpoints.len() > 1);
     let height = table.height.saturating_sub(1) as usize;
     let top = (d.endpoint_cursor + 1).saturating_sub(height);
+    kit::hit_rows(
+        Rect {
+            y: table.y + 1,
+            height: table.height.saturating_sub(1),
+            ..table
+        },
+        super::ENDPOINT_ROWS,
+        top,
+        d.endpoints.len().saturating_sub(top),
+    );
     let rows = d
         .endpoints
         .iter()
@@ -2538,6 +2546,17 @@ fn render_requests_tab(d: &Dashboard, f: &mut Frame, area: Rect) {
     let height = table.height.saturating_sub(1) as usize;
     // Scroll just enough to keep the selected row on screen
     let top = (d.scroll + 1).saturating_sub(height);
+    // Under the header line, each row is clickable
+    kit::hit_rows(
+        Rect {
+            y: table.y + 1,
+            height: table.height.saturating_sub(1),
+            ..table
+        },
+        super::REQUEST_ROWS,
+        top,
+        log.len().saturating_sub(top),
+    );
     let api = !d.endpoints.is_empty();
     let rows = log.iter().enumerate().skip(top).take(height).map(|(i, e)| {
         let endpoint = d

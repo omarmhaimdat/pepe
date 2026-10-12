@@ -6,14 +6,20 @@ use std::io::stdout;
 
 use crossterm::{
     cursor::{Hide, Show},
-    event::{DisableBracketedPaste, EnableBracketedPaste},
+    event::{DisableBracketedPaste, DisableMouseCapture, EnableBracketedPaste, EnableMouseCapture},
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
 
 pub(crate) fn restore_terminal() {
     let _ = disable_raw_mode();
-    let _ = execute!(stdout(), DisableBracketedPaste, LeaveAlternateScreen, Show);
+    let _ = execute!(
+        stdout(),
+        DisableMouseCapture,
+        DisableBracketedPaste,
+        LeaveAlternateScreen,
+        Show
+    );
 }
 
 /// Puts the terminal into dashboard mode and restores it when dropped, so
@@ -25,8 +31,17 @@ impl TerminalGuard {
         enable_raw_mode()?;
         #[cfg(unix)]
         keep_ctrl_c_a_signal();
-        // Bracketed paste: a pasted curl command arrives whole, not as keys
-        execute!(stdout(), EnterAlternateScreen, Hide, EnableBracketedPaste)?;
+        // Bracketed paste: a pasted curl command arrives whole, not as keys.
+        // The mouse: every screen takes clicks and the wheel; with it
+        // captured the terminal no longer turns the wheel into arrow keys,
+        // so each screen does that itself (`ui::kit::click`).
+        execute!(
+            stdout(),
+            EnterAlternateScreen,
+            Hide,
+            EnableBracketedPaste,
+            EnableMouseCapture
+        )?;
         Ok(Self)
     }
 }

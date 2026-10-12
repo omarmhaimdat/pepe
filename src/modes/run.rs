@@ -125,16 +125,41 @@ pub(crate) async fn run_interactive(
     // it, which can block too, and Ctrl-C must still get out then
     let _watchdog = CtrlCWatchdog::arm();
     let _terminal = TerminalGuard::enter()?;
+    // What the command line gave: a saved test opens on top of it
+    let base = args.clone();
     let mut args = args.clone();
     let mut farewell = Farewell::default();
     // Why the last start didn't happen, for the setup screen to say
     let mut error: Option<String> = None;
+    // The library opens first when nothing at all was asked for and the
+    // project has saved tests; ctrl-o on the form comes back to it
+    let mut library =
+        setup && args.url.is_empty() && args.command.is_none() && args.config_loaded.is_none();
     loop {
         if setup {
+            if library {
+                library = false;
+                let store = crate::store::Store::local();
+                let entries = store.entries();
+                if !entries.is_empty() {
+                    match ui::LibraryScreen::new(store.clone(), entries).run().await? {
+                        ui::LibraryOutcome::Open(name) => match store.open(&name, &base) {
+                            Ok(opened) => args = opened,
+                            Err(e) => error = Some(e),
+                        },
+                        ui::LibraryOutcome::New => {}
+                        ui::LibraryOutcome::Quit => return Ok(farewell),
+                    }
+                }
+            }
             match ui::Setup::new(&args).with_error(error.take()).run().await? {
                 ui::SetupOutcome::Start(chosen) => {
                     args = *chosen;
                     farewell.command = Some(args.command_line());
+                }
+                ui::SetupOutcome::Library => {
+                    library = true;
+                    continue;
                 }
                 ui::SetupOutcome::Quit => return Ok(farewell),
             }

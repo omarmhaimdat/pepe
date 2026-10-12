@@ -3,6 +3,7 @@ mod body;
 mod filter;
 pub mod format;
 mod kit;
+mod library;
 mod logs;
 pub(crate) mod mascot;
 mod ping;
@@ -12,6 +13,7 @@ mod setup;
 pub mod theme;
 mod view;
 
+pub use library::{LibraryOutcome, LibraryScreen};
 pub use logs::LogsScreen;
 pub use ping::{parse_color, Look, PingScreen};
 pub use plan::{PlanOutcome, PlanScreen};
@@ -21,7 +23,9 @@ pub use setup::{Setup, SetupOutcome};
 use std::collections::VecDeque;
 use std::time::{Duration, Instant};
 
-use crossterm::event::{Event, EventStream, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
+use crossterm::event::{
+    Event, EventStream, KeyCode, KeyEvent, KeyEventKind, KeyModifiers, MouseEvent,
+};
 use futures::{FutureExt, StreamExt};
 use ratatui::{backend::CrosstermBackend, Terminal};
 use tokio::sync::mpsc::error::TryRecvError;
@@ -33,6 +37,10 @@ use crate::metrics::Metrics;
 use crate::response::ResponseStats;
 use crate::timeline::Timeline;
 use crate::Cli;
+
+/// The dashboard's clickable lists, for `kit::Hit::Row`
+const REQUEST_ROWS: u8 = 0;
+const ENDPOINT_ROWS: u8 = 1;
 
 /// Redraw interval while a run is live. Input redraws immediately, and a
 /// finished dashboard only redraws on input, so it costs no CPU while idle.
@@ -219,6 +227,8 @@ pub struct Dashboard {
 
     tab: Tab,
     show_help: bool,
+    /// Tells a second click on a row from the first
+    clicks: kit::Clicks,
     /// What the request log shows
     filter: filter::Filter,
     /// Latency the slow filter requires, refreshed as results arrive
@@ -286,6 +296,7 @@ impl Dashboard {
             frame: 0,
             tab: Tab::Live,
             show_help: false,
+            clicks: kit::Clicks::default(),
             filter: filter::Filter::default(),
             slow_threshold_us: 0,
             scroll: 0,
@@ -928,13 +939,45 @@ impl Dashboard {
     }
 
     fn handle(&mut self, event: Event, load: &LoadHandle) -> Option<Outcome> {
-        // Anything else (resize, focus, ...) just triggers the redraw
-        let Event::Key(key) = event else { return None };
-        // Windows reports key releases too; act on presses only
-        if key.kind != KeyEventKind::Press {
+        match event {
+            // Windows reports key releases too; act on presses only
+            Event::Key(key) if key.kind == KeyEventKind::Press => self.handle_key(key, load),
+            Event::Mouse(mouse) => self.handle_mouse(mouse, load),
+            // Anything else (resize, focus, ...) just triggers the redraw
+            _ => None,
+        }
+    }
+
+    /// A click on a request or an endpoint selects it, a second click is
+    /// enter on it; on a tab shows it; on a key chip presses the key. The
+    /// wheel scrolls.
+    fn handle_mouse(&mut self, event: MouseEvent, load: &LoadHandle) -> Option<Outcome> {
+        if self.show_help {
+            if kit::pressed(&event) {
+                self.show_help = false;
+            }
             return None;
         }
-        self.handle_key(key, load)
+        match kit::click(&event)? {
+            kit::Hit::Key(key) => self.handle_key(key, load),
+            kit::Hit::Tab(index) => {
+                if let Some(&tab) = self.tabs().get(index) {
+                    self.tab = tab;
+                }
+                None
+            }
+            hit @ kit::Hit::Row { list, index } => {
+                match list {
+                    REQUEST_ROWS => self.scroll = index,
+                    ENDPOINT_ROWS => self.endpoint_cursor = index,
+                    _ => return None,
+                }
+                if self.clicks.second(hit, Instant::now()) {
+                    return self.handle_key(KeyEvent::from(KeyCode::Enter), load);
+                }
+                None
+            }
+        }
     }
 
     fn handle_key(&mut self, key: KeyEvent, load: &LoadHandle) -> Option<Outcome> {

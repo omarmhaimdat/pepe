@@ -4,7 +4,9 @@
 
 use std::time::{Duration, Instant};
 
-use crossterm::event::{Event, EventStream, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
+use crossterm::event::{
+    Event, EventStream, KeyCode, KeyEvent, KeyEventKind, KeyModifiers, MouseEvent,
+};
 use futures::StreamExt;
 use ratatui::{
     backend::CrosstermBackend,
@@ -16,7 +18,8 @@ use ratatui::{
 };
 use tokio::time::MissedTickBehavior;
 
-use super::kit::{about_line, caption, chips_fit, help, marker, panel, FAINT, SELECTED};
+use super::kit;
+use super::kit::{about_line, caption, help, marker, panel, FAINT, SELECTED};
 use super::view::{label, status_color, truncate, value, ACCENT, BAD, GOOD, LABEL, RULE, WARN};
 use super::{format, mascot, theme, Outcome};
 use crate::insights::Level;
@@ -168,6 +171,26 @@ impl RampScreen {
         }
     }
 
+    /// A click on a step shows its details; a key chip presses its key;
+    /// the wheel moves between steps
+    fn mouse(&mut self, event: MouseEvent, now: Instant) -> Effect {
+        if self.show_help {
+            if kit::pressed(&event) {
+                self.show_help = false;
+            }
+            return Effect::None;
+        }
+        match kit::click(&event) {
+            Some(kit::Hit::Key(key)) => self.key(key, now),
+            Some(kit::Hit::Row { index, .. }) => {
+                let last = self.ramp.plan.levels.len().saturating_sub(1);
+                self.selected = Some(index.min(last));
+                Effect::None
+            }
+            _ => Effect::None,
+        }
+    }
+
     /// Carry out what the ramp decided
     fn apply(&self, tick: Tick, load: &LoadHandle) {
         match tick {
@@ -218,8 +241,15 @@ impl RampScreen {
                     dirty |= pumps % PUMPS_PER_FRAME == 0 || self.ramp.end.is_some();
                 }
                 event = events.next() => match event {
-                    Some(Ok(Event::Key(key))) if key.kind == KeyEventKind::Press => {
-                        match self.key(key, Instant::now()) {
+                    Some(Ok(event)) => {
+                        let effect = match event {
+                            Event::Key(key) if key.kind == KeyEventKind::Press => {
+                                self.key(key, Instant::now())
+                            }
+                            Event::Mouse(mouse) => self.mouse(mouse, Instant::now()),
+                            _ => Effect::None,
+                        };
+                        match effect {
                             Effect::Leave(outcome) => return Ok(outcome),
                             Effect::Ramp(tick) => self.apply(tick, load),
                             Effect::Paused(paused) => load.set_paused(paused),
@@ -227,7 +257,6 @@ impl RampScreen {
                         }
                         dirty = true;
                     }
-                    Some(Ok(_)) => dirty = true,
                     Some(Err(e)) => return Err(e.into()),
                     None => return Ok(Outcome::Quit),
                 },
@@ -405,7 +434,7 @@ impl RampScreen {
             ("?", "keys"),
             ("q", "quit"),
         ]);
-        f.render_widget(Paragraph::new(chips_fit(&keys, footer.width)), footer);
+        kit::footer(f, footer, &keys);
         if self.show_help {
             help(
                 f,
@@ -794,6 +823,9 @@ impl RampScreen {
         // Keep the selected step in view
         let height = body.height as usize;
         let scroll = (cursor + 2).min(lines.len()).saturating_sub(height) as u16;
+        if selectable {
+            kit::hit_rows(body, 0, scroll as usize, lines.len() - scroll as usize);
+        }
         f.render_widget(Paragraph::new(lines).scroll((scroll, 0)), body);
     }
 

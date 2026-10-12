@@ -3,9 +3,11 @@
 
 use std::io::Write as _;
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
-use crossterm::event::{Event, EventStream, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
+use crossterm::event::{
+    Event, EventStream, KeyCode, KeyEvent, KeyEventKind, KeyModifiers, MouseEvent,
+};
 use futures::StreamExt;
 use ratatui::{
     backend::CrosstermBackend,
@@ -17,7 +19,8 @@ use ratatui::{
 };
 use tokio::time::MissedTickBehavior;
 
-use super::kit::{about_line, chips_fit, help, marker, tabs, wrap, FAINT, SELECTED};
+use super::kit;
+use super::kit::{about_line, help, marker, wrap, FAINT, SELECTED};
 use super::view::{label, status_color, truncate, value, ACCENT, BAD, GOOD, LABEL, RULE, WARN};
 use super::{format, theme};
 use crate::ping::{glyph, percent, Kind, Phases, Sample, Shared, State, TargetStats};
@@ -101,6 +104,8 @@ pub struct PingScreen {
     failures_only: bool,
     inspecting: bool,
     show_help: bool,
+    /// Tells a second click on a ping from the first
+    clicks: kit::Clicks,
 }
 
 /// A colour named on the command line
@@ -181,6 +186,7 @@ impl PingScreen {
             failures_only: false,
             inspecting: false,
             show_help: false,
+            clicks: kit::Clicks::default(),
         }
     }
 
@@ -211,6 +217,35 @@ impl PingScreen {
                 let count = self.shared.lock().targets.len().max(1);
                 self.picked = (self.picked as i64 + by).rem_euclid(count as i64) as usize;
             }
+        }
+    }
+
+    /// The mouse: a click on a ping picks it, a second click opens it; on
+    /// a tab shows it; on a key chip presses the key. The wheel moves.
+    /// True when it asks to leave.
+    fn mouse(&mut self, event: MouseEvent, now: Instant) -> bool {
+        if self.show_help {
+            if kit::pressed(&event) {
+                self.show_help = false;
+            }
+            return false;
+        }
+        match kit::click(&event) {
+            Some(kit::Hit::Key(key)) => self.key(key),
+            Some(kit::Hit::Tab(index)) => {
+                if let Some(&tab) = TABS.get(index) {
+                    self.tab = tab;
+                }
+                false
+            }
+            Some(hit @ kit::Hit::Row { index, .. }) => {
+                self.line = Some(index);
+                if self.clicks.second(hit, now) {
+                    return self.key(KeyEvent::from(KeyCode::Enter));
+                }
+                false
+            }
+            None => false,
         }
     }
 
@@ -323,6 +358,11 @@ impl PingScreen {
                             return Ok(());
                         }
                     }
+                    Some(Ok(Event::Mouse(mouse))) => {
+                        if self.mouse(mouse, Instant::now()) {
+                            return Ok(());
+                        }
+                    }
                     Some(Ok(_)) => {}
                     Some(Err(e)) => return Err(e.into()),
                     None => return Ok(()),
@@ -371,7 +411,7 @@ impl PingScreen {
             .map(|t| t.to_string())
             .collect();
         let at = TABS.iter().position(|t| *t == self.tab).unwrap_or(0);
-        f.render_widget(Paragraph::new(tabs(&titles, at)), tab_bar);
+        kit::tab_bar(f, tab_bar, &titles, at);
         match self.tab {
             Tab::Graph => self.render_graph(f, body, &state, now),
             Tab::Phases => self.render_phases(f, body, &state),
@@ -406,7 +446,7 @@ impl PingScreen {
                 ("q", "quit"),
             ],
         };
-        f.render_widget(Paragraph::new(chips_fit(&keys, footer.width)), footer);
+        kit::footer(f, footer, &keys);
 
         if self.inspecting {
             self.render_inspector(f, area, &state);
@@ -970,6 +1010,16 @@ impl PingScreen {
         let picked = self.line.map(|l| l.min(last));
         let end = picked.map_or(last, |p| p.max(height.saturating_sub(1)).min(last));
         let start = (end + 1).saturating_sub(height);
+        kit::hit_rows(
+            Rect {
+                y: area.y + 1,
+                height: area.height.saturating_sub(1),
+                ..area
+            },
+            0,
+            start,
+            end + 1 - start,
+        );
         let offset = i64::from(crate::logs::local_offset());
         for (i, sample) in samples.iter().enumerate().take(end + 1).skip(start) {
             let is_picked = picked == Some(i);

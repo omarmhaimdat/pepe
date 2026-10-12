@@ -288,6 +288,19 @@ impl Config {
         }
     }
 
+    /// `apply` for a saved test: the file decides the mode too, when the
+    /// command line named none (`pepe --load my-ramp` runs the ramp)
+    pub fn apply_test(&self, cli: &mut Cli, matches: &ArgMatches) {
+        if cli.command.is_none() {
+            if self.ramp.is_some() {
+                cli.command = Some(Command::Ramp(RampArgs::default()));
+            } else if self.api.is_some() {
+                cli.command = Some(Command::Api(crate::cli::ApiArgs::default()));
+            }
+        }
+        self.apply(cli, matches);
+    }
+
     /// The settings as they stand, in a form that reads back the same.
     /// Defaults are left out, so the file says only what was chosen.
     pub fn from_cli(cli: &Cli) -> Config {
