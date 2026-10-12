@@ -41,6 +41,10 @@ use crate::Cli;
 /// The dashboard's clickable lists, for `kit::Hit::Row`
 const REQUEST_ROWS: u8 = 0;
 const ENDPOINT_ROWS: u8 = 1;
+/// The filter bar's choices: a status, a latency, the endpoint's chip
+const STATUS_CHOICES: u8 = 2;
+const SLOW_CHOICES: u8 = 3;
+const ENDPOINT_CHOICE: u8 = 4;
 
 /// Redraw interval while a run is live. Input redraws immediately, and a
 /// finished dashboard only redraws on input, so it costs no CPU while idle.
@@ -1000,6 +1004,35 @@ impl Dashboard {
                 }
                 None
             }
+            // The filter bar: a click on a choice is that choice
+            kit::Hit::Row {
+                list: STATUS_CHOICES,
+                index,
+            } => {
+                if let Some(&status) = filter::Status::ALL.get(index) {
+                    self.filter.status = status;
+                    self.refilter();
+                }
+                None
+            }
+            kit::Hit::Row {
+                list: SLOW_CHOICES,
+                index,
+            } => {
+                if let Some(&slow) = filter::Slow::ALL.get(index) {
+                    self.filter.slow = slow;
+                    self.refilter();
+                }
+                None
+            }
+            kit::Hit::Row {
+                list: ENDPOINT_CHOICE,
+                ..
+            } => {
+                self.filter.endpoint = None;
+                self.refilter();
+                None
+            }
             hit @ kit::Hit::Row { list, index } => {
                 match list {
                     REQUEST_ROWS => self.scroll = index,
@@ -1312,6 +1345,78 @@ mod tests {
             .unwrap();
         let client = request.build_client().unwrap();
         crate::load::start(client, request, 1, Plan::Count(0), false)
+    }
+
+    #[test]
+    fn the_filter_bar_is_clickable_part_by_part() {
+        use crossterm::event::{MouseButton, MouseEvent, MouseEventKind};
+        use ratatui::{backend::TestBackend, layout::Rect, Terminal};
+        let mut d = dashboard();
+        d.tab = Tab::Requests;
+        let load = dummy_load();
+        let mut terminal = Terminal::new(TestBackend::new(120, 40)).unwrap();
+        let find = |hit: kit::Hit| {
+            kit::hits()
+                .into_iter()
+                .find(|(_, h)| *h == hit)
+                .map(|(area, _)| area)
+                .unwrap_or_else(|| panic!("{hit:?} isn't on screen"))
+        };
+        let click = |area: Rect| MouseEvent {
+            kind: MouseEventKind::Down(MouseButton::Left),
+            column: area.x + 1,
+            row: area.y,
+            modifiers: KeyModifiers::NONE,
+        };
+        terminal
+            .draw(|f| theme::draw(f, |f| view::render(&d, f)))
+            .unwrap();
+        // The letters act as the keys: f cycles the status
+        let before = d.filter.status;
+        d.handle_mouse(
+            click(find(kit::Hit::Key(KeyEvent::from(KeyCode::Char('f'))))),
+            &load,
+        );
+        assert_eq!(d.filter.status, before.next());
+        // A status is set by clicking it
+        let third = filter::Status::ALL[2];
+        d.handle_mouse(
+            click(find(kit::Hit::Row {
+                list: STATUS_CHOICES,
+                index: 2,
+            })),
+            &load,
+        );
+        assert_eq!(d.filter.status, third);
+        // So is a latency
+        d.handle_mouse(
+            click(find(kit::Hit::Row {
+                list: SLOW_CHOICES,
+                index: 1,
+            })),
+            &load,
+        );
+        assert_eq!(d.filter.slow, filter::Slow::ALL[1]);
+        // The search opens for typing
+        d.handle_mouse(
+            click(find(kit::Hit::Key(KeyEvent::from(KeyCode::Char('/'))))),
+            &load,
+        );
+        assert!(d.filter.editing);
+        d.handle_key(KeyEvent::from(KeyCode::Esc), &load);
+        assert!(!d.filter.editing);
+        // The choices are only where the bar is drawn: on another tab they're gone
+        d.tab = Tab::Live;
+        terminal
+            .draw(|f| theme::draw(f, |f| view::render(&d, f)))
+            .unwrap();
+        assert!(!kit::hits().iter().any(|(_, h)| matches!(
+            h,
+            kit::Hit::Row {
+                list: STATUS_CHOICES,
+                ..
+            }
+        )));
     }
 
     #[test]
