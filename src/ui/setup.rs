@@ -4,7 +4,9 @@
 
 use std::time::Duration;
 
-use crossterm::event::{Event, EventStream, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
+use crossterm::event::{
+    Event, EventStream, KeyCode, KeyEvent, KeyEventKind, KeyModifiers, MouseEvent,
+};
 use futures::StreamExt;
 use ratatui::{
     backend::CrosstermBackend,
@@ -16,7 +18,7 @@ use ratatui::{
 };
 
 use super::kit::{
-    about_line, caption, chips_fit, help, marker, panel, tabs, TextInput, FAINT, SELECTED,
+    self, about_line, caption, help, marker, panel, tabs, Hit, TextInput, FAINT, SELECTED,
 };
 use super::view::{label, status_color, truncate, value, ACCENT, BAD, GOOD, LABEL, RULE, WARN};
 use super::{body, format, mascot, theme};
@@ -39,6 +41,8 @@ const WIDE: u16 = 100;
 pub enum SetupOutcome {
     /// Run a load test with these settings
     Start(Box<Cli>),
+    /// Go to the saved tests
+    Library,
     Quit,
 }
 
@@ -120,6 +124,8 @@ enum Action {
     Try,
     /// Save the form under the name in the prompt
     Save,
+    /// Go to the saved tests, if there are any
+    Library,
     Quit,
 }
 
@@ -134,6 +140,8 @@ struct Naming {
 struct Section {
     title: &'static str,
     lines: Vec<Line<'static>>,
+    /// The field on each line, for a click; none on a heading or a gap
+    fields: Vec<Option<Field>>,
     focus: Option<usize>,
 }
 
@@ -502,6 +510,7 @@ impl Setup {
             KeyCode::Enter => return Some(Action::Start),
             KeyCode::Char('t') if ctrl => return Some(Action::Try),
             KeyCode::Char('s') if ctrl => self.open_naming(),
+            KeyCode::Char('o') if ctrl => return Some(Action::Library),
             KeyCode::Tab => self.switch_mode(1),
             KeyCode::BackTab => self.switch_mode(-1),
             KeyCode::Up => self.move_focus(-1),
@@ -568,6 +577,57 @@ impl Setup {
                 )
             }
             Err(e) => (e, true),
+        }
+    }
+
+    /// A click on a field focuses it, and on the focused field changes a
+    /// choice; on a mode tab switches mode; on a key chip presses the key.
+    /// The wheel moves between fields.
+    fn mouse(&mut self, event: MouseEvent) -> Option<Action> {
+        if self.show_help {
+            if kit::pressed(&event) {
+                self.show_help = false;
+            }
+            return None;
+        }
+        match kit::click(&event)? {
+            Hit::Key(key) => self.key(key),
+            Hit::Tab(index) if self.naming.is_none() => {
+                if let Some(at) = Mode::ALL.iter().position(|&m| m == self.mode) {
+                    if index < Mode::ALL.len() {
+                        self.switch_mode(index as isize - at as isize);
+                    }
+                }
+                self.message = None;
+                None
+            }
+            Hit::Row { index, .. } if self.naming.is_none() => {
+                let fields = self.fields();
+                if index >= fields.len() {
+                    return None;
+                }
+                if self.focus == index {
+                    let field = fields[index];
+                    let typed = self.text(field).is_some()
+                        || matches!(field, Field::AddHeader | Field::AddUntil);
+                    if !typed {
+                        self.change(1);
+                    }
+                } else {
+                    // Step there, so leaving an emptied header removes it
+                    // as the arrows would; the steps are bounded in case a
+                    // removal moves the target
+                    for _ in 0..fields.len() {
+                        if self.focus == index || index >= self.fields().len() {
+                            break;
+                        }
+                        self.move_focus(if self.focus < index { 1 } else { -1 });
+                    }
+                }
+                self.message = None;
+                None
+            }
+            _ => None,
         }
     }
 
@@ -819,6 +879,7 @@ impl Setup {
             };
             let action = match event {
                 Some(Ok(Event::Key(key))) if key.kind == KeyEventKind::Press => self.key(key),
+                Some(Ok(Event::Mouse(mouse))) => self.mouse(mouse),
                 Some(Ok(Event::Paste(text))) => {
                     self.paste(&text);
                     None
@@ -842,6 +903,16 @@ impl Setup {
                     }
                 }
                 Some(Action::Save) => self.message = Some(self.save()),
+                Some(Action::Library) => {
+                    if self.store.names().is_empty() {
+                        self.message = Some((
+                            "nothing saved yet · ctrl-s saves this form as a test".into(),
+                            true,
+                        ));
+                    } else {
+                        return Ok(SetupOutcome::Library);
+                    }
+                }
                 Some(Action::Try) => {
                     self.message = Some(("sending one request…".into(), false));
                     terminal.draw(|f| theme::draw(f, |f| self.render(f)))?;
@@ -918,11 +989,12 @@ impl Setup {
                 ("←→", "change"),
                 ("tab", "mode"),
                 ("ctrl-s", "save as…"),
+                ("ctrl-o", "saved tests"),
                 ("F1", "keys"),
                 ("esc", "quit"),
             ]
         };
-        f.render_widget(Paragraph::new(chips_fit(chips, footer.width)), footer);
+        kit::footer(f, footer, chips);
         if self.show_help {
             help(
                 f,
@@ -934,6 +1006,7 @@ impl Setup {
                     ("← →", "change a choice, or move in the text"),
                     ("tab", "switch mode: single URL, ramp, API"),
                     ("ctrl-s", "save the form as a named test, in .pepe/tests"),
+                    ("ctrl-o", "open the saved tests"),
                     ("F1 / ?", "this help (? where you can't type)"),
                     ("esc", "quit"),
                 ],
@@ -998,6 +1071,15 @@ impl Setup {
         };
         let titles: Vec<String> = Mode::ALL.iter().map(|m| m.name().to_string()).collect();
         let selected = Mode::ALL.iter().position(|&m| m == self.mode).unwrap_or(0);
+        // The tabs are the second line, under a line of air when tall
+        kit::tabs_at(
+            Rect {
+                y: area.y + if tall { 2 } else { 1 },
+                height: 1,
+                ..area
+            },
+            &titles,
+        );
         let lines = vec![
             Line::from(vec![
                 Span::styled(" pepe ", Style::new().bg(ACCENT).fg(Color::Black).bold()),
@@ -1059,6 +1141,7 @@ impl Setup {
         } else {
             line
         });
+        section.fields.push(Some(field));
     }
 
     /// A field edited by typing: its text, with the caret when it's focused
@@ -1129,6 +1212,7 @@ impl Setup {
             title: "target",
             lines: Vec::new(),
             focus: None,
+            fields: Vec::new(),
         };
         if self.mode == Mode::Api {
             self.row(
@@ -1230,6 +1314,7 @@ impl Setup {
             },
             lines: Vec::new(),
             focus: None,
+            fields: Vec::new(),
         };
         if self.mode == Mode::Ramp {
             for (field, name, text, hint) in [
@@ -1320,6 +1405,7 @@ impl Setup {
             title: "options",
             lines: Vec::new(),
             focus: None,
+            fields: Vec::new(),
         };
         self.row(
             &mut options,
@@ -1464,6 +1550,21 @@ impl Setup {
             let scroll = section
                 .focus
                 .map_or(0, |line| (line + 1).saturating_sub(inner.height as usize));
+            // Each row shown is clickable as its field
+            let fields = self.fields();
+            for (line, field) in section.fields.iter().enumerate().skip(scroll) {
+                let index = field.and_then(|f| fields.iter().position(|x| *x == f));
+                if let Some(index) = index {
+                    kit::hit(
+                        Rect {
+                            y: inner.y + (line - scroll) as u16,
+                            height: 1,
+                            ..inner
+                        },
+                        Hit::Row { list: 0, index },
+                    );
+                }
+            }
             f.render_widget(
                 Paragraph::new(section.lines.clone())
                     .scroll((scroll as u16, 0))
@@ -1503,19 +1604,23 @@ impl Setup {
                 title: "setup",
                 lines: Vec::new(),
                 focus: None,
+                fields: Vec::new(),
             };
             for section in self.sections(width, width) {
                 if !all.lines.is_empty() {
                     all.lines.push(Line::raw(""));
+                    all.fields.push(None);
                 }
                 all.lines.push(Line::from(Span::styled(
                     format!(" {}", section.title.to_uppercase()),
                     Style::new().fg(LABEL).bold(),
                 )));
+                all.fields.push(None);
                 if let Some(line) = section.focus {
                     all.focus = Some(all.lines.len() + line);
                 }
                 all.lines.extend(section.lines);
+                all.fields.extend(section.fields);
             }
             card(f, &all, area);
         }
@@ -1690,6 +1795,92 @@ mod tests {
         assert!(matches!(press(&mut s, KeyCode::Enter), Some(Action::Save)));
         // ctrl-c still quits from the prompt
         assert!(matches!(ctrl(&mut s, 'c'), Some(Action::Quit)));
+    }
+
+    #[test]
+    fn clicks_focus_fields_change_choices_switch_modes_and_press_chips() {
+        use crossterm::event::{MouseButton, MouseEvent, MouseEventKind};
+        let click_at = |area: Rect| MouseEvent {
+            kind: MouseEventKind::Down(MouseButton::Left),
+            column: area.x + 2,
+            row: area.y,
+            modifiers: KeyModifiers::NONE,
+        };
+        let find = |hit: Hit| {
+            kit::hits()
+                .into_iter()
+                .find(|(_, h)| *h == hit)
+                .map(|(area, _)| area)
+                .unwrap_or_else(|| panic!("{hit:?} isn't on screen"))
+        };
+        let mut s = setup(&["pepe", "https://x.io/"]);
+        for (w, h) in [(120, 40), (80, 24)] {
+            s.method = "GET".into();
+            s.focus = 0;
+            let mut terminal = Terminal::new(TestBackend::new(w, h)).unwrap();
+            terminal.draw(|f| theme::draw(f, |f| s.render(f))).unwrap();
+            // The method row: a click focuses it, another changes it
+            let method = s.fields().iter().position(|f| *f == Field::Method).unwrap();
+            assert!(s
+                .mouse(click_at(find(Hit::Row {
+                    list: 0,
+                    index: method
+                })))
+                .is_none());
+            assert_eq!(s.focus, method);
+            assert_eq!(s.method, "GET");
+            s.mouse(click_at(find(Hit::Row {
+                list: 0,
+                index: method,
+            })));
+            assert_eq!(s.method, "POST");
+            // A text field: focusing it puts the caret at its end
+            let url = s.fields().iter().position(|f| *f == Field::Url).unwrap();
+            s.mouse(click_at(find(Hit::Row {
+                list: 0,
+                index: url,
+            })));
+            assert_eq!((s.focus, s.cursor), (url, "https://x.io/".len()));
+            // The ramp tab
+            s.mouse(click_at(find(Hit::Tab(1))));
+            assert_eq!(s.mode, Mode::Ramp);
+            s.mouse(click_at(find(Hit::Tab(0))));
+            assert_eq!(s.mode, Mode::Single);
+            // The F1 chip opens the keys, as the key does, and a click
+            // anywhere closes them again
+            terminal.draw(|f| theme::draw(f, |f| s.render(f))).unwrap();
+            let keys = Hit::Key(KeyEvent::from(KeyCode::F(1)));
+            assert!(s.mouse(click_at(find(keys))).is_none());
+            assert!(s.show_help);
+            s.mouse(click_at(find(Hit::Tab(1))));
+            assert!(!s.show_help);
+            assert_eq!(s.mode, Mode::Single, "the click only closed the keys");
+            // In the name prompt, rows and tabs are out of reach
+            ctrl(&mut s, 's');
+            s.mouse(click_at(find(Hit::Tab(1))));
+            assert_eq!(s.mode, Mode::Single);
+            press(&mut s, KeyCode::Esc);
+            assert!(s.naming.is_none());
+            // The wheel moves between fields
+            let wheel = MouseEvent {
+                kind: MouseEventKind::ScrollDown,
+                column: 5,
+                row: 5,
+                modifiers: KeyModifiers::NONE,
+            };
+            let before = s.focus;
+            s.mouse(wheel);
+            assert_eq!(s.focus, before + 1);
+        }
+    }
+
+    #[test]
+    fn ctrl_o_asks_for_the_library() {
+        let mut s = setup(&["pepe", "https://x.io/"]);
+        assert!(matches!(ctrl(&mut s, 'o'), Some(Action::Library)));
+        // Not from the name prompt, where o is a letter
+        ctrl(&mut s, 's');
+        assert!(ctrl(&mut s, 'o').is_none());
     }
 
     #[test]

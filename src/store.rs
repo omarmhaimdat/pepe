@@ -3,6 +3,9 @@
 //! committed with the code, and run again with `pepe --load NAME`.
 
 use std::path::{Path, PathBuf};
+use std::time::SystemTime;
+
+use clap::{CommandFactory, Parser};
 
 use crate::cli::Cli;
 use crate::config::{self, Config};
@@ -18,6 +21,31 @@ const NAME_MAX: usize = 64;
 #[derive(Debug, Clone, PartialEq)]
 pub struct Store {
     root: PathBuf,
+}
+
+/// One saved test, as the library lists it
+#[derive(Debug, Clone)]
+pub struct Entry {
+    pub name: String,
+    /// When the file was last written
+    pub modified: Option<SystemTime>,
+    /// The settings it runs with, or why the file can't be read
+    pub cli: Result<Box<Cli>, String>,
+}
+
+/// The settings a saved test runs with on top of `base`: the file fills
+/// in what the command line didn't say, and decides the mode when the
+/// command line named none
+fn on_top_of(config: &Config, base: &Cli) -> Cli {
+    let mut cli = base.clone();
+    let nothing_typed = Cli::command().get_matches_from(["pepe"]);
+    config.apply_test(&mut cli, &nothing_typed);
+    cli
+}
+
+/// The settings a saved test runs with, on pepe's defaults
+pub fn settings_of(config: &Config) -> Cli {
+    on_top_of(config, &Cli::parse_from(["pepe"]))
 }
 
 impl Store {
@@ -63,6 +91,35 @@ impl Store {
             .collect();
         names.sort();
         names
+    }
+
+    /// The test saved under `name`, ready to run or to edit, on top of
+    /// what the command line gave
+    pub fn open(&self, name: &str, base: &Cli) -> Result<Cli, String> {
+        let (path, config) = self.load(name)?;
+        let mut cli = on_top_of(&config, base);
+        cli.config_loaded = Some(path);
+        Ok(cli)
+    }
+
+    /// Every saved test, by name; a file that doesn't read is listed with
+    /// its error rather than hidden
+    pub fn entries(&self) -> Vec<Entry> {
+        self.names()
+            .into_iter()
+            .map(|name| {
+                let path = self.path(&name);
+                let modified = std::fs::metadata(&path).and_then(|m| m.modified()).ok();
+                let cli = self
+                    .load(&name)
+                    .map(|(_, config)| Box::new(settings_of(&config)));
+                Entry {
+                    name,
+                    modified,
+                    cli,
+                }
+            })
+            .collect()
     }
 
     /// The name a path in the store is saved under, if it's one
@@ -251,6 +308,43 @@ mod tests {
         assert_eq!(store.names(), ["api-health", "zeta"]);
         assert_eq!(store.name_of(&path), Some("api-health".to_string()));
         assert_eq!(store.name_of(Path::new("pepe.toml")), None);
+        let _ = std::fs::remove_dir_all(store.root);
+    }
+
+    #[test]
+    fn entries_carry_the_settings_and_the_file_decides_the_mode() {
+        let store = temp_store("entries");
+        store
+            .save(
+                "plain",
+                &Cli::parse_from(["pepe", "-c", "4", "https://x.io/a"]),
+            )
+            .unwrap();
+        store
+            .save(
+                "climb",
+                &Cli::parse_from(["pepe", "ramp", "--to", "40", "https://x.io/b"]),
+            )
+            .unwrap();
+        std::fs::write(store.path("broken"), "nope = ").unwrap();
+        let entries = store.entries();
+        let names: Vec<&str> = entries.iter().map(|e| e.name.as_str()).collect();
+        assert_eq!(names, ["broken", "climb", "plain"]);
+        assert!(entries[0].cli.as_ref().unwrap_err().contains("broken.toml"));
+        let climb = entries[1].cli.as_ref().unwrap();
+        match &climb.command {
+            Some(crate::cli::Command::Ramp(ramp)) => {
+                assert_eq!((ramp.to, ramp.url.as_str()), (40, "https://x.io/b"));
+            }
+            other => panic!("not a ramp: {other:?}"),
+        }
+        let plain = entries[2].cli.as_ref().unwrap();
+        assert!(plain.command.is_none());
+        assert_eq!(
+            (plain.concurrency, plain.url.as_str()),
+            (4, "https://x.io/a")
+        );
+        assert!(entries[2].modified.is_some());
         let _ = std::fs::remove_dir_all(store.root);
     }
 
