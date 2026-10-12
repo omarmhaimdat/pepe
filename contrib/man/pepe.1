@@ -8,7 +8,7 @@ pepe \- HTTP load generator
 .ie \n(.g .ds Aq \(aq
 .el .ds Aq '
 .SH SYNOPSIS
-\fBpepe\fR [\fB\-h\fR|\fB\-\-help\fR] [\fB\-n\fR|\fB\-\-number\fR] [\fB\-c\fR|\fB\-\-concurrency\fR] [\fB\-z\fR|\fB\-\-duration\fR] [\fB\-\-curl\fR] [\fB\-m\fR|\fB\-\-method\fR] [\fB\-H\fR|\fB\-\-headers\fR] [\fB\-t\fR|\fB\-\-timeout\fR] [\fB\-\-warmup\fR] [\fB\-\-threads\fR] [\fB\-\-rate\fR] [\fB\-d\fR|\fB\-\-body\fR] [\fB\-u\fR|\fB\-\-user\-agent\fR] [\fB\-p\fR|\fB\-\-proxy\fR] [\fB\-k\fR|\fB\-\-insecure\fR] [\fB\-\-disable\-compression\fR] [\fB\-\-disable\-keepalive\fR] [\fB\-\-disable\-redirects\fR] [\fB\-\-json\fR] [\fB\-\-trace\-header\fR] [\fB\-\-snapshot\fR] [\fB\-\-allow\-host\fR] [\fB\-\-max\-requests\fR] [\fB\-\-max\-rate\fR] [\fB\-\-max\-concurrency\fR] [\fB\-\-dry\-run\fR] [\fB\-\-fail\-if\fR] [\fB\-\-metrics\fR] [\fB\-i\fR|\fB\-\-setup\fR] [\fB\-\-config\fR] [\fB\-\-write\-config\fR] [\fB\-\-load\fR] [\fB\-\-keep\fR] [\fB\-V\fR|\fB\-\-version\fR] [\fIURL\fR] [\fIARGS\fR] [\fIsubcommands\fR]
+\fBpepe\fR [\fB\-h\fR|\fB\-\-help\fR] [\fB\-n\fR|\fB\-\-number\fR] [\fB\-c\fR|\fB\-\-concurrency\fR] [\fB\-z\fR|\fB\-\-duration\fR] [\fB\-\-curl\fR] [\fB\-m\fR|\fB\-\-method\fR] [\fB\-H\fR|\fB\-\-headers\fR] [\fB\-t\fR|\fB\-\-timeout\fR] [\fB\-\-warmup\fR] [\fB\-\-threads\fR] [\fB\-\-rate\fR] [\fB\-d\fR|\fB\-\-body\fR] [\fB\-u\fR|\fB\-\-user\-agent\fR] [\fB\-p\fR|\fB\-\-proxy\fR] [\fB\-k\fR|\fB\-\-insecure\fR] [\fB\-\-disable\-compression\fR] [\fB\-\-disable\-keepalive\fR] [\fB\-\-disable\-redirects\fR] [\fB\-\-json\fR] [\fB\-\-trace\-header\fR] [\fB\-\-snapshot\fR] [\fB\-\-allow\-host\fR] [\fB\-\-max\-requests\fR] [\fB\-\-max\-rate\fR] [\fB\-\-max\-concurrency\fR] [\fB\-\-dry\-run\fR] [\fB\-\-fail\-if\fR] [\fB\-\-metrics\fR] [\fB\-i\fR|\fB\-\-setup\fR] [\fB\-\-config\fR] [\fB\-\-write\-config\fR] [\fB\-\-load\fR] [\fB\-\-keep\fR] [\fB\-\-record\fR] [\fB\-V\fR|\fB\-\-version\fR] [\fIURL\fR] [\fIARGS\fR] [\fIsubcommands\fR]
 .ie \n(.g .ds Aq \(aq
 .el .ds Aq '
 .SH DESCRIPTION
@@ -116,6 +116,9 @@ Run a test saved on the setup screen (ctrl\-s): ./.pepe/tests/NAME.toml; flags o
 \fB\-\-keep\fR [\fI<NAME>\fR]
 Keep the settings as they stand as a saved test, ./.pepe/tests/NAME.toml, then run. With \-\-load and no NAME, the loaded test is updated in place; with another NAME, it\*(Aqs copied
 .TP
+\fB\-\-record\fR
+Keep the run\*(Aqs report under its saved test when it ends, as ./.pepe/runs/NAME/<moment>.json; the run has to be a saved test (\-\-load NAME, or \-\-keep NAME)
+.TP
 \fB\-V\fR, \fB\-\-version\fR
 Print version
 .TP
@@ -136,6 +139,12 @@ Raise the load step by step to find where the target stops keeping up
 .TP
 pepe\-compare(1)
 Hold a run\*(Aqs JSON report against an earlier one and say what moved
+.TP
+pepe\-rerun(1)
+Run a saved test again, record the run, and say what moved since the run before
+.TP
+pepe\-history(1)
+The saved tests and their recorded runs
 .TP
 pepe\-api(1)
 Load\-test every endpoint of an OpenAPI spec

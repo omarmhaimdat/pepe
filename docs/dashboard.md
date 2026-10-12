@@ -54,6 +54,7 @@ The mouse works too: click a tab to show it, a request or an endpoint to select 
 | `s` / `i` | Stop sending and keep the results on screen |
 | `r` | Restart with the same settings (and the current concurrency) |
 | `ctrl-s` | Save the run's settings as a named test in `.pepe/tests`, with the concurrency as dialed in; a run from a saved test offers its own name, so enter updates it |
+| `w` | Once the run has ended: record its report under its saved test, as `.pepe/runs/NAME/<moment>.json` |
 | `e` | Back to the setup screen (or, in API mode, the plan), to change the settings and run again |
 | `tab` / `←` `→` / `1` `2` `3` | Switch view |
 | `↑` `↓` / `j` `k`, `PgUp` `PgDn`, `home` `end` | Select a request in the log (newer / older) |

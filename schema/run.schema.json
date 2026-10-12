@@ -7,6 +7,8 @@
   "required": ["schema_version", "summary"],
   "properties": {
     "schema_version": { "type": "integer", "const": 1 },
+    "test": { "type": "string", "description": "The saved test this run is of (.pepe/tests/NAME.toml), when it is one" },
+    "command": { "type": "string", "description": "The pepe command that reproduces it, secrets in headers masked" },
     "target": {
       "type": "object",
       "description": "What was tested and with what load",

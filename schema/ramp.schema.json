@@ -7,6 +7,8 @@
   "required": ["schema_version", "ended", "requests", "failed_requests", "seconds", "findings", "steps"],
   "properties": {
     "schema_version": { "type": "integer", "const": 1 },
+    "test": { "type": "string", "description": "The saved test this ramp is of (.pepe/tests/NAME.toml), when it is one" },
+    "command": { "type": "string", "description": "The pepe command that reproduces it, secrets in headers masked" },
     "ended": { "type": "string", "description": "completed, interrupted, or `stopped: <condition>`" },
     "holds_concurrency": { "type": ["integer", "null"], "description": "The highest level the target kept up with" },
     "capacity": {

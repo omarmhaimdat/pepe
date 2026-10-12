@@ -34,7 +34,8 @@
 <figure class="code"><div class="bar"><span>bash</span><button type="button" class="copy" aria-label="Copy">copy</button></div><pre><code>pepe --json -n 5000 -c 20 https://staging.example.com/api &gt; before.json
 # ... deploy ...
 pepe --json -n 5000 -c 20 https://staging.example.com/api &gt; after.json
-pepe compare before.json after.json</code></pre></figure>
+pepe compare before.json after.json
+pepe compare api-health          # a saved test: its last two recorded runs</code></pre></figure>
 <figure class="code"><div class="bar"><span></span><button type="button" class="copy" aria-label="Copy">copy</button></div><pre><code>pepe · compare before.json → after.json
 ▲ Slower · 5,000 → 5,000 requests · p99 120.0ms → 166.0ms · 260 req/s → 252 req/s
   ▲ p99 up 38%: 120.0ms → 166.0ms

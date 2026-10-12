@@ -9,6 +9,7 @@ pepe --json -n 5000 -c 20 https://staging.example.com/api > before.json
 # ... deploy ...
 pepe --json -n 5000 -c 20 https://staging.example.com/api > after.json
 pepe compare before.json after.json
+pepe compare api-health          # a saved test: its last two recorded runs
 ```
 
 ```

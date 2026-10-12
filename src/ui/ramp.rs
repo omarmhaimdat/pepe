@@ -62,6 +62,8 @@ pub struct RampScreen {
     naming: Option<kit::SaveAs>,
     /// Something to say at the end of the footer, and since when
     notice: Option<(String, Instant)>,
+    /// `w` recorded the ramp under its test already
+    recorded: bool,
 }
 
 fn level_color(level: Level) -> Color {
@@ -116,6 +118,38 @@ impl RampScreen {
             saved_as,
             naming: None,
             notice: None,
+            recorded: false,
+        }
+    }
+
+    /// Whether `w` recorded this ramp already, so the way out doesn't again
+    pub fn recorded(&self) -> bool {
+        self.recorded
+    }
+
+    /// The ramp's report as JSON, marked as its test's
+    pub fn result_json(&self) -> serde_json::Value {
+        let mut report = ramp::json(&self.ramp);
+        crate::store::stamp_test(&mut report, &self.cli);
+        report
+    }
+
+    /// `w` once the ramp has ended: its report under its saved test
+    fn record_run(&mut self, now: Instant) {
+        let Some(name) = self.saved_as.clone() else {
+            self.notice = Some(("save the test first: ctrl-s".into(), now));
+            return;
+        };
+        let json = serde_json::to_string_pretty(&self.result_json()).unwrap_or_default();
+        match self.store.record(&name, &json) {
+            Ok(path) => {
+                self.recorded = true;
+                self.notice = Some((
+                    format!("recorded {} · pepe history {name}", path.display()),
+                    now,
+                ));
+            }
+            Err(e) => self.notice = Some((e, now)),
         }
     }
 
@@ -178,6 +212,10 @@ impl RampScreen {
             KeyCode::Char('q') | KeyCode::Char('Q') => Effect::Leave(Outcome::Quit),
             KeyCode::Char('r') | KeyCode::Char('R') => Effect::Leave(Outcome::Restart),
             KeyCode::Char('e') | KeyCode::Char('E') => Effect::Leave(Outcome::Edit),
+            KeyCode::Char('w') if !running => {
+                self.record_run(now);
+                Effect::None
+            }
             KeyCode::Char(' ') if running => {
                 let paused = !self.ramp.is_paused();
                 self.ramp.set_paused(paused, now);
@@ -479,6 +517,9 @@ impl RampScreen {
         if self.selected.is_some() {
             keys.push(("esc", if ended { "last step" } else { "follow" }));
         }
+        if ended {
+            keys.push(("w", "record result"));
+        }
         keys.extend([
             ("r", if ended { "run again" } else { "restart" }),
             ("e", "edit"),
@@ -529,6 +570,10 @@ impl RampScreen {
                     ("r", "restart (once ended: run again)"),
                     ("e", "edit the settings, then run again"),
                     ("ctrl-s", "save the settings as a named test (.pepe/tests)"),
+                    (
+                        "w",
+                        "once ended: record the ramp under its test (.pepe/runs)",
+                    ),
                     ("?", "close this help"),
                     ("q", "quit"),
                 ],

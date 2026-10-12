@@ -1,6 +1,6 @@
 # Print an optspec for argparse to handle cmd's options that are independent of any subcommand.
 function __fish_pepe_global_optspecs
-    string join \n h/help n/number= z/duration= curl m/method= H/headers= t/timeout= warmup= threads= rate= d/body= p/proxy= k/insecure disable-compression disable-keepalive disable-redirects json trace-header= snapshot= allow-host= max-requests= max-rate= max-concurrency= dry-run fail-if= metrics= i/setup config= write-config= load= keep= c/concurrency= u/user-agent= V/version
+    string join \n h/help n/number= z/duration= curl m/method= H/headers= t/timeout= warmup= threads= rate= d/body= p/proxy= k/insecure disable-compression disable-keepalive disable-redirects json trace-header= snapshot= allow-host= max-requests= max-rate= max-concurrency= dry-run fail-if= metrics= i/setup config= write-config= load= keep= record c/concurrency= u/user-agent= V/version
 end
 
 function __fish_pepe_needs_command
@@ -57,10 +57,13 @@ complete -c pepe -n "__fish_pepe_needs_command" -l disable-redirects -d 'Prevent
 complete -c pepe -n "__fish_pepe_needs_command" -l json -d 'Output results in JSON format'
 complete -c pepe -n "__fish_pepe_needs_command" -l dry-run -d 'Say what would be sent, to where and how much, and send nothing; as JSON with --json'
 complete -c pepe -n "__fish_pepe_needs_command" -s i -l setup -d 'Open the setup screen to review or change the settings before starting (it opens by itself when no URL is given)'
+complete -c pepe -n "__fish_pepe_needs_command" -l record -d 'Keep the run\'s report under its saved test when it ends, as ./.pepe/runs/NAME/<moment>.json; the run has to be a saved test (--load NAME, or --keep NAME)'
 complete -c pepe -n "__fish_pepe_needs_command" -s V -l version -d 'Print version'
 complete -c pepe -n "__fish_pepe_needs_command" -a "ping" -d 'Ping a URL: a request a second, each split into DNS, connect, TLS, first byte and download, on a graph'
 complete -c pepe -n "__fish_pepe_needs_command" -a "ramp" -d 'Raise the load step by step to find where the target stops keeping up'
 complete -c pepe -n "__fish_pepe_needs_command" -a "compare" -d 'Hold a run\'s JSON report against an earlier one and say what moved'
+complete -c pepe -n "__fish_pepe_needs_command" -a "rerun" -d 'Run a saved test again, record the run, and say what moved since the run before'
+complete -c pepe -n "__fish_pepe_needs_command" -a "history" -d 'The saved tests and their recorded runs'
 complete -c pepe -n "__fish_pepe_needs_command" -a "api" -d 'Load-test every endpoint of an OpenAPI spec'
 complete -c pepe -n "__fish_pepe_needs_command" -a "flow" -d 'Run a sequence of requests from a flow file, each step fed by the last'
 complete -c pepe -n "__fish_pepe_needs_command" -a "replay" -d 'Send the URLs of an access log in their real proportions'
@@ -129,6 +132,7 @@ complete -c pepe -n "__fish_pepe_using_subcommand ping" -l disable-redirects -d 
 complete -c pepe -n "__fish_pepe_using_subcommand ping" -l json -d 'Output results in JSON format'
 complete -c pepe -n "__fish_pepe_using_subcommand ping" -l dry-run -d 'Say what would be sent, to where and how much, and send nothing; as JSON with --json'
 complete -c pepe -n "__fish_pepe_using_subcommand ping" -s i -l setup -d 'Open the setup screen to review or change the settings before starting (it opens by itself when no URL is given)'
+complete -c pepe -n "__fish_pepe_using_subcommand ping" -l record -d 'Keep the run\'s report under its saved test when it ends, as ./.pepe/runs/NAME/<moment>.json; the run has to be a saved test (--load NAME, or --keep NAME)'
 complete -c pepe -n "__fish_pepe_using_subcommand ramp" -l from -d 'Concurrency of the first step' -r
 complete -c pepe -n "__fish_pepe_using_subcommand ramp" -l to -d 'Concurrency of the last step' -r
 complete -c pepe -n "__fish_pepe_using_subcommand ramp" -l step -d 'Concurrency added at each step' -r
@@ -166,6 +170,7 @@ complete -c pepe -n "__fish_pepe_using_subcommand ramp" -l disable-redirects -d 
 complete -c pepe -n "__fish_pepe_using_subcommand ramp" -l json -d 'Output results in JSON format'
 complete -c pepe -n "__fish_pepe_using_subcommand ramp" -l dry-run -d 'Say what would be sent, to where and how much, and send nothing; as JSON with --json'
 complete -c pepe -n "__fish_pepe_using_subcommand ramp" -s i -l setup -d 'Open the setup screen to review or change the settings before starting (it opens by itself when no URL is given)'
+complete -c pepe -n "__fish_pepe_using_subcommand ramp" -l record -d 'Keep the run\'s report under its saved test when it ends, as ./.pepe/runs/NAME/<moment>.json; the run has to be a saved test (--load NAME, or --keep NAME)'
 complete -c pepe -n "__fish_pepe_using_subcommand compare" -l svg -d 'Also write the verdict as a card, an SVG for a README or a page' -r -F
 complete -c pepe -n "__fish_pepe_using_subcommand compare" -s n -l number -d 'Number of requests to perform' -r
 complete -c pepe -n "__fish_pepe_using_subcommand compare" -s z -l duration -d 'Duration of the test, e.g. 10s, 3m, 2h (mutually exclusive with -n)' -r
@@ -200,6 +205,74 @@ complete -c pepe -n "__fish_pepe_using_subcommand compare" -l disable-redirects 
 complete -c pepe -n "__fish_pepe_using_subcommand compare" -l json -d 'Output results in JSON format'
 complete -c pepe -n "__fish_pepe_using_subcommand compare" -l dry-run -d 'Say what would be sent, to where and how much, and send nothing; as JSON with --json'
 complete -c pepe -n "__fish_pepe_using_subcommand compare" -s i -l setup -d 'Open the setup screen to review or change the settings before starting (it opens by itself when no URL is given)'
+complete -c pepe -n "__fish_pepe_using_subcommand compare" -l record -d 'Keep the run\'s report under its saved test when it ends, as ./.pepe/runs/NAME/<moment>.json; the run has to be a saved test (--load NAME, or --keep NAME)'
+complete -c pepe -n "__fish_pepe_using_subcommand rerun" -s n -l number -d 'Number of requests to perform' -r
+complete -c pepe -n "__fish_pepe_using_subcommand rerun" -s z -l duration -d 'Duration of the test, e.g. 10s, 3m, 2h (mutually exclusive with -n)' -r
+complete -c pepe -n "__fish_pepe_using_subcommand rerun" -s m -l method -d 'HTTP method, e.g. GET, POST, PUT, DELETE' -r
+complete -c pepe -n "__fish_pepe_using_subcommand rerun" -s H -l headers -d 'HTTP headers, e.g. -H \'Accept: application/json\'' -r
+complete -c pepe -n "__fish_pepe_using_subcommand rerun" -s t -l timeout -d 'Time in seconds to wait for a response' -r
+complete -c pepe -n "__fish_pepe_using_subcommand rerun" -l warmup -d 'Send for this long before measuring, e.g. 5s: connections open, caches fill and JITs settle without counting against the run' -r
+complete -c pepe -n "__fish_pepe_using_subcommand rerun" -l threads -d 'Threads sending requests (default 1), or "auto" to add one whenever those sending are all busy. One sends 100k requests a second or more; the dashboard says when it is the limit' -r
+complete -c pepe -n "__fish_pepe_using_subcommand rerun" -l rate -d 'Start this many requests a second, spread evenly, instead of as many as the concurrency allows; -c is then the most in flight at once, and pepe says when it holds the rate back' -r
+complete -c pepe -n "__fish_pepe_using_subcommand rerun" -s d -l body -d 'HTTP request body' -r
+complete -c pepe -n "__fish_pepe_using_subcommand rerun" -s p -l proxy -d 'Proxy server URL: http://user:pass@host:port or socks5://host:port' -r
+complete -c pepe -n "__fish_pepe_using_subcommand rerun" -l trace-header -d 'Response header holding the request id to show for the slowest requests and in the inspector, so they can be found in the server\'s logs; without it, X-Request-Id, traceparent, CF-Ray, X-Amzn-Trace-Id and other common ones are looked for' -r
+complete -c pepe -n "__fish_pepe_using_subcommand rerun" -l snapshot -d 'Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run\'s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run' -r -F
+complete -c pepe -n "__fish_pepe_using_subcommand rerun" -l allow-host -d 'Refuse to send anywhere but these hosts: api.example.com exactly, or .example.com for it and its subdomains; repeat for more. Every target is checked before anything is sent' -r
+complete -c pepe -n "__fish_pepe_using_subcommand rerun" -l max-requests -d 'Refuse a run that would send more requests than this: -n above it, or -z without a --rate that bounds it' -r
+complete -c pepe -n "__fish_pepe_using_subcommand rerun" -l max-rate -d 'Refuse a --rate above this, and a run with no --rate at all, which sends as fast as the target answers' -r
+complete -c pepe -n "__fish_pepe_using_subcommand rerun" -l max-concurrency -d 'Refuse a concurrency above this' -r
+complete -c pepe -n "__fish_pepe_using_subcommand rerun" -l fail-if -d 'End with exit code 4 when the run crosses this, for CI and scripts: \'p99 > 300ms\', \'errors > 1%\'; repeat for more. The report is still printed. (pepe ping has --slo for the same.)' -r
+complete -c pepe -n "__fish_pepe_using_subcommand rerun" -l metrics -d 'Serve the live numbers for Prometheus at http://ADDR/metrics while the run goes, e.g. :9100 or 127.0.0.1:9100, so a soak run or a long ping shows up in Grafana next to the server\'s own' -r
+complete -c pepe -n "__fish_pepe_using_subcommand rerun" -l config -d 'Read settings from this file instead of ./pepe.toml; flags on the command line win over it' -r -F
+complete -c pepe -n "__fish_pepe_using_subcommand rerun" -l write-config -d 'Write the settings as they stand to this file, as a pepe.toml, and exit' -r -F
+complete -c pepe -n "__fish_pepe_using_subcommand rerun" -l load -d 'Run a test saved on the setup screen (ctrl-s): ./.pepe/tests/NAME.toml; flags on the command line win over it' -r
+complete -c pepe -n "__fish_pepe_using_subcommand rerun" -l keep -d 'Keep the settings as they stand as a saved test, ./.pepe/tests/NAME.toml, then run. With --load and no NAME, the loaded test is updated in place; with another NAME, it\'s copied' -r
+complete -c pepe -n "__fish_pepe_using_subcommand rerun" -s c -l concurrency -d 'Number of concurrent requests at a time' -r
+complete -c pepe -n "__fish_pepe_using_subcommand rerun" -s u -l user-agent -d 'User-Agent string, default is pepe/{version}' -r
+complete -c pepe -n "__fish_pepe_using_subcommand rerun" -l gate -d 'Exit 1 when the verdict is Slower or Worse, for CI'
+complete -c pepe -n "__fish_pepe_using_subcommand rerun" -s h -l help -d 'Print help'
+complete -c pepe -n "__fish_pepe_using_subcommand rerun" -s k -l insecure -d 'Accept invalid TLS certificates (self-signed, expired, wrong host)'
+complete -c pepe -n "__fish_pepe_using_subcommand rerun" -l disable-compression -d 'Disable HTTP compression, e.g. gzip'
+complete -c pepe -n "__fish_pepe_using_subcommand rerun" -l disable-keepalive -d 'Disable HTTP keepalive, e.g. Connection: close'
+complete -c pepe -n "__fish_pepe_using_subcommand rerun" -l disable-redirects -d 'Prevent http redirects'
+complete -c pepe -n "__fish_pepe_using_subcommand rerun" -l json -d 'Output results in JSON format'
+complete -c pepe -n "__fish_pepe_using_subcommand rerun" -l dry-run -d 'Say what would be sent, to where and how much, and send nothing; as JSON with --json'
+complete -c pepe -n "__fish_pepe_using_subcommand rerun" -s i -l setup -d 'Open the setup screen to review or change the settings before starting (it opens by itself when no URL is given)'
+complete -c pepe -n "__fish_pepe_using_subcommand rerun" -l record -d 'Keep the run\'s report under its saved test when it ends, as ./.pepe/runs/NAME/<moment>.json; the run has to be a saved test (--load NAME, or --keep NAME)'
+complete -c pepe -n "__fish_pepe_using_subcommand history" -s n -l number -d 'Number of requests to perform' -r
+complete -c pepe -n "__fish_pepe_using_subcommand history" -s z -l duration -d 'Duration of the test, e.g. 10s, 3m, 2h (mutually exclusive with -n)' -r
+complete -c pepe -n "__fish_pepe_using_subcommand history" -s m -l method -d 'HTTP method, e.g. GET, POST, PUT, DELETE' -r
+complete -c pepe -n "__fish_pepe_using_subcommand history" -s H -l headers -d 'HTTP headers, e.g. -H \'Accept: application/json\'' -r
+complete -c pepe -n "__fish_pepe_using_subcommand history" -s t -l timeout -d 'Time in seconds to wait for a response' -r
+complete -c pepe -n "__fish_pepe_using_subcommand history" -l warmup -d 'Send for this long before measuring, e.g. 5s: connections open, caches fill and JITs settle without counting against the run' -r
+complete -c pepe -n "__fish_pepe_using_subcommand history" -l threads -d 'Threads sending requests (default 1), or "auto" to add one whenever those sending are all busy. One sends 100k requests a second or more; the dashboard says when it is the limit' -r
+complete -c pepe -n "__fish_pepe_using_subcommand history" -l rate -d 'Start this many requests a second, spread evenly, instead of as many as the concurrency allows; -c is then the most in flight at once, and pepe says when it holds the rate back' -r
+complete -c pepe -n "__fish_pepe_using_subcommand history" -s d -l body -d 'HTTP request body' -r
+complete -c pepe -n "__fish_pepe_using_subcommand history" -s p -l proxy -d 'Proxy server URL: http://user:pass@host:port or socks5://host:port' -r
+complete -c pepe -n "__fish_pepe_using_subcommand history" -l trace-header -d 'Response header holding the request id to show for the slowest requests and in the inspector, so they can be found in the server\'s logs; without it, X-Request-Id, traceparent, CF-Ray, X-Amzn-Trace-Id and other common ones are looked for' -r
+complete -c pepe -n "__fish_pepe_using_subcommand history" -l snapshot -d 'Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run\'s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run' -r -F
+complete -c pepe -n "__fish_pepe_using_subcommand history" -l allow-host -d 'Refuse to send anywhere but these hosts: api.example.com exactly, or .example.com for it and its subdomains; repeat for more. Every target is checked before anything is sent' -r
+complete -c pepe -n "__fish_pepe_using_subcommand history" -l max-requests -d 'Refuse a run that would send more requests than this: -n above it, or -z without a --rate that bounds it' -r
+complete -c pepe -n "__fish_pepe_using_subcommand history" -l max-rate -d 'Refuse a --rate above this, and a run with no --rate at all, which sends as fast as the target answers' -r
+complete -c pepe -n "__fish_pepe_using_subcommand history" -l max-concurrency -d 'Refuse a concurrency above this' -r
+complete -c pepe -n "__fish_pepe_using_subcommand history" -l fail-if -d 'End with exit code 4 when the run crosses this, for CI and scripts: \'p99 > 300ms\', \'errors > 1%\'; repeat for more. The report is still printed. (pepe ping has --slo for the same.)' -r
+complete -c pepe -n "__fish_pepe_using_subcommand history" -l metrics -d 'Serve the live numbers for Prometheus at http://ADDR/metrics while the run goes, e.g. :9100 or 127.0.0.1:9100, so a soak run or a long ping shows up in Grafana next to the server\'s own' -r
+complete -c pepe -n "__fish_pepe_using_subcommand history" -l config -d 'Read settings from this file instead of ./pepe.toml; flags on the command line win over it' -r -F
+complete -c pepe -n "__fish_pepe_using_subcommand history" -l write-config -d 'Write the settings as they stand to this file, as a pepe.toml, and exit' -r -F
+complete -c pepe -n "__fish_pepe_using_subcommand history" -l load -d 'Run a test saved on the setup screen (ctrl-s): ./.pepe/tests/NAME.toml; flags on the command line win over it' -r
+complete -c pepe -n "__fish_pepe_using_subcommand history" -l keep -d 'Keep the settings as they stand as a saved test, ./.pepe/tests/NAME.toml, then run. With --load and no NAME, the loaded test is updated in place; with another NAME, it\'s copied' -r
+complete -c pepe -n "__fish_pepe_using_subcommand history" -s c -l concurrency -d 'Number of concurrent requests at a time' -r
+complete -c pepe -n "__fish_pepe_using_subcommand history" -s u -l user-agent -d 'User-Agent string, default is pepe/{version}' -r
+complete -c pepe -n "__fish_pepe_using_subcommand history" -s h -l help -d 'Print help'
+complete -c pepe -n "__fish_pepe_using_subcommand history" -s k -l insecure -d 'Accept invalid TLS certificates (self-signed, expired, wrong host)'
+complete -c pepe -n "__fish_pepe_using_subcommand history" -l disable-compression -d 'Disable HTTP compression, e.g. gzip'
+complete -c pepe -n "__fish_pepe_using_subcommand history" -l disable-keepalive -d 'Disable HTTP keepalive, e.g. Connection: close'
+complete -c pepe -n "__fish_pepe_using_subcommand history" -l disable-redirects -d 'Prevent http redirects'
+complete -c pepe -n "__fish_pepe_using_subcommand history" -l json -d 'Output results in JSON format'
+complete -c pepe -n "__fish_pepe_using_subcommand history" -l dry-run -d 'Say what would be sent, to where and how much, and send nothing; as JSON with --json'
+complete -c pepe -n "__fish_pepe_using_subcommand history" -s i -l setup -d 'Open the setup screen to review or change the settings before starting (it opens by itself when no URL is given)'
+complete -c pepe -n "__fish_pepe_using_subcommand history" -l record -d 'Keep the run\'s report under its saved test when it ends, as ./.pepe/runs/NAME/<moment>.json; the run has to be a saved test (--load NAME, or --keep NAME)'
 complete -c pepe -n "__fish_pepe_using_subcommand api" -l auth -d 'Credentials: bearer:TOKEN, basic:USER:PASSWORD, apikey:VALUE, header:NAME=VALUE or query:NAME=VALUE' -r
 complete -c pepe -n "__fish_pepe_using_subcommand api" -l server -d 'Base URL to send requests to, instead of the spec\'s server' -r
 complete -c pepe -n "__fish_pepe_using_subcommand api" -l tag -d 'Run the endpoints with this tag, e.g. --tag Billing' -r
@@ -240,6 +313,7 @@ complete -c pepe -n "__fish_pepe_using_subcommand api" -l disable-redirects -d '
 complete -c pepe -n "__fish_pepe_using_subcommand api" -l json -d 'Output results in JSON format'
 complete -c pepe -n "__fish_pepe_using_subcommand api" -l dry-run -d 'Say what would be sent, to where and how much, and send nothing; as JSON with --json'
 complete -c pepe -n "__fish_pepe_using_subcommand api" -s i -l setup -d 'Open the setup screen to review or change the settings before starting (it opens by itself when no URL is given)'
+complete -c pepe -n "__fish_pepe_using_subcommand api" -l record -d 'Keep the run\'s report under its saved test when it ends, as ./.pepe/runs/NAME/<moment>.json; the run has to be a saved test (--load NAME, or --keep NAME)'
 complete -c pepe -n "__fish_pepe_using_subcommand flow" -s n -l number -d 'Number of requests to perform' -r
 complete -c pepe -n "__fish_pepe_using_subcommand flow" -s z -l duration -d 'Duration of the test, e.g. 10s, 3m, 2h (mutually exclusive with -n)' -r
 complete -c pepe -n "__fish_pepe_using_subcommand flow" -s m -l method -d 'HTTP method, e.g. GET, POST, PUT, DELETE' -r
@@ -272,6 +346,7 @@ complete -c pepe -n "__fish_pepe_using_subcommand flow" -l disable-redirects -d 
 complete -c pepe -n "__fish_pepe_using_subcommand flow" -l json -d 'Output results in JSON format'
 complete -c pepe -n "__fish_pepe_using_subcommand flow" -l dry-run -d 'Say what would be sent, to where and how much, and send nothing; as JSON with --json'
 complete -c pepe -n "__fish_pepe_using_subcommand flow" -s i -l setup -d 'Open the setup screen to review or change the settings before starting (it opens by itself when no URL is given)'
+complete -c pepe -n "__fish_pepe_using_subcommand flow" -l record -d 'Keep the run\'s report under its saved test when it ends, as ./.pepe/runs/NAME/<moment>.json; the run has to be a saved test (--load NAME, or --keep NAME)'
 complete -c pepe -n "__fish_pepe_using_subcommand replay" -l base-url -d 'Where to send the requests: put in front of paths, and in place of the host of full URLs, e.g. https://staging.example.com' -r
 complete -c pepe -n "__fish_pepe_using_subcommand replay" -l rows -d 'URLs that get a row of their own on the dashboard, most frequent first; the rest share one' -r
 complete -c pepe -n "__fish_pepe_using_subcommand replay" -s n -l number -d 'Number of requests to perform' -r
@@ -307,6 +382,7 @@ complete -c pepe -n "__fish_pepe_using_subcommand replay" -l disable-redirects -
 complete -c pepe -n "__fish_pepe_using_subcommand replay" -l json -d 'Output results in JSON format'
 complete -c pepe -n "__fish_pepe_using_subcommand replay" -l dry-run -d 'Say what would be sent, to where and how much, and send nothing; as JSON with --json'
 complete -c pepe -n "__fish_pepe_using_subcommand replay" -s i -l setup -d 'Open the setup screen to review or change the settings before starting (it opens by itself when no URL is given)'
+complete -c pepe -n "__fish_pepe_using_subcommand replay" -l record -d 'Keep the run\'s report under its saved test when it ends, as ./.pepe/runs/NAME/<moment>.json; the run has to be a saved test (--load NAME, or --keep NAME)'
 complete -c pepe -n "__fish_pepe_using_subcommand logs" -l format -d 'The access log\'s log_format as nginx.conf has it, on one line, when it isn\'t `combined`: \'$remote_addr [$time_local] "$request" $status $request_time\'' -r
 complete -c pepe -n "__fish_pepe_using_subcommand logs" -l window -d 'What "now" is measured over, e.g. 10s, 1m, 5m' -r
 complete -c pepe -n "__fish_pepe_using_subcommand logs" -l since -d 'How far back to start, e.g. 90m, 24h, 7d. At a terminal a log that is being written is shown live, from five minutes back, without it' -r
@@ -345,6 +421,7 @@ complete -c pepe -n "__fish_pepe_using_subcommand logs" -l disable-redirects -d 
 complete -c pepe -n "__fish_pepe_using_subcommand logs" -l json -d 'Output results in JSON format'
 complete -c pepe -n "__fish_pepe_using_subcommand logs" -l dry-run -d 'Say what would be sent, to where and how much, and send nothing; as JSON with --json'
 complete -c pepe -n "__fish_pepe_using_subcommand logs" -s i -l setup -d 'Open the setup screen to review or change the settings before starting (it opens by itself when no URL is given)'
+complete -c pepe -n "__fish_pepe_using_subcommand logs" -l record -d 'Keep the run\'s report under its saved test when it ends, as ./.pepe/runs/NAME/<moment>.json; the run has to be a saved test (--load NAME, or --keep NAME)'
 complete -c pepe -n "__fish_pepe_using_subcommand schema" -s n -l number -d 'Number of requests to perform' -r
 complete -c pepe -n "__fish_pepe_using_subcommand schema" -s z -l duration -d 'Duration of the test, e.g. 10s, 3m, 2h (mutually exclusive with -n)' -r
 complete -c pepe -n "__fish_pepe_using_subcommand schema" -s m -l method -d 'HTTP method, e.g. GET, POST, PUT, DELETE' -r
@@ -377,6 +454,7 @@ complete -c pepe -n "__fish_pepe_using_subcommand schema" -l disable-redirects -
 complete -c pepe -n "__fish_pepe_using_subcommand schema" -l json -d 'Output results in JSON format'
 complete -c pepe -n "__fish_pepe_using_subcommand schema" -l dry-run -d 'Say what would be sent, to where and how much, and send nothing; as JSON with --json'
 complete -c pepe -n "__fish_pepe_using_subcommand schema" -s i -l setup -d 'Open the setup screen to review or change the settings before starting (it opens by itself when no URL is given)'
+complete -c pepe -n "__fish_pepe_using_subcommand schema" -l record -d 'Keep the run\'s report under its saved test when it ends, as ./.pepe/runs/NAME/<moment>.json; the run has to be a saved test (--load NAME, or --keep NAME)'
 complete -c pepe -n "__fish_pepe_using_subcommand mcp" -s n -l number -d 'Number of requests to perform' -r
 complete -c pepe -n "__fish_pepe_using_subcommand mcp" -s z -l duration -d 'Duration of the test, e.g. 10s, 3m, 2h (mutually exclusive with -n)' -r
 complete -c pepe -n "__fish_pepe_using_subcommand mcp" -s m -l method -d 'HTTP method, e.g. GET, POST, PUT, DELETE' -r
@@ -409,6 +487,7 @@ complete -c pepe -n "__fish_pepe_using_subcommand mcp" -l disable-redirects -d '
 complete -c pepe -n "__fish_pepe_using_subcommand mcp" -l json -d 'Output results in JSON format'
 complete -c pepe -n "__fish_pepe_using_subcommand mcp" -l dry-run -d 'Say what would be sent, to where and how much, and send nothing; as JSON with --json'
 complete -c pepe -n "__fish_pepe_using_subcommand mcp" -s i -l setup -d 'Open the setup screen to review or change the settings before starting (it opens by itself when no URL is given)'
+complete -c pepe -n "__fish_pepe_using_subcommand mcp" -l record -d 'Keep the run\'s report under its saved test when it ends, as ./.pepe/runs/NAME/<moment>.json; the run has to be a saved test (--load NAME, or --keep NAME)'
 complete -c pepe -n "__fish_pepe_using_subcommand self-update" -s n -l number -d 'Number of requests to perform' -r
 complete -c pepe -n "__fish_pepe_using_subcommand self-update" -s z -l duration -d 'Duration of the test, e.g. 10s, 3m, 2h (mutually exclusive with -n)' -r
 complete -c pepe -n "__fish_pepe_using_subcommand self-update" -s m -l method -d 'HTTP method, e.g. GET, POST, PUT, DELETE' -r
@@ -443,6 +522,7 @@ complete -c pepe -n "__fish_pepe_using_subcommand self-update" -l disable-redire
 complete -c pepe -n "__fish_pepe_using_subcommand self-update" -l json -d 'Output results in JSON format'
 complete -c pepe -n "__fish_pepe_using_subcommand self-update" -l dry-run -d 'Say what would be sent, to where and how much, and send nothing; as JSON with --json'
 complete -c pepe -n "__fish_pepe_using_subcommand self-update" -s i -l setup -d 'Open the setup screen to review or change the settings before starting (it opens by itself when no URL is given)'
+complete -c pepe -n "__fish_pepe_using_subcommand self-update" -l record -d 'Keep the run\'s report under its saved test when it ends, as ./.pepe/runs/NAME/<moment>.json; the run has to be a saved test (--load NAME, or --keep NAME)'
 complete -c pepe -n "__fish_pepe_using_subcommand completions" -s n -l number -d 'Number of requests to perform' -r
 complete -c pepe -n "__fish_pepe_using_subcommand completions" -s z -l duration -d 'Duration of the test, e.g. 10s, 3m, 2h (mutually exclusive with -n)' -r
 complete -c pepe -n "__fish_pepe_using_subcommand completions" -s m -l method -d 'HTTP method, e.g. GET, POST, PUT, DELETE' -r
@@ -476,15 +556,18 @@ complete -c pepe -n "__fish_pepe_using_subcommand completions" -l disable-keepal
 complete -c pepe -n "__fish_pepe_using_subcommand completions" -l disable-redirects -d 'Prevent http redirects'
 complete -c pepe -n "__fish_pepe_using_subcommand completions" -l json -d 'Output results in JSON format'
 complete -c pepe -n "__fish_pepe_using_subcommand completions" -s i -l setup -d 'Open the setup screen to review or change the settings before starting (it opens by itself when no URL is given)'
-complete -c pepe -n "__fish_pepe_using_subcommand help; and not __fish_seen_subcommand_from ping ramp compare api flow replay logs schema mcp self-update completions help" -f -a "ping" -d 'Ping a URL: a request a second, each split into DNS, connect, TLS, first byte and download, on a graph'
-complete -c pepe -n "__fish_pepe_using_subcommand help; and not __fish_seen_subcommand_from ping ramp compare api flow replay logs schema mcp self-update completions help" -f -a "ramp" -d 'Raise the load step by step to find where the target stops keeping up'
-complete -c pepe -n "__fish_pepe_using_subcommand help; and not __fish_seen_subcommand_from ping ramp compare api flow replay logs schema mcp self-update completions help" -f -a "compare" -d 'Hold a run\'s JSON report against an earlier one and say what moved'
-complete -c pepe -n "__fish_pepe_using_subcommand help; and not __fish_seen_subcommand_from ping ramp compare api flow replay logs schema mcp self-update completions help" -f -a "api" -d 'Load-test every endpoint of an OpenAPI spec'
-complete -c pepe -n "__fish_pepe_using_subcommand help; and not __fish_seen_subcommand_from ping ramp compare api flow replay logs schema mcp self-update completions help" -f -a "flow" -d 'Run a sequence of requests from a flow file, each step fed by the last'
-complete -c pepe -n "__fish_pepe_using_subcommand help; and not __fish_seen_subcommand_from ping ramp compare api flow replay logs schema mcp self-update completions help" -f -a "replay" -d 'Send the URLs of an access log in their real proportions'
-complete -c pepe -n "__fish_pepe_using_subcommand help; and not __fish_seen_subcommand_from ping ramp compare api flow replay logs schema mcp self-update completions help" -f -a "logs" -d 'Read nginx logs: requests per second now, against each minute, hour and day'
-complete -c pepe -n "__fish_pepe_using_subcommand help; and not __fish_seen_subcommand_from ping ramp compare api flow replay logs schema mcp self-update completions help" -f -a "schema" -d 'Print the JSON Schema of a report: run (the default), ramp, ping or compare'
-complete -c pepe -n "__fish_pepe_using_subcommand help; and not __fish_seen_subcommand_from ping ramp compare api flow replay logs schema mcp self-update completions help" -f -a "mcp" -d 'Serve pepe\'s modes as tools for an agent over stdio (the Model Context Protocol); the guardrail flags given here hold for every call'
-complete -c pepe -n "__fish_pepe_using_subcommand help; and not __fish_seen_subcommand_from ping ramp compare api flow replay logs schema mcp self-update completions help" -f -a "self-update" -d 'Update pepe to the latest release, or say what\'s new in it'
-complete -c pepe -n "__fish_pepe_using_subcommand help; and not __fish_seen_subcommand_from ping ramp compare api flow replay logs schema mcp self-update completions help" -f -a "completions" -d 'Tab completion for your shell: print the script, or --install it'
-complete -c pepe -n "__fish_pepe_using_subcommand help; and not __fish_seen_subcommand_from ping ramp compare api flow replay logs schema mcp self-update completions help" -f -a "help" -d 'Print this message or the help of the given subcommand(s)'
+complete -c pepe -n "__fish_pepe_using_subcommand completions" -l record -d 'Keep the run\'s report under its saved test when it ends, as ./.pepe/runs/NAME/<moment>.json; the run has to be a saved test (--load NAME, or --keep NAME)'
+complete -c pepe -n "__fish_pepe_using_subcommand help; and not __fish_seen_subcommand_from ping ramp compare rerun history api flow replay logs schema mcp self-update completions help" -f -a "ping" -d 'Ping a URL: a request a second, each split into DNS, connect, TLS, first byte and download, on a graph'
+complete -c pepe -n "__fish_pepe_using_subcommand help; and not __fish_seen_subcommand_from ping ramp compare rerun history api flow replay logs schema mcp self-update completions help" -f -a "ramp" -d 'Raise the load step by step to find where the target stops keeping up'
+complete -c pepe -n "__fish_pepe_using_subcommand help; and not __fish_seen_subcommand_from ping ramp compare rerun history api flow replay logs schema mcp self-update completions help" -f -a "compare" -d 'Hold a run\'s JSON report against an earlier one and say what moved'
+complete -c pepe -n "__fish_pepe_using_subcommand help; and not __fish_seen_subcommand_from ping ramp compare rerun history api flow replay logs schema mcp self-update completions help" -f -a "rerun" -d 'Run a saved test again, record the run, and say what moved since the run before'
+complete -c pepe -n "__fish_pepe_using_subcommand help; and not __fish_seen_subcommand_from ping ramp compare rerun history api flow replay logs schema mcp self-update completions help" -f -a "history" -d 'The saved tests and their recorded runs'
+complete -c pepe -n "__fish_pepe_using_subcommand help; and not __fish_seen_subcommand_from ping ramp compare rerun history api flow replay logs schema mcp self-update completions help" -f -a "api" -d 'Load-test every endpoint of an OpenAPI spec'
+complete -c pepe -n "__fish_pepe_using_subcommand help; and not __fish_seen_subcommand_from ping ramp compare rerun history api flow replay logs schema mcp self-update completions help" -f -a "flow" -d 'Run a sequence of requests from a flow file, each step fed by the last'
+complete -c pepe -n "__fish_pepe_using_subcommand help; and not __fish_seen_subcommand_from ping ramp compare rerun history api flow replay logs schema mcp self-update completions help" -f -a "replay" -d 'Send the URLs of an access log in their real proportions'
+complete -c pepe -n "__fish_pepe_using_subcommand help; and not __fish_seen_subcommand_from ping ramp compare rerun history api flow replay logs schema mcp self-update completions help" -f -a "logs" -d 'Read nginx logs: requests per second now, against each minute, hour and day'
+complete -c pepe -n "__fish_pepe_using_subcommand help; and not __fish_seen_subcommand_from ping ramp compare rerun history api flow replay logs schema mcp self-update completions help" -f -a "schema" -d 'Print the JSON Schema of a report: run (the default), ramp, ping or compare'
+complete -c pepe -n "__fish_pepe_using_subcommand help; and not __fish_seen_subcommand_from ping ramp compare rerun history api flow replay logs schema mcp self-update completions help" -f -a "mcp" -d 'Serve pepe\'s modes as tools for an agent over stdio (the Model Context Protocol); the guardrail flags given here hold for every call'
+complete -c pepe -n "__fish_pepe_using_subcommand help; and not __fish_seen_subcommand_from ping ramp compare rerun history api flow replay logs schema mcp self-update completions help" -f -a "self-update" -d 'Update pepe to the latest release, or say what\'s new in it'
+complete -c pepe -n "__fish_pepe_using_subcommand help; and not __fish_seen_subcommand_from ping ramp compare rerun history api flow replay logs schema mcp self-update completions help" -f -a "completions" -d 'Tab completion for your shell: print the script, or --install it'
+complete -c pepe -n "__fish_pepe_using_subcommand help; and not __fish_seen_subcommand_from ping ramp compare rerun history api flow replay logs schema mcp self-update completions help" -f -a "help" -d 'Print this message or the help of the given subcommand(s)'

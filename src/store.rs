@@ -3,17 +3,20 @@
 //! committed with the code, and run again with `pepe --load NAME`.
 
 use std::path::{Path, PathBuf};
-use std::time::SystemTime;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use clap::{CommandFactory, Parser};
 
 use crate::cli::Cli;
+use crate::compare::Side;
 use crate::config::{self, Config};
 
 /// The store's directory, in the directory pepe runs in
 pub const DIR: &str = ".pepe";
 /// Where the tests go under it
 const TESTS: &str = "tests";
+/// Where their recorded runs go: `runs/NAME/<moment>.json`
+const RUNS: &str = "runs";
 /// Longest name taken
 const NAME_MAX: usize = 64;
 
@@ -31,6 +34,65 @@ pub struct Entry {
     pub modified: Option<SystemTime>,
     /// The settings it runs with, or why the file can't be read
     pub cli: Result<Box<Cli>, String>,
+    /// Its last recorded run, when there is one that reads
+    pub last: Option<LastRun>,
+}
+
+/// One recorded run of a test: its report, and when it was
+#[derive(Debug, Clone, PartialEq)]
+pub struct Run {
+    pub path: PathBuf,
+    pub when: SystemTime,
+}
+
+/// The last recorded run, in the numbers a list shows
+#[derive(Debug, Clone)]
+pub struct LastRun {
+    pub when: SystemTime,
+    pub side: Side,
+}
+
+/// The saved test a run is of: the name its settings were loaded from
+pub fn test_of(cli: &Cli) -> Option<String> {
+    cli.config_loaded
+        .as_ref()
+        .and_then(|path| Store::local().name_of(path))
+}
+
+/// Mark a report as a run of its test: the name, and the command that
+/// reproduces it, secrets in headers masked
+pub fn stamp_test(report: &mut serde_json::Value, cli: &Cli) {
+    if let Some(name) = test_of(cli) {
+        report["test"] = serde_json::Value::String(name);
+    }
+    report["command"] = serde_json::Value::String(cli.command_line_masked());
+}
+
+/// A moment as a file name, the same on every system: `2026-10-12T14-03-22Z`
+pub fn stamp(when: SystemTime) -> String {
+    let secs = when
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs() as i64;
+    let c = crate::logs::civil(secs);
+    format!(
+        "{:04}-{:02}-{:02}T{:02}-{:02}-{:02}Z",
+        c.year, c.month, c.day, c.hour, c.minute, c.second
+    )
+}
+
+/// The moment a file name stamps, if it is one; a `-2` after it, from a
+/// clash, is fine
+fn unstamp(name: &str) -> Option<SystemTime> {
+    let field = |range: std::ops::Range<usize>| name.get(range)?.parse::<i64>().ok();
+    if name.get(10..11) != Some("T") || name.get(19..20) != Some("Z") {
+        return None;
+    }
+    let (y, mo, d) = (field(0..4)?, field(5..7)?, field(8..10)?);
+    let (h, mi, s) = (field(11..13)?, field(14..16)?, field(17..19)?);
+    let days = crate::logs::days_from_civil(y, mo as u32, d as u32);
+    let secs = days * 86_400 + h * 3_600 + mi * 60 + s;
+    Some(UNIX_EPOCH + Duration::from_secs(u64::try_from(secs).ok()?))
 }
 
 /// The settings a saved test runs with on top of `base`: the file fills
@@ -119,13 +181,75 @@ impl Store {
                 let cli = self
                     .load(&name)
                     .map(|(_, config)| Box::new(settings_of(&config)));
+                let last = self.last_run(&name).and_then(|run| {
+                    Side::read(&run.path).ok().map(|side| LastRun {
+                        when: run.when,
+                        side,
+                    })
+                });
                 Entry {
                     name,
                     modified,
                     cli,
+                    last,
                 }
             })
             .collect()
+    }
+
+    /// Where a test's recorded runs are
+    pub fn runs_dir(&self, name: &str) -> PathBuf {
+        self.root.join(RUNS).join(name)
+    }
+
+    /// Keep a run's JSON report under its test, named by the moment; the
+    /// directory is made on the first
+    pub fn record(&self, name: &str, json: &str) -> Result<PathBuf, String> {
+        validate_name(name)?;
+        let dir = self.runs_dir(name);
+        std::fs::create_dir_all(&dir)
+            .map_err(|e| format!("couldn't create {}: {e}", dir.display()))?;
+        let stamp = stamp(SystemTime::now());
+        let mut path = dir.join(format!("{stamp}.json"));
+        // Two runs in one second: the second is told apart
+        let mut n = 2;
+        while path.exists() {
+            path = dir.join(format!("{stamp}-{n}.json"));
+            n += 1;
+        }
+        std::fs::write(&path, json)
+            .map_err(|e| format!("couldn't write {}: {e}", path.display()))?;
+        Ok(path)
+    }
+
+    /// A test's recorded runs, the oldest first
+    pub fn runs(&self, name: &str) -> Vec<Run> {
+        let Ok(entries) = std::fs::read_dir(self.runs_dir(name)) else {
+            return Vec::new();
+        };
+        let mut runs: Vec<Run> = entries
+            .filter_map(|entry| entry.ok())
+            .filter(|entry| {
+                entry.path().is_file() && entry.path().extension().is_some_and(|e| e == "json")
+            })
+            .map(|entry| {
+                let path = entry.path();
+                let when = path
+                    .file_stem()
+                    .and_then(|stem| unstamp(stem.to_str()?))
+                    .or_else(|| entry.metadata().ok()?.modified().ok())
+                    .unwrap_or(UNIX_EPOCH);
+                Run { path, when }
+            })
+            .collect();
+        // The same second's `-2`, `-3` come after the first, in order
+        runs.sort_by_key(|run| (run.when, run.path.as_os_str().len(), run.path.clone()));
+        runs
+    }
+
+    /// The last recorded run of a test
+    pub fn last_run(&self, name: &str) -> Option<Run> {
+        self.runs(name).pop()
     }
 
     /// The name a path in the store is saved under, if it's one
@@ -377,6 +501,50 @@ mod tests {
             (4, "https://x.io/a")
         );
         assert!(entries[2].modified.is_some());
+        let _ = std::fs::remove_dir_all(store.root);
+    }
+
+    #[test]
+    fn a_moment_is_a_file_name_and_back() {
+        let when = UNIX_EPOCH + Duration::from_secs(1_791_900_000);
+        let stamp = stamp(when);
+        assert_eq!(stamp, "2026-10-13T14-00-00Z");
+        assert_eq!(unstamp(&stamp), Some(when));
+        assert_eq!(
+            unstamp("2026-10-13T14-00-00Z-2"),
+            Some(when),
+            "a clash's second"
+        );
+        assert_eq!(unstamp("notes"), None);
+        assert_eq!(unstamp("2026-10-13 14:00:00"), None);
+    }
+
+    #[test]
+    fn runs_are_recorded_under_the_test_oldest_first() {
+        let store = temp_store("runs");
+        assert!(store.runs("api").is_empty() && store.last_run("api").is_none());
+        let report = |rps: u32| {
+            format!(
+                r#"{{"schema_version":1,"summary":{{"total_requests":100,"failed_requests":0,"requests_per_second":{rps},"latency":{{"median_ms":10,"p99_ms":50,"std_dev_ms":1,"avg_ms":12}}}}}}"#
+            )
+        };
+        let first = store.record("api", &report(100)).unwrap();
+        let second = store.record("api", &report(200)).unwrap();
+        assert_ne!(first, second, "two in one second are told apart");
+        assert!(first.starts_with(store.runs_dir("api")));
+        std::fs::write(store.runs_dir("api").join("notes.txt"), "x").unwrap();
+        let runs = store.runs("api");
+        assert_eq!(runs.len(), 2);
+        assert_eq!(runs[0].path, first);
+        assert_eq!(store.last_run("api").unwrap().path, second);
+        assert!(store.record("a b", "{}").is_err());
+        // The library's entry carries the last run's numbers
+        store
+            .save("api", &Cli::parse_from(["pepe", "https://x.io/"]))
+            .unwrap();
+        let entries = store.entries();
+        let last = entries[0].last.as_ref().expect("a last run");
+        assert_eq!(last.side.requests_per_second, Some(200.0));
         let _ = std::fs::remove_dir_all(store.root);
     }
 

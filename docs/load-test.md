@@ -223,6 +223,20 @@ Keys are the long flags' names; the on/off ones are said the positive way. A key
 
 A project keeps more than one. `ctrl-s` on the setup screen asks for a name and writes the form as `.pepe/tests/NAME.toml`, the same format as `pepe.toml`, and `pepe --load NAME` runs it again, flags on the command line winning as usual; the file decides the mode, so a saved ramp runs as a ramp. `--keep NAME` keeps the settings as given on the command line the same way, then runs: `pepe -n 1000 -c 10 https://api.example.com/health --keep api-health`. With `--load` and no name, `--keep` updates the loaded test in place, so `pepe --load api-health -c 20 --keep` keeps the new concurrency; with another name it makes a copy. (`--save FILE` is a ping's, and writes its report.) Once the project has saved tests, `pepe` alone opens on the list of them. The files are meant to be committed with the code, so a team shares its tests and CI runs them by name.
 
+### Recorded runs
+
+A saved test keeps its results too, when asked. `--record` on a run of a saved test writes the report when it ends, as `.pepe/runs/NAME/<moment>.json`; on the dashboard and the ramp screen, `w` does the same once the run has ended. The report carries the test's name and the command that reproduces it, secrets in headers masked, so any recorded run can be run again from the report alone.
+
+```bash
+pepe --load api-health --record            # run it, keep the report
+pepe history                               # every saved test, with its last run
+pepe history api-health                    # its runs, each against the one before
+pepe compare api-health                    # the last two runs, as pepe compare says it
+pepe rerun api-health --gate               # run, record, compare with the run before; exit 1 on a regression
+```
+
+`pepe rerun NAME` is `--load NAME --record` followed by the comparison; with `--json` the comparison is what's printed, the run's own report being on disk. In the library, `h` opens a test's recorded runs, each with what moved since the run before. Everything is plain JSON under `.pepe/runs`, so it can be committed with the tests, or kept out of git with a line in `.gitignore`.
+
 ## Environment
 
 | Variable | Effect |

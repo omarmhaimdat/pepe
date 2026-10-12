@@ -33,6 +33,7 @@ pub(crate) async fn run_json(args: &Cli) -> Result<(), Box<dyn std::error::Error
                 load.rate().map(|r| (r, load.missed())),
             )
             .with_target("run", Some(&args.method), &args.url, args.concurrency)
+            .with_test(args)
             .with_warmup(args.warmup(), warmup_requests)
             .with_timeline(timeline)
             .with_slowest(slowest)
@@ -110,8 +111,19 @@ pub(crate) async fn run_json(args: &Cli) -> Result<(), Box<dyn std::error::Error
     if let Some(path) = &args.snapshot {
         report.clone().with_snapshot(false).write_to(path)?;
     }
-    println!("{}", report.to_json()?);
+    let json = report.to_json()?;
+    let comparison = if args.record {
+        record_result(args, &json)?
+    } else {
+        None
+    };
+    // A rerun's answer is what moved; the run's own report is recorded
+    match &comparison {
+        Some(comparison) => println!("{}", comparison.to_json()?),
+        None => println!("{json}"),
+    }
     exit_if_failed(args, &metrics);
+    finish_rerun(args, comparison.as_ref());
     Ok(())
 }
 
@@ -190,6 +202,10 @@ pub(crate) async fn run_interactive(
                     ui::Outcome::Quit => {
                         farewell.report = screen.report();
                         farewell.metrics = Some(screen.metrics().clone());
+                        if !screen.recorded() {
+                            farewell.result =
+                                Some(serde_json::to_string_pretty(&screen.result_json())?);
+                        }
                         return Ok(farewell);
                     }
                 }
@@ -222,6 +238,9 @@ pub(crate) async fn run_interactive(
                     ui::Outcome::Quit => {
                         farewell.report = dashboard.report();
                         farewell.metrics = Some(dashboard.metrics().clone());
+                        if !dashboard.recorded() {
+                            farewell.result = Some(dashboard.report_json(&load).to_json()?);
+                        }
                         return Ok(farewell);
                     }
                 }
@@ -241,9 +260,14 @@ pub(crate) async fn run_screens(args: &Cli, setup: bool) -> Result<(), Box<dyn s
     if let Some(command) = farewell.command {
         println!("Run this again with:\n  {command}");
     }
+    let comparison = match (&farewell.result, args.record) {
+        (Some(json), true) => record_result(args, json)?,
+        _ => None,
+    };
     say_if_newer(check).await;
     if let Some(metrics) = farewell.metrics {
         exit_if_failed(args, &metrics);
     }
+    finish_rerun(args, comparison.as_ref());
     Ok(())
 }

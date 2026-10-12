@@ -517,6 +517,18 @@ impl<'a> PlanScreen<'a> {
         }
         match kit::click(&event)? {
             kit::Hit::Key(key) => self.key(key),
+            // A parameter in the pane on the right: picked, and a second
+            // click edits it
+            hit @ kit::Hit::Row { list: 1, index } if self.prompt.is_none() => {
+                let endpoint = self.selected()?;
+                let rows = self.detail_rows(endpoint);
+                self.focus = Focus::Detail;
+                self.detail_cursor = index.min(rows.len().saturating_sub(1));
+                if self.clicks.second(hit, now) {
+                    return self.key(KeyEvent::from(KeyCode::Enter));
+                }
+                None
+            }
             hit @ kit::Hit::Row { index, .. } if self.prompt.is_none() => {
                 self.focus = Focus::List;
                 self.move_to(index);
@@ -1498,6 +1510,7 @@ impl<'a> PlanScreen<'a> {
             top = cursor + 1 - height;
         }
         self.detail_top.set(top);
+        kit::hit_rows(table, 1, top, rows.len().saturating_sub(top));
         let name_width = endpoint
             .fields
             .iter()
