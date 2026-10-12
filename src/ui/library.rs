@@ -19,8 +19,10 @@ use ratatui::{
     Frame, Terminal,
 };
 
-use super::kit::{self, about_line, caption, help, marker, panel, Clicks, Hit, FAINT, SELECTED};
-use super::view::{label, truncate, value, ACCENT, LABEL, RULE, WARN};
+use super::kit::{
+    self, about_line, caption, help, marker, panel, Clicks, Hit, SaveAs, SaveKey, FAINT, SELECTED,
+};
+use super::view::{label, truncate, value, ACCENT, GOOD, LABEL, RULE, WARN};
 use super::{mascot, theme};
 use crate::cli::Command;
 use crate::store::{Entry, Store};
@@ -38,6 +40,8 @@ pub enum LibraryOutcome {
 enum Action {
     Open,
     New,
+    /// Enter in the copy-as prompt
+    Copy,
     Quit,
 }
 
@@ -52,6 +56,10 @@ pub struct LibraryScreen {
     show_help: bool,
     /// Tells a second click on a row from the first
     clicks: Clicks,
+    /// The copy-as prompt, while it's open
+    naming: Option<SaveAs>,
+    /// Shown on the status line until the next key: (text, is an error)
+    message: Option<(String, bool)>,
 }
 
 impl LibraryScreen {
@@ -64,6 +72,45 @@ impl LibraryScreen {
             selected,
             show_help: false,
             clicks: Clicks::default(),
+            naming: None,
+            message: None,
+        }
+    }
+
+    /// `c`: ask for the name a copy of the selected test goes under
+    fn open_copy(&mut self) {
+        let Some(entry) = self.selected() else {
+            return;
+        };
+        if entry.cli.is_err() {
+            self.message = Some(("this file can't be read, so can't be copied".into(), true));
+            return;
+        }
+        let offered = format!("{}-copy", entry.name);
+        self.naming = Some(SaveAs::new("copy as", &offered));
+    }
+
+    /// Enter in the copy-as prompt: the selected test's settings under the
+    /// new name; the list then shows it, selected
+    fn copy(&mut self) {
+        let Some(mut naming) = self.naming.take() else {
+            return;
+        };
+        let Some(Ok(cli)) = self.selected().map(|e| &e.cli) else {
+            return;
+        };
+        let cli = cli.clone();
+        match naming.save(&self.store, None, &cli) {
+            Some(name) => {
+                self.entries = self.store.entries();
+                self.selected = self
+                    .entries
+                    .iter()
+                    .position(|e| e.name == name)
+                    .unwrap_or(self.selected);
+                self.message = naming.message.take();
+            }
+            None => self.naming = Some(naming),
         }
     }
 
@@ -78,7 +125,7 @@ impl LibraryScreen {
         }
         match kit::click(&event)? {
             Hit::Key(key) => self.key(key),
-            hit @ Hit::Row { index, .. } if index < self.entries.len() => {
+            hit @ Hit::Row { index, .. } if index < self.entries.len() && self.naming.is_none() => {
                 self.selected = index;
                 self.clicks.second(hit, now).then_some(Action::Open)
             }
@@ -107,11 +154,22 @@ impl LibraryScreen {
             }
             return None;
         }
+        self.message = None;
+        if let Some(naming) = &mut self.naming {
+            match naming.key(key) {
+                SaveKey::Quit => return Some(Action::Quit),
+                SaveKey::Cancel => self.naming = None,
+                SaveKey::Save => return Some(Action::Copy),
+                SaveKey::Typed => {}
+            }
+            return None;
+        }
         match key.code {
             KeyCode::Char('c') if ctrl => return Some(Action::Quit),
             KeyCode::Esc | KeyCode::Char('q') => return Some(Action::Quit),
             KeyCode::Enter if self.selected().is_some() => return Some(Action::Open),
             KeyCode::Char('n') => return Some(Action::New),
+            KeyCode::Char('c') => self.open_copy(),
             KeyCode::F(1) | KeyCode::Char('?') => self.show_help = true,
             KeyCode::Up | KeyCode::Char('k') => self.move_by(-1),
             KeyCode::Down | KeyCode::Char('j') => self.move_by(1),
@@ -147,6 +205,7 @@ impl LibraryScreen {
             match action {
                 Some(Action::Quit) => return Ok(LibraryOutcome::Quit),
                 Some(Action::New) => return Ok(LibraryOutcome::New),
+                Some(Action::Copy) => self.copy(),
                 Some(Action::Open) => {
                     if let Some(entry) = self.selected() {
                         return Ok(LibraryOutcome::Open(entry.name.clone()));
@@ -176,6 +235,22 @@ impl LibraryScreen {
         self.render_command(f, command);
 
         let line = match self.selected().map(|e| &e.cli) {
+            _ if self.naming.is_some() => self
+                .naming
+                .as_ref()
+                .map(|naming| naming.line(&self.store, status.width))
+                .unwrap_or_default(),
+            _ if self.message.is_some() => {
+                let (text, error) = self.message.clone().unwrap_or_default();
+                let color = if error { WARN } else { GOOD };
+                Line::from(vec![
+                    value(if error { " ! " } else { " ✔ " }, color),
+                    Span::styled(
+                        truncate(&text, (status.width as usize).saturating_sub(4)),
+                        Style::new().fg(color),
+                    ),
+                ])
+            }
             Some(Err(e)) => Line::from(vec![
                 value(" ! ", WARN),
                 Span::styled(
@@ -189,17 +264,19 @@ impl LibraryScreen {
             None => Line::from(label(" nothing saved yet · n starts a new test")),
         };
         f.render_widget(Paragraph::new(line), status);
-        kit::footer(
-            f,
-            footer,
+        let chips: &[(&str, &str)] = if self.naming.is_some() {
+            &[("enter", "copy"), ("esc", "cancel"), ("ctrl-c", "quit")]
+        } else {
             &[
                 ("enter", "open"),
                 ("n", "new test"),
+                ("c", "copy"),
                 ("↑↓", "move"),
                 ("F1", "keys"),
                 ("esc", "quit"),
-            ],
-        );
+            ]
+        };
+        kit::footer(f, footer, chips);
         if self.show_help {
             help(
                 f,
@@ -207,6 +284,7 @@ impl LibraryScreen {
                 &[
                     ("enter", "put the test in the setup form"),
                     ("n", "start from an empty form"),
+                    ("c", "copy the test under another name"),
                     ("↑ ↓ / j k", "move"),
                     ("F1 / ?", "this help"),
                     ("esc / q", "quit"),
@@ -624,6 +702,51 @@ mod tests {
         assert!(first > 0, "the list scrolled to the end");
         s.mouse(click_at(row_at(first)), Instant::now());
         assert_eq!(s.selected, first);
+    }
+
+    #[test]
+    fn c_copies_the_selected_test_under_another_name() {
+        let root = std::env::temp_dir().join(format!("pepe-library-copy-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let store = Store::at(&root);
+        store
+            .save(
+                "api-health",
+                &Cli::parse_from(["pepe", "-c", "5", "https://x.io/"]),
+            )
+            .unwrap();
+        std::fs::write(store.path("broken"), "nope = ").unwrap();
+        let mut s = LibraryScreen::new(store.clone(), store.entries());
+        assert_eq!(s.selected().unwrap().name, "api-health");
+        press(&mut s, KeyCode::Char('c'));
+        assert_eq!(
+            s.naming.as_ref().map(|n| n.name()).as_deref(),
+            Some("api-health-copy")
+        );
+        // Letters go into the name now
+        press(&mut s, KeyCode::Char('2'));
+        assert!(matches!(press(&mut s, KeyCode::Enter), Some(Action::Copy)));
+        s.copy();
+        assert!(s.naming.is_none());
+        assert_eq!(s.selected().unwrap().name, "api-health-copy2");
+        assert_eq!(
+            store.load("api-health-copy2").unwrap().1.concurrency,
+            Some(5)
+        );
+        assert!(matches!(&s.message, Some((m, false)) if m.contains("saved")));
+        // A copy under a taken name asks first
+        press(&mut s, KeyCode::Char('c'));
+        s.naming.as_mut().unwrap().input = kit::TextInput::new("api-health");
+        s.copy();
+        assert!(s.naming.is_some(), "still asking");
+        s.copy();
+        assert!(s.naming.is_none());
+        // The broken file can't be copied
+        s.selected = s.entries.iter().position(|e| e.name == "broken").unwrap();
+        press(&mut s, KeyCode::Char('c'));
+        assert!(s.naming.is_none());
+        assert!(matches!(&s.message, Some((m, true)) if m.contains("can't be read")));
+        let _ = std::fs::remove_dir_all(&root);
     }
 
     #[test]

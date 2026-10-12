@@ -6,6 +6,65 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+## [0.39.0](https://github.com/omarmhaimdat/pepe/compare/v0.38.0...v0.39.0) - 2026-10-12
+
+### Added
+
+- *(setup)* any run is kept, updated or copied: --keep, ctrl-s on the dashboard and ramp, c in the library ([#173](https://github.com/omarmhaimdat/pepe/pull/173))
+
+  ## What
+
+  Any run can be kept as a saved test, updated in place, or copied: from
+  the command line and from every screen that runs one.
+
+  - `pepe -n 1000 -c 10 https://example.com --keep NAME` writes the
+  settings as given to `.pepe/tests/NAME.toml`, says so on stderr, then
+  runs. With `--load` and no name, `--keep` updates the loaded test in
+  place, so `pepe --load api-health -c 20 --keep` keeps the new
+  concurrency; with another name it copies it. A curl command is kept too,
+  body included. Ping, flow, replay and the rest refuse with exit code 2,
+  since a saved test is a load test.
+
+    ```
+    $ pepe -n 1000 -c 10 https://api.example.com/health --keep api-health
+    saved .pepe/tests/api-health.toml · `pepe --load api-health` runs it
+    ```
+
+  - `ctrl-s` on the dashboard and the ramp screen saves the run's settings
+  the same way, with the concurrency as dialed in with `+` and `-`. A run
+  started from a saved test offers its own name, so enter updates it
+  without asking; another name makes a copy; a taken name asks once. The
+  result shows as a notice in the footer.
+  - `c` in the library copies the selected test under another name,
+  offering `NAME-copy`, and selects the new file.
+  - One "save as" prompt now serves the setup form, the dashboard, the
+  ramp and the library.
+
+  The flag is `--keep` rather than `--save` because `pepe ping --save
+  FILE` already writes a report and a global flag reaches every
+  subcommand, so `--save` stays the word for reports. The reference,
+  completions and man page know `--keep`; the load-test, dashboard and
+  agents pages document it.
+
+  ## Why
+
+  v0.37.0 saved a test from the setup form and v0.38.0 gave the saved
+  tests a library. A run worked out on the command line, or dialed in on
+  the dashboard, deserves keeping just as much, and a saved test has to be
+  updatable and copyable without going through the form.
+
+  ## Checked
+
+  - `cargo test`, `cargo clippy --all-targets -- -D warnings`, `cargo fmt
+  --check`
+  - `UPDATE_CONTRIB=1 cargo test contrib` and `python3 site/build-docs.py`
+  - By hand from a scratch directory: `--keep` of a run, an update in
+  place with `--load … --keep`, a copy under another name, a ramp kept as
+  a ramp, a curl command kept with its body, and the refusals for a
+  missing name, nothing to keep, and a ping; `pepe ping --save` still
+  takes its file.
+
+
 ## [0.38.0](https://github.com/omarmhaimdat/pepe/compare/v0.37.0...v0.38.0) - 2026-10-12
 
 ### Added

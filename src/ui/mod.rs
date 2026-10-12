@@ -233,6 +233,12 @@ pub struct Dashboard {
     show_help: bool,
     /// Tells a second click on a row from the first
     clicks: kit::Clicks,
+    /// The project's saved tests, where ctrl-s keeps this run
+    store: crate::store::Store,
+    /// The name this run's settings were loaded from or last saved as
+    saved_as: Option<String>,
+    /// The save-as prompt, while it's open
+    naming: Option<kit::SaveAs>,
     /// What the request log shows
     filter: filter::Filter,
     /// Latency the slow filter requires, refreshed as results arrive
@@ -265,6 +271,11 @@ impl Dashboard {
     pub fn new(args: Cli, plan: Plan) -> Self {
         let snapshot = args.snapshot.clone();
         let warmup = args.warmup();
+        let store = crate::store::Store::local();
+        let saved_as = args
+            .config_loaded
+            .as_ref()
+            .and_then(|path| store.name_of(path));
         Self {
             concurrency: args.concurrency as usize,
             rate: args.rate,
@@ -301,6 +312,9 @@ impl Dashboard {
             tab: Tab::Live,
             show_help: false,
             clicks: kit::Clicks::default(),
+            saved_as,
+            store,
+            naming: None,
             filter: filter::Filter::default(),
             slow_threshold_us: 0,
             scroll: 0,
@@ -822,6 +836,25 @@ impl Dashboard {
         self.notify_for(message, NOTICE_TTL);
     }
 
+    /// Enter in the save-as prompt: this run's settings, with the
+    /// concurrency as dialed in, under the name
+    fn save_test(&mut self) {
+        let Some(mut naming) = self.naming.take() else {
+            return;
+        };
+        let mut cli = self.args.clone();
+        cli.concurrency = self.concurrency as u32;
+        match naming.save(&self.store, self.saved_as.as_deref(), &cli) {
+            Some(name) => {
+                self.saved_as = Some(name);
+                if let Some((text, _)) = naming.message.take() {
+                    self.notify_for(text, Duration::from_secs(6));
+                }
+            }
+            None => self.naming = Some(naming),
+        }
+    }
+
     fn notify_for(&mut self, message: String, ttl: Duration) {
         self.notice = Some((message, Instant::now(), ttl));
     }
@@ -964,6 +997,7 @@ impl Dashboard {
         }
         match kit::click(&event)? {
             kit::Hit::Key(key) => self.handle_key(key, load),
+            _ if self.naming.is_some() => None,
             kit::Hit::Tab(index) => {
                 if let Some(&tab) = self.tabs().get(index) {
                     self.tab = tab;
@@ -1017,6 +1051,23 @@ impl Dashboard {
         let running = self.finished.is_none();
         if key.code == KeyCode::Char('c') && key.modifiers.contains(KeyModifiers::CONTROL) {
             return Some(Outcome::Quit);
+        }
+        if let Some(naming) = &mut self.naming {
+            match naming.key(key) {
+                kit::SaveKey::Quit => return Some(Outcome::Quit),
+                kit::SaveKey::Cancel => self.naming = None,
+                kit::SaveKey::Save => self.save_test(),
+                kit::SaveKey::Typed => {}
+            }
+            return None;
+        }
+        if key.code == KeyCode::Char('s') && key.modifiers.contains(KeyModifiers::CONTROL) {
+            let offered = self
+                .saved_as
+                .clone()
+                .unwrap_or_else(|| crate::store::suggest_for(&self.args));
+            self.naming = Some(kit::SaveAs::new("save as", &offered));
+            return None;
         }
         if self.filter.editing && self.edit_search(key) {
             return None;
@@ -1366,6 +1417,51 @@ mod tests {
                 ..
             }
         )));
+    }
+
+    #[test]
+    fn ctrl_s_keeps_the_run_with_the_concurrency_as_dialed_in() {
+        let root = std::env::temp_dir().join(format!("pepe-dash-save-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let mut d = dashboard();
+        d.store = crate::store::Store::local_at(&root);
+        d.concurrency = 9;
+        let load = dummy_load();
+        let ctrl_s = KeyEvent::new(KeyCode::Char('s'), KeyModifiers::CONTROL);
+        assert!(d.handle_key(ctrl_s, &load).is_none());
+        assert_eq!(d.naming.as_ref().map(|n| n.name()).as_deref(), Some("x"));
+        // Typing goes to the name, not the dashboard: `q` doesn't quit
+        assert!(d
+            .handle_key(KeyEvent::from(KeyCode::Char('q')), &load)
+            .is_none());
+        assert_eq!(d.naming.as_ref().map(|n| n.name()).as_deref(), Some("xq"));
+        assert!(d
+            .handle_key(KeyEvent::from(KeyCode::Enter), &load)
+            .is_none());
+        assert!(d.naming.is_none());
+        assert_eq!(d.saved_as.as_deref(), Some("xq"));
+        let (_, config) = d.store.load("xq").unwrap();
+        assert_eq!(
+            (config.url.as_deref(), config.concurrency),
+            (Some("http://x"), Some(9))
+        );
+        assert!(matches!(&d.notice, Some((text, _, _)) if text.contains("--load xq")));
+        // Saved again under its own name: no question asked
+        d.concurrency = 12;
+        d.handle_key(ctrl_s, &load);
+        assert_eq!(d.naming.as_ref().map(|n| n.name()).as_deref(), Some("xq"));
+        d.handle_key(KeyEvent::from(KeyCode::Enter), &load);
+        assert!(d.naming.is_none());
+        assert_eq!(d.store.load("xq").unwrap().1.concurrency, Some(12));
+        // Esc leaves the prompt, and q quits again
+        d.handle_key(ctrl_s, &load);
+        d.handle_key(KeyEvent::from(KeyCode::Esc), &load);
+        assert!(d.naming.is_none());
+        assert!(matches!(
+            d.handle_key(KeyEvent::from(KeyCode::Char('q')), &load),
+            Some(Outcome::Quit)
+        ));
+        let _ = std::fs::remove_dir_all(&root);
     }
 
     fn stat(status: u16) -> ResponseStats {

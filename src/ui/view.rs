@@ -856,6 +856,11 @@ fn render_tabs(d: &Dashboard, f: &mut Frame, area: Rect) {
 }
 
 fn render_footer(d: &Dashboard, f: &mut Frame, area: Rect) {
+    // The save-as prompt takes the whole line while it's open
+    if let Some(naming) = &d.naming {
+        f.render_widget(Paragraph::new(naming.line(&d.store, area.width)), area);
+        return;
+    }
     // The view's own keys first, then the run's, then the way around:
     // help and quit always last, so they're never the ones cut
     let mut hints: Vec<(&str, &str)> = Vec::new();
@@ -898,6 +903,7 @@ fn render_footer(d: &Dashboard, f: &mut Frame, area: Rect) {
         }
         hints.push(("r", "restart"));
         hints.push(("e", "edit"));
+        hints.push(("ctrl-s", "save test"));
         hints.push(("tab", "view"));
         hints.push(("?", "keys"));
         hints.push(("q", "quit"));
@@ -943,6 +949,7 @@ fn render_help(f: &mut Frame, area: Rect) {
         ("s", "stop the run, keep the results"),
         ("r", "restart with the same settings"),
         ("e", "edit the settings, then run again"),
+        ("ctrl-s", "save the settings as a named test (.pepe/tests)"),
         ("tab / ← →", "switch view"),
         ("1 2 3", "live, stats, requests"),
         ("↑ ↓ / j k", "select a request (newer / older)"),

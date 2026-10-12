@@ -54,6 +54,14 @@ pub struct RampScreen {
     selected: Option<usize>,
     /// The keys overlay is open
     show_help: bool,
+    /// The project's saved tests, where ctrl-s keeps this ramp
+    store: crate::store::Store,
+    /// The name these settings were loaded from or last saved as
+    saved_as: Option<String>,
+    /// The save-as prompt, while it's open
+    naming: Option<kit::SaveAs>,
+    /// Something to say at the end of the footer, and since when
+    notice: Option<(String, Instant)>,
 }
 
 fn level_color(level: Level) -> Color {
@@ -94,11 +102,20 @@ fn change(was: f64, now: f64) -> String {
 
 impl RampScreen {
     pub fn new(cli: Cli, plan: RampPlan) -> Self {
+        let store = crate::store::Store::local();
+        let saved_as = cli
+            .config_loaded
+            .as_ref()
+            .and_then(|path| store.name_of(path));
         RampScreen {
             cli,
             ramp: Ramp::new(plan, Instant::now()),
             selected: None,
             show_help: false,
+            store,
+            saved_as,
+            naming: None,
+            notice: None,
         }
     }
 
@@ -126,8 +143,26 @@ impl RampScreen {
     }
 
     fn key(&mut self, key: KeyEvent, now: Instant) -> Effect {
-        if key.code == KeyCode::Char('c') && key.modifiers.contains(KeyModifiers::CONTROL) {
+        let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
+        if key.code == KeyCode::Char('c') && ctrl {
             return Effect::Leave(Outcome::Quit);
+        }
+        if let Some(naming) = &mut self.naming {
+            match naming.key(key) {
+                kit::SaveKey::Quit => return Effect::Leave(Outcome::Quit),
+                kit::SaveKey::Cancel => self.naming = None,
+                kit::SaveKey::Save => self.save_test(now),
+                kit::SaveKey::Typed => {}
+            }
+            return Effect::None;
+        }
+        if key.code == KeyCode::Char('s') && ctrl {
+            let offered = self
+                .saved_as
+                .clone()
+                .unwrap_or_else(|| crate::store::suggest_for(&self.cli));
+            self.naming = Some(kit::SaveAs::new("save as", &offered));
+            return Effect::None;
         }
         let running = self.ramp.end.is_none();
         let last = self.ramp.plan.levels.len() - 1;
@@ -182,12 +217,28 @@ impl RampScreen {
         }
         match kit::click(&event) {
             Some(kit::Hit::Key(key)) => self.key(key, now),
-            Some(kit::Hit::Row { index, .. }) => {
+            Some(kit::Hit::Row { index, .. }) if self.naming.is_none() => {
                 let last = self.ramp.plan.levels.len().saturating_sub(1);
                 self.selected = Some(index.min(last));
                 Effect::None
             }
             _ => Effect::None,
+        }
+    }
+
+    /// Enter in the save-as prompt: the ramp's settings under the name
+    fn save_test(&mut self, now: Instant) {
+        let Some(mut naming) = self.naming.take() else {
+            return;
+        };
+        match naming.save(&self.store, self.saved_as.as_deref(), &self.cli) {
+            Some(name) => {
+                self.saved_as = Some(name);
+                if let Some((text, _)) = naming.message.take() {
+                    self.notice = Some((text, now));
+                }
+            }
+            None => self.naming = Some(naming),
         }
     }
 
@@ -431,10 +482,39 @@ impl RampScreen {
         keys.extend([
             ("r", if ended { "run again" } else { "restart" }),
             ("e", "edit"),
+            ("ctrl-s", "save test"),
             ("?", "keys"),
             ("q", "quit"),
         ]);
-        kit::footer(f, footer, &keys);
+        if let Some(naming) = &self.naming {
+            f.render_widget(
+                Paragraph::new(naming.line(&self.store, footer.width)),
+                footer,
+            );
+        } else {
+            // A fresh notice has the right-hand end of the footer
+            let notice = self
+                .notice
+                .as_ref()
+                .filter(|(_, since)| now.duration_since(*since) < Duration::from_secs(6))
+                .map(|(text, _)| format!(" {text} "));
+            let taken = notice.as_ref().map_or(0, |n| n.chars().count() as u16 + 1);
+            kit::footer(
+                f,
+                Rect {
+                    width: footer.width.saturating_sub(taken),
+                    ..footer
+                },
+                &keys,
+            );
+            if let Some(notice) = notice {
+                f.render_widget(
+                    Paragraph::new(Span::styled(notice, Style::new().fg(Color::Black).bg(GOOD)))
+                        .alignment(Alignment::Right),
+                    footer,
+                );
+            }
+        }
         if self.show_help {
             help(
                 f,
@@ -448,6 +528,7 @@ impl RampScreen {
                     ("esc / end", "follow the step in progress again"),
                     ("r", "restart (once ended: run again)"),
                     ("e", "edit the settings, then run again"),
+                    ("ctrl-s", "save the settings as a named test (.pepe/tests)"),
                     ("?", "close this help"),
                     ("q", "quit"),
                 ],
@@ -1336,6 +1417,47 @@ mod tests {
                 until: vec![Condition::parse("p99 > 100ms").unwrap()],
             },
         )
+    }
+
+    #[test]
+    fn ctrl_s_keeps_the_ramp_and_says_so_in_the_footer() {
+        let root = std::env::temp_dir().join(format!("pepe-ramp-save-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let mut s = screen(&[10, 20, 30]);
+        s.store = crate::store::Store::local_at(&root);
+        let now = Instant::now();
+        let ctrl_s = KeyEvent::new(KeyCode::Char('s'), KeyModifiers::CONTROL);
+        assert_eq!(s.key(ctrl_s, now), Effect::None);
+        assert_eq!(
+            s.naming.as_ref().map(|n| n.name()).as_deref(),
+            Some("x.io-a")
+        );
+        // `s` types into the name instead of stopping the ramp
+        assert_eq!(s.key(KeyEvent::from(KeyCode::Char('s')), now), Effect::None);
+        assert!(s.ramp.end.is_none());
+        assert_eq!(s.key(KeyEvent::from(KeyCode::Enter), now), Effect::None);
+        assert!(s.naming.is_none());
+        assert_eq!(s.saved_as.as_deref(), Some("x.io-as"));
+        let (_, config) = s.store.load("x.io-as").unwrap();
+        assert_eq!(config.url.as_deref(), Some("http://x.io/a"));
+        assert!(config.ramp.is_some(), "kept as a ramp");
+        let mut terminal = Terminal::new(TestBackend::new(120, 40)).unwrap();
+        terminal.draw(|f| s.render(f, now)).unwrap();
+        let screen = terminal.backend().to_string();
+        assert!(screen.contains("--load x.io-as"), "{screen}");
+        // Six seconds on, the notice is gone and the keys are back
+        terminal
+            .draw(|f| s.render(f, now + Duration::from_secs(7)))
+            .unwrap();
+        let screen = terminal.backend().to_string();
+        assert!(!screen.contains("--load x.io-as"), "{screen}");
+        // The chip for it fits a wide footer
+        let mut wide = Terminal::new(TestBackend::new(170, 40)).unwrap();
+        wide.draw(|f| s.render(f, now + Duration::from_secs(7)))
+            .unwrap();
+        let screen = wide.backend().to_string();
+        assert!(screen.contains("save test"), "{screen}");
+        let _ = std::fs::remove_dir_all(&root);
     }
 
     fn stat(ms: u64, code: u16) -> ResponseStats {

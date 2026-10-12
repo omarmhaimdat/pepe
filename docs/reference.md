@@ -141,6 +141,9 @@ Options:
       --load <NAME>
           Run a test saved on the setup screen (ctrl-s): ./.pepe/tests/NAME.toml; flags on the command line win over it
 
+      --keep [<NAME>]
+          Keep the settings as they stand as a saved test, ./.pepe/tests/NAME.toml, then run. With --load and no NAME, the loaded test is updated in place; with another NAME, it's copied
+
   -V, --version
           Print version
 ```
@@ -347,6 +350,9 @@ Options:
 
       --load <NAME>
           Run a test saved on the setup screen (ctrl-s): ./.pepe/tests/NAME.toml; flags on the command line win over it
+
+      --keep [<NAME>]
+          Keep the settings as they stand as a saved test, ./.pepe/tests/NAME.toml, then run. With --load and no NAME, the loaded test is updated in place; with another NAME, it's copied
 ```
 
 ## pepe ramp
@@ -484,6 +490,9 @@ Options:
 
       --load <NAME>
           Run a test saved on the setup screen (ctrl-s): ./.pepe/tests/NAME.toml; flags on the command line win over it
+
+      --keep [<NAME>]
+          Keep the settings as they stand as a saved test, ./.pepe/tests/NAME.toml, then run. With --load and no NAME, the loaded test is updated in place; with another NAME, it's copied
 ```
 
 ## pepe compare
@@ -607,6 +616,9 @@ Options:
 
       --load <NAME>
           Run a test saved on the setup screen (ctrl-s): ./.pepe/tests/NAME.toml; flags on the command line win over it
+
+      --keep [<NAME>]
+          Keep the settings as they stand as a saved test, ./.pepe/tests/NAME.toml, then run. With --load and no NAME, the loaded test is updated in place; with another NAME, it's copied
 ```
 
 ## pepe api
@@ -745,6 +757,9 @@ Options:
 
       --load <NAME>
           Run a test saved on the setup screen (ctrl-s): ./.pepe/tests/NAME.toml; flags on the command line win over it
+
+      --keep [<NAME>]
+          Keep the settings as they stand as a saved test, ./.pepe/tests/NAME.toml, then run. With --load and no NAME, the loaded test is updated in place; with another NAME, it's copied
 ```
 
 ## pepe flow
@@ -859,6 +874,9 @@ Options:
 
       --load <NAME>
           Run a test saved on the setup screen (ctrl-s): ./.pepe/tests/NAME.toml; flags on the command line win over it
+
+      --keep [<NAME>]
+          Keep the settings as they stand as a saved test, ./.pepe/tests/NAME.toml, then run. With --load and no NAME, the loaded test is updated in place; with another NAME, it's copied
 ```
 
 ## pepe replay
@@ -984,6 +1002,9 @@ Options:
 
       --load <NAME>
           Run a test saved on the setup screen (ctrl-s): ./.pepe/tests/NAME.toml; flags on the command line win over it
+
+      --keep [<NAME>]
+          Keep the settings as they stand as a saved test, ./.pepe/tests/NAME.toml, then run. With --load and no NAME, the loaded test is updated in place; with another NAME, it's copied
 ```
 
 ## pepe logs
@@ -1120,6 +1141,9 @@ Options:
 
       --load <NAME>
           Run a test saved on the setup screen (ctrl-s): ./.pepe/tests/NAME.toml; flags on the command line win over it
+
+      --keep [<NAME>]
+          Keep the settings as they stand as a saved test, ./.pepe/tests/NAME.toml, then run. With --load and no NAME, the loaded test is updated in place; with another NAME, it's copied
 ```
 
 ## pepe schema
@@ -1236,6 +1260,9 @@ Options:
 
       --load <NAME>
           Run a test saved on the setup screen (ctrl-s): ./.pepe/tests/NAME.toml; flags on the command line win over it
+
+      --keep [<NAME>]
+          Keep the settings as they stand as a saved test, ./.pepe/tests/NAME.toml, then run. With --load and no NAME, the loaded test is updated in place; with another NAME, it's copied
 ```
 
 ## pepe mcp
@@ -1346,6 +1373,9 @@ Options:
 
       --load <NAME>
           Run a test saved on the setup screen (ctrl-s): ./.pepe/tests/NAME.toml; flags on the command line win over it
+
+      --keep [<NAME>]
+          Keep the settings as they stand as a saved test, ./.pepe/tests/NAME.toml, then run. With --load and no NAME, the loaded test is updated in place; with another NAME, it's copied
 ```
 
 ## pepe self-update
@@ -1462,6 +1492,9 @@ Options:
 
       --load <NAME>
           Run a test saved on the setup screen (ctrl-s): ./.pepe/tests/NAME.toml; flags on the command line win over it
+
+      --keep [<NAME>]
+          Keep the settings as they stand as a saved test, ./.pepe/tests/NAME.toml, then run. With --load and no NAME, the loaded test is updated in place; with another NAME, it's copied
 ```
 
 ## pepe completions
@@ -1581,4 +1614,7 @@ Options:
 
       --load <NAME>
           Run a test saved on the setup screen (ctrl-s): ./.pepe/tests/NAME.toml; flags on the command line win over it
+
+      --keep [<NAME>]
+          Keep the settings as they stand as a saved test, ./.pepe/tests/NAME.toml, then run. With --load and no NAME, the loaded test is updated in place; with another NAME, it's copied
 ```

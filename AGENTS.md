@@ -46,6 +46,11 @@ max-rate = 500
 max-concurrency = 64
 ```
 
+A test worth keeping: `--keep NAME` writes the settings as given to
+`.pepe/tests/NAME.toml` next to the code, then runs; `pepe --load NAME`
+runs it again, flags on the command line winning. `--load NAME --keep`
+updates it in place.
+
 ## Diagnose one endpoint
 
 ```bash

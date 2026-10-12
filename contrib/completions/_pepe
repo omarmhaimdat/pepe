@@ -43,6 +43,7 @@ _pepe() {
 '--config=[Read settings from this file instead of ./pepe.toml; flags on the command line win over it]:FILE:_files' \
 '--write-config=[Write the settings as they stand to this file, as a pepe.toml, and exit]:FILE:_files' \
 '(--config)--load=[Run a test saved on the setup screen (ctrl-s)\: ./.pepe/tests/NAME.toml; flags on the command line win over it]:NAME:_default' \
+'--keep=[Keep the settings as they stand as a saved test, ./.pepe/tests/NAME.toml, then run. With --load and no NAME, the loaded test is updated in place; with another NAME, it'\''s copied]::NAME:_default' \
 '-c+[Number of concurrent requests at a time]:CONCURRENCY:_default' \
 '--concurrency=[Number of concurrent requests at a time]:CONCURRENCY:_default' \
 '-u+[User-Agent string, default is pepe/{version}]:USER_AGENT:_default' \
@@ -115,6 +116,7 @@ fail\:"A failure"))' \
 '--config=[Read settings from this file instead of ./pepe.toml; flags on the command line win over it]:FILE:_files' \
 '--write-config=[Write the settings as they stand to this file, as a pepe.toml, and exit]:FILE:_files' \
 '(--config)--load=[Run a test saved on the setup screen (ctrl-s)\: ./.pepe/tests/NAME.toml; flags on the command line win over it]:NAME:_default' \
+'--keep=[Keep the settings as they stand as a saved test, ./.pepe/tests/NAME.toml, then run. With --load and no NAME, the loaded test is updated in place; with another NAME, it'\''s copied]::NAME:_default' \
 '-c+[Number of concurrent requests at a time]:CONCURRENCY:_default' \
 '--concurrency=[Number of concurrent requests at a time]:CONCURRENCY:_default' \
 '-u+[User-Agent string, default is pepe/{version}]:USER_AGENT:_default' \
@@ -183,6 +185,7 @@ _arguments "${_arguments_options[@]}" : \
 '--config=[Read settings from this file instead of ./pepe.toml; flags on the command line win over it]:FILE:_files' \
 '--write-config=[Write the settings as they stand to this file, as a pepe.toml, and exit]:FILE:_files' \
 '(--config)--load=[Run a test saved on the setup screen (ctrl-s)\: ./.pepe/tests/NAME.toml; flags on the command line win over it]:NAME:_default' \
+'--keep=[Keep the settings as they stand as a saved test, ./.pepe/tests/NAME.toml, then run. With --load and no NAME, the loaded test is updated in place; with another NAME, it'\''s copied]::NAME:_default' \
 '-c+[Number of concurrent requests at a time]:CONCURRENCY:_default' \
 '--concurrency=[Number of concurrent requests at a time]:CONCURRENCY:_default' \
 '-u+[User-Agent string, default is pepe/{version}]:USER_AGENT:_default' \
@@ -232,6 +235,7 @@ _arguments "${_arguments_options[@]}" : \
 '--config=[Read settings from this file instead of ./pepe.toml; flags on the command line win over it]:FILE:_files' \
 '--write-config=[Write the settings as they stand to this file, as a pepe.toml, and exit]:FILE:_files' \
 '(--config)--load=[Run a test saved on the setup screen (ctrl-s)\: ./.pepe/tests/NAME.toml; flags on the command line win over it]:NAME:_default' \
+'--keep=[Keep the settings as they stand as a saved test, ./.pepe/tests/NAME.toml, then run. With --load and no NAME, the loaded test is updated in place; with another NAME, it'\''s copied]::NAME:_default' \
 '-c+[Number of concurrent requests at a time]:CONCURRENCY:_default' \
 '--concurrency=[Number of concurrent requests at a time]:CONCURRENCY:_default' \
 '-u+[User-Agent string, default is pepe/{version}]:USER_AGENT:_default' \
@@ -288,6 +292,7 @@ _arguments "${_arguments_options[@]}" : \
 '--config=[Read settings from this file instead of ./pepe.toml; flags on the command line win over it]:FILE:_files' \
 '--write-config=[Write the settings as they stand to this file, as a pepe.toml, and exit]:FILE:_files' \
 '(--config)--load=[Run a test saved on the setup screen (ctrl-s)\: ./.pepe/tests/NAME.toml; flags on the command line win over it]:NAME:_default' \
+'--keep=[Keep the settings as they stand as a saved test, ./.pepe/tests/NAME.toml, then run. With --load and no NAME, the loaded test is updated in place; with another NAME, it'\''s copied]::NAME:_default' \
 '-c+[Number of concurrent requests at a time]:CONCURRENCY:_default' \
 '--concurrency=[Number of concurrent requests at a time]:CONCURRENCY:_default' \
 '-u+[User-Agent string, default is pepe/{version}]:USER_AGENT:_default' \
@@ -338,6 +343,7 @@ _arguments "${_arguments_options[@]}" : \
 '--config=[Read settings from this file instead of ./pepe.toml; flags on the command line win over it]:FILE:_files' \
 '--write-config=[Write the settings as they stand to this file, as a pepe.toml, and exit]:FILE:_files' \
 '(--config)--load=[Run a test saved on the setup screen (ctrl-s)\: ./.pepe/tests/NAME.toml; flags on the command line win over it]:NAME:_default' \
+'--keep=[Keep the settings as they stand as a saved test, ./.pepe/tests/NAME.toml, then run. With --load and no NAME, the loaded test is updated in place; with another NAME, it'\''s copied]::NAME:_default' \
 '-c+[Number of concurrent requests at a time]:CONCURRENCY:_default' \
 '--concurrency=[Number of concurrent requests at a time]:CONCURRENCY:_default' \
 '-u+[User-Agent string, default is pepe/{version}]:USER_AGENT:_default' \
@@ -388,6 +394,7 @@ _arguments "${_arguments_options[@]}" : \
 '--config=[Read settings from this file instead of ./pepe.toml; flags on the command line win over it]:FILE:_files' \
 '--write-config=[Write the settings as they stand to this file, as a pepe.toml, and exit]:FILE:_files' \
 '(--config)--load=[Run a test saved on the setup screen (ctrl-s)\: ./.pepe/tests/NAME.toml; flags on the command line win over it]:NAME:_default' \
+'--keep=[Keep the settings as they stand as a saved test, ./.pepe/tests/NAME.toml, then run. With --load and no NAME, the loaded test is updated in place; with another NAME, it'\''s copied]::NAME:_default' \
 '-c+[Number of concurrent requests at a time]:CONCURRENCY:_default' \
 '--concurrency=[Number of concurrent requests at a time]:CONCURRENCY:_default' \
 '-u+[User-Agent string, default is pepe/{version}]:USER_AGENT:_default' \
@@ -441,6 +448,7 @@ _arguments "${_arguments_options[@]}" : \
 '--config=[Read settings from this file instead of ./pepe.toml; flags on the command line win over it]:FILE:_files' \
 '--write-config=[Write the settings as they stand to this file, as a pepe.toml, and exit]:FILE:_files' \
 '(--config)--load=[Run a test saved on the setup screen (ctrl-s)\: ./.pepe/tests/NAME.toml; flags on the command line win over it]:NAME:_default' \
+'--keep=[Keep the settings as they stand as a saved test, ./.pepe/tests/NAME.toml, then run. With --load and no NAME, the loaded test is updated in place; with another NAME, it'\''s copied]::NAME:_default' \
 '-c+[Number of concurrent requests at a time]:CONCURRENCY:_default' \
 '--concurrency=[Number of concurrent requests at a time]:CONCURRENCY:_default' \
 '-u+[User-Agent string, default is pepe/{version}]:USER_AGENT:_default' \
@@ -491,6 +499,7 @@ _arguments "${_arguments_options[@]}" : \
 '--config=[Read settings from this file instead of ./pepe.toml; flags on the command line win over it]:FILE:_files' \
 '--write-config=[Write the settings as they stand to this file, as a pepe.toml, and exit]:FILE:_files' \
 '(--config)--load=[Run a test saved on the setup screen (ctrl-s)\: ./.pepe/tests/NAME.toml; flags on the command line win over it]:NAME:_default' \
+'--keep=[Keep the settings as they stand as a saved test, ./.pepe/tests/NAME.toml, then run. With --load and no NAME, the loaded test is updated in place; with another NAME, it'\''s copied]::NAME:_default' \
 '-c+[Number of concurrent requests at a time]:CONCURRENCY:_default' \
 '--concurrency=[Number of concurrent requests at a time]:CONCURRENCY:_default' \
 '-u+[User-Agent string, default is pepe/{version}]:USER_AGENT:_default' \
@@ -539,6 +548,7 @@ _arguments "${_arguments_options[@]}" : \
 '--config=[Read settings from this file instead of ./pepe.toml; flags on the command line win over it]:FILE:_files' \
 '--write-config=[Write the settings as they stand to this file, as a pepe.toml, and exit]:FILE:_files' \
 '(--config)--load=[Run a test saved on the setup screen (ctrl-s)\: ./.pepe/tests/NAME.toml; flags on the command line win over it]:NAME:_default' \
+'--keep=[Keep the settings as they stand as a saved test, ./.pepe/tests/NAME.toml, then run. With --load and no NAME, the loaded test is updated in place; with another NAME, it'\''s copied]::NAME:_default' \
 '-c+[Number of concurrent requests at a time]:CONCURRENCY:_default' \
 '--concurrency=[Number of concurrent requests at a time]:CONCURRENCY:_default' \
 '-u+[User-Agent string, default is pepe/{version}]:USER_AGENT:_default' \
@@ -586,6 +596,7 @@ _arguments "${_arguments_options[@]}" : \
 '--config=[Read settings from this file instead of ./pepe.toml; flags on the command line win over it]:FILE:_files' \
 '--write-config=[Write the settings as they stand to this file, as a pepe.toml, and exit]:FILE:_files' \
 '(--config)--load=[Run a test saved on the setup screen (ctrl-s)\: ./.pepe/tests/NAME.toml; flags on the command line win over it]:NAME:_default' \
+'--keep=[Keep the settings as they stand as a saved test, ./.pepe/tests/NAME.toml, then run. With --load and no NAME, the loaded test is updated in place; with another NAME, it'\''s copied]::NAME:_default' \
 '-c+[Number of concurrent requests at a time]:CONCURRENCY:_default' \
 '--concurrency=[Number of concurrent requests at a time]:CONCURRENCY:_default' \
 '-u+[User-Agent string, default is pepe/{version}]:USER_AGENT:_default' \
@@ -635,6 +646,7 @@ _arguments "${_arguments_options[@]}" : \
 '--config=[Read settings from this file instead of ./pepe.toml; flags on the command line win over it]:FILE:_files' \
 '--write-config=[Write the settings as they stand to this file, as a pepe.toml, and exit]:FILE:_files' \
 '(--config)--load=[Run a test saved on the setup screen (ctrl-s)\: ./.pepe/tests/NAME.toml; flags on the command line win over it]:NAME:_default' \
+'--keep=[Keep the settings as they stand as a saved test, ./.pepe/tests/NAME.toml, then run. With --load and no NAME, the loaded test is updated in place; with another NAME, it'\''s copied]::NAME:_default' \
 '-c+[Number of concurrent requests at a time]:CONCURRENCY:_default' \
 '--concurrency=[Number of concurrent requests at a time]:CONCURRENCY:_default' \
 '-u+[User-Agent string, default is pepe/{version}]:USER_AGENT:_default' \

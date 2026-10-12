@@ -69,6 +69,42 @@ pub const SNAPSHOT_EVERY: std::time::Duration = std::time::Duration::from_secs(6
 
 // The load engine has its own threads (see `load`); this runtime only runs
 // the screens, the reports and the update check
+/// `--keep NAME`: the settings as they stand into the project's store,
+/// said on stderr; from then on the run is that test's
+fn keep_test(args: &mut Cli, name: &str) -> Result<(), String> {
+    use cli::Command;
+    match &args.command {
+        None | Some(Command::Ramp(_)) | Some(Command::Api(_)) => {}
+        Some(_) => {
+            return Err("--keep keeps a load test: a run, a ramp or an API".into());
+        }
+    }
+    args.take_curl()?;
+    let empty = match &args.command {
+        Some(Command::Ramp(ramp)) => ramp.url.is_empty(),
+        Some(Command::Api(api)) => api.spec.is_empty(),
+        _ => args.url.is_empty(),
+    };
+    if empty {
+        return Err("--keep needs something to keep: a URL, or the setup screen's ctrl-s".into());
+    }
+    let store = store::Store::local();
+    let name = match (name.is_empty(), &args.load) {
+        (false, _) => name.to_string(),
+        (true, Some(loaded)) => loaded.clone(),
+        (true, None) => {
+            return Err(format!(
+                "--keep needs a name here, say --keep {}",
+                store::suggest_for(args)
+            ))
+        }
+    };
+    let path = store.save(&name, args)?;
+    eprintln!("saved {} · `pepe --load {name}` runs it", path.display());
+    args.config_loaded = Some(path);
+    Ok(())
+}
+
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Parsed by hand so the config file can tell typed flags from defaults
@@ -104,6 +140,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             path.display()
         );
         return Ok(());
+    }
+    // `--keep`: save the settings as they stand, then go on; a run that
+    // was `--load`ed is updated in place when no name is given
+    if let Some(name) = args.keep.clone() {
+        if let Err(e) = keep_test(&mut args, &name) {
+            eprintln!("error: {e}");
+            std::process::exit(2);
+        }
     }
     // Which response header carries the request id; `validate` rejects a
     // name that isn't one

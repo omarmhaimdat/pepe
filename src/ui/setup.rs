@@ -18,7 +18,7 @@ use ratatui::{
 };
 
 use super::kit::{
-    self, about_line, caption, help, marker, panel, tabs, Hit, TextInput, FAINT, SELECTED,
+    self, about_line, caption, help, marker, panel, tabs, Hit, SaveAs, SaveKey, FAINT, SELECTED,
 };
 use super::view::{label, status_color, truncate, value, ACCENT, BAD, GOOD, LABEL, RULE, WARN};
 use super::{body, format, mascot, theme};
@@ -129,13 +129,6 @@ enum Action {
     Quit,
 }
 
-/// The prompt ctrl-s opens: the name the form is saved under
-struct Naming {
-    input: TextInput,
-    /// The name is taken and replacing it was said once; enter again does
-    replace: bool,
-}
-
 /// A card of the form: its rows, and which one has the caret
 struct Section {
     title: &'static str,
@@ -194,7 +187,7 @@ pub struct Setup {
     /// The name this form was loaded from or last saved as, offered again
     saved_as: Option<String>,
     /// The name prompt, while it's open
-    naming: Option<Naming>,
+    naming: Option<SaveAs>,
     /// The keys overlay is open
     show_help: bool,
 }
@@ -488,15 +481,11 @@ impl Setup {
             return None;
         }
         if let Some(naming) = &mut self.naming {
-            match key.code {
-                KeyCode::Char('c') if ctrl => return Some(Action::Quit),
-                KeyCode::Esc => self.naming = None,
-                KeyCode::Enter => return Some(Action::Save),
-                _ => {
-                    if naming.input.key(key) {
-                        naming.replace = false;
-                    }
-                }
+            match naming.key(key) {
+                SaveKey::Quit => return Some(Action::Quit),
+                SaveKey::Cancel => self.naming = None,
+                SaveKey::Save => return Some(Action::Save),
+                SaveKey::Typed => {}
             }
             self.message = None;
             return None;
@@ -544,40 +533,30 @@ impl Setup {
                 &self.url
             })
         });
-        self.naming = Some(Naming {
-            input: TextInput::new(&offered),
-            replace: false,
-        });
+        self.naming = Some(SaveAs::new("save as", &offered));
     }
 
     /// Enter in the name prompt: save the form under the name, once a
     /// taken name has been confirmed; what to say under the form
     fn save(&mut self) -> (String, bool) {
-        let Some(naming) = &mut self.naming else {
+        let Some(mut naming) = self.naming.take() else {
             return ("press ctrl-s to save".into(), true);
         };
-        let name = naming.input.text().trim().to_string();
-        if let Err(e) = store::validate_name(&name) {
-            return (e, true);
-        }
-        if self.store.has(&name) && !naming.replace && self.saved_as.as_deref() != Some(&name) {
-            naming.replace = true;
-            return (
-                format!("`{name}` is saved already · enter replaces it, esc keeps it"),
-                true,
-            );
-        }
-        match self.to_cli().and_then(|cli| self.store.save(&name, &cli)) {
-            Ok(path) => {
-                self.saved_as = Some(name.clone());
-                self.naming = None;
-                (
-                    format!("saved {} · `pepe --load {name}` runs it", path.display()),
-                    false,
-                )
+        let cli = match self.to_cli() {
+            Ok(cli) => cli,
+            Err(e) => {
+                naming.message = Some((e.clone(), true));
+                self.naming = Some(naming);
+                return (e, true);
             }
-            Err(e) => (e, true),
+        };
+        let saved = naming.save(&self.store, self.saved_as.as_deref(), &cli);
+        let message = naming.message.clone().unwrap_or_default();
+        match saved {
+            Some(name) => self.saved_as = Some(name),
+            None => self.naming = Some(naming),
         }
+        message
     }
 
     /// A click on a field focuses it, and on the focused field changes a
@@ -635,8 +614,7 @@ impl Setup {
     /// document is the spec, anything else goes into the focused field
     fn paste(&mut self, text: &str) {
         if let Some(naming) = &mut self.naming {
-            naming.input.insert(text.trim());
-            naming.replace = false;
+            naming.paste(text);
             return;
         }
         if self.mode == Mode::Api && openapi::is_document(text) {
@@ -944,7 +922,7 @@ impl Setup {
         self.render_command(f, command);
 
         let line = if let Some(naming) = &self.naming {
-            self.naming_line(naming, status.width)
+            naming.line(&self.store, status.width)
         } else if let Some((text, error)) = &self.message {
             Line::from(vec![
                 if *error {
@@ -1019,33 +997,6 @@ impl Setup {
                 ],
             );
         }
-    }
-
-    /// The status line while the name prompt is open: the name being
-    /// typed, then what enter does, or what's wrong with the name
-    fn naming_line(&self, naming: &Naming, width: u16) -> Line<'static> {
-        let lead = " save as ";
-        let hint = match &self.message {
-            Some((text, _)) => format!("  {text}"),
-            None => format!(
-                "  enter saves to {} · esc cancels",
-                self.store.tests_dir().display()
-            ),
-        };
-        let room = (width as usize)
-            .saturating_sub(lead.chars().count() + hint.chars().count())
-            .max(12);
-        let mut spans = vec![value(lead, ACCENT)];
-        spans.extend(naming.input.spans(room, false));
-        spans.push(Span::styled(
-            hint,
-            Style::new().fg(if matches!(&self.message, Some((_, true))) {
-                WARN
-            } else {
-                LABEL
-            }),
-        ));
-        Line::from(spans)
     }
 
     fn render_header(&self, f: &mut Frame, area: Rect, tall: bool) {
@@ -2304,7 +2255,7 @@ mod tests {
             assert!(screen.contains("save as"), "{w}x{h}:\n{screen}");
             assert!(screen.contains("example.com"), "{w}x{h}:\n{screen}");
             // A refused name is said in the same line
-            s.message = Some(("give the test a name".into(), true));
+            s.naming.as_mut().unwrap().message = Some(("give the test a name".into(), true));
             terminal.draw(|f| s.render(f)).unwrap();
             assert!(terminal.backend().to_string().contains("give the test"));
             s.message = None;

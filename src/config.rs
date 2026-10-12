@@ -310,7 +310,9 @@ impl Config {
             url: (!cli.url.is_empty()).then(|| cli.url.clone()),
             method: differs(&cli.method, &defaults.method),
             headers: (!cli.headers.is_empty()).then(|| cli.headers.clone()),
-            body: cli.body.clone(),
+            body: cli
+                .body()
+                .map(|bytes| String::from_utf8_lossy(&bytes).into_owned()),
             requests: (cli.duration.is_none() && cli.number != defaults.number)
                 .then_some(cli.number),
             duration: cli.duration.clone(),
