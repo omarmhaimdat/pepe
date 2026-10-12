@@ -168,6 +168,12 @@ pub struct Cli {
     #[arg(long, global = true, value_name = "NAME", conflicts_with = "config")]
     pub load: Option<String>,
 
+    /// Keep the settings as they stand as a saved test, ./.pepe/tests/NAME.toml,
+    /// then run. With --load and no NAME, the loaded test is updated in place;
+    /// with another NAME, it's copied
+    #[arg(long, global = true, value_name = "NAME", num_args = 0..=1, default_missing_value = "")]
+    pub keep: Option<String>,
+
     /// The config file that was read, if one was
     #[arg(skip)]
     pub config_loaded: Option<std::path::PathBuf>,
@@ -619,18 +625,12 @@ impl Cli {
         }
 
         if self.curl {
-            let request = curl_request(&self.args).map_err(|e| {
+            self.take_curl().map_err(|e| {
                 Error::raw(
                     clap::error::ErrorKind::ValueValidation,
                     format!("Invalid curl command: {e}"),
                 )
             })?;
-            // stderr, so `--json` output on stdout stays valid JSON
-            eprintln!("curl: {} {}", request.method, request.url);
-            for note in &request.notes {
-                eprintln!("  note: {note}");
-            }
-            self.apply_curl(request);
         }
 
         for header in &self.headers {
@@ -757,6 +757,24 @@ impl Cli {
         }
 
         Ok(milliseconds)
+    }
+
+    /// The curl command after `--curl --`, taken into the settings once:
+    /// validation does it, or `--save` earlier, to keep the request
+    pub fn take_curl(&mut self) -> Result<(), String> {
+        if !self.curl {
+            return Ok(());
+        }
+        let request = curl_request(&self.args)?;
+        // stderr, so `--json` output on stdout stays valid JSON
+        eprintln!("curl: {} {}", request.method, request.url);
+        for note in &request.notes {
+            eprintln!("  note: {note}");
+        }
+        self.apply_curl(request);
+        self.curl = false;
+        self.args.clear();
+        Ok(())
     }
 
     /// Take the request a curl command describes. Like curl, redirects are

@@ -59,6 +59,12 @@ impl Store {
         Store { root: root.into() }
     }
 
+    /// `at`, for tests that stand in for `local`
+    #[cfg(test)]
+    pub fn local_at(root: impl Into<PathBuf>) -> Self {
+        Store::at(root)
+    }
+
     /// Where the tests are
     pub fn tests_dir(&self) -> PathBuf {
         self.root.join(TESTS)
@@ -197,6 +203,16 @@ pub fn validate_name(name: &str) -> Result<(), String> {
     Ok(())
 }
 
+/// A name to offer for these settings: from the URL, a ramp's URL or an
+/// API's spec
+pub fn suggest_for(cli: &Cli) -> String {
+    match &cli.command {
+        Some(crate::cli::Command::Api(api)) => suggest_name(&api.spec),
+        Some(crate::cli::Command::Ramp(ramp)) if cli.url.is_empty() => suggest_name(&ramp.url),
+        _ => suggest_name(&cli.url),
+    }
+}
+
 /// A name to offer for a URL: its host and path, `api.example.com-health`;
 /// `test` when the URL says nothing usable
 pub fn suggest_name(url: &str) -> String {
@@ -252,6 +268,22 @@ mod tests {
         assert!(validate_name("a b").unwrap_err().contains("space"));
         assert!(validate_name("a/b").unwrap_err().contains("`/`"));
         assert!(validate_name(&"x".repeat(65)).unwrap_err().contains("64"));
+    }
+
+    #[test]
+    fn a_name_is_offered_for_any_mode() {
+        assert_eq!(
+            suggest_for(&Cli::parse_from(["pepe", "https://x.io/a"])),
+            "x.io-a"
+        );
+        assert_eq!(
+            suggest_for(&Cli::parse_from(["pepe", "ramp", "https://x.io/b"])),
+            "x.io-b"
+        );
+        assert_eq!(
+            suggest_for(&Cli::parse_from(["pepe", "api", "openapi.yaml"])),
+            "openapi.yaml"
+        );
     }
 
     #[test]

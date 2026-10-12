@@ -13,7 +13,9 @@ use ratatui::{
     Frame,
 };
 
-use super::view::{label, ACCENT, LABEL, RULE};
+use super::view::{label, value, ACCENT, LABEL, RULE, WARN};
+use crate::store::{self, Store};
+use crate::Cli;
 
 /// Background of the selected line
 pub(super) const SELECTED: Color = Color::Indexed(237);
@@ -541,10 +543,201 @@ impl TextInput {
     }
 }
 
+// ─── Saving a test ───────────────────────────────────────────────────────
+
+/// What a key did in the save-as prompt
+#[derive(Debug, PartialEq, Eq)]
+pub(super) enum SaveKey {
+    /// Enter: save under the name
+    Save,
+    /// Esc: close the prompt, nothing saved
+    Cancel,
+    /// Ctrl-C
+    Quit,
+    /// The name changed, or nothing
+    Typed,
+}
+
+/// The prompt that keeps a test under a name, the same on every screen
+/// that has one to keep: the setup form, a run, a ramp, the library's
+/// copy. It takes the status line: the name being typed, then what enter
+/// does or what's wrong with the name. A taken name asks once before it's
+/// replaced; a test saved under its own name again goes straight through.
+pub(super) struct SaveAs {
+    pub(super) input: TextInput,
+    /// "save as", "copy as"
+    lead: &'static str,
+    /// The name is taken and replacing it was said once; enter again does
+    replace: bool,
+    /// What to say after the name: (text, is an error)
+    pub(super) message: Option<(String, bool)>,
+}
+
+impl SaveAs {
+    pub(super) fn new(lead: &'static str, offered: &str) -> Self {
+        SaveAs {
+            input: TextInput::new(offered),
+            lead,
+            replace: false,
+            message: None,
+        }
+    }
+
+    pub(super) fn name(&self) -> String {
+        self.input.text().trim().to_string()
+    }
+
+    pub(super) fn key(&mut self, key: KeyEvent) -> SaveKey {
+        // AltGr arrives as ctrl+alt on Windows, and types a character
+        let ctrl = key.modifiers.contains(KeyModifiers::CONTROL)
+            && !key.modifiers.contains(KeyModifiers::ALT);
+        match key.code {
+            KeyCode::Char('c') if ctrl => return SaveKey::Quit,
+            KeyCode::Esc => return SaveKey::Cancel,
+            KeyCode::Enter => return SaveKey::Save,
+            _ => {
+                if self.input.key(key) {
+                    self.replace = false;
+                }
+            }
+        }
+        self.message = None;
+        SaveKey::Typed
+    }
+
+    pub(super) fn paste(&mut self, text: &str) {
+        self.input.insert(text.trim());
+        self.replace = false;
+        self.message = None;
+    }
+
+    /// Enter: save `cli` under the name, in `store`. `saved_as` is the name
+    /// the settings already have, which replaces without asking. The name
+    /// saved, with `message` saying so, or none and `message` saying why
+    /// the prompt stays open.
+    pub(super) fn save(
+        &mut self,
+        store: &Store,
+        saved_as: Option<&str>,
+        cli: &Cli,
+    ) -> Option<String> {
+        let name = self.name();
+        if let Err(e) = store::validate_name(&name) {
+            self.message = Some((e, true));
+            return None;
+        }
+        if store.has(&name) && !self.replace && saved_as != Some(name.as_str()) {
+            self.replace = true;
+            self.message = Some((
+                format!("`{name}` is saved already · enter replaces it, esc keeps it"),
+                true,
+            ));
+            return None;
+        }
+        match store.save(&name, cli) {
+            Ok(path) => {
+                self.message = Some((
+                    format!("saved {} · `pepe --load {name}` runs it", path.display()),
+                    false,
+                ));
+                Some(name)
+            }
+            Err(e) => {
+                self.message = Some((e, true));
+                None
+            }
+        }
+    }
+
+    /// The status line while the prompt is open
+    pub(super) fn line(&self, store: &Store, width: u16) -> Line<'static> {
+        let lead = format!(" {} ", self.lead);
+        let hint = match &self.message {
+            Some((text, _)) => format!("  {text}"),
+            None => format!(
+                "  enter saves to {} · esc cancels",
+                store.tests_dir().display()
+            ),
+        };
+        let room = (width as usize)
+            .saturating_sub(lead.chars().count() + hint.chars().count())
+            .max(12);
+        let mut spans = vec![value(lead, ACCENT)];
+        spans.extend(self.input.spans(room, false));
+        spans.push(Span::styled(
+            hint,
+            Style::new().fg(if matches!(&self.message, Some((_, true))) {
+                WARN
+            } else {
+                LABEL
+            }),
+        ));
+        Line::from(spans)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use clap::Parser;
     use ratatui::{backend::TestBackend, Terminal};
+
+    #[test]
+    fn the_prompt_saves_asks_before_replacing_and_refuses_bad_names() {
+        let root = std::env::temp_dir().join(format!("pepe-saveas-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let store = Store::at(&root);
+        let cli = Cli::parse_from(["pepe", "-c", "3", "https://x.io/"]);
+
+        let mut prompt = SaveAs::new("save as", "x.io");
+        assert_eq!(
+            prompt.key(KeyEvent::from(KeyCode::Backspace)),
+            SaveKey::Typed
+        );
+        assert_eq!(prompt.name(), "x.i");
+        prompt.paste(" tems ");
+        assert_eq!(prompt.name(), "x.items");
+        assert_eq!(prompt.key(KeyEvent::from(KeyCode::Enter)), SaveKey::Save);
+        assert_eq!(prompt.key(KeyEvent::from(KeyCode::Esc)), SaveKey::Cancel);
+        assert_eq!(
+            prompt.key(KeyEvent::new(KeyCode::Char('c'), KeyModifiers::CONTROL)),
+            SaveKey::Quit
+        );
+        // Saved, and said
+        assert_eq!(prompt.save(&store, None, &cli), Some("x.items".into()));
+        assert!(matches!(&prompt.message, Some((m, false)) if m.contains("--load x.items")));
+        assert_eq!(store.load("x.items").unwrap().1.concurrency, Some(3));
+        // Taken by another: asked once, then replaced
+        let mut again = SaveAs::new("save as", "x.items");
+        assert_eq!(again.save(&store, None, &cli), None);
+        assert!(matches!(&again.message, Some((m, true)) if m.contains("replaces")));
+        assert_eq!(again.save(&store, None, &cli), Some("x.items".into()));
+        // Its own name: straight through
+        let mut own = SaveAs::new("save as", "x.items");
+        assert_eq!(
+            own.save(&store, Some("x.items"), &cli),
+            Some("x.items".into())
+        );
+        // Editing after the warning asks again for the new name
+        let mut edited = SaveAs::new("save as", "x.items");
+        edited.save(&store, None, &cli);
+        edited.key(KeyEvent::from(KeyCode::Char('2')));
+        assert_eq!(edited.save(&store, None, &cli), Some("x.items2".into()));
+        // A bad name stays in the prompt
+        let mut bad = SaveAs::new("save as", "a b");
+        assert_eq!(bad.save(&store, None, &cli), None);
+        assert!(matches!(&bad.message, Some((m, true)) if m.contains("space")));
+        // The line shows the name and the hint, and the message instead
+        let line = SaveAs::new("copy as", "x.items")
+            .line(&store, 80)
+            .to_string();
+        assert!(
+            line.contains("copy as") && line.contains("x.items") && line.contains("enter saves"),
+            "{line}"
+        );
+        assert!(bad.line(&store, 80).to_string().contains("space"));
+        let _ = std::fs::remove_dir_all(&root);
+    }
 
     #[test]
     fn chips_stand_for_their_keys() {
