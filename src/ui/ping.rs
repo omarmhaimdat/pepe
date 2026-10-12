@@ -11,7 +11,7 @@ use crossterm::event::{
 use futures::StreamExt;
 use ratatui::{
     backend::CrosstermBackend,
-    layout::{Constraint, Flex, Layout, Rect},
+    layout::{Alignment, Constraint, Flex, Layout, Rect},
     style::{Color, Style, Stylize},
     text::{Line, Span},
     widgets::{Block, BorderType, Clear, Paragraph},
@@ -23,7 +23,8 @@ use super::kit;
 use super::kit::{about_line, help, marker, wrap, FAINT, SELECTED};
 use super::view::{label, status_color, truncate, value, ACCENT, BAD, GOOD, LABEL, RULE, WARN};
 use super::{format, theme};
-use crate::ping::{glyph, percent, Kind, Phases, Sample, Shared, State, TargetStats};
+use crate::ping::{glyph, percent, Kind, Phases, Sample, Settings, Shared, State, TargetStats};
+use crate::Cli;
 
 /// How often the screen is drawn again while nothing is pressed
 const FRAME: Duration = Duration::from_millis(200);
@@ -75,6 +76,10 @@ pub struct Look {
     pub simple: bool,
     pub colors: Vec<Color>,
     pub bell: bool,
+    /// The settings as given, for ctrl-s to keep
+    pub cli: Cli,
+    /// What the pings share, for `r` to report
+    pub settings: Settings,
 }
 
 pub struct PingScreen {
@@ -106,6 +111,18 @@ pub struct PingScreen {
     show_help: bool,
     /// Tells a second click on a ping from the first
     clicks: kit::Clicks,
+    cli: Cli,
+    settings: Settings,
+    /// The project's saved tests, where ctrl-s keeps this ping
+    store: crate::store::Store,
+    /// The name these settings were loaded from or last saved as
+    saved_as: Option<String>,
+    /// The save-as prompt, while it's open
+    naming: Option<kit::SaveAs>,
+    /// Something to say at the end of the footer, and since when
+    notice: Option<(String, Instant)>,
+    /// `r` recorded the pings under their test already
+    recorded: bool,
 }
 
 /// A colour named on the command line
@@ -166,6 +183,12 @@ fn listed(state: &State, picked: usize, all: bool, failures_only: bool) -> Vec<&
 
 impl PingScreen {
     pub fn new(shared: Arc<Shared>, look: Look) -> Self {
+        let store = crate::store::Store::local();
+        let saved_as = look
+            .cli
+            .config_loaded
+            .as_ref()
+            .and_then(|path| store.name_of(path));
         PingScreen {
             shared,
             tab: Tab::Graph,
@@ -187,6 +210,60 @@ impl PingScreen {
             inspecting: false,
             show_help: false,
             clicks: kit::Clicks::default(),
+            cli: look.cli,
+            settings: look.settings,
+            store,
+            saved_as,
+            naming: None,
+            notice: None,
+            recorded: false,
+        }
+    }
+
+    /// Whether `r` recorded these pings already, so the way out doesn't again
+    pub fn recorded(&self) -> bool {
+        self.recorded
+    }
+
+    /// Enter in the save-as prompt: the ping's settings under the name
+    fn save_test(&mut self, now: Instant) {
+        let Some(mut naming) = self.naming.take() else {
+            return;
+        };
+        match naming.save(&self.store, self.saved_as.as_deref(), &self.cli) {
+            Some(name) => {
+                self.saved_as = Some(name);
+                if let Some((text, _)) = naming.message.take() {
+                    self.notice = Some((text, now));
+                }
+            }
+            None => self.naming = Some(naming),
+        }
+    }
+
+    /// `r`: the pings so far, as the JSON report, under the saved test
+    fn record_run(&mut self, now: Instant) {
+        let Some(name) = self.saved_as.clone() else {
+            self.notice = Some(("save the test first: ctrl-s".into(), now));
+            return;
+        };
+        let report = {
+            let state = self.shared.lock();
+            let mut report = crate::ping::json_report(&state, &self.settings, !state.done);
+            crate::store::stamp_test(&mut report, &self.cli);
+            // Saved on this screen, so the file isn't what was loaded
+            report["test"] = serde_json::Value::String(name.clone());
+            serde_json::to_string_pretty(&report).unwrap_or_default()
+        };
+        match self.store.record(&name, &report) {
+            Ok(path) => {
+                self.recorded = true;
+                self.notice = Some((
+                    format!("recorded {} · pepe history {name}", path.display()),
+                    now,
+                ));
+            }
+            Err(e) => self.notice = Some((e, now)),
         }
     }
 
@@ -238,21 +315,43 @@ impl PingScreen {
                 }
                 false
             }
-            Some(hit @ kit::Hit::Row { index, .. }) => {
+            Some(hit @ kit::Hit::Row { index, .. }) if self.naming.is_none() => {
                 self.line = Some(index);
                 if self.clicks.second(hit, now) {
                     return self.key(KeyEvent::from(KeyCode::Enter));
                 }
                 false
             }
-            None => false,
+            _ => false,
         }
     }
 
     /// True when the key asks to leave
     fn key(&mut self, key: KeyEvent) -> bool {
-        if key.code == KeyCode::Char('c') && key.modifiers.contains(KeyModifiers::CONTROL) {
+        let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
+        if key.code == KeyCode::Char('c') && ctrl {
             return true;
+        }
+        if let Some(naming) = &mut self.naming {
+            match naming.key(key) {
+                kit::SaveKey::Quit => return true,
+                kit::SaveKey::Cancel => self.naming = None,
+                kit::SaveKey::Save => self.save_test(Instant::now()),
+                kit::SaveKey::Typed => {}
+            }
+            return false;
+        }
+        if key.code == KeyCode::Char('s') && ctrl {
+            let offered = self
+                .saved_as
+                .clone()
+                .unwrap_or_else(|| crate::store::suggest_for(&self.cli));
+            self.naming = Some(kit::SaveAs::new("save as", &offered));
+            return false;
+        }
+        if key.code == KeyCode::Char('r') {
+            self.record_run(Instant::now());
+            return false;
         }
         if self.show_help {
             self.show_help = !matches!(key.code, KeyCode::Char('?') | KeyCode::Esc | KeyCode::F(1));
@@ -446,7 +545,39 @@ impl PingScreen {
                 ("q", "quit"),
             ],
         };
-        kit::footer(f, footer, &keys);
+        let mut keys = keys;
+        let keep = keys.len().saturating_sub(2);
+        keys.insert(keep, ("ctrl-s", "save test"));
+        keys.insert(keep + 1, ("r", "record"));
+        if let Some(naming) = &self.naming {
+            f.render_widget(
+                Paragraph::new(naming.line(&self.store, footer.width)),
+                footer,
+            );
+        } else {
+            let now = Instant::now();
+            let notice = self
+                .notice
+                .as_ref()
+                .filter(|(_, since)| now.duration_since(*since) < Duration::from_secs(6))
+                .map(|(text, _)| format!(" {text} "));
+            let taken = notice.as_ref().map_or(0, |n| n.chars().count() as u16 + 1);
+            kit::footer(
+                f,
+                Rect {
+                    width: footer.width.saturating_sub(taken),
+                    ..footer
+                },
+                &keys,
+            );
+            if let Some(notice) = notice {
+                f.render_widget(
+                    Paragraph::new(Span::styled(notice, Style::new().fg(Color::Black).bg(GOOD)))
+                        .alignment(Alignment::Right),
+                    footer,
+                );
+            }
+        }
 
         if self.inspecting {
             self.render_inspector(f, area, &state);
@@ -1481,6 +1612,7 @@ fn braille_bit(dx: usize, dy: usize) -> u32 {
 mod tests {
     use super::*;
     use crate::ping::{self, Settings, Slo, Target};
+    use clap::Parser;
     use ratatui::backend::TestBackend;
 
     fn settings() -> Settings {
@@ -1578,8 +1710,49 @@ mod tests {
                 simple: false,
                 colors: Vec::new(),
                 bell: false,
+                cli: Cli::parse_from(["pepe", "ping", "https://api.test/", "https://cdn.test/"]),
+                settings: cfg,
             },
         )
+    }
+
+    #[test]
+    fn ctrl_s_keeps_the_ping_and_r_records_it() {
+        let root = std::env::temp_dir().join(format!("pepe-ping-save-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let mut s = screen();
+        s.store = crate::store::Store::local_at(&root);
+        let ctrl_s = KeyEvent::new(KeyCode::Char('s'), KeyModifiers::CONTROL);
+        assert!(!s.key(ctrl_s));
+        assert_eq!(
+            s.naming.as_ref().map(|n| n.name()).as_deref(),
+            Some("api.test")
+        );
+        // `q` types into the name rather than quitting
+        assert!(!s.key(KeyEvent::from(KeyCode::Char('q'))));
+        assert!(!s.key(KeyEvent::from(KeyCode::Enter)));
+        assert!(s.naming.is_none());
+        assert_eq!(s.saved_as.as_deref(), Some("api.testq"));
+        let (_, config) = s.store.load("api.testq").unwrap();
+        let ping = config.ping.expect("a [ping] section");
+        assert_eq!(ping.targets.unwrap().len(), 2);
+        // `r` records the pings so far under it
+        assert!(!s.key(KeyEvent::from(KeyCode::Char('r'))));
+        assert!(s.recorded());
+        let runs = s.store.runs("api.testq");
+        assert_eq!(runs.len(), 1);
+        let text = std::fs::read_to_string(&runs[0].path).unwrap();
+        assert!(
+            text.contains("\"mode\": \"ping\"") && text.contains("\"test\": \"api.testq\""),
+            "{text}"
+        );
+        assert!(matches!(&s.notice, Some((n, _)) if n.contains("recorded")));
+        // Esc leaves the prompt; q quits again
+        s.key(ctrl_s);
+        s.key(KeyEvent::from(KeyCode::Esc));
+        assert!(s.naming.is_none());
+        assert!(s.key(KeyEvent::from(KeyCode::Char('q'))));
+        let _ = std::fs::remove_dir_all(&root);
     }
 
     impl Settings {

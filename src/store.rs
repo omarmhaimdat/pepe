@@ -332,6 +332,9 @@ pub fn validate_name(name: &str) -> Result<(), String> {
 pub fn suggest_for(cli: &Cli) -> String {
     match &cli.command {
         Some(crate::cli::Command::Api(api)) => suggest_name(&api.spec),
+        Some(crate::cli::Command::Ping(ping)) => {
+            suggest_name(ping.targets.first().map_or("", String::as_str))
+        }
         Some(crate::cli::Command::Ramp(ramp)) if cli.url.is_empty() => suggest_name(&ramp.url),
         _ => suggest_name(&cli.url),
     }

@@ -108,8 +108,12 @@ pub(crate) struct Farewell {
 /// `--record` asks for a saved test to record under, and a run or a ramp
 pub(crate) fn check_record(args: &Cli) -> Result<(), String> {
     match &args.command {
-        None | Some(cli::Command::Ramp(_)) => {}
-        Some(_) => return Err("--record keeps a run's or a ramp's report, not this mode's".into()),
+        None | Some(cli::Command::Ramp(_)) | Some(cli::Command::Ping(_)) => {}
+        Some(_) => {
+            return Err(
+                "--record keeps a run's, a ramp's or a ping's report, not this mode's".into(),
+            )
+        }
     }
     if store::test_of(args).is_none() {
         return Err(

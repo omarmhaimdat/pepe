@@ -184,6 +184,11 @@ pub struct Cli {
     #[arg(skip)]
     pub rerun: Option<RerunArgs>,
 
+    /// `-n` came from a saved test's file rather than the command line; a
+    /// ping, which runs forever by default, ends on it all the same
+    #[arg(skip)]
+    pub number_from_file: bool,
+
     /// The config file that was read, if one was
     #[arg(skip)]
     pub config_loaded: Option<std::path::PathBuf>,
@@ -263,6 +268,20 @@ pub struct SchemaArgs {
     /// Which report: run, ramp, ping or compare
     #[arg(default_value = "run", value_name = "REPORT")]
     pub which: String,
+}
+
+impl PingArgs {
+    /// The arguments as `pepe ping` has them before any flag: clap's
+    /// defaults, which `Default` doesn't know
+    pub fn usual() -> Self {
+        match Cli::parse_from(["pepe", "ping", "x"]).command {
+            Some(Command::Ping(mut ping)) => {
+                ping.targets.clear();
+                ping
+            }
+            _ => PingArgs::default(),
+        }
+    }
 }
 
 #[derive(clap::Args, Debug, Clone, PartialEq, Default)]
@@ -848,6 +867,7 @@ impl Cli {
             Some(Command::Api(_)) => parts.push("api".into()),
             Some(Command::Replay(_)) => parts.push("replay".into()),
             Some(Command::Flow(_)) => parts.push("flow".into()),
+            Some(Command::Ping(_)) => parts.push("ping".into()),
             _ => {}
         }
         let mut flag = |name: &str, value: &str| {
@@ -859,8 +879,47 @@ impl Cli {
             Some(Command::Ramp(ramp)) => Some(ramp),
             _ => None,
         };
+        // A ping has no concurrency, and may have several targets
+        let ping = matches!(self.command, Some(Command::Ping(_)));
         let mut target = self.url.clone();
+        let mut more_targets: Vec<String> = Vec::new();
+        // Switches with no value, added once `flag` is done with `parts`
+        let mut switches: Vec<&str> = Vec::new();
         match &self.command {
+            Some(Command::Ping(ping)) => {
+                let usual = PingArgs::usual();
+                let mut targets = ping.targets.iter();
+                target = targets.next().cloned().unwrap_or_default();
+                more_targets = targets.cloned().collect();
+                if ping.every != usual.every {
+                    flag("--every", &ping.every);
+                }
+                for name in &ping.name {
+                    flag("--name", name);
+                }
+                if let Some(slo) = &ping.slo {
+                    flag("--slo", slo);
+                }
+                if ping.port != usual.port {
+                    flag("--port", &ping.port.to_string());
+                }
+                if let Some(interface) = &ping.interface {
+                    flag("--interface", interface);
+                }
+                for (on, name) in [
+                    (ping.tcp, "--tcp"),
+                    (ping.cmd, "--cmd"),
+                    (ping.keep_alive, "--keep-alive"),
+                    (ping.http1, "--http1"),
+                    (ping.ipv4, "-4"),
+                    (ping.ipv6, "-6"),
+                    (ping.all_ips, "--all-ips"),
+                ] {
+                    if on {
+                        switches.push(name);
+                    }
+                }
+            }
             Some(Command::Ramp(ramp)) => {
                 let usual = RampArgs::default();
                 for (name, value, default) in [
@@ -903,7 +962,7 @@ impl Cli {
             _ => {}
         }
         if ramp.is_none() {
-            if self.concurrency != defaults.concurrency {
+            if self.concurrency != defaults.concurrency && !ping {
                 flag("-c", &self.concurrency.to_string());
             }
             match &self.duration {
@@ -954,7 +1013,9 @@ impl Cli {
                 parts.push(name.to_string());
             }
         }
+        parts.extend(switches.iter().map(|s| s.to_string()));
         parts.push(shell_quote(&target));
+        parts.extend(more_targets.iter().map(|t| shell_quote(t)));
         parts.join(" ")
     }
 
@@ -1216,6 +1277,38 @@ mod tests {
             raw.contains("filename=\"blob.bin\"\r\nContent-Type: application/octet-stream"),
             "{raw}"
         );
+    }
+
+    #[test]
+    fn a_pings_command_line_round_trips() {
+        let argv = [
+            "pepe",
+            "ping",
+            "--every",
+            "2s",
+            "--slo",
+            "total=500",
+            "--keep-alive",
+            "-n",
+            "30",
+            "--name",
+            "a",
+            "--name",
+            "b",
+            "https://a.io",
+            "https://b.io",
+        ];
+        let cli = Cli::parse_from(argv);
+        let line = cli.command_line();
+        assert!(line.starts_with("pepe ping "), "{line}");
+        assert!(!line.contains("-c "), "{line}");
+        let again = Cli::parse_from(crate::curl::split(&line).unwrap());
+        let (Some(Command::Ping(a)), Some(Command::Ping(b))) = (&cli.command, &again.command)
+        else {
+            panic!("{line}");
+        };
+        assert_eq!(a, b, "{line}");
+        assert_eq!(again.number, 30, "{line}");
     }
 
     #[test]
