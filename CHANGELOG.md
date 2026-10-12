@@ -6,6 +6,90 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+## [0.37.0](https://github.com/omarmhaimdat/pepe/compare/v0.36.1...v0.37.0) - 2026-10-12
+
+### Added
+
+- *(setup)* ctrl-s saves the form as a named test, run again with --load ([#168](https://github.com/omarmhaimdat/pepe/pull/168))
+
+  ## What
+
+  A project keeps more than one load test. `ctrl-s` on the setup screen
+  now asks for a name and writes the form as `.pepe/tests/NAME.toml`, the
+  same format as `pepe.toml`, meant to be committed with the code. The
+  name it offers comes from the URL (`api.example.com-v1-health`); a taken
+  name asks once before it is replaced, and a bad name is explained in the
+  same line.
+
+  `pepe --load NAME` runs a saved test, flags on the command line winning
+  as usual. It conflicts with `--config`, and a missing name says what is
+  saved:
+
+  ```
+  $ pepe --load nope
+  error: no test named `nope` (saved: api-health, checkout)
+  ```
+
+  The one-line text editor the plan screen used moves into the ui kit, so
+  both screens share it. The reference, the completions and the man page
+  know the new flag; the load-test page has a "Saved tests" section.
+
+  ## Why
+
+  A test worked out on the setup screen had one place to go, `pepe.toml`,
+  so a second one overwrote the first and reports piled up as nameless
+  files. This is the first step of a project-local store under `.pepe/`:
+  named tests now, a library screen in front of the form and results kept
+  per test next.
+
+  ## Checked
+
+  - `cargo test`, `cargo clippy --all-targets -- -D warnings`, `cargo fmt
+  --check`
+  - `UPDATE_CONTRIB=1 cargo test contrib` and `python3 site/build-docs.py`
+  - By hand from a scratch directory: `--load` with `--dry-run --json`, a
+  flag overriding the file, the `--config` conflict (exit 2), a bad name
+  and the missing-name message with and without saved tests; the setup
+  screen at 80 columns with the prompt open.
+
+
+
+### Other
+
+- *(agents)* the skill, llms.txt and the install page know the MCP server ([#167](https://github.com/omarmhaimdat/pepe/pull/167))
+
+  ## What changed
+
+  AGENTS.md and the agents page already described `pepe mcp`, the MCP
+  registry listing and the Claude Code plugin; the skill, `llms.txt` and
+  the install page did not. Each now says what the others say.
+
+  - `skills/pepe/SKILL.md`: an "As an MCP server" section with the seven
+  tools, the `claude mcp add` line, the two ways the registry starts it
+  (`uvx pepe-http mcp`, the `ghcr.io/omarmhaimdat/pepe` image) and the
+  plugin's caps. The install block gains `uvx` and Docker.
+  - `llms.txt`: one paragraph on the MCP server, the registry name
+  `io.github.omarmhaimdat/pepe` and the plugin; the install line gains
+  `uvx pepe-http`.
+  - `docs/install.md`: `uvx pepe-http` under PyPI, with a note that the
+  package carries a `pepe-http` command for it, and a pointer from the
+  Docker section to the registry.
+  - `site/docs/install.html` and `site/docs/search.json`: regenerated with
+  `site/build-docs.py`; `--check` passes.
+
+  ## Why
+
+  A model or an agent reads whichever of these it reaches first. The MCP
+  server and the registry listing (#162, #165) were only in two of the
+  five.
+
+  ## For the reviewer
+
+  Every fact was checked against the code: the tool names in `src/mcp.rs`,
+  the `pepe-http` script in `packaging/pypi/pyproject.toml`, the image's
+  entrypoint. No code changes.
+
+
 ## [0.36.1](https://github.com/omarmhaimdat/pepe/compare/v0.36.0...v0.36.1) - 2026-10-11
 
 ### Fixed
