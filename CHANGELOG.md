@@ -6,6 +6,80 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+## [0.38.0](https://github.com/omarmhaimdat/pepe/compare/v0.37.0...v0.38.0) - 2026-10-12
+
+### Added
+
+- *(setup)* a library of the saved tests to pick from, and the mouse on every screen ([#171](https://github.com/omarmhaimdat/pepe/pull/171))
+
+  ## What
+
+  The second step of the saved tests that v0.37.0 began.
+
+  - With saved tests in the project, `pepe` alone opens on the library:
+  each test with its mode, target, load and age, and the command it runs
+  as. Enter puts one in the setup form, where it can still be changed
+  before the start; `n` starts from an empty form; `ctrl-o` on the form
+  goes back to the library. A file that doesn't read is listed with its
+  error rather than hidden.
+  - A saved test's file decides the mode when the command line names none,
+  so `pepe --load my-ramp` runs the ramp and the library opens a ramp into
+  the ramp form. A typed mode still wins.
+  - Every screen takes the mouse: a click on a row selects it and a second
+  click opens it, a tab shows it, a key chip in the footer presses its
+  key, and the wheel scrolls. Screens register what they draw as clickable
+  regions and look a click up against them, so what is clickable is
+  exactly what is on screen. Mouse capture is on for the whole session and
+  off again on every way out. The keyboard stays the primary path; with
+  the mouse captured, selecting text in the terminal needs shift held.
+
+  The load-test and dashboard pages document the library and the mouse.
+
+  ## Why
+
+  Saving tests under names is only half of it: there has to be a place to
+  see them and pick one, and a list to pick from has to be clickable. A
+  mouse that works on one screen only is a surprise, so it works on all of
+  them, through one shared mechanism rather than seven.
+
+  ## Checked
+
+  - `cargo test`, `cargo clippy --all-targets -- -D warnings`, `cargo fmt
+  --check`
+  - `python3 site/build-docs.py` (no flag changed, so the completions and
+  man page are as they were)
+  - By hand from a scratch directory with four saved tests, one of them
+  broken: the library at 80 and 170 columns, clicks and a double click on
+  its rows, and `--load` of a saved ramp running as a ramp with `--dry-run
+  --json`.
+
+
+
+### Other
+
+- *(nix)* update flake.lock ([#170](https://github.com/omarmhaimdat/pepe/pull/170))
+
+  Automated changes by the
+  [update-flake-lock](https://github.com/DeterminateSystems/update-flake-lock)
+  GitHub Action.
+
+  ```
+  Flake lock file updates:
+
+  • Updated input 'nixpkgs':
+      'github:NixOS/nixpkgs/a7868a727837f3c09cee2ce0ca671c76b1589fed?narHash=sha256-KgItSKML8Xvte0B7/uGnBDsYzSnnKHcOaiUbgWBXLXw%3D' (2026-10-03)
+    → 'github:NixOS/nixpkgs/6510408d147d8c5e6d76043e899e9251756f6a75?narHash=sha256-XK4KceonkwD8LuMAt/vNrz982mXJM5jeHAxMwsUXXAQ%3D' (2026-10-10)
+  ```
+
+  ### Running GitHub Actions on this PR
+
+  GitHub Actions will not run workflows on pull requests which are opened
+  by a GitHub Action.
+
+  **To run GitHub Actions workflows on this PR, close and re-open this
+  pull request.**
+
+
 ## [0.37.0](https://github.com/omarmhaimdat/pepe/compare/v0.36.1...v0.37.0) - 2026-10-12
 
 ### Added
