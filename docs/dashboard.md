@@ -45,7 +45,7 @@ On the Requests view: `f` cycles the status filter (2xx, 3xx, 4xx, 5xx, no respo
 
 ## Keys
 
-The mouse works too: click a tab to show it, a request or an endpoint to select it (twice to open it), or a key in the footer to press it; the wheel scrolls. Every pepe screen takes the mouse the same way.
+The mouse works too: click a tab to show it, a request or an endpoint to select it (twice to open it), a status or a latency in the filter bar to filter by it, the search to type in it, or a key in the footer to press it; the wheel scrolls. Every pepe screen takes the mouse the same way.
 
 | Key | Action |
 | --- | --- |

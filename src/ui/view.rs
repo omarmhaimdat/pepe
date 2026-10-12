@@ -20,6 +20,7 @@ use crate::load::Plan;
 use crate::response::ResponseStats;
 use crate::timeline::{bin_floor_us, bin_of, LatencyBins, BINS, BINS_PER_DECADE};
 use crate::utils::num_of_cores;
+use crossterm::event::{KeyCode, KeyEvent};
 
 // ─── Palette ─────────────────────────────────────────────────────────────────
 // 256-color indexes are stable across themes; the semantic colors use the
@@ -2596,63 +2597,122 @@ fn render_requests_tab(d: &Dashboard, f: &mut Frame, area: Rect) {
 }
 
 /// "STATUS f  all 2xx 3xx …   LATENCY l  any ≥p50 …   SEARCH /  query"
+/// The filter bar over the requests: each group's name and key, then its
+/// choices, the one in force lit. Every part is clickable: a name or a
+/// key as the key, a choice as that choice, the endpoint's chip to let
+/// it go, the search to type in it.
 fn render_filter_bar(d: &Dashboard, f: &mut Frame, area: Rect) {
     let selected = Style::new().fg(Color::Black).bg(ACCENT).bold();
     let idle = Style::new().fg(LABEL);
-    let group = |spans: &mut Vec<Span<'static>>, name: &str, key: &str| {
-        spans.push(Span::styled(
-            format!("{name} "),
-            Style::new().fg(LABEL).bold(),
-        ));
-        spans.push(Span::styled(
-            format!("{key} "),
-            Style::new().fg(ACCENT).bold(),
-        ));
+    let key_of = |key: char| kit::Hit::Key(KeyEvent::from(KeyCode::Char(key)));
+
+    // Spans laid left to right, each registered where it lands
+    let mut spans: Vec<Span<'static>> = Vec::new();
+    let mut x = area.x;
+    let end = area.x.saturating_add(area.width);
+    let mut put = |spans: &mut Vec<Span<'static>>, span: Span<'static>, hit: Option<kit::Hit>| {
+        let width = span.width() as u16;
+        if let (Some(hit), true) = (hit, x < end) {
+            kit::hit(
+                Rect {
+                    x,
+                    y: area.y,
+                    width: width.min(end - x),
+                    height: 1,
+                },
+                hit,
+            );
+        }
+        x = x.saturating_add(width);
+        spans.push(span);
+    };
+    // A group's name and its key, both clickable as the key
+    let heading = |name: &str, key: char| {
+        [
+            Span::styled(format!("{name} "), Style::new().fg(LABEL).bold()),
+            Span::styled(format!("{key} "), Style::new().fg(ACCENT).bold()),
+        ]
     };
 
-    let mut spans = Vec::new();
-    group(&mut spans, "STATUS", "f");
-    for status in filter::Status::ALL {
-        let style = if status == d.filter.status {
-            selected
-        } else {
-            idle
-        };
-        spans.push(Span::styled(format!(" {} ", status.label()), style));
+    for span in heading("STATUS", 'f') {
+        put(&mut spans, span, Some(key_of('f')));
     }
-    spans.push(Span::raw("    "));
-    group(&mut spans, "LATENCY", "l");
-    for slow in filter::Slow::ALL {
-        let style = if slow == d.filter.slow {
+    for (i, status) in filter::Status::ALL.iter().enumerate() {
+        let style = if *status == d.filter.status {
             selected
         } else {
             idle
         };
-        spans.push(Span::styled(format!(" {} ", slow.label()), style));
+        put(
+            &mut spans,
+            Span::styled(format!(" {} ", status.label()), style),
+            Some(kit::Hit::Row {
+                list: super::STATUS_CHOICES,
+                index: i,
+            }),
+        );
+    }
+    put(&mut spans, Span::raw("    "), None);
+    for span in heading("LATENCY", 'l') {
+        put(&mut spans, span, Some(key_of('l')));
+    }
+    for (i, slow) in filter::Slow::ALL.iter().enumerate() {
+        let style = if *slow == d.filter.slow {
+            selected
+        } else {
+            idle
+        };
+        put(
+            &mut spans,
+            Span::styled(format!(" {} ", slow.label()), style),
+            Some(kit::Hit::Row {
+                list: super::SLOW_CHOICES,
+                index: i,
+            }),
+        );
     }
     if d.filter.slow != filter::Slow::Any {
-        spans.push(label(format!(
-            " {}",
-            format::latency(Duration::from_micros(d.slow_threshold_us))
-        )));
+        put(
+            &mut spans,
+            label(format!(
+                " {}",
+                format::latency(Duration::from_micros(d.slow_threshold_us))
+            )),
+            None,
+        );
     }
     if let Some(view) = d.filter.endpoint.and_then(|e| d.endpoints.get(e as usize)) {
-        spans.push(Span::raw("    "));
-        spans.push(Span::styled("ENDPOINT ", Style::new().fg(LABEL).bold()));
-        spans.push(Span::styled(format!(" {} ", view.label), selected));
+        put(&mut spans, Span::raw("    "), None);
+        let let_go = Some(kit::Hit::Row {
+            list: super::ENDPOINT_CHOICE,
+            index: 0,
+        });
+        put(
+            &mut spans,
+            Span::styled("ENDPOINT ", Style::new().fg(LABEL).bold()),
+            let_go,
+        );
+        put(
+            &mut spans,
+            Span::styled(format!(" {} ", view.label), selected),
+            let_go,
+        );
     }
-    spans.push(Span::raw("    "));
-    group(&mut spans, "SEARCH", "/");
-    if d.filter.editing {
-        spans.push(Span::styled(
+    put(&mut spans, Span::raw("    "), None);
+    for span in heading("SEARCH", '/') {
+        put(&mut spans, span, Some(key_of('/')));
+    }
+    let search = if d.filter.editing {
+        Span::styled(
             format!(" {}▏", d.filter.query),
             Style::new().fg(Color::Reset).bg(RULE),
-        ));
+        )
     } else if d.filter.query.is_empty() {
-        spans.push(label(" status or body text"));
+        label(" status or body text")
     } else {
-        spans.push(Span::styled(format!(" {} ", d.filter.query), selected));
-    }
+        Span::styled(format!(" {} ", d.filter.query), selected)
+    };
+    put(&mut spans, search, (!d.filter.editing).then(|| key_of('/')));
     f.render_widget(Paragraph::new(Line::from(spans)), area);
 }
 
