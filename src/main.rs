@@ -110,6 +110,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Parsed by hand so the config file can tell typed flags from defaults
     let matches = Cli::command().get_matches();
     let mut args = Cli::from_arg_matches(&matches).unwrap_or_else(|e| e.exit());
+    // `pepe rerun NAME` is `--load NAME --record`, then a comparison
+    if let Some(cli::Command::Rerun(rerun)) = args.command.clone() {
+        args.command = None;
+        args.load = Some(rerun.name.clone());
+        args.record = true;
+        args.rerun = Some(rerun);
+    }
     let loaded = match &args.load {
         Some(name) => store::Store::local().load(name).map(Some),
         None => config::load(args.config.as_deref()),
@@ -145,6 +152,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // was `--load`ed is updated in place when no name is given
     if let Some(name) = args.keep.clone() {
         if let Err(e) = keep_test(&mut args, &name) {
+            eprintln!("error: {e}");
+            std::process::exit(2);
+        }
+    }
+    if let Some(cli::Command::History(what)) = &args.command {
+        return modes::history::run_history(&args, what);
+    }
+    if args.record {
+        if let Err(e) = modes::check_record(&args) {
             eprintln!("error: {e}");
             std::process::exit(2);
         }

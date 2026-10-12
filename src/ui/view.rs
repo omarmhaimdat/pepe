@@ -900,6 +900,8 @@ fn render_footer(d: &Dashboard, f: &mut Frame, area: Rect) {
             hints.push(("space", if d.paused { "resume" } else { "pause" }));
             hints.push(("+/-", "concurrency"));
             hints.push(("s", "stop"));
+        } else {
+            hints.push(("w", "record result"));
         }
         hints.push(("r", "restart"));
         hints.push(("e", "edit"));
@@ -950,6 +952,10 @@ fn render_help(f: &mut Frame, area: Rect) {
         ("r", "restart with the same settings"),
         ("e", "edit the settings, then run again"),
         ("ctrl-s", "save the settings as a named test (.pepe/tests)"),
+        (
+            "w",
+            "once ended: record the run under its test (.pepe/runs)",
+        ),
         ("tab / ← →", "switch view"),
         ("1 2 3", "live, stats, requests"),
         ("↑ ↓ / j k", "select a request (newer / older)"),

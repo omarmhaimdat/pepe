@@ -174,6 +174,16 @@ pub struct Cli {
     #[arg(long, global = true, value_name = "NAME", num_args = 0..=1, default_missing_value = "")]
     pub keep: Option<String>,
 
+    /// Keep the run's report under its saved test when it ends, as
+    /// ./.pepe/runs/NAME/<moment>.json; the run has to be a saved test
+    /// (--load NAME, or --keep NAME)
+    #[arg(long, global = true)]
+    pub record: bool,
+
+    /// `pepe rerun`: after recording, what moved since the run before
+    #[arg(skip)]
+    pub rerun: Option<RerunArgs>,
+
     /// The config file that was read, if one was
     #[arg(skip)]
     pub config_loaded: Option<std::path::PathBuf>,
@@ -223,6 +233,10 @@ pub enum Command {
     Ramp(RampArgs),
     /// Hold a run's JSON report against an earlier one and say what moved
     Compare(CompareArgs),
+    /// Run a saved test again, record the run, and say what moved since the run before
+    Rerun(RerunArgs),
+    /// The saved tests and their recorded runs
+    History(HistoryArgs),
     /// Load-test every endpoint of an OpenAPI spec
     Api(ApiArgs),
     /// Run a sequence of requests from a flow file, each step fed by the last
@@ -389,10 +403,11 @@ pub enum Refused {
 
 #[derive(clap::Args, Debug, Clone, PartialEq)]
 pub struct CompareArgs {
-    /// The earlier report (`pepe --json`, `--snapshot`, or a ramp's)
+    /// The earlier report (`pepe --json`, `--snapshot`, or a ramp's), or
+    /// the name of a saved test, whose last two recorded runs are compared
     pub before: std::path::PathBuf,
     /// The later one, of the same test
-    pub after: std::path::PathBuf,
+    pub after: Option<std::path::PathBuf>,
 
     /// Exit 1 when the verdict is Slower or Worse, for CI
     #[arg(long)]
@@ -401,6 +416,23 @@ pub struct CompareArgs {
     /// Also write the verdict as a card, an SVG for a README or a page
     #[arg(long, value_name = "FILE")]
     pub svg: Option<std::path::PathBuf>,
+}
+
+#[derive(clap::Args, Debug, Clone, PartialEq)]
+pub struct RerunArgs {
+    /// The saved test, as `pepe history` lists them
+    pub name: String,
+
+    /// Exit 1 when the verdict is Slower or Worse, for CI
+    #[arg(long)]
+    pub gate: bool,
+}
+
+#[derive(clap::Args, Debug, Clone, PartialEq)]
+pub struct HistoryArgs {
+    /// One saved test: its recorded runs, the latest last. Without it,
+    /// every saved test with its last run
+    pub name: Option<String>,
 }
 
 #[derive(clap::Args, Debug, Clone, PartialEq)]
@@ -797,6 +829,13 @@ impl Cli {
         self.insecure |= request.insecure;
         self.disable_keepalive |= request.no_keepalive;
         self.disable_redirects = !request.follow_redirects;
+    }
+
+    /// `command_line` with the secrets in headers masked, for a report
+    pub fn command_line_masked(&self) -> String {
+        let mut masked = self.clone();
+        masked.headers = crate::guard::Plan::headers_of(&self.headers);
+        masked.command_line()
     }
 
     /// The pepe command that reproduces these settings, leaving out
@@ -1239,7 +1278,10 @@ mod tests {
             bare.contains("\"foo\" isn't a URL, nor a command"),
             "{bare}"
         );
-        assert!(bare.contains("ping, ramp, compare, api, flow"), "{bare}");
+        assert!(
+            bare.contains("ping, ramp, compare, rerun, history, api, flow"),
+            "{bare}"
+        );
         assert!(bare.contains("pepe self-update"), "{bare}");
         let host = trouble("example.com/x");
         assert!(host.contains("has no scheme"), "{host}");

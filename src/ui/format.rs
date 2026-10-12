@@ -106,6 +106,30 @@ pub fn span(d: Duration) -> String {
     }
 }
 
+/// Milliseconds as a report says them: 645ms, 1.20s, 7.5ms
+pub fn ms(v: f64) -> String {
+    if v >= 1000.0 {
+        format!("{:.2}s", v / 1000.0)
+    } else if v >= 10.0 {
+        format!("{v:.0}ms")
+    } else {
+        format!("{v:.1}ms")
+    }
+}
+
+/// A moment as `2026-10-12 14:03`, in local time
+pub fn local_stamp(at: std::time::SystemTime) -> String {
+    let secs = at
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs() as i64;
+    let c = crate::logs::civil(secs + i64::from(crate::logs::local_offset()));
+    format!(
+        "{:04}-{:02}-{:02} {:02}:{:02}",
+        c.year, c.month, c.day, c.hour, c.minute
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

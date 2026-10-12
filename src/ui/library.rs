@@ -19,13 +19,15 @@ use ratatui::{
     Frame, Terminal,
 };
 
+use super::history::{HistoryScreen, Recorded};
 use super::kit::{
     self, about_line, caption, help, marker, panel, Clicks, Hit, SaveAs, SaveKey, FAINT, SELECTED,
 };
 use super::view::{label, truncate, value, ACCENT, GOOD, LABEL, RULE, WARN};
 use super::{mascot, theme};
 use crate::cli::Command;
-use crate::store::{Entry, Store};
+use crate::compare::Side;
+use crate::store::{Entry, LastRun, Store};
 use crate::Cli;
 
 /// How the library was left
@@ -42,6 +44,8 @@ enum Action {
     New,
     /// Enter in the copy-as prompt
     Copy,
+    /// `h`: the selected test's recorded runs
+    History,
     Quit,
 }
 
@@ -170,6 +174,7 @@ impl LibraryScreen {
             KeyCode::Enter if self.selected().is_some() => return Some(Action::Open),
             KeyCode::Char('n') => return Some(Action::New),
             KeyCode::Char('c') => self.open_copy(),
+            KeyCode::Char('h') if self.selected().is_some() => return Some(Action::History),
             KeyCode::F(1) | KeyCode::Char('?') => self.show_help = true,
             KeyCode::Up | KeyCode::Char('k') => self.move_by(-1),
             KeyCode::Down | KeyCode::Char('j') => self.move_by(1),
@@ -206,6 +211,32 @@ impl LibraryScreen {
                 Some(Action::Quit) => return Ok(LibraryOutcome::Quit),
                 Some(Action::New) => return Ok(LibraryOutcome::New),
                 Some(Action::Copy) => self.copy(),
+                Some(Action::History) => {
+                    if let Some(entry) = self.selected() {
+                        let name = entry.name.clone();
+                        let runs: Vec<Recorded> = self
+                            .store
+                            .runs(&name)
+                            .into_iter()
+                            .filter_map(|run| {
+                                Side::read(&run.path)
+                                    .ok()
+                                    .map(|side| Recorded { run, side })
+                            })
+                            .collect();
+                        if runs.is_empty() {
+                            self.message = Some((
+                                format!("no recorded run of `{name}` yet · pepe --load {name} --record, or w on the dashboard"),
+                                true,
+                            ));
+                        } else {
+                            HistoryScreen::new(self.store.clone(), &name, runs)
+                                .run()
+                                .await?;
+                            terminal.clear()?;
+                        }
+                    }
+                }
                 Some(Action::Open) => {
                     if let Some(entry) = self.selected() {
                         return Ok(LibraryOutcome::Open(entry.name.clone()));
@@ -271,6 +302,7 @@ impl LibraryScreen {
                 ("enter", "open"),
                 ("n", "new test"),
                 ("c", "copy"),
+                ("h", "history"),
                 ("↑↓", "move"),
                 ("F1", "keys"),
                 ("esc", "quit"),
@@ -285,6 +317,7 @@ impl LibraryScreen {
                     ("enter", "put the test in the setup form"),
                     ("n", "start from an empty form"),
                     ("c", "copy the test under another name"),
+                    ("h", "its recorded runs, and what moved between them"),
                     ("↑ ↓ / j k", "move"),
                     ("F1 / ?", "this help"),
                     ("esc / q", "quit"),
@@ -383,6 +416,7 @@ impl LibraryScreen {
         let age_w = if width >= 50 { 12 } else { 0 };
         let mode_w = if width >= 60 { 4 } else { 0 };
         let load_w = if width >= 90 { 24 } else { 0 };
+        let last_w = if width >= 120 { 30 } else { 0 };
         // The marker and a space, two between columns, one before the age
         let fixed = 2
             + name_w
@@ -391,6 +425,8 @@ impl LibraryScreen {
             + (mode_w > 0) as usize * 2
             + load_w
             + (load_w > 0) as usize * 2
+            + last_w
+            + (last_w > 0) as usize * 2
             + age_w
             + (age_w > 0) as usize;
         let target_w = width.saturating_sub(fixed).max(6);
@@ -432,6 +468,14 @@ impl LibraryScreen {
                     let load = entry.cli.as_ref().map_or(String::new(), |cli| load_of(cli));
                     spans.push(value(pad(&load, load_w), LABEL));
                 }
+                if last_w > 0 {
+                    spans.push(Span::raw("  "));
+                    let last = entry
+                        .last
+                        .as_ref()
+                        .map_or_else(|| "no run recorded".to_string(), |l| last_run_text(l, now));
+                    spans.push(value(pad(&last, last_w), LABEL));
+                }
                 if age_w > 0 {
                     let age = entry.modified.map_or(String::new(), |t| ago(t, now));
                     spans.push(value(format!(" {age:>w$}", w = age_w), FAINT));
@@ -470,6 +514,24 @@ impl LibraryScreen {
     }
 }
 
+/// A test's last recorded run in a few words: `319 rps · p99 645ms · 2 h ago`
+fn last_run_text(last: &LastRun, now: SystemTime) -> String {
+    let mut parts = Vec::new();
+    if let Some(rps) = last.side.requests_per_second {
+        parts.push(format!("{} rps", super::format::compact(rps)));
+    } else if let Some(capacity) = last.side.capacity_per_second {
+        parts.push(format!("holds {} rps", super::format::compact(capacity)));
+    }
+    if let Some(p99) = last.side.p99_ms {
+        parts.push(format!("p99 {}", super::format::ms(p99)));
+    }
+    if last.side.failed_percent > 0.0 {
+        parts.push(format!("{:.1}% failed", last.side.failed_percent));
+    }
+    parts.push(ago(last.when, now));
+    parts.join(" · ")
+}
+
 /// What a test does, in a word
 fn mode_of(cli: &Cli) -> &'static str {
     match &cli.command {
@@ -501,7 +563,7 @@ fn load_of(cli: &Cli) -> String {
 
 /// How long ago, in a reader's words: "just now", "5 min ago", "3 h ago",
 /// "yesterday", "4 days ago", "3 weeks ago", "2 months ago"
-pub(super) fn ago(then: SystemTime, now: SystemTime) -> String {
+pub fn ago(then: SystemTime, now: SystemTime) -> String {
     let secs = now.duration_since(then).unwrap_or_default().as_secs();
     match secs {
         0..60 => "just now".into(),
@@ -526,6 +588,7 @@ mod tests {
             name: name.into(),
             modified: Some(SystemTime::now() - Duration::from_secs(3 * 86_400)),
             cli: Ok(Box::new(Cli::parse_from(argv))),
+            last: None,
         }
     }
 
@@ -552,6 +615,7 @@ mod tests {
                     name: "broken".into(),
                     modified: None,
                     cli: Err(".pepe/tests/broken.toml: expected a value".into()),
+                    last: None,
                 },
             ],
         )

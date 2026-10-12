@@ -2,6 +2,7 @@ mod bigtext;
 mod body;
 mod filter;
 pub mod format;
+mod history;
 mod kit;
 mod library;
 mod logs;
@@ -13,7 +14,7 @@ mod setup;
 pub mod theme;
 mod view;
 
-pub use library::{LibraryOutcome, LibraryScreen};
+pub use library::{ago, LibraryOutcome, LibraryScreen};
 pub use logs::LogsScreen;
 pub use ping::{parse_color, Look, PingScreen};
 pub use plan::{PlanOutcome, PlanScreen};
@@ -239,6 +240,8 @@ pub struct Dashboard {
     saved_as: Option<String>,
     /// The save-as prompt, while it's open
     naming: Option<kit::SaveAs>,
+    /// `w` recorded the run under its test already
+    recorded: bool,
     /// What the request log shows
     filter: filter::Filter,
     /// Latency the slow filter requires, refreshed as results arrive
@@ -315,6 +318,7 @@ impl Dashboard {
             saved_as,
             store,
             naming: None,
+            recorded: false,
             filter: filter::Filter::default(),
             slow_threshold_us: 0,
             scroll: 0,
@@ -332,7 +336,7 @@ impl Dashboard {
     }
 
     /// The JSON report of the run so far, as `--json` would print it
-    fn report_json(&self, load: &LoadHandle) -> crate::json_report::JsonReport {
+    pub(crate) fn report_json(&self, load: &LoadHandle) -> crate::json_report::JsonReport {
         let report = crate::json_report::JsonReport::generate(
             &self.metrics,
             self.elapsed(),
@@ -349,6 +353,7 @@ impl Dashboard {
             &self.args.url,
             self.concurrency as u32,
         )
+        .with_test(&self.args)
         .with_warmup(self.args.warmup(), self.warmup_requests)
         .with_timeline(&self.timeline)
         .with_slowest(&self.slowest)
@@ -836,6 +841,33 @@ impl Dashboard {
         self.notify_for(message, NOTICE_TTL);
     }
 
+    /// Whether `w` recorded this run already, so the way out doesn't again
+    pub fn recorded(&self) -> bool {
+        self.recorded
+    }
+
+    /// `w` once the run has ended: its report under its saved test
+    fn record_run(&mut self, load: &LoadHandle) {
+        let Some(name) = self.saved_as.clone() else {
+            self.notify("save the test first: ctrl-s".into());
+            return;
+        };
+        let json = match self.report_json(load).to_json() {
+            Ok(json) => json,
+            Err(e) => return self.notify(e.to_string()),
+        };
+        match self.store.record(&name, &json) {
+            Ok(path) => {
+                self.recorded = true;
+                self.notify_for(
+                    format!("recorded {} · pepe history {name}", path.display()),
+                    Duration::from_secs(6),
+                );
+            }
+            Err(e) => self.notify(e),
+        }
+    }
+
     /// Enter in the save-as prompt: this run's settings, with the
     /// concurrency as dialed in, under the name
     fn save_test(&mut self) {
@@ -1083,6 +1115,7 @@ impl Dashboard {
             KeyCode::Char('q') | KeyCode::Esc => return Some(Outcome::Quit),
             KeyCode::Char('r') => return Some(Outcome::Restart),
             KeyCode::Char('e') | KeyCode::Char('E') => return Some(Outcome::Edit),
+            KeyCode::Char('w') if !running => self.record_run(load),
             KeyCode::Char('s') | KeyCode::Char('i') if running => {
                 // Stop sending; results so far stay on screen
                 load.stop();
