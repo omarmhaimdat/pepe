@@ -166,6 +166,9 @@ Options:
       --load &lt;NAME&gt;
           Run a test saved on the setup screen (ctrl-s): ./.pepe/tests/NAME.toml; flags on the command line win over it
 
+      --keep [&lt;NAME&gt;]
+          Keep the settings as they stand as a saved test, ./.pepe/tests/NAME.toml, then run. With --load and no NAME, the loaded test is updated in place; with another NAME, it&#x27;s copied
+
   -V, --version
           Print version</code></pre></figure>
 <h2 id="pepe-ping"><a href="#pepe-ping">pepe ping</a></h2>
@@ -367,7 +370,10 @@ Options:
           Write the settings as they stand to this file, as a pepe.toml, and exit
 
       --load &lt;NAME&gt;
-          Run a test saved on the setup screen (ctrl-s): ./.pepe/tests/NAME.toml; flags on the command line win over it</code></pre></figure>
+          Run a test saved on the setup screen (ctrl-s): ./.pepe/tests/NAME.toml; flags on the command line win over it
+
+      --keep [&lt;NAME&gt;]
+          Keep the settings as they stand as a saved test, ./.pepe/tests/NAME.toml, then run. With --load and no NAME, the loaded test is updated in place; with another NAME, it&#x27;s copied</code></pre></figure>
 <h2 id="pepe-ramp"><a href="#pepe-ramp">pepe ramp</a></h2>
 <figure class="code"><div class="bar"><span>text</span><button type="button" class="copy" aria-label="Copy">copy</button></div><pre><code>Raise the load step by step to find where the target stops keeping up
 
@@ -500,7 +506,10 @@ Options:
           Write the settings as they stand to this file, as a pepe.toml, and exit
 
       --load &lt;NAME&gt;
-          Run a test saved on the setup screen (ctrl-s): ./.pepe/tests/NAME.toml; flags on the command line win over it</code></pre></figure>
+          Run a test saved on the setup screen (ctrl-s): ./.pepe/tests/NAME.toml; flags on the command line win over it
+
+      --keep [&lt;NAME&gt;]
+          Keep the settings as they stand as a saved test, ./.pepe/tests/NAME.toml, then run. With --load and no NAME, the loaded test is updated in place; with another NAME, it&#x27;s copied</code></pre></figure>
 <h2 id="pepe-compare"><a href="#pepe-compare">pepe compare</a></h2>
 <figure class="code"><div class="bar"><span>text</span><button type="button" class="copy" aria-label="Copy">copy</button></div><pre><code>Hold a run&#x27;s JSON report against an earlier one and say what moved
 
@@ -619,7 +628,10 @@ Options:
           Write the settings as they stand to this file, as a pepe.toml, and exit
 
       --load &lt;NAME&gt;
-          Run a test saved on the setup screen (ctrl-s): ./.pepe/tests/NAME.toml; flags on the command line win over it</code></pre></figure>
+          Run a test saved on the setup screen (ctrl-s): ./.pepe/tests/NAME.toml; flags on the command line win over it
+
+      --keep [&lt;NAME&gt;]
+          Keep the settings as they stand as a saved test, ./.pepe/tests/NAME.toml, then run. With --load and no NAME, the loaded test is updated in place; with another NAME, it&#x27;s copied</code></pre></figure>
 <h2 id="pepe-api"><a href="#pepe-api">pepe api</a></h2>
 <figure class="code"><div class="bar"><span>text</span><button type="button" class="copy" aria-label="Copy">copy</button></div><pre><code>Load-test every endpoint of an OpenAPI spec
 
@@ -753,7 +765,10 @@ Options:
           Write the settings as they stand to this file, as a pepe.toml, and exit
 
       --load &lt;NAME&gt;
-          Run a test saved on the setup screen (ctrl-s): ./.pepe/tests/NAME.toml; flags on the command line win over it</code></pre></figure>
+          Run a test saved on the setup screen (ctrl-s): ./.pepe/tests/NAME.toml; flags on the command line win over it
+
+      --keep [&lt;NAME&gt;]
+          Keep the settings as they stand as a saved test, ./.pepe/tests/NAME.toml, then run. With --load and no NAME, the loaded test is updated in place; with another NAME, it&#x27;s copied</code></pre></figure>
 <h2 id="pepe-flow"><a href="#pepe-flow">pepe flow</a></h2>
 <figure class="code"><div class="bar"><span>text</span><button type="button" class="copy" aria-label="Copy">copy</button></div><pre><code>Run a sequence of requests from a flow file, each step fed by the last
 
@@ -863,7 +878,10 @@ Options:
           Write the settings as they stand to this file, as a pepe.toml, and exit
 
       --load &lt;NAME&gt;
-          Run a test saved on the setup screen (ctrl-s): ./.pepe/tests/NAME.toml; flags on the command line win over it</code></pre></figure>
+          Run a test saved on the setup screen (ctrl-s): ./.pepe/tests/NAME.toml; flags on the command line win over it
+
+      --keep [&lt;NAME&gt;]
+          Keep the settings as they stand as a saved test, ./.pepe/tests/NAME.toml, then run. With --load and no NAME, the loaded test is updated in place; with another NAME, it&#x27;s copied</code></pre></figure>
 <h2 id="pepe-replay"><a href="#pepe-replay">pepe replay</a></h2>
 <figure class="code"><div class="bar"><span>text</span><button type="button" class="copy" aria-label="Copy">copy</button></div><pre><code>Send the URLs of an access log in their real proportions
 
@@ -984,7 +1002,10 @@ Options:
           Write the settings as they stand to this file, as a pepe.toml, and exit
 
       --load &lt;NAME&gt;
-          Run a test saved on the setup screen (ctrl-s): ./.pepe/tests/NAME.toml; flags on the command line win over it</code></pre></figure>
+          Run a test saved on the setup screen (ctrl-s): ./.pepe/tests/NAME.toml; flags on the command line win over it
+
+      --keep [&lt;NAME&gt;]
+          Keep the settings as they stand as a saved test, ./.pepe/tests/NAME.toml, then run. With --load and no NAME, the loaded test is updated in place; with another NAME, it&#x27;s copied</code></pre></figure>
 <h2 id="pepe-logs"><a href="#pepe-logs">pepe logs</a></h2>
 <figure class="code"><div class="bar"><span>text</span><button type="button" class="copy" aria-label="Copy">copy</button></div><pre><code>Read nginx logs: requests per second now, against each minute, hour and day
 
@@ -1116,7 +1137,10 @@ Options:
           Write the settings as they stand to this file, as a pepe.toml, and exit
 
       --load &lt;NAME&gt;
-          Run a test saved on the setup screen (ctrl-s): ./.pepe/tests/NAME.toml; flags on the command line win over it</code></pre></figure>
+          Run a test saved on the setup screen (ctrl-s): ./.pepe/tests/NAME.toml; flags on the command line win over it
+
+      --keep [&lt;NAME&gt;]
+          Keep the settings as they stand as a saved test, ./.pepe/tests/NAME.toml, then run. With --load and no NAME, the loaded test is updated in place; with another NAME, it&#x27;s copied</code></pre></figure>
 <h2 id="pepe-schema"><a href="#pepe-schema">pepe schema</a></h2>
 <figure class="code"><div class="bar"><span>text</span><button type="button" class="copy" aria-label="Copy">copy</button></div><pre><code>Print the JSON Schema of a report: run (the default), ramp, ping or compare
 
@@ -1228,7 +1252,10 @@ Options:
           Write the settings as they stand to this file, as a pepe.toml, and exit
 
       --load &lt;NAME&gt;
-          Run a test saved on the setup screen (ctrl-s): ./.pepe/tests/NAME.toml; flags on the command line win over it</code></pre></figure>
+          Run a test saved on the setup screen (ctrl-s): ./.pepe/tests/NAME.toml; flags on the command line win over it
+
+      --keep [&lt;NAME&gt;]
+          Keep the settings as they stand as a saved test, ./.pepe/tests/NAME.toml, then run. With --load and no NAME, the loaded test is updated in place; with another NAME, it&#x27;s copied</code></pre></figure>
 <h2 id="pepe-mcp"><a href="#pepe-mcp">pepe mcp</a></h2>
 <figure class="code"><div class="bar"><span>text</span><button type="button" class="copy" aria-label="Copy">copy</button></div><pre><code>Serve pepe&#x27;s modes as tools for an agent over stdio (the Model Context Protocol); the guardrail flags given here hold for every call
 
@@ -1334,7 +1361,10 @@ Options:
           Write the settings as they stand to this file, as a pepe.toml, and exit
 
       --load &lt;NAME&gt;
-          Run a test saved on the setup screen (ctrl-s): ./.pepe/tests/NAME.toml; flags on the command line win over it</code></pre></figure>
+          Run a test saved on the setup screen (ctrl-s): ./.pepe/tests/NAME.toml; flags on the command line win over it
+
+      --keep [&lt;NAME&gt;]
+          Keep the settings as they stand as a saved test, ./.pepe/tests/NAME.toml, then run. With --load and no NAME, the loaded test is updated in place; with another NAME, it&#x27;s copied</code></pre></figure>
 <h2 id="pepe-self-update"><a href="#pepe-self-update">pepe self-update</a></h2>
 <figure class="code"><div class="bar"><span>text</span><button type="button" class="copy" aria-label="Copy">copy</button></div><pre><code>Update pepe to the latest release, or say what&#x27;s new in it
 
@@ -1446,7 +1476,10 @@ Options:
           Write the settings as they stand to this file, as a pepe.toml, and exit
 
       --load &lt;NAME&gt;
-          Run a test saved on the setup screen (ctrl-s): ./.pepe/tests/NAME.toml; flags on the command line win over it</code></pre></figure>
+          Run a test saved on the setup screen (ctrl-s): ./.pepe/tests/NAME.toml; flags on the command line win over it
+
+      --keep [&lt;NAME&gt;]
+          Keep the settings as they stand as a saved test, ./.pepe/tests/NAME.toml, then run. With --load and no NAME, the loaded test is updated in place; with another NAME, it&#x27;s copied</code></pre></figure>
 <h2 id="pepe-completions"><a href="#pepe-completions">pepe completions</a></h2>
 <figure class="code"><div class="bar"><span>text</span><button type="button" class="copy" aria-label="Copy">copy</button></div><pre><code>Tab completion for your shell: print the script, or --install it
 
@@ -1561,7 +1594,10 @@ Options:
           Write the settings as they stand to this file, as a pepe.toml, and exit
 
       --load &lt;NAME&gt;
-          Run a test saved on the setup screen (ctrl-s): ./.pepe/tests/NAME.toml; flags on the command line win over it</code></pre></figure>
+          Run a test saved on the setup screen (ctrl-s): ./.pepe/tests/NAME.toml; flags on the command line win over it
+
+      --keep [&lt;NAME&gt;]
+          Keep the settings as they stand as a saved test, ./.pepe/tests/NAME.toml, then run. With --load and no NAME, the loaded test is updated in place; with another NAME, it&#x27;s copied</code></pre></figure>
     </article>
     <nav class="turn"><a class="prev" href="agents.html"><small>Previous</small>Agents and scripts</a><a class="next" href="benchmarks.html"><small>Next</small>Benchmarks</a></nav>
     <p class="edit"><a href="https://github.com/omarmhaimdat/pepe/edit/master/docs/reference.md">Edit this page on GitHub</a></p>
