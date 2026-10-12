@@ -6,6 +6,39 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+## [0.39.1](https://github.com/omarmhaimdat/pepe/compare/v0.39.0...v0.39.1) - 2026-10-12
+
+### Fixed
+
+- *(dashboard)* the filter bar over the requests is clickable, part by part ([#174](https://github.com/omarmhaimdat/pepe/pull/174))
+
+  ## What
+
+  The requests tab's filter bar, the line with STATUS, LATENCY and SEARCH
+  over the table, takes the mouse like the rest of the dashboard:
+
+  - a group's name or its key letter (`f`, `l`, `/`) presses that key, so
+  STATUS cycles the status filter and SEARCH opens the search for typing;
+  - a status or a latency choice sets that filter outright, rather than
+  cycling to it;
+  - the ENDPOINT chip, when an endpoint filter is on, lets it go.
+
+  ## Why
+
+  v0.38.0 made every screen clickable through regions registered as they
+  are drawn. The filter bar drew its hints and choices as plain text and
+  registered nothing, so the three controls a user reaches for most on
+  that tab were the ones that took no click.
+
+  ## Checked
+
+  - `cargo test`, `cargo clippy --all-targets -- -D warnings`, `cargo fmt
+  --check`
+  - `python3 site/build-docs.py`
+  - A test renders the requests tab, clicks each part and checks the
+  filter it sets, then checks the regions are gone on another tab.
+
+
 ## [0.39.0](https://github.com/omarmhaimdat/pepe/compare/v0.38.0...v0.39.0) - 2026-10-12
 
 ### Added
