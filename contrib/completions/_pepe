@@ -42,6 +42,7 @@ _pepe() {
 '--metrics=[Serve the live numbers for Prometheus at http\://ADDR/metrics while the run goes, e.g. \:9100 or 127.0.0.1\:9100, so a soak run or a long ping shows up in Grafana next to the server'\''s own]:ADDR:_default' \
 '--config=[Read settings from this file instead of ./pepe.toml; flags on the command line win over it]:FILE:_files' \
 '--write-config=[Write the settings as they stand to this file, as a pepe.toml, and exit]:FILE:_files' \
+'(--config)--load=[Run a test saved on the setup screen (ctrl-s)\: ./.pepe/tests/NAME.toml; flags on the command line win over it]:NAME:_default' \
 '-c+[Number of concurrent requests at a time]:CONCURRENCY:_default' \
 '--concurrency=[Number of concurrent requests at a time]:CONCURRENCY:_default' \
 '-u+[User-Agent string, default is pepe/{version}]:USER_AGENT:_default' \
@@ -113,6 +114,7 @@ fail\:"A failure"))' \
 '--metrics=[Serve the live numbers for Prometheus at http\://ADDR/metrics while the run goes, e.g. \:9100 or 127.0.0.1\:9100, so a soak run or a long ping shows up in Grafana next to the server'\''s own]:ADDR:_default' \
 '--config=[Read settings from this file instead of ./pepe.toml; flags on the command line win over it]:FILE:_files' \
 '--write-config=[Write the settings as they stand to this file, as a pepe.toml, and exit]:FILE:_files' \
+'(--config)--load=[Run a test saved on the setup screen (ctrl-s)\: ./.pepe/tests/NAME.toml; flags on the command line win over it]:NAME:_default' \
 '-c+[Number of concurrent requests at a time]:CONCURRENCY:_default' \
 '--concurrency=[Number of concurrent requests at a time]:CONCURRENCY:_default' \
 '-u+[User-Agent string, default is pepe/{version}]:USER_AGENT:_default' \
@@ -180,6 +182,7 @@ _arguments "${_arguments_options[@]}" : \
 '--metrics=[Serve the live numbers for Prometheus at http\://ADDR/metrics while the run goes, e.g. \:9100 or 127.0.0.1\:9100, so a soak run or a long ping shows up in Grafana next to the server'\''s own]:ADDR:_default' \
 '--config=[Read settings from this file instead of ./pepe.toml; flags on the command line win over it]:FILE:_files' \
 '--write-config=[Write the settings as they stand to this file, as a pepe.toml, and exit]:FILE:_files' \
+'(--config)--load=[Run a test saved on the setup screen (ctrl-s)\: ./.pepe/tests/NAME.toml; flags on the command line win over it]:NAME:_default' \
 '-c+[Number of concurrent requests at a time]:CONCURRENCY:_default' \
 '--concurrency=[Number of concurrent requests at a time]:CONCURRENCY:_default' \
 '-u+[User-Agent string, default is pepe/{version}]:USER_AGENT:_default' \
@@ -228,6 +231,7 @@ _arguments "${_arguments_options[@]}" : \
 '--metrics=[Serve the live numbers for Prometheus at http\://ADDR/metrics while the run goes, e.g. \:9100 or 127.0.0.1\:9100, so a soak run or a long ping shows up in Grafana next to the server'\''s own]:ADDR:_default' \
 '--config=[Read settings from this file instead of ./pepe.toml; flags on the command line win over it]:FILE:_files' \
 '--write-config=[Write the settings as they stand to this file, as a pepe.toml, and exit]:FILE:_files' \
+'(--config)--load=[Run a test saved on the setup screen (ctrl-s)\: ./.pepe/tests/NAME.toml; flags on the command line win over it]:NAME:_default' \
 '-c+[Number of concurrent requests at a time]:CONCURRENCY:_default' \
 '--concurrency=[Number of concurrent requests at a time]:CONCURRENCY:_default' \
 '-u+[User-Agent string, default is pepe/{version}]:USER_AGENT:_default' \
@@ -283,6 +287,7 @@ _arguments "${_arguments_options[@]}" : \
 '--metrics=[Serve the live numbers for Prometheus at http\://ADDR/metrics while the run goes, e.g. \:9100 or 127.0.0.1\:9100, so a soak run or a long ping shows up in Grafana next to the server'\''s own]:ADDR:_default' \
 '--config=[Read settings from this file instead of ./pepe.toml; flags on the command line win over it]:FILE:_files' \
 '--write-config=[Write the settings as they stand to this file, as a pepe.toml, and exit]:FILE:_files' \
+'(--config)--load=[Run a test saved on the setup screen (ctrl-s)\: ./.pepe/tests/NAME.toml; flags on the command line win over it]:NAME:_default' \
 '-c+[Number of concurrent requests at a time]:CONCURRENCY:_default' \
 '--concurrency=[Number of concurrent requests at a time]:CONCURRENCY:_default' \
 '-u+[User-Agent string, default is pepe/{version}]:USER_AGENT:_default' \
@@ -332,6 +337,7 @@ _arguments "${_arguments_options[@]}" : \
 '--metrics=[Serve the live numbers for Prometheus at http\://ADDR/metrics while the run goes, e.g. \:9100 or 127.0.0.1\:9100, so a soak run or a long ping shows up in Grafana next to the server'\''s own]:ADDR:_default' \
 '--config=[Read settings from this file instead of ./pepe.toml; flags on the command line win over it]:FILE:_files' \
 '--write-config=[Write the settings as they stand to this file, as a pepe.toml, and exit]:FILE:_files' \
+'(--config)--load=[Run a test saved on the setup screen (ctrl-s)\: ./.pepe/tests/NAME.toml; flags on the command line win over it]:NAME:_default' \
 '-c+[Number of concurrent requests at a time]:CONCURRENCY:_default' \
 '--concurrency=[Number of concurrent requests at a time]:CONCURRENCY:_default' \
 '-u+[User-Agent string, default is pepe/{version}]:USER_AGENT:_default' \
@@ -381,6 +387,7 @@ _arguments "${_arguments_options[@]}" : \
 '--metrics=[Serve the live numbers for Prometheus at http\://ADDR/metrics while the run goes, e.g. \:9100 or 127.0.0.1\:9100, so a soak run or a long ping shows up in Grafana next to the server'\''s own]:ADDR:_default' \
 '--config=[Read settings from this file instead of ./pepe.toml; flags on the command line win over it]:FILE:_files' \
 '--write-config=[Write the settings as they stand to this file, as a pepe.toml, and exit]:FILE:_files' \
+'(--config)--load=[Run a test saved on the setup screen (ctrl-s)\: ./.pepe/tests/NAME.toml; flags on the command line win over it]:NAME:_default' \
 '-c+[Number of concurrent requests at a time]:CONCURRENCY:_default' \
 '--concurrency=[Number of concurrent requests at a time]:CONCURRENCY:_default' \
 '-u+[User-Agent string, default is pepe/{version}]:USER_AGENT:_default' \
@@ -433,6 +440,7 @@ _arguments "${_arguments_options[@]}" : \
 '--metrics=[Serve the live numbers for Prometheus at http\://ADDR/metrics while the run goes, e.g. \:9100 or 127.0.0.1\:9100, so a soak run or a long ping shows up in Grafana next to the server'\''s own]:ADDR:_default' \
 '--config=[Read settings from this file instead of ./pepe.toml; flags on the command line win over it]:FILE:_files' \
 '--write-config=[Write the settings as they stand to this file, as a pepe.toml, and exit]:FILE:_files' \
+'(--config)--load=[Run a test saved on the setup screen (ctrl-s)\: ./.pepe/tests/NAME.toml; flags on the command line win over it]:NAME:_default' \
 '-c+[Number of concurrent requests at a time]:CONCURRENCY:_default' \
 '--concurrency=[Number of concurrent requests at a time]:CONCURRENCY:_default' \
 '-u+[User-Agent string, default is pepe/{version}]:USER_AGENT:_default' \
@@ -482,6 +490,7 @@ _arguments "${_arguments_options[@]}" : \
 '--metrics=[Serve the live numbers for Prometheus at http\://ADDR/metrics while the run goes, e.g. \:9100 or 127.0.0.1\:9100, so a soak run or a long ping shows up in Grafana next to the server'\''s own]:ADDR:_default' \
 '--config=[Read settings from this file instead of ./pepe.toml; flags on the command line win over it]:FILE:_files' \
 '--write-config=[Write the settings as they stand to this file, as a pepe.toml, and exit]:FILE:_files' \
+'(--config)--load=[Run a test saved on the setup screen (ctrl-s)\: ./.pepe/tests/NAME.toml; flags on the command line win over it]:NAME:_default' \
 '-c+[Number of concurrent requests at a time]:CONCURRENCY:_default' \
 '--concurrency=[Number of concurrent requests at a time]:CONCURRENCY:_default' \
 '-u+[User-Agent string, default is pepe/{version}]:USER_AGENT:_default' \
@@ -529,6 +538,7 @@ _arguments "${_arguments_options[@]}" : \
 '--metrics=[Serve the live numbers for Prometheus at http\://ADDR/metrics while the run goes, e.g. \:9100 or 127.0.0.1\:9100, so a soak run or a long ping shows up in Grafana next to the server'\''s own]:ADDR:_default' \
 '--config=[Read settings from this file instead of ./pepe.toml; flags on the command line win over it]:FILE:_files' \
 '--write-config=[Write the settings as they stand to this file, as a pepe.toml, and exit]:FILE:_files' \
+'(--config)--load=[Run a test saved on the setup screen (ctrl-s)\: ./.pepe/tests/NAME.toml; flags on the command line win over it]:NAME:_default' \
 '-c+[Number of concurrent requests at a time]:CONCURRENCY:_default' \
 '--concurrency=[Number of concurrent requests at a time]:CONCURRENCY:_default' \
 '-u+[User-Agent string, default is pepe/{version}]:USER_AGENT:_default' \
@@ -575,6 +585,7 @@ _arguments "${_arguments_options[@]}" : \
 '--metrics=[Serve the live numbers for Prometheus at http\://ADDR/metrics while the run goes, e.g. \:9100 or 127.0.0.1\:9100, so a soak run or a long ping shows up in Grafana next to the server'\''s own]:ADDR:_default' \
 '--config=[Read settings from this file instead of ./pepe.toml; flags on the command line win over it]:FILE:_files' \
 '--write-config=[Write the settings as they stand to this file, as a pepe.toml, and exit]:FILE:_files' \
+'(--config)--load=[Run a test saved on the setup screen (ctrl-s)\: ./.pepe/tests/NAME.toml; flags on the command line win over it]:NAME:_default' \
 '-c+[Number of concurrent requests at a time]:CONCURRENCY:_default' \
 '--concurrency=[Number of concurrent requests at a time]:CONCURRENCY:_default' \
 '-u+[User-Agent string, default is pepe/{version}]:USER_AGENT:_default' \
@@ -623,6 +634,7 @@ _arguments "${_arguments_options[@]}" : \
 '--metrics=[Serve the live numbers for Prometheus at http\://ADDR/metrics while the run goes, e.g. \:9100 or 127.0.0.1\:9100, so a soak run or a long ping shows up in Grafana next to the server'\''s own]:ADDR:_default' \
 '--config=[Read settings from this file instead of ./pepe.toml; flags on the command line win over it]:FILE:_files' \
 '--write-config=[Write the settings as they stand to this file, as a pepe.toml, and exit]:FILE:_files' \
+'(--config)--load=[Run a test saved on the setup screen (ctrl-s)\: ./.pepe/tests/NAME.toml; flags on the command line win over it]:NAME:_default' \
 '-c+[Number of concurrent requests at a time]:CONCURRENCY:_default' \
 '--concurrency=[Number of concurrent requests at a time]:CONCURRENCY:_default' \
 '-u+[User-Agent string, default is pepe/{version}]:USER_AGENT:_default' \

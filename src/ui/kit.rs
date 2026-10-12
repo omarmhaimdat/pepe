@@ -1,9 +1,10 @@
 //! What the setup, plan and ramp screens are drawn with: cards, key chips,
 //! the bar on the selected line
 
+use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use ratatui::{
     layout::{Constraint, Flex, Layout, Rect},
-    style::{Color, Style, Stylize},
+    style::{Color, Modifier, Style, Stylize},
     text::{Line, Span},
     widgets::{Block, BorderType, Clear, Paragraph},
     Frame,
@@ -220,4 +221,132 @@ pub(super) fn wrap(text: &str, width: usize, max_lines: usize) -> Vec<String> {
         }
     }
     lines
+}
+
+/// One line of text being edited
+#[derive(Debug, Default, Clone, PartialEq)]
+pub(super) struct TextInput {
+    chars: Vec<char>,
+    cursor: usize,
+}
+
+impl TextInput {
+    pub(super) fn new(text: &str) -> Self {
+        let chars: Vec<char> = text.chars().collect();
+        TextInput {
+            cursor: chars.len(),
+            chars,
+        }
+    }
+
+    pub(super) fn text(&self) -> String {
+        self.chars.iter().collect()
+    }
+
+    pub(super) fn insert(&mut self, text: &str) {
+        for c in text.chars().filter(|c| !c.is_control()) {
+            self.chars.insert(self.cursor, c);
+            self.cursor += 1;
+        }
+    }
+
+    /// Edit or move; false when the key isn't one for the text
+    pub(super) fn key(&mut self, key: KeyEvent) -> bool {
+        // AltGr arrives as ctrl+alt on Windows, and types a character
+        let ctrl = key.modifiers.contains(KeyModifiers::CONTROL)
+            && !key.modifiers.contains(KeyModifiers::ALT);
+        match key.code {
+            KeyCode::Char('u') if ctrl => {
+                self.chars.drain(..self.cursor);
+                self.cursor = 0;
+            }
+            KeyCode::Char('w') if ctrl => {
+                let mut start = self.cursor;
+                while start > 0 && self.chars[start - 1] == ' ' {
+                    start -= 1;
+                }
+                while start > 0 && self.chars[start - 1] != ' ' {
+                    start -= 1;
+                }
+                self.chars.drain(start..self.cursor);
+                self.cursor = start;
+            }
+            KeyCode::Char('a') if ctrl => self.cursor = 0,
+            KeyCode::Char('e') if ctrl => self.cursor = self.chars.len(),
+            KeyCode::Char(c) if !ctrl => {
+                self.chars.insert(self.cursor, c);
+                self.cursor += 1;
+            }
+            KeyCode::Backspace if self.cursor > 0 => {
+                self.cursor -= 1;
+                self.chars.remove(self.cursor);
+            }
+            KeyCode::Delete if self.cursor < self.chars.len() => {
+                self.chars.remove(self.cursor);
+            }
+            KeyCode::Backspace | KeyCode::Delete => {}
+            KeyCode::Left => self.cursor = self.cursor.saturating_sub(1),
+            KeyCode::Right => self.cursor = (self.cursor + 1).min(self.chars.len()),
+            KeyCode::Home => self.cursor = 0,
+            KeyCode::End => self.cursor = self.chars.len(),
+            _ => return false,
+        }
+        true
+    }
+
+    /// The text on lines of `width`, the `max_lines` of them around the
+    /// cursor
+    pub(super) fn wrapped(&self, width: usize, max_lines: usize) -> Vec<Vec<Span<'static>>> {
+        let width = width.max(2);
+        // The cursor can sit one past the end
+        let count = self.chars.len() / width + 1;
+        let first = (self.cursor / width + 1).saturating_sub(max_lines.max(1));
+        (first..count.min(first + max_lines.max(1)))
+            .map(|line| {
+                let start = line * width;
+                let end = self.chars.len().min(start + width);
+                let text = |range: std::ops::Range<usize>| -> String {
+                    self.chars[range].iter().collect()
+                };
+                if (start..start + width).contains(&self.cursor) {
+                    let under = if self.cursor < end {
+                        text(self.cursor..self.cursor + 1)
+                    } else {
+                        " ".to_string()
+                    };
+                    vec![
+                        Span::raw(text(start..self.cursor)),
+                        Span::styled(under, Style::new().add_modifier(Modifier::REVERSED)),
+                        Span::raw(text((self.cursor + 1).min(end)..end)),
+                    ]
+                } else {
+                    vec![Span::raw(text(start..end))]
+                }
+            })
+            .collect()
+    }
+
+    /// The part that fits `width` with the cursor in view, as spans
+    pub(super) fn spans(&self, width: usize, hidden: bool) -> Vec<Span<'static>> {
+        let width = width.max(2);
+        let start = (self.cursor + 1).saturating_sub(width);
+        let end = self.chars.len().min(start + width);
+        let show = |range: std::ops::Range<usize>| -> String {
+            if hidden {
+                "•".repeat(range.len())
+            } else {
+                self.chars[range].iter().collect()
+            }
+        };
+        let under = if self.cursor < end {
+            show(self.cursor..self.cursor + 1)
+        } else {
+            " ".to_string()
+        };
+        vec![
+            Span::raw(show(start..self.cursor)),
+            Span::styled(under, Style::new().add_modifier(Modifier::REVERSED)),
+            Span::raw(show((self.cursor + 1).min(end)..end)),
+        ]
+    }
 }

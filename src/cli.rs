@@ -163,6 +163,11 @@ pub struct Cli {
     #[arg(long, global = true, value_name = "FILE")]
     pub write_config: Option<std::path::PathBuf>,
 
+    /// Run a test saved on the setup screen (ctrl-s): ./.pepe/tests/NAME.toml;
+    /// flags on the command line win over it
+    #[arg(long, global = true, value_name = "NAME", conflicts_with = "config")]
+    pub load: Option<String>,
+
     /// The config file that was read, if one was
     #[arg(skip)]
     pub config_loaded: Option<std::path::PathBuf>,

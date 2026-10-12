@@ -167,7 +167,7 @@ pepe -i -c 50 -z 30s https://example.com
 - `↑` `↓` move between fields, `←` `→` change a choice, `enter` starts.
 - Paste a curl command anywhere and the form is filled in from it.
 - `ctrl-t` sends the request once and shows the response, to check it before the run.
-- `ctrl-s` saves the form as `pepe.toml`.
+- `ctrl-s` saves the form under a name, as `.pepe/tests/NAME.toml` next to the code; `pepe --load NAME` runs it again. The name it offers comes from the URL, and a taken name asks before it's replaced.
 - The command card always shows the flags that reproduce the form. It's printed to your shell when you quit, and `e` in the dashboard brings you back to the form.
 - `F1` (or `?` outside a text field) lists the keys; `esc` quits.
 
@@ -214,7 +214,11 @@ set = ["id=1,2,3"]
 include-writes = false
 ```
 
-Keys are the long flags' names; the on/off ones are said the positive way. A key pepe doesn't know is an error that names it. `--config FILE` reads another file; `--write-config FILE` writes the settings as given on the command line and exits, and `ctrl-s` on the setup screen writes the form the same way, so a test worked out on screen can be kept and run again with `pepe`.
+Keys are the long flags' names; the on/off ones are said the positive way. A key pepe doesn't know is an error that names it. `--config FILE` reads another file; `--write-config FILE` writes the settings as given on the command line and exits.
+
+### Saved tests
+
+A project keeps more than one. `ctrl-s` on the setup screen asks for a name and writes the form as `.pepe/tests/NAME.toml`, the same format as `pepe.toml`, and `pepe --load NAME` runs it again, flags on the command line winning as usual. The files are meant to be committed with the code, so a team shares its tests and CI runs them by name.
 
 ## Environment
 

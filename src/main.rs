@@ -33,6 +33,7 @@ mod replay;
 mod request;
 mod response;
 mod schema;
+mod store;
 mod terminal;
 mod timeline;
 mod trace;
@@ -73,7 +74,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Parsed by hand so the config file can tell typed flags from defaults
     let matches = Cli::command().get_matches();
     let mut args = Cli::from_arg_matches(&matches).unwrap_or_else(|e| e.exit());
-    match config::load(args.config.as_deref()) {
+    let loaded = match &args.load {
+        Some(name) => store::Store::local().load(name).map(Some),
+        None => config::load(args.config.as_deref()),
+    };
+    match loaded {
         Ok(Some((path, file))) => {
             file.apply(&mut args, &matches);
             args.config_loaded = Some(path);

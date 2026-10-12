@@ -1,6 +1,6 @@
 # Print an optspec for argparse to handle cmd's options that are independent of any subcommand.
 function __fish_pepe_global_optspecs
-    string join \n h/help n/number= z/duration= curl m/method= H/headers= t/timeout= warmup= threads= rate= d/body= p/proxy= k/insecure disable-compression disable-keepalive disable-redirects json trace-header= snapshot= allow-host= max-requests= max-rate= max-concurrency= dry-run fail-if= metrics= i/setup config= write-config= c/concurrency= u/user-agent= V/version
+    string join \n h/help n/number= z/duration= curl m/method= H/headers= t/timeout= warmup= threads= rate= d/body= p/proxy= k/insecure disable-compression disable-keepalive disable-redirects json trace-header= snapshot= allow-host= max-requests= max-rate= max-concurrency= dry-run fail-if= metrics= i/setup config= write-config= load= c/concurrency= u/user-agent= V/version
 end
 
 function __fish_pepe_needs_command
@@ -44,6 +44,7 @@ complete -c pepe -n "__fish_pepe_needs_command" -l fail-if -d 'End with exit cod
 complete -c pepe -n "__fish_pepe_needs_command" -l metrics -d 'Serve the live numbers for Prometheus at http://ADDR/metrics while the run goes, e.g. :9100 or 127.0.0.1:9100, so a soak run or a long ping shows up in Grafana next to the server\'s own' -r
 complete -c pepe -n "__fish_pepe_needs_command" -l config -d 'Read settings from this file instead of ./pepe.toml; flags on the command line win over it' -r -F
 complete -c pepe -n "__fish_pepe_needs_command" -l write-config -d 'Write the settings as they stand to this file, as a pepe.toml, and exit' -r -F
+complete -c pepe -n "__fish_pepe_needs_command" -l load -d 'Run a test saved on the setup screen (ctrl-s): ./.pepe/tests/NAME.toml; flags on the command line win over it' -r
 complete -c pepe -n "__fish_pepe_needs_command" -s c -l concurrency -d 'Number of concurrent requests at a time' -r
 complete -c pepe -n "__fish_pepe_needs_command" -s u -l user-agent -d 'User-Agent string, default is pepe/{version}' -r
 complete -c pepe -n "__fish_pepe_needs_command" -s h -l help -d 'Print help'
@@ -101,6 +102,7 @@ complete -c pepe -n "__fish_pepe_using_subcommand ping" -l fail-if -d 'End with 
 complete -c pepe -n "__fish_pepe_using_subcommand ping" -l metrics -d 'Serve the live numbers for Prometheus at http://ADDR/metrics while the run goes, e.g. :9100 or 127.0.0.1:9100, so a soak run or a long ping shows up in Grafana next to the server\'s own' -r
 complete -c pepe -n "__fish_pepe_using_subcommand ping" -l config -d 'Read settings from this file instead of ./pepe.toml; flags on the command line win over it' -r -F
 complete -c pepe -n "__fish_pepe_using_subcommand ping" -l write-config -d 'Write the settings as they stand to this file, as a pepe.toml, and exit' -r -F
+complete -c pepe -n "__fish_pepe_using_subcommand ping" -l load -d 'Run a test saved on the setup screen (ctrl-s): ./.pepe/tests/NAME.toml; flags on the command line win over it' -r
 complete -c pepe -n "__fish_pepe_using_subcommand ping" -s c -l concurrency -d 'Number of concurrent requests at a time' -r
 complete -c pepe -n "__fish_pepe_using_subcommand ping" -s u -l user-agent -d 'User-Agent string, default is pepe/{version}' -r
 complete -c pepe -n "__fish_pepe_using_subcommand ping" -s 4 -d 'Resolve names to IPv4 addresses only'
@@ -150,6 +152,7 @@ complete -c pepe -n "__fish_pepe_using_subcommand ramp" -l fail-if -d 'End with 
 complete -c pepe -n "__fish_pepe_using_subcommand ramp" -l metrics -d 'Serve the live numbers for Prometheus at http://ADDR/metrics while the run goes, e.g. :9100 or 127.0.0.1:9100, so a soak run or a long ping shows up in Grafana next to the server\'s own' -r
 complete -c pepe -n "__fish_pepe_using_subcommand ramp" -l config -d 'Read settings from this file instead of ./pepe.toml; flags on the command line win over it' -r -F
 complete -c pepe -n "__fish_pepe_using_subcommand ramp" -l write-config -d 'Write the settings as they stand to this file, as a pepe.toml, and exit' -r -F
+complete -c pepe -n "__fish_pepe_using_subcommand ramp" -l load -d 'Run a test saved on the setup screen (ctrl-s): ./.pepe/tests/NAME.toml; flags on the command line win over it' -r
 complete -c pepe -n "__fish_pepe_using_subcommand ramp" -s c -l concurrency -d 'Number of concurrent requests at a time' -r
 complete -c pepe -n "__fish_pepe_using_subcommand ramp" -s u -l user-agent -d 'User-Agent string, default is pepe/{version}' -r
 complete -c pepe -n "__fish_pepe_using_subcommand ramp" -s h -l help -d 'Print help'
@@ -181,6 +184,7 @@ complete -c pepe -n "__fish_pepe_using_subcommand compare" -l fail-if -d 'End wi
 complete -c pepe -n "__fish_pepe_using_subcommand compare" -l metrics -d 'Serve the live numbers for Prometheus at http://ADDR/metrics while the run goes, e.g. :9100 or 127.0.0.1:9100, so a soak run or a long ping shows up in Grafana next to the server\'s own' -r
 complete -c pepe -n "__fish_pepe_using_subcommand compare" -l config -d 'Read settings from this file instead of ./pepe.toml; flags on the command line win over it' -r -F
 complete -c pepe -n "__fish_pepe_using_subcommand compare" -l write-config -d 'Write the settings as they stand to this file, as a pepe.toml, and exit' -r -F
+complete -c pepe -n "__fish_pepe_using_subcommand compare" -l load -d 'Run a test saved on the setup screen (ctrl-s): ./.pepe/tests/NAME.toml; flags on the command line win over it' -r
 complete -c pepe -n "__fish_pepe_using_subcommand compare" -s c -l concurrency -d 'Number of concurrent requests at a time' -r
 complete -c pepe -n "__fish_pepe_using_subcommand compare" -s u -l user-agent -d 'User-Agent string, default is pepe/{version}' -r
 complete -c pepe -n "__fish_pepe_using_subcommand compare" -l gate -d 'Exit 1 when the verdict is Slower or Worse, for CI'
@@ -218,6 +222,7 @@ complete -c pepe -n "__fish_pepe_using_subcommand api" -l fail-if -d 'End with e
 complete -c pepe -n "__fish_pepe_using_subcommand api" -l metrics -d 'Serve the live numbers for Prometheus at http://ADDR/metrics while the run goes, e.g. :9100 or 127.0.0.1:9100, so a soak run or a long ping shows up in Grafana next to the server\'s own' -r
 complete -c pepe -n "__fish_pepe_using_subcommand api" -l config -d 'Read settings from this file instead of ./pepe.toml; flags on the command line win over it' -r -F
 complete -c pepe -n "__fish_pepe_using_subcommand api" -l write-config -d 'Write the settings as they stand to this file, as a pepe.toml, and exit' -r -F
+complete -c pepe -n "__fish_pepe_using_subcommand api" -l load -d 'Run a test saved on the setup screen (ctrl-s): ./.pepe/tests/NAME.toml; flags on the command line win over it' -r
 complete -c pepe -n "__fish_pepe_using_subcommand api" -s c -l concurrency -d 'Number of concurrent requests at a time' -r
 complete -c pepe -n "__fish_pepe_using_subcommand api" -s u -l user-agent -d 'User-Agent string, default is pepe/{version}' -r
 complete -c pepe -n "__fish_pepe_using_subcommand api" -l all -d 'Run every endpoint that has the values it needs. Without --all, --tag or --only, nothing runs until it\'s picked on the plan screen'
@@ -250,6 +255,7 @@ complete -c pepe -n "__fish_pepe_using_subcommand flow" -l fail-if -d 'End with 
 complete -c pepe -n "__fish_pepe_using_subcommand flow" -l metrics -d 'Serve the live numbers for Prometheus at http://ADDR/metrics while the run goes, e.g. :9100 or 127.0.0.1:9100, so a soak run or a long ping shows up in Grafana next to the server\'s own' -r
 complete -c pepe -n "__fish_pepe_using_subcommand flow" -l config -d 'Read settings from this file instead of ./pepe.toml; flags on the command line win over it' -r -F
 complete -c pepe -n "__fish_pepe_using_subcommand flow" -l write-config -d 'Write the settings as they stand to this file, as a pepe.toml, and exit' -r -F
+complete -c pepe -n "__fish_pepe_using_subcommand flow" -l load -d 'Run a test saved on the setup screen (ctrl-s): ./.pepe/tests/NAME.toml; flags on the command line win over it' -r
 complete -c pepe -n "__fish_pepe_using_subcommand flow" -s c -l concurrency -d 'Number of concurrent requests at a time' -r
 complete -c pepe -n "__fish_pepe_using_subcommand flow" -s u -l user-agent -d 'User-Agent string, default is pepe/{version}' -r
 complete -c pepe -n "__fish_pepe_using_subcommand flow" -s h -l help -d 'Print help'
@@ -282,6 +288,7 @@ complete -c pepe -n "__fish_pepe_using_subcommand replay" -l fail-if -d 'End wit
 complete -c pepe -n "__fish_pepe_using_subcommand replay" -l metrics -d 'Serve the live numbers for Prometheus at http://ADDR/metrics while the run goes, e.g. :9100 or 127.0.0.1:9100, so a soak run or a long ping shows up in Grafana next to the server\'s own' -r
 complete -c pepe -n "__fish_pepe_using_subcommand replay" -l config -d 'Read settings from this file instead of ./pepe.toml; flags on the command line win over it' -r -F
 complete -c pepe -n "__fish_pepe_using_subcommand replay" -l write-config -d 'Write the settings as they stand to this file, as a pepe.toml, and exit' -r -F
+complete -c pepe -n "__fish_pepe_using_subcommand replay" -l load -d 'Run a test saved on the setup screen (ctrl-s): ./.pepe/tests/NAME.toml; flags on the command line win over it' -r
 complete -c pepe -n "__fish_pepe_using_subcommand replay" -s c -l concurrency -d 'Number of concurrent requests at a time' -r
 complete -c pepe -n "__fish_pepe_using_subcommand replay" -s u -l user-agent -d 'User-Agent string, default is pepe/{version}' -r
 complete -c pepe -n "__fish_pepe_using_subcommand replay" -l include-writes -d 'Replay POST, PUT, PATCH and DELETE too; only GET, HEAD and OPTIONS without it'
@@ -317,6 +324,7 @@ complete -c pepe -n "__fish_pepe_using_subcommand logs" -l fail-if -d 'End with 
 complete -c pepe -n "__fish_pepe_using_subcommand logs" -l metrics -d 'Serve the live numbers for Prometheus at http://ADDR/metrics while the run goes, e.g. :9100 or 127.0.0.1:9100, so a soak run or a long ping shows up in Grafana next to the server\'s own' -r
 complete -c pepe -n "__fish_pepe_using_subcommand logs" -l config -d 'Read settings from this file instead of ./pepe.toml; flags on the command line win over it' -r -F
 complete -c pepe -n "__fish_pepe_using_subcommand logs" -l write-config -d 'Write the settings as they stand to this file, as a pepe.toml, and exit' -r -F
+complete -c pepe -n "__fish_pepe_using_subcommand logs" -l load -d 'Run a test saved on the setup screen (ctrl-s): ./.pepe/tests/NAME.toml; flags on the command line win over it' -r
 complete -c pepe -n "__fish_pepe_using_subcommand logs" -s c -l concurrency -d 'Number of concurrent requests at a time' -r
 complete -c pepe -n "__fish_pepe_using_subcommand logs" -s u -l user-agent -d 'User-Agent string, default is pepe/{version}' -r
 complete -c pepe -n "__fish_pepe_using_subcommand logs" -l all -d 'Read all of the log before following it, however far back it goes'
@@ -349,6 +357,7 @@ complete -c pepe -n "__fish_pepe_using_subcommand schema" -l fail-if -d 'End wit
 complete -c pepe -n "__fish_pepe_using_subcommand schema" -l metrics -d 'Serve the live numbers for Prometheus at http://ADDR/metrics while the run goes, e.g. :9100 or 127.0.0.1:9100, so a soak run or a long ping shows up in Grafana next to the server\'s own' -r
 complete -c pepe -n "__fish_pepe_using_subcommand schema" -l config -d 'Read settings from this file instead of ./pepe.toml; flags on the command line win over it' -r -F
 complete -c pepe -n "__fish_pepe_using_subcommand schema" -l write-config -d 'Write the settings as they stand to this file, as a pepe.toml, and exit' -r -F
+complete -c pepe -n "__fish_pepe_using_subcommand schema" -l load -d 'Run a test saved on the setup screen (ctrl-s): ./.pepe/tests/NAME.toml; flags on the command line win over it' -r
 complete -c pepe -n "__fish_pepe_using_subcommand schema" -s c -l concurrency -d 'Number of concurrent requests at a time' -r
 complete -c pepe -n "__fish_pepe_using_subcommand schema" -s u -l user-agent -d 'User-Agent string, default is pepe/{version}' -r
 complete -c pepe -n "__fish_pepe_using_subcommand schema" -s h -l help -d 'Print help'
@@ -379,6 +388,7 @@ complete -c pepe -n "__fish_pepe_using_subcommand mcp" -l fail-if -d 'End with e
 complete -c pepe -n "__fish_pepe_using_subcommand mcp" -l metrics -d 'Serve the live numbers for Prometheus at http://ADDR/metrics while the run goes, e.g. :9100 or 127.0.0.1:9100, so a soak run or a long ping shows up in Grafana next to the server\'s own' -r
 complete -c pepe -n "__fish_pepe_using_subcommand mcp" -l config -d 'Read settings from this file instead of ./pepe.toml; flags on the command line win over it' -r -F
 complete -c pepe -n "__fish_pepe_using_subcommand mcp" -l write-config -d 'Write the settings as they stand to this file, as a pepe.toml, and exit' -r -F
+complete -c pepe -n "__fish_pepe_using_subcommand mcp" -l load -d 'Run a test saved on the setup screen (ctrl-s): ./.pepe/tests/NAME.toml; flags on the command line win over it' -r
 complete -c pepe -n "__fish_pepe_using_subcommand mcp" -s c -l concurrency -d 'Number of concurrent requests at a time' -r
 complete -c pepe -n "__fish_pepe_using_subcommand mcp" -s u -l user-agent -d 'User-Agent string, default is pepe/{version}' -r
 complete -c pepe -n "__fish_pepe_using_subcommand mcp" -s h -l help -d 'Print help'
@@ -409,6 +419,7 @@ complete -c pepe -n "__fish_pepe_using_subcommand self-update" -l fail-if -d 'En
 complete -c pepe -n "__fish_pepe_using_subcommand self-update" -l metrics -d 'Serve the live numbers for Prometheus at http://ADDR/metrics while the run goes, e.g. :9100 or 127.0.0.1:9100, so a soak run or a long ping shows up in Grafana next to the server\'s own' -r
 complete -c pepe -n "__fish_pepe_using_subcommand self-update" -l config -d 'Read settings from this file instead of ./pepe.toml; flags on the command line win over it' -r -F
 complete -c pepe -n "__fish_pepe_using_subcommand self-update" -l write-config -d 'Write the settings as they stand to this file, as a pepe.toml, and exit' -r -F
+complete -c pepe -n "__fish_pepe_using_subcommand self-update" -l load -d 'Run a test saved on the setup screen (ctrl-s): ./.pepe/tests/NAME.toml; flags on the command line win over it' -r
 complete -c pepe -n "__fish_pepe_using_subcommand self-update" -s c -l concurrency -d 'Number of concurrent requests at a time' -r
 complete -c pepe -n "__fish_pepe_using_subcommand self-update" -s u -l user-agent -d 'User-Agent string, default is pepe/{version}' -r
 complete -c pepe -n "__fish_pepe_using_subcommand self-update" -l check -d 'Only say whether a newer release exists (exit code 1 if so) and what\'s in it; don\'t install it'
@@ -441,6 +452,7 @@ complete -c pepe -n "__fish_pepe_using_subcommand completions" -l fail-if -d 'En
 complete -c pepe -n "__fish_pepe_using_subcommand completions" -l metrics -d 'Serve the live numbers for Prometheus at http://ADDR/metrics while the run goes, e.g. :9100 or 127.0.0.1:9100, so a soak run or a long ping shows up in Grafana next to the server\'s own' -r
 complete -c pepe -n "__fish_pepe_using_subcommand completions" -l config -d 'Read settings from this file instead of ./pepe.toml; flags on the command line win over it' -r -F
 complete -c pepe -n "__fish_pepe_using_subcommand completions" -l write-config -d 'Write the settings as they stand to this file, as a pepe.toml, and exit' -r -F
+complete -c pepe -n "__fish_pepe_using_subcommand completions" -l load -d 'Run a test saved on the setup screen (ctrl-s): ./.pepe/tests/NAME.toml; flags on the command line win over it' -r
 complete -c pepe -n "__fish_pepe_using_subcommand completions" -s c -l concurrency -d 'Number of concurrent requests at a time' -r
 complete -c pepe -n "__fish_pepe_using_subcommand completions" -s u -l user-agent -d 'User-Agent string, default is pepe/{version}' -r
 complete -c pepe -n "__fish_pepe_using_subcommand completions" -l install -d 'Put the script and the man pages in place and add the line the shell\'s startup file needs, so tab completion works in the next shell'
