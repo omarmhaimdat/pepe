@@ -118,6 +118,8 @@ pepe ping · https://example.com/ · 3 pings
 | `--save-body <FILE>` | | Write the last body received |
 | `--once` | | Three quick pings, the diagnosis, and out |
 
+`--keep NAME` saves the ping as a test, `.pepe/tests/NAME.toml` with a `[ping]` section, and `pepe --load NAME` runs it again; on the screen, `ctrl-s` does the same. `--record`, or `r` on the screen, keeps the report under the test, so `pepe history NAME` and `pepe compare NAME` hold pings against each other phase by phase ([Load test: saved tests](load-test.md#saved-tests)).
+
 `-n` and `-z` end the run; without them it runs until `q`. `-t` is the timeout, `-H`, `-m`, `-d`, `-u`, `-p`, `-k`, `--disable-compression` and `--disable-redirects` shape the request, and `--metrics` serves the live numbers ([Output](output.md#prometheus-metrics)).
 
 ## Without a screen

@@ -537,6 +537,7 @@ fn mode_of(cli: &Cli) -> &'static str {
     match &cli.command {
         Some(Command::Ramp(_)) => "ramp",
         Some(Command::Api(_)) => "api",
+        Some(Command::Ping(_)) => "ping",
         _ => "run",
     }
 }
@@ -546,6 +547,7 @@ fn target_of(cli: &Cli) -> String {
     match &cli.command {
         Some(Command::Ramp(ramp)) if cli.url.is_empty() => ramp.url.clone(),
         Some(Command::Api(api)) => api.spec.clone(),
+        Some(Command::Ping(ping)) => ping.targets.join(", "),
         _ => cli.url.clone(),
     }
 }
@@ -554,6 +556,17 @@ fn target_of(cli: &Cli) -> String {
 fn load_of(cli: &Cli) -> String {
     match &cli.command {
         Some(Command::Ramp(ramp)) => format!("{} → {} · {} a step", ramp.from, ramp.to, ramp.every),
+        Some(Command::Ping(ping)) => {
+            let count = if cli.number_from_file {
+                format!("{} pings", cli.number)
+            } else {
+                "until stopped".to_string()
+            };
+            match &ping.slo {
+                Some(slo) => format!("every {} · {count} · slo {slo}", ping.every),
+                None => format!("every {} · {count}", ping.every),
+            }
+        }
         _ => match &cli.duration {
             Some(duration) => format!("{} at a time · {duration}", cli.concurrency),
             None => format!("{} at a time · {} requests", cli.concurrency, cli.number),

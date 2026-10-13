@@ -140,7 +140,10 @@ impl RampScreen {
             self.notice = Some(("save the test first: ctrl-s".into(), now));
             return;
         };
-        let json = serde_json::to_string_pretty(&self.result_json()).unwrap_or_default();
+        let mut report = self.result_json();
+        // Saved on this screen, so the file isn't what was loaded
+        report["test"] = serde_json::Value::String(name.clone());
+        let json = serde_json::to_string_pretty(&report).unwrap_or_default();
         match self.store.record(&name, &json) {
             Ok(path) => {
                 self.recorded = true;

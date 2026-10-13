@@ -852,7 +852,10 @@ impl Dashboard {
             self.notify("save the test first: ctrl-s".into());
             return;
         };
-        let json = match self.report_json(load).to_json() {
+        let mut report = self.report_json(load);
+        // Saved on this screen, so the file isn't what was loaded
+        report.test = Some(name.clone());
+        let json = match report.to_json() {
             Ok(json) => json,
             Err(e) => return self.notify(e.to_string()),
         };

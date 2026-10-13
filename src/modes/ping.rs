@@ -54,8 +54,9 @@ pub(crate) async fn run_ping(
             ui::parse_color(c).unwrap_or_else(|| fail(format!("--color: {c:?} isn't a colour")))
         })
         .collect();
-    // Only a count that was typed ends the run: the default is forever
-    let count = if typed("number") {
+    // Only a count that was typed, or a saved test's, ends the run: the
+    // default is forever
+    let count = if typed("number") || args.number_from_file {
         Some(u64::from(args.number))
     } else if what.once {
         Some(3)
@@ -170,12 +171,13 @@ pub(crate) async fn run_ping(
         });
     }
     let mut interrupted = false;
+    let mut recorded = false;
     if screen {
         let check = update::Check::start();
         let outcome = {
             let _watchdog = CtrlCWatchdog::arm();
             let _terminal = TerminalGuard::enter()?;
-            ui::PingScreen::new(
+            let mut screen = ui::PingScreen::new(
                 shared.clone(),
                 ui::Look {
                     window: window.as_secs_f32(),
@@ -188,10 +190,13 @@ pub(crate) async fn run_ping(
                     simple: what.simple_graphics,
                     colors,
                     bell: what.bell,
+                    cli: args.clone(),
+                    settings: settings.clone(),
                 },
-            )
-            .run()
-            .await
+            );
+            let outcome = screen.run().await;
+            recorded = screen.recorded();
+            outcome
         };
         shared.stop();
         outcome?;
@@ -256,7 +261,7 @@ pub(crate) async fn run_ping(
             }
         }
         let state = shared.lock();
-        if json {
+        if json && args.rerun.is_none() {
             println!(
                 "{}",
                 serde_json::to_string_pretty(&crate::ping::json_report(
@@ -274,6 +279,27 @@ pub(crate) async fn run_ping(
         }
     }
     let state = shared.lock();
+    // `--record`: the report under the saved test, unless the screen did
+    let comparison = if args.record && !recorded {
+        let mut report = crate::ping::json_report(&state, &settings, interrupted);
+        crate::store::stamp_test(&mut report, args);
+        record_result(args, &serde_json::to_string_pretty(&report)?)?
+    } else {
+        None
+    };
+    if let (Some(comparison), true) = (&comparison, args.json) {
+        println!("{}", comparison.to_json()?);
+    } else if args.json && args.rerun.is_some() && !screen {
+        // A rerun with nothing to compare with yet: the report after all
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&crate::ping::json_report(
+                &state,
+                &settings,
+                interrupted
+            ))?
+        );
+    }
     if let Some(path) = &what.save {
         let report = serde_json::to_string_pretty(&crate::ping::json_report(
             &state,
@@ -306,5 +332,6 @@ pub(crate) async fn run_ping(
     if code != 0 {
         std::process::exit(code);
     }
+    finish_rerun(args, comparison.as_ref());
     Ok(())
 }

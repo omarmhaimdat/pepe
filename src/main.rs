@@ -74,19 +74,20 @@ pub const SNAPSHOT_EVERY: std::time::Duration = std::time::Duration::from_secs(6
 fn keep_test(args: &mut Cli, name: &str) -> Result<(), String> {
     use cli::Command;
     match &args.command {
-        None | Some(Command::Ramp(_)) | Some(Command::Api(_)) => {}
+        None | Some(Command::Ramp(_)) | Some(Command::Api(_)) | Some(Command::Ping(_)) => {}
         Some(_) => {
-            return Err("--keep keeps a load test: a run, a ramp or an API".into());
+            return Err("--keep keeps a test: a run, a ramp, an API or a ping".into());
         }
     }
     args.take_curl()?;
     let empty = match &args.command {
         Some(Command::Ramp(ramp)) => ramp.url.is_empty(),
         Some(Command::Api(api)) => api.spec.is_empty(),
+        Some(Command::Ping(ping)) => ping.targets.is_empty(),
         _ => args.url.is_empty(),
     };
     if empty {
-        return Err("--keep needs something to keep: a URL, or the setup screen's ctrl-s".into());
+        return Err("--keep needs something to keep: a URL or a ping's target, or the setup screen's ctrl-s".into());
     }
     let store = store::Store::local();
     let name = match (name.is_empty(), &args.load) {
