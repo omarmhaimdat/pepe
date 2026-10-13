@@ -6,6 +6,64 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+## [0.41.0](https://github.com/omarmhaimdat/pepe/compare/v0.40.0...v0.41.0) - 2026-10-13
+
+### Added
+
+- *(ping)* a ping is a saved test too: --keep, --load, --record, ctrl-s and r on its screen ([#179](https://github.com/omarmhaimdat/pepe/pull/179))
+
+  ## What
+
+  A ping is a saved test like the others.
+
+  - The saved-test file gains a `[ping]` section: targets, `every`,
+  `name`, `slo`, `tcp`, `port`, `cmd`, `keep-alive`, `http1`, `ipv4`,
+  `ipv6`, `all-ips`, `interface`. `pepe ping … --keep NAME` writes one;
+  `pepe --load NAME` runs it again, the file deciding the mode, and a ping
+  ends on the file's `-n` where it would otherwise run forever.
+
+    ```
+  $ pepe ping https://api.example.com/health -n 30 --every 2s --slo
+  total=500 --keep prod-health --record --json
+    saved .pepe/tests/prod-health.toml · `pepe --load prod-health` runs it
+  recorded .pepe/runs/prod-health/2026-10-12T23-29-20Z.json · pepe history
+  prod-health
+    ```
+
+  - `--record` keeps the ping's report under the test, and `pepe rerun`,
+  `pepe history NAME` and `pepe compare NAME` work on pings, phase by
+  phase, as `pepe compare` already knew how to read them.
+  - On the ping screen, `ctrl-s` saves the test (offering the first target
+  as the name) and `r` records the pings so far. The footer says where
+  they went.
+  - The library lists a ping with its targets, interval, count or "until
+  stopped", and SLO. A report's `command` renders a ping as a `pepe ping
+  …` line that parses back, several targets included.
+  - A report recorded from a screen right after the test was saved there
+  now names the test explicitly, since the settings were not loaded from
+  the file. The dashboard and the ramp had the same gap.
+
+  The ping and load-test pages document it.
+
+  ## Why
+
+  A ping is the test most worth keeping over time: "prod health, every two
+  seconds, total under 500ms" is what you'd run again next month and hold
+  against today's phases. With v0.40's recorded runs in place, the pieces
+  fit the existing design without new concepts.
+
+  ## Checked
+
+  - `cargo test`, `cargo clippy --all-targets -- -D warnings`, `cargo fmt
+  --check`
+  - `UPDATE_CONTRIB=1 cargo test contrib` and `python3 site/build-docs.py`
+  - Against a local HTTP server: `pepe ping … --keep --record --json`,
+  `--load` running the ping and ending on its count, `--record` twice,
+  `pepe rerun`, `pepe history NAME`, `pepe compare NAME`, the recorded
+  report's `test` and `command`, and `--load … --dry-run` showing the ping
+  as kept.
+
+
 ## [0.40.0](https://github.com/omarmhaimdat/pepe/compare/v0.39.1...v0.40.0) - 2026-10-12
 
 ### Added
