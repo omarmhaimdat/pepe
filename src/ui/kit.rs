@@ -78,7 +78,7 @@ fn chip_width(key: &str, action: &str) -> usize {
 
 /// The chips that fit `width`: the screen's own keys in order while they
 /// fit, and always the last two — `?` keys and the way out — at the end
-fn fitting(
+pub(super) fn fitting(
     pairs: &[(&'static str, &'static str)],
     width: u16,
 ) -> Vec<(&'static str, &'static str)> {
@@ -98,18 +98,49 @@ fn fitting(
     shown
 }
 
+/// A footer narrower than this keeps its whole width for the screen's keys
+const ROOM_FOR_SETTINGS: u16 = 56;
+
 /// The footer drawn at `area`: the key chips that fit, each clickable as
-/// its key. Every screen's footer goes through here.
+/// its key, and at the right-hand end the key that opens the settings.
+/// Every screen's footer goes through here.
 pub(super) fn footer(f: &mut Frame, area: Rect, pairs: &[(&'static str, &'static str)]) {
-    let shown = fitting(pairs, area.width);
-    let mut x = area.x;
+    // ` F2 ` and ` settings`, with a space between it and the keys
+    let (key, action) = ("F2", "settings");
+    let settings = (key.len() + action.len() + 3) as u16;
+    let keys = if area.width >= ROOM_FOR_SETTINGS {
+        let at = Rect {
+            x: area.right() - settings,
+            width: settings,
+            ..area
+        };
+        hit(at, Hit::Key(KeyEvent::from(KeyCode::F(2))));
+        f.render_widget(
+            Paragraph::new(Line::from(vec![
+                Span::styled(
+                    format!(" {key} "),
+                    Style::new().bg(SELECTED).fg(ACCENT).bold(),
+                ),
+                label(format!(" {action}")),
+            ])),
+            at,
+        );
+        Rect {
+            width: area.width - settings - 1,
+            ..area
+        }
+    } else {
+        area
+    };
+    let shown = fitting(pairs, keys.width);
+    let mut x = keys.x;
     for (key, action) in &shown {
         let width = chip_width(key, action) as u16;
         if let Some(pressed) = key_for_chip(key) {
             hit(
                 Rect {
                     x,
-                    y: area.y,
+                    y: keys.y,
                     width,
                     height: 1,
                 },
@@ -118,7 +149,7 @@ pub(super) fn footer(f: &mut Frame, area: Rect, pairs: &[(&'static str, &'static
         }
         x = x.saturating_add(width);
     }
-    f.render_widget(Paragraph::new(chips(&shown)), area);
+    f.render_widget(Paragraph::new(chips(&shown)), keys);
 }
 
 /// The key a chip stands for, when it stands for one: "enter", "esc",
@@ -302,6 +333,10 @@ pub(super) fn tabs(titles: &[String], selected: usize) -> Line<'static> {
 /// The `?` overlay: every key on this screen with what it does, then notes
 /// on anything that needs explaining. `?` or esc closes it, on every screen.
 pub(super) fn help(f: &mut Frame, area: Rect, rows: &[(&str, &str)], notes: &[String]) {
+    // The settings page opens from every screen: its key goes above the
+    // last two, which close the help and leave
+    let mut rows = rows.to_vec();
+    rows.insert(rows.len().saturating_sub(2), super::settings::HELP);
     let mut lines: Vec<Line> = rows
         .iter()
         .map(|(key, action)| {
@@ -681,6 +716,33 @@ mod tests {
     use super::*;
     use clap::Parser;
     use ratatui::{backend::TestBackend, Terminal};
+
+    #[test]
+    fn the_settings_key_has_the_right_hand_end_of_a_footer_with_room() {
+        let keys = [("r", "restart"), ("?", "keys"), ("q", "quit")];
+        let draw = |width: u16| {
+            hits_clear();
+            let mut terminal = Terminal::new(TestBackend::new(width, 1)).unwrap();
+            terminal.draw(|f| footer(f, f.area(), &keys)).unwrap();
+            let buffer = terminal.backend().buffer().clone();
+            (0..width)
+                .map(|x| buffer[(x, 0)].symbol().to_string())
+                .collect::<String>()
+        };
+        let line = draw(80);
+        assert!(line.ends_with(" F2  settings"), "{line:?}");
+        assert!(line.starts_with(" r  restart"), "{line:?}");
+        // A click on it is the key, as on any chip
+        assert_eq!(hit_at(79, 0), Some(Hit::Key(KeyEvent::from(KeyCode::F(2)))));
+        assert_eq!(
+            hit_at(0, 0),
+            Some(Hit::Key(KeyEvent::from(KeyCode::Char('r'))))
+        );
+        // Too narrow, the line is the screen's own keys
+        let line = draw(40);
+        assert!(!line.contains("F2") && line.contains("quit"), "{line:?}");
+        assert_eq!(hit_at(39, 0), None);
+    }
 
     #[test]
     fn the_prompt_saves_asks_before_replacing_and_refuses_bad_names() {

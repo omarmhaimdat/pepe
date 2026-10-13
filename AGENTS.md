@@ -38,6 +38,10 @@ reason on stderr.
 | `--max-concurrency 64` | `-c` and a ramp's top step must be under it. |
 | `--dry-run` | Says what would be sent, to where and how much (secrets in headers masked), and sends nothing; `--json` gives it as JSON with `"sent": 0`. Use it before the real call when the URL came from input. |
 
+`~/.config/pepe/settings.toml` (the settings page, F2 on a screen) holds
+the same keys under `[defaults]` for every run on the machine, under any
+`pepe.toml`; of two caps, the lower holds.
+
 ```toml
 # pepe.toml, next to the code: holds for every run in that directory
 allow-host = [".staging.example.com", "localhost"]

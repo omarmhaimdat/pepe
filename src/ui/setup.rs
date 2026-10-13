@@ -21,7 +21,7 @@ use super::kit::{
     self, about_line, caption, help, marker, panel, tabs, Hit, SaveAs, SaveKey, FAINT, SELECTED,
 };
 use super::view::{label, status_color, truncate, value, ACCENT, BAD, GOOD, LABEL, RULE, WARN};
-use super::{body, format, mascot, theme};
+use super::{body, format, mascot, settings, theme};
 use crate::cli::{ApiArgs, Command, RampArgs};
 use crate::curl;
 use crate::load::Plan;
@@ -469,6 +469,9 @@ impl Setup {
         // AltGr arrives as ctrl+alt on Windows, and types a character
         let ctrl = key.modifiers.contains(KeyModifiers::CONTROL)
             && !key.modifiers.contains(KeyModifiers::ALT);
+        if settings::key(key) {
+            return None;
+        }
         let field = self.focused();
         let editable =
             self.text(field).is_some() || matches!(field, Field::AddHeader | Field::AddUntil);
@@ -563,6 +566,9 @@ impl Setup {
     /// choice; on a mode tab switches mode; on a key chip presses the key.
     /// The wheel moves between fields.
     fn mouse(&mut self, event: MouseEvent) -> Option<Action> {
+        if settings::is_open() {
+            return None;
+        }
         if self.show_help {
             if kit::pressed(&event) {
                 self.show_help = false;
@@ -859,7 +865,9 @@ impl Setup {
                 Some(Ok(Event::Key(key))) if key.kind == KeyEventKind::Press => self.key(key),
                 Some(Ok(Event::Mouse(mouse))) => self.mouse(mouse),
                 Some(Ok(Event::Paste(text))) => {
-                    self.paste(&text);
+                    if !settings::paste(&text) {
+                        self.paste(&text);
+                    }
                     None
                 }
                 Some(Ok(_)) => None,

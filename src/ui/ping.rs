@@ -22,7 +22,7 @@ use tokio::time::MissedTickBehavior;
 use super::kit;
 use super::kit::{about_line, help, marker, wrap, FAINT, SELECTED};
 use super::view::{label, status_color, truncate, value, ACCENT, BAD, GOOD, LABEL, RULE, WARN};
-use super::{format, theme};
+use super::{format, settings, theme};
 use crate::ping::{glyph, percent, Kind, Phases, Sample, Settings, Shared, State, TargetStats};
 use crate::Cli;
 
@@ -301,6 +301,9 @@ impl PingScreen {
     /// a tab shows it; on a key chip presses the key. The wheel moves.
     /// True when it asks to leave.
     fn mouse(&mut self, event: MouseEvent, now: Instant) -> bool {
+        if settings::is_open() {
+            return false;
+        }
         if self.show_help {
             if kit::pressed(&event) {
                 self.show_help = false;
@@ -331,6 +334,9 @@ impl PingScreen {
         let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
         if key.code == KeyCode::Char('c') && ctrl {
             return true;
+        }
+        if settings::key(key) {
+            return false;
         }
         if let Some(naming) = &mut self.naming {
             match naming.key(key) {

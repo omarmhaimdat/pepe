@@ -10,6 +10,7 @@ pub(crate) mod mascot;
 mod ping;
 mod plan;
 mod ramp;
+mod settings;
 mod setup;
 pub mod theme;
 mod view;
@@ -1024,6 +1025,9 @@ impl Dashboard {
     /// enter on it; on a tab shows it; on a key chip presses the key. The
     /// wheel scrolls.
     fn handle_mouse(&mut self, event: MouseEvent, load: &LoadHandle) -> Option<Outcome> {
+        if settings::is_open() {
+            return None;
+        }
         if self.show_help {
             if kit::pressed(&event) {
                 self.show_help = false;
@@ -1086,6 +1090,9 @@ impl Dashboard {
         let running = self.finished.is_none();
         if key.code == KeyCode::Char('c') && key.modifiers.contains(KeyModifiers::CONTROL) {
             return Some(Outcome::Quit);
+        }
+        if settings::key(key) {
+            return None;
         }
         if let Some(naming) = &mut self.naming {
             match naming.key(key) {

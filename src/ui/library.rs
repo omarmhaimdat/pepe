@@ -24,7 +24,7 @@ use super::kit::{
     self, about_line, caption, help, marker, panel, Clicks, Hit, SaveAs, SaveKey, FAINT, SELECTED,
 };
 use super::view::{label, truncate, value, ACCENT, GOOD, LABEL, RULE, WARN};
-use super::{mascot, theme};
+use super::{mascot, settings, theme};
 use crate::cli::Command;
 use crate::compare::Side;
 use crate::store::{Entry, LastRun, Store};
@@ -121,6 +121,9 @@ impl LibraryScreen {
     /// A click selects the row under it, a second click on the same row
     /// opens it; a key chip is its key; the wheel moves the selection
     fn mouse(&mut self, event: MouseEvent, now: Instant) -> Option<Action> {
+        if settings::is_open() {
+            return None;
+        }
         if self.show_help {
             if kit::pressed(&event) {
                 self.show_help = false;
@@ -150,6 +153,9 @@ impl LibraryScreen {
         // AltGr arrives as ctrl+alt on Windows, and types a character
         let ctrl = key.modifiers.contains(KeyModifiers::CONTROL)
             && !key.modifiers.contains(KeyModifiers::ALT);
+        if settings::key(key) {
+            return None;
+        }
         if self.show_help {
             // Any key closes it; ctrl-c still quits
             self.show_help = false;

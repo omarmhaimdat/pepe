@@ -176,7 +176,7 @@ pepe -i -c 50 -z 30s https://example.com
 
 ## Config file
 
-A load test can live next to the code it tests. Put a `pepe.toml` in the directory and `pepe` alone runs it; flags on the command line win over the file, and the file wins over pepe's defaults.
+A load test can live next to the code it tests. Put a `pepe.toml` in the directory and `pepe` alone runs it; flags on the command line win over the file, and the file wins over this machine's [settings](install.md#settings) and pepe's defaults.
 
 ```toml
 url = "https://api.example.com/health"
@@ -245,7 +245,8 @@ pepe rerun api-health --gate               # run, record, compare with the run b
 | `PEPE_GITHUB_TOKEN` | A GitHub token for `pepe self-update`, for forks or rate-limited CI |
 | `PEPE_CACHE_DIR` | Where the update check keeps its answer (defaults to the OS cache directory) |
 | `NO_COLOR` | Set to anything to draw without colour: selections in reverse video, the heatmap in shades, the verdict uncoloured |
-| `PEPE_THEME` | `light` or `dark`, to match the terminal's background. Unset, pepe reads `COLORFGBG` where the terminal sets it, else assumes dark |
+| `PEPE_THEME` | A [theme](install.md#themes-and-colour) by name: `pepe`, `nord`, `dracula`, `gruvbox`, `tokyo-night`, `catppuccin`, `paper`, `terminal`, `light`, `none`. Unset, the theme saved in the settings, else what `COLORFGBG` and `COLORTERM` say of the terminal |
+| `PEPE_CONFIG_DIR` | Where `settings.toml` is kept (defaults to `~/.config/pepe`) ([Settings](install.md#settings)) |
 | `HTTP_PROXY`, `HTTPS_PROXY`, `ALL_PROXY` | Proxies, as curl reads them |
 
 ## What pepe measures

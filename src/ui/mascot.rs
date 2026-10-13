@@ -9,7 +9,7 @@ use ratatui::{
     text::{Line, Span},
 };
 
-use super::theme::{self, Theme};
+use super::theme;
 
 /// The small sprite is 16×16 pixels, so 16×8 cells; the box keeps 4 more
 /// columns so the speech line under him fits
@@ -649,7 +649,7 @@ fn draw(grid: &[Vec<u8>], width: usize, true_color: bool) -> Vec<Line<'static>> 
 }
 
 fn sprite(rows: &[&str], width: usize, mood: Mood, frame: u64) -> Vec<Line<'static>> {
-    let true_color = theme::current() == Theme::Pepe;
+    let true_color = theme::current().true_color();
     draw(&pixels(rows, mood, frame), width, true_color)
 }
 

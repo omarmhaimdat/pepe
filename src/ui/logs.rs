@@ -26,7 +26,7 @@ use super::view::{
     bar, inset, label, panel, section, status_color, truncate, value, ACCENT, BAD, GOOD, LABEL,
     RULE, WARN,
 };
-use super::{bigtext, format, theme};
+use super::{bigtext, format, settings, theme};
 use crate::logs::{
     self, ago, busiest, day_and_time, echo, offset_label, percent, rate, time_of_day, typical,
     versus, Clock, Grain, Now, Parser, Recent, Row, Shared, Stats,
@@ -240,6 +240,9 @@ impl LogsScreen {
     /// on a tab shows it; on a key chip presses the key. The wheel moves.
     /// True when it asks to leave.
     fn mouse(&mut self, event: MouseEvent, now: Instant) -> bool {
+        if settings::is_open() {
+            return false;
+        }
         if self.show_help {
             if kit::pressed(&event) {
                 self.show_help = false;
@@ -269,6 +272,9 @@ impl LogsScreen {
     fn key(&mut self, key: KeyEvent) -> bool {
         if key.code == KeyCode::Char('c') && key.modifiers.contains(KeyModifiers::CONTROL) {
             return true;
+        }
+        if settings::key(key) {
+            return false;
         }
         if self.searching {
             match key.code {

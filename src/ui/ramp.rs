@@ -21,7 +21,7 @@ use tokio::time::MissedTickBehavior;
 use super::kit;
 use super::kit::{about_line, caption, help, marker, panel, FAINT, SELECTED};
 use super::view::{label, status_color, truncate, value, ACCENT, BAD, GOOD, LABEL, RULE, WARN};
-use super::{format, mascot, theme, Outcome};
+use super::{format, mascot, settings, theme, Outcome};
 use crate::insights::Level;
 use crate::load::LoadHandle;
 use crate::ramp::{self, End, Ramp, RampPlan, Second, Step, Tick};
@@ -184,6 +184,9 @@ impl RampScreen {
         if key.code == KeyCode::Char('c') && ctrl {
             return Effect::Leave(Outcome::Quit);
         }
+        if settings::key(key) {
+            return Effect::None;
+        }
         if let Some(naming) = &mut self.naming {
             match naming.key(key) {
                 kit::SaveKey::Quit => return Effect::Leave(Outcome::Quit),
@@ -250,6 +253,9 @@ impl RampScreen {
     /// A click on a step shows its details; a key chip presses its key;
     /// the wheel moves between steps
     fn mouse(&mut self, event: MouseEvent, now: Instant) -> Effect {
+        if settings::is_open() {
+            return Effect::None;
+        }
         if self.show_help {
             if kit::pressed(&event) {
                 self.show_help = false;

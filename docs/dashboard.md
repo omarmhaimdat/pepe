@@ -64,13 +64,14 @@ The mouse works too: click a tab to show it, a request or an endpoint to select 
 | `x` / `c` | Show only failed requests / clear all filters |
 | `enter` | Inspect the selected request: `↑`/`↓` (or the trackpad), `u`/`d` and `g`/`G` scroll the response, `←`/`→` walk to the newer/older request, `[`/`]` jump to the nearest one kept in full, `v` switches between formatted and raw, `esc` goes back |
 | `?` | Show all keys, here and on the setup (`F1`), ramp, API and ping screens |
+| `F2` | The settings, on every screen: the theme, and the defaults a run starts from ([Install: settings](install.md#settings)) |
 | `q` / `esc` / `Ctrl-C` | Quit; the verdict is left in your shell |
 
 The ramp, plan, logs and ping screens have keys of their own, on their pages: [Ramp](ramp.md#keys), [OpenAPI](api.md#the-plan-screen), [nginx logs](logs.md#keys), [Ping](ping.md#keys). The setup screen's are on [Load testing](load-test.md#the-setup-screen).
 
 ## Size and colour
 
-The dashboard draws at any size from 60×18 up and says so below it; charts and tables take the room they get. It redraws ten times a second while live, on input only once the run is over, so it costs no CPU while idle, and it survives whatever else writes to the terminal. Colour follows the terminal: pepe's own palette where true colour is available, the terminal's 256 colours otherwise, `PEPE_THEME=light` for a light background, `NO_COLOR` for none ([Install: themes](install.md#themes-and-colour)).
+The dashboard draws at any size from 60×18 up and says so below it; charts and tables take the room they get. It redraws ten times a second while live, on input only once the run is over, so it costs no CPU while idle, and it survives whatever else writes to the terminal. Colour follows the terminal: pepe's own palette where true colour is available, the terminal's 256 colours otherwise, `NO_COLOR` for none. `F2` picks another theme, from any screen, and keeps it ([Install: themes](install.md#themes-and-colour)).
 
 ## Without a terminal
 

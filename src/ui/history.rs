@@ -18,7 +18,7 @@ use ratatui::{
 
 use super::kit::{self, about_line, caption, help, marker, panel, Hit, FAINT, SELECTED};
 use super::view::{label, truncate, value, ACCENT, BAD, GOOD, LABEL, RULE, WARN};
-use super::{format, theme};
+use super::{format, settings, theme};
 use crate::compare::{compare, Comparison, Side};
 use crate::store::{Run, Store};
 
@@ -63,6 +63,9 @@ impl HistoryScreen {
     /// True when the key asks to leave
     fn key(&mut self, key: KeyEvent) -> bool {
         let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
+        if settings::key(key) {
+            return false;
+        }
         if self.show_help {
             self.show_help = false;
             return key.code == KeyCode::Char('c') && ctrl;
@@ -83,6 +86,9 @@ impl HistoryScreen {
     }
 
     fn mouse(&mut self, event: MouseEvent) -> bool {
+        if settings::is_open() {
+            return false;
+        }
         if self.show_help {
             if kit::pressed(&event) {
                 self.show_help = false;
