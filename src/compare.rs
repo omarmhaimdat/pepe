@@ -164,6 +164,11 @@ pub struct Side {
 }
 
 impl Side {
+    /// What the run was: its target, else the file it was read from
+    pub fn command_or_file(&self) -> String {
+        self.target.clone().unwrap_or_else(|| self.file.clone())
+    }
+
     /// A run report (`pepe --json`, `--snapshot`, API, flow or replay),
     /// a ramp's, or a ping's
     pub fn read(path: &Path) -> Result<Self, String> {

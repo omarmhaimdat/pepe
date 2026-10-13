@@ -8,7 +8,7 @@ use clap::parser::{ArgMatches, ValueSource};
 use clap::Parser;
 use serde::{Deserialize, Serialize};
 
-use crate::cli::{Cli, Command, RampArgs};
+use crate::cli::{Cli, Command, PingArgs, RampArgs};
 use crate::utils::default_user_agent;
 
 /// The file read when `--config` names none
@@ -84,6 +84,44 @@ pub struct Config {
     /// Defaults for `pepe api`
     #[serde(skip_serializing_if = "Option::is_none")]
     pub api: Option<ApiConfig>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ping: Option<PingConfig>,
+}
+
+/// `[ping]`: what `pepe ping` is told, beyond the request flags it shares
+#[derive(Serialize, Deserialize, Debug, Clone, Default, PartialEq)]
+#[serde(deny_unknown_fields, rename_all = "kebab-case")]
+pub struct PingConfig {
+    /// URLs, hosts, host:port, ranges, or commands with `cmd = true`
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub targets: Option<Vec<String>>,
+    /// `--every`, e.g. "1s"
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub every: Option<String>,
+    /// `--name`, one per target
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<Vec<String>>,
+    /// `--slo`, e.g. "total=500,ttfb=200"
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub slo: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tcp: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub port: Option<u16>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cmd: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub keep_alive: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub http1: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ipv4: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ipv6: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub all_ips: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub interface: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, Default, PartialEq)]
@@ -192,7 +230,8 @@ impl Config {
             keep_alive,
             redirects,
             snapshot,
-            allow_host
+            allow_host,
+            ping
         );
         // The caps: the lower of the two holds, so a file in a directory
         // can't loosen what the machine is held to
@@ -280,6 +319,7 @@ impl Config {
         if !typed("number") && !typed("duration") {
             if let Some(n) = self.requests {
                 cli.number = n;
+                cli.number_from_file = true;
             }
             if let Some(duration) = &self.duration {
                 cli.duration = Some(duration.clone());
@@ -324,6 +364,34 @@ impl Config {
         cli.disable_keepalive |= self.keep_alive == Some(false);
         cli.disable_redirects |= self.redirects == Some(false);
 
+        if let (Some(Command::Ping(ping)), Some(file)) = (&mut cli.command, &self.ping) {
+            if let (Some(targets), true) = (&file.targets, ping.targets.is_empty()) {
+                ping.targets = targets.clone();
+            }
+            if let (Some(every), false) = (&file.every, typed("every")) {
+                ping.every = every.clone();
+            }
+            if let (Some(names), true) = (&file.name, ping.name.is_empty()) {
+                ping.name = names.clone();
+            }
+            if ping.slo.is_none() {
+                ping.slo = file.slo.clone();
+            }
+            if let (Some(port), false) = (file.port, typed("port")) {
+                ping.port = port;
+            }
+            if ping.interface.is_none() {
+                ping.interface = file.interface.clone();
+            }
+            // Flags: on from the file unless the command line left them off
+            ping.tcp |= file.tcp.unwrap_or(false);
+            ping.cmd |= file.cmd.unwrap_or(false);
+            ping.keep_alive |= file.keep_alive.unwrap_or(false);
+            ping.http1 |= file.http1.unwrap_or(false);
+            ping.ipv4 |= file.ipv4.unwrap_or(false);
+            ping.ipv6 |= file.ipv6.unwrap_or(false);
+            ping.all_ips |= file.all_ips.unwrap_or(false);
+        }
         match (&mut cli.command, &self.ramp, &self.api) {
             (Some(Command::Ramp(ramp)), Some(file), _) => {
                 if ramp.url.is_empty() {
@@ -375,6 +443,28 @@ impl Config {
         }
     }
 
+    /// `apply` for a saved test: the file decides the mode too, when the
+    /// command line named none (`pepe --load my-ramp` runs the ramp)
+    pub fn apply_test(&self, cli: &mut Cli, matches: &ArgMatches) {
+        self.pick_mode(cli);
+        self.apply(cli, matches);
+    }
+
+    /// The mode a saved test runs in, when the command line named none.
+    /// Asked of the test as saved, before the machine's defaults go under
+    /// it: a `[ramp]` in the settings doesn't make every test a ramp.
+    pub fn pick_mode(&self, cli: &mut Cli) {
+        if cli.command.is_none() {
+            if self.ramp.is_some() {
+                cli.command = Some(Command::Ramp(RampArgs::default()));
+            } else if self.api.is_some() {
+                cli.command = Some(Command::Api(crate::cli::ApiArgs::default()));
+            } else if self.ping.is_some() {
+                cli.command = Some(Command::Ping(PingArgs::usual()));
+            }
+        }
+    }
+
     /// The settings as they stand, in a form that reads back the same.
     /// Defaults are left out, so the file says only what was chosen.
     pub fn from_cli(cli: &Cli) -> Config {
@@ -384,7 +474,9 @@ impl Config {
             url: (!cli.url.is_empty()).then(|| cli.url.clone()),
             method: differs(&cli.method, &defaults.method),
             headers: (!cli.headers.is_empty()).then(|| cli.headers.clone()),
-            body: cli.body.clone(),
+            body: cli
+                .body()
+                .map(|bytes| String::from_utf8_lossy(&bytes).into_owned()),
             requests: (cli.duration.is_none() && cli.number != defaults.number)
                 .then_some(cli.number),
             duration: cli.duration.clone(),
@@ -407,6 +499,7 @@ impl Config {
             max_concurrency: cli.max_concurrency,
             ramp: None,
             api: None,
+            ping: None,
         };
         match &cli.command {
             Some(Command::Ramp(ramp)) => {
@@ -424,6 +517,29 @@ impl Config {
                     step: Some(ramp.step),
                     every: (ramp.every != usual.every).then(|| ramp.every.clone()),
                     until: (!ramp.until.is_empty()).then(|| ramp.until.clone()),
+                });
+            }
+            Some(Command::Ping(ping)) => {
+                let usual = PingArgs::usual();
+                let list = |v: &Vec<String>| (!v.is_empty()).then(|| v.clone());
+                // A ping has no load of its own, and no URL but its targets
+                config.url = None;
+                config.concurrency = None;
+                config.duration = None;
+                config.ping = Some(PingConfig {
+                    targets: list(&ping.targets),
+                    every: (ping.every != usual.every).then(|| ping.every.clone()),
+                    name: list(&ping.name),
+                    slo: ping.slo.clone(),
+                    tcp: ping.tcp.then_some(true),
+                    port: (ping.port != usual.port).then_some(ping.port),
+                    cmd: ping.cmd.then_some(true),
+                    keep_alive: ping.keep_alive.then_some(true),
+                    http1: ping.http1.then_some(true),
+                    ipv4: ping.ipv4.then_some(true),
+                    ipv6: ping.ipv6.then_some(true),
+                    all_ips: ping.all_ips.then_some(true),
+                    interface: ping.interface.clone(),
                 });
             }
             Some(Command::Api(api)) => {
@@ -447,11 +563,15 @@ impl Config {
 
     /// The file's text, with a line on how it's used
     pub fn to_toml(&self) -> String {
+        self.to_toml_with(&format!(
+            "# pepe load test · run it with `pepe` in this directory, or `pepe --config {DEFAULT_PATH}`"
+        ))
+    }
+
+    /// The file's text, under `heading`, a comment line saying how it's run
+    pub fn to_toml_with(&self, heading: &str) -> String {
         let body = toml::to_string(self).unwrap_or_default();
-        format!(
-            "# pepe load test · run it with `pepe` in this directory, or `pepe --config {DEFAULT_PATH}`\n\
-             # flags on the command line win over this file\n\n{body}"
-        )
+        format!("{heading}\n# flags on the command line win over this file\n\n{body}")
     }
 }
 
@@ -470,6 +590,61 @@ mod tests {
     fn parse_argv(argv: &[&str]) -> (Cli, ArgMatches) {
         let matches = Cli::command().get_matches_from(argv);
         (Cli::from_arg_matches(&matches).unwrap(), matches)
+    }
+
+    #[test]
+    fn a_ping_is_a_test_too() {
+        let (cli, _) = parse_argv(&[
+            "pepe",
+            "ping",
+            "--every",
+            "2s",
+            "--slo",
+            "total=500",
+            "--keep-alive",
+            "-n",
+            "30",
+            "https://a.io",
+            "https://b.io",
+        ]);
+        let config = Config::from_cli(&cli);
+        let text = config.to_toml();
+        assert!(text.contains("[ping]"), "{text}");
+        assert!(!text.contains("url ="), "{text}");
+        assert!(text.contains("requests = 30"), "{text}");
+        let read = parse(&text).unwrap();
+        let ping = read.ping.as_ref().unwrap();
+        assert_eq!(
+            ping.targets.as_deref(),
+            Some(&["https://a.io".to_string(), "https://b.io".to_string()][..])
+        );
+        assert_eq!(
+            (ping.every.as_deref(), ping.slo.as_deref(), ping.keep_alive),
+            (Some("2s"), Some("total=500"), Some(true))
+        );
+        assert_eq!(ping.port, None, "the usual port isn't written");
+        // The file decides the mode and fills the ping in
+        let (mut fresh, matches) = parse_argv(&["pepe"]);
+        read.apply_test(&mut fresh, &matches);
+        let Some(Command::Ping(args)) = &fresh.command else {
+            panic!("not a ping: {:?}", fresh.command);
+        };
+        assert_eq!(args.targets, ["https://a.io", "https://b.io"]);
+        assert_eq!(
+            (args.every.as_str(), args.port, args.keep_alive),
+            ("2s", PingArgs::usual().port, true)
+        );
+        assert_eq!((fresh.number, fresh.number_from_file), (30, true));
+        // Typed flags still win
+        let (mut typed, matches) = parse_argv(&["pepe", "ping", "--every", "5s", "https://c.io"]);
+        read.apply(&mut typed, &matches);
+        let Some(Command::Ping(args)) = &typed.command else {
+            panic!()
+        };
+        assert_eq!(
+            (args.every.as_str(), args.targets.as_slice()),
+            ("5s", &["https://c.io".to_string()][..])
+        );
     }
 
     #[test]
@@ -684,6 +859,15 @@ mod tests {
         assert_eq!(cli.duration.as_deref(), Some("30s"));
         assert!(cli.disable_keepalive && cli.insecure);
         assert_eq!(cli.max_requests, Some(10000));
+
+        // A saved test's mode is its own: a ramp in the machine's defaults
+        // doesn't turn a plain test into one
+        let test = parse("url = \"https://example.com/\"\n").unwrap();
+        let (mut cli, matches) = parse_argv(&["pepe"]);
+        test.pick_mode(&mut cli);
+        test.over(&machine).apply(&mut cli, &matches);
+        assert!(cli.command.is_none());
+        assert_eq!(cli.concurrency, 8);
     }
 
     #[test]

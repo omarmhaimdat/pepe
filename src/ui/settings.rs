@@ -15,7 +15,7 @@ use ratatui::{
     Frame,
 };
 
-use super::kit::{chips_fit, marker, FAINT, FIELD, SELECTED};
+use super::kit::{chips, fitting, marker, FAINT, FIELD, SELECTED};
 use super::theme::{self, Theme};
 use super::view::{label, truncate, ACCENT, BAD, GOOD, LABEL, WARN};
 use crate::config::RampConfig;
@@ -444,12 +444,6 @@ impl Page {
                     close: true,
                 }
             }
-            KeyCode::Char('o') if ctrl => {
-                return Did {
-                    changed: false,
-                    close: true,
-                }
-            }
             KeyCode::Up | KeyCode::Char('k') => self.move_by(-1),
             KeyCode::Down | KeyCode::Char('j') | KeyCode::Tab => self.move_by(1),
             KeyCode::BackTab => self.move_by(-1),
@@ -646,7 +640,7 @@ impl Page {
             )),
         };
         f.render_widget(Paragraph::new(note), message);
-        let chips: &[(&str, &str)] = if self.editing.is_some() {
+        let pairs: &[(&str, &str)] = if self.editing.is_some() {
             &[("enter", "keep"), ("esc", "leave as it was")]
         } else if self.item().choice() {
             &[
@@ -663,7 +657,7 @@ impl Page {
                 ("esc", "close"),
             ]
         };
-        f.render_widget(Paragraph::new(chips_fit(chips, inner.width)), keys);
+        f.render_widget(Paragraph::new(chips(&fitting(pairs, inner.width))), keys);
         popup
     }
 }
@@ -697,8 +691,8 @@ thread_local! {
 }
 
 /// Every screen hands its keys here first. True when the key was the
-/// page's: F2 (or ctrl-o) opens it, and while it's open every key but
-/// ctrl-c is its own.
+/// page's: F2 opens it, and while it's open every key but ctrl-c is its
+/// own.
 pub(super) fn key(key: KeyEvent) -> bool {
     let ctrl =
         key.modifiers.contains(KeyModifiers::CONTROL) && !key.modifiers.contains(KeyModifiers::ALT);
@@ -708,7 +702,7 @@ pub(super) fn key(key: KeyEvent) -> bool {
     PAGE.with(|page| {
         let mut page = page.borrow_mut();
         let Some(open) = page.as_mut() else {
-            let opens = key.code == KeyCode::F(2) || (ctrl && key.code == KeyCode::Char('o'));
+            let opens = key.code == KeyCode::F(2);
             if opens {
                 *page = Some(Page::open(crate::settings::get(), crate::settings::path()));
             }
@@ -738,6 +732,11 @@ pub(super) fn paste(text: &str) -> bool {
         }
         None => false,
     })
+}
+
+/// Whether the page is up: the mouse is no screen's while it is
+pub(super) fn is_open() -> bool {
+    PAGE.with(|page| page.borrow().is_some())
 }
 
 /// Draw the page over the frame, when it's open, and say where it is

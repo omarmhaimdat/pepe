@@ -30,6 +30,12 @@ pub struct JsonReport {
     /// What the dashboard would have said: the level and its findings
     #[serde(skip_serializing_if = "Option::is_none")]
     pub verdict: Option<VerdictJson>,
+    /// The saved test this run is of (`.pepe/tests/NAME.toml`), when it is one
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub test: Option<String>,
+    /// The pepe command that reproduces the run, secrets in headers masked
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub command: Option<String>,
 }
 
 #[derive(Serialize, Clone, PartialEq, Debug)]
@@ -376,6 +382,14 @@ impl JsonReport {
         self
     }
 
+    /// The run's test and the command that reproduces it, so a recorded
+    /// run can be run again from the report alone
+    pub fn with_test(mut self, cli: &crate::Cli) -> Self {
+        self.test = crate::store::test_of(cli);
+        self.command = Some(cli.command_line_masked());
+        self
+    }
+
     /// Mark the report as a snapshot of a run, still going or just over
     pub fn with_snapshot(mut self, running: bool) -> Self {
         self.snapshot = Some(Snapshot {
@@ -422,6 +436,8 @@ impl JsonReport {
             generator: None,
             timeline: Vec::new(),
             snapshot: None,
+            test: None,
+            command: None,
             summary: JsonSummary {
                 total_requests: metrics.total,
                 successful_requests: metrics.success,

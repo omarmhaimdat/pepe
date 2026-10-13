@@ -45,12 +45,16 @@ On the Requests view: `f` cycles the status filter (2xx, 3xx, 4xx, 5xx, no respo
 
 ## Keys
 
+The mouse works too: click a tab to show it, a request or an endpoint to select it (twice to open it), a status or a latency in the filter bar to filter by it, the search to type in it, or a key in the footer to press it; the wheel scrolls. Every pepe screen takes the mouse the same way.
+
 | Key | Action |
 | --- | --- |
 | `space` / `p` | Pause or resume sending; a timed run's clock stops while paused |
 | `+` / `-` | Raise or lower concurrency by about 10%, live |
 | `s` / `i` | Stop sending and keep the results on screen |
 | `r` | Restart with the same settings (and the current concurrency) |
+| `ctrl-s` | Save the run's settings as a named test in `.pepe/tests`, with the concurrency as dialed in; a run from a saved test offers its own name, so enter updates it |
+| `w` | Once the run has ended: record its report under its saved test, as `.pepe/runs/NAME/<moment>.json` |
 | `e` | Back to the setup screen (or, in API mode, the plan), to change the settings and run again |
 | `tab` / `←` `→` / `1` `2` `3` | Switch view |
 | `↑` `↓` / `j` `k`, `PgUp` `PgDn`, `home` `end` | Select a request in the log (newer / older) |
@@ -60,7 +64,7 @@ On the Requests view: `f` cycles the status filter (2xx, 3xx, 4xx, 5xx, no respo
 | `x` / `c` | Show only failed requests / clear all filters |
 | `enter` | Inspect the selected request: `↑`/`↓` (or the trackpad), `u`/`d` and `g`/`G` scroll the response, `←`/`→` walk to the newer/older request, `[`/`]` jump to the nearest one kept in full, `v` switches between formatted and raw, `esc` goes back |
 | `?` | Show all keys, here and on the setup (`F1`), ramp, API and ping screens |
-| `F2` / `ctrl-o` | The settings, on every screen: the theme, and the defaults a run starts from ([Install: settings](install.md#settings)) |
+| `F2` | The settings, on every screen: the theme, and the defaults a run starts from ([Install: settings](install.md#settings)) |
 | `q` / `esc` / `Ctrl-C` | Quit; the verdict is left in your shell |
 
 The ramp, plan, logs and ping screens have keys of their own, on their pages: [Ramp](ramp.md#keys), [OpenAPI](api.md#the-plan-screen), [nginx logs](logs.md#keys), [Ping](ping.md#keys). The setup screen's are on [Load testing](load-test.md#the-setup-screen).

@@ -4,21 +4,24 @@
 //! the single request that checks new credentials.
 
 use std::cell::Cell;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
-use crossterm::event::{Event, EventStream, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
+use crossterm::event::{
+    Event, EventStream, KeyCode, KeyEvent, KeyEventKind, KeyModifiers, MouseEvent,
+};
 use futures::StreamExt;
 use ratatui::{
     backend::CrosstermBackend,
     layout::{Alignment, Constraint, Layout, Rect},
-    style::{Color, Modifier, Style, Stylize},
+    style::{Color, Style, Stylize},
     text::{Line, Span},
     widgets::{Clear, Padding, Paragraph},
     Frame, Terminal,
 };
 
+use super::kit;
 use super::kit::{
-    about_line, caption, chips, chips_fit, help, marker, pane_title, panel, wrap, FAINT, FIELD,
+    about_line, caption, chips, help, marker, pane_title, panel, wrap, TextInput, FAINT, FIELD,
     SELECTED,
 };
 use super::view::{label, status_color, truncate, value, ACCENT, BAD, GOOD, LABEL, RULE, WARN};
@@ -41,134 +44,6 @@ const FOLD_ABOVE: usize = 40;
 pub enum PlanOutcome {
     Start,
     Quit,
-}
-
-/// One line of text being edited
-#[derive(Debug, Default, Clone, PartialEq)]
-struct TextInput {
-    chars: Vec<char>,
-    cursor: usize,
-}
-
-impl TextInput {
-    fn new(text: &str) -> Self {
-        let chars: Vec<char> = text.chars().collect();
-        TextInput {
-            cursor: chars.len(),
-            chars,
-        }
-    }
-
-    fn text(&self) -> String {
-        self.chars.iter().collect()
-    }
-
-    fn insert(&mut self, text: &str) {
-        for c in text.chars().filter(|c| !c.is_control()) {
-            self.chars.insert(self.cursor, c);
-            self.cursor += 1;
-        }
-    }
-
-    /// Edit or move; false when the key isn't one for the text
-    fn key(&mut self, key: KeyEvent) -> bool {
-        // AltGr arrives as ctrl+alt on Windows, and types a character
-        let ctrl = key.modifiers.contains(KeyModifiers::CONTROL)
-            && !key.modifiers.contains(KeyModifiers::ALT);
-        match key.code {
-            KeyCode::Char('u') if ctrl => {
-                self.chars.drain(..self.cursor);
-                self.cursor = 0;
-            }
-            KeyCode::Char('w') if ctrl => {
-                let mut start = self.cursor;
-                while start > 0 && self.chars[start - 1] == ' ' {
-                    start -= 1;
-                }
-                while start > 0 && self.chars[start - 1] != ' ' {
-                    start -= 1;
-                }
-                self.chars.drain(start..self.cursor);
-                self.cursor = start;
-            }
-            KeyCode::Char('a') if ctrl => self.cursor = 0,
-            KeyCode::Char('e') if ctrl => self.cursor = self.chars.len(),
-            KeyCode::Char(c) if !ctrl => {
-                self.chars.insert(self.cursor, c);
-                self.cursor += 1;
-            }
-            KeyCode::Backspace if self.cursor > 0 => {
-                self.cursor -= 1;
-                self.chars.remove(self.cursor);
-            }
-            KeyCode::Delete if self.cursor < self.chars.len() => {
-                self.chars.remove(self.cursor);
-            }
-            KeyCode::Backspace | KeyCode::Delete => {}
-            KeyCode::Left => self.cursor = self.cursor.saturating_sub(1),
-            KeyCode::Right => self.cursor = (self.cursor + 1).min(self.chars.len()),
-            KeyCode::Home => self.cursor = 0,
-            KeyCode::End => self.cursor = self.chars.len(),
-            _ => return false,
-        }
-        true
-    }
-
-    /// The text on lines of `width`, the `max_lines` of them around the
-    /// cursor
-    fn wrapped(&self, width: usize, max_lines: usize) -> Vec<Vec<Span<'static>>> {
-        let width = width.max(2);
-        // The cursor can sit one past the end
-        let count = self.chars.len() / width + 1;
-        let first = (self.cursor / width + 1).saturating_sub(max_lines.max(1));
-        (first..count.min(first + max_lines.max(1)))
-            .map(|line| {
-                let start = line * width;
-                let end = self.chars.len().min(start + width);
-                let text = |range: std::ops::Range<usize>| -> String {
-                    self.chars[range].iter().collect()
-                };
-                if (start..start + width).contains(&self.cursor) {
-                    let under = if self.cursor < end {
-                        text(self.cursor..self.cursor + 1)
-                    } else {
-                        " ".to_string()
-                    };
-                    vec![
-                        Span::raw(text(start..self.cursor)),
-                        Span::styled(under, Style::new().add_modifier(Modifier::REVERSED)),
-                        Span::raw(text((self.cursor + 1).min(end)..end)),
-                    ]
-                } else {
-                    vec![Span::raw(text(start..end))]
-                }
-            })
-            .collect()
-    }
-
-    /// The part that fits `width` with the cursor in view, as spans
-    fn spans(&self, width: usize, hidden: bool) -> Vec<Span<'static>> {
-        let width = width.max(2);
-        let start = (self.cursor + 1).saturating_sub(width);
-        let end = self.chars.len().min(start + width);
-        let show = |range: std::ops::Range<usize>| -> String {
-            if hidden {
-                "•".repeat(range.len())
-            } else {
-                self.chars[range].iter().collect()
-            }
-        };
-        let under = if self.cursor < end {
-            show(self.cursor..self.cursor + 1)
-        } else {
-            " ".to_string()
-        };
-        vec![
-            Span::raw(show(start..self.cursor)),
-            Span::styled(under, Style::new().add_modifier(Modifier::REVERSED)),
-            Span::raw(show((self.cursor + 1).min(end)..end)),
-        ]
-    }
 }
 
 /// What the prompt at the bottom of the screen is editing
@@ -279,6 +154,8 @@ pub struct PlanScreen<'a> {
     auth_declined: bool,
     // Set while drawing, for scrolling and paging
     list_top: Cell<usize>,
+    /// Tells a second click on an endpoint from the first
+    clicks: kit::Clicks,
     list_height: Cell<usize>,
     detail_top: Cell<usize>,
     /// The keys overlay is open
@@ -308,6 +185,7 @@ impl<'a> PlanScreen<'a> {
             auth,
             auth_declined: false,
             list_top: Cell::new(0),
+            clicks: kit::Clicks::default(),
             list_height: Cell::new(10),
             detail_top: Cell::new(0),
             show_help: false,
@@ -629,6 +507,44 @@ impl<'a> PlanScreen<'a> {
             return None;
         }
         Some(Action::Start)
+    }
+
+    /// A click on an endpoint selects it, a second click is enter on it;
+    /// a key chip presses its key; the wheel moves
+    fn mouse(&mut self, event: MouseEvent, now: Instant) -> Option<Action> {
+        if settings::is_open() {
+            return None;
+        }
+        if self.show_help {
+            if kit::pressed(&event) {
+                self.show_help = false;
+            }
+            return None;
+        }
+        match kit::click(&event)? {
+            kit::Hit::Key(key) => self.key(key),
+            // A parameter in the pane on the right: picked, and a second
+            // click edits it
+            hit @ kit::Hit::Row { list: 1, index } if self.prompt.is_none() => {
+                let endpoint = self.selected()?;
+                let rows = self.detail_rows(endpoint);
+                self.focus = Focus::Detail;
+                self.detail_cursor = index.min(rows.len().saturating_sub(1));
+                if self.clicks.second(hit, now) {
+                    return self.key(KeyEvent::from(KeyCode::Enter));
+                }
+                None
+            }
+            hit @ kit::Hit::Row { index, .. } if self.prompt.is_none() => {
+                self.focus = Focus::List;
+                self.move_to(index);
+                if self.clicks.second(hit, now) {
+                    return self.key(KeyEvent::from(KeyCode::Enter));
+                }
+                None
+            }
+            _ => None,
+        }
     }
 
     fn list_key(&mut self, key: KeyEvent) -> Option<Action> {
@@ -979,6 +895,7 @@ impl<'a> PlanScreen<'a> {
             };
             let action = match event {
                 Some(Ok(Event::Key(key))) if key.kind == KeyEventKind::Press => self.key(key),
+                Some(Ok(Event::Mouse(mouse))) => self.mouse(mouse, Instant::now()),
                 Some(Ok(Event::Paste(text))) => {
                     if !settings::paste(&text) {
                         self.paste(&text);
@@ -1025,10 +942,7 @@ impl<'a> PlanScreen<'a> {
         self.render_header(f, header, tall, cards);
         self.render_body(f, body);
         self.render_status(f, status);
-        f.render_widget(
-            Paragraph::new(chips_fit(&self.hints(), footer.width)),
-            footer,
-        );
+        kit::footer(f, footer, &self.hints());
         if self.show_help {
             help(
                 f,
@@ -1358,6 +1272,7 @@ impl<'a> PlanScreen<'a> {
             top = cursor + 1 - height;
         }
         self.list_top.set(top);
+        kit::hit_rows(body, 0, top, rows.len().saturating_sub(top));
 
         let shared = shared_prefix(endpoints);
         let lines: Vec<Line> = rows
@@ -1603,6 +1518,7 @@ impl<'a> PlanScreen<'a> {
             top = cursor + 1 - height;
         }
         self.detail_top.set(top);
+        kit::hit_rows(table, 1, top, rows.len().saturating_sub(top));
         let name_width = endpoint
             .fields
             .iter()

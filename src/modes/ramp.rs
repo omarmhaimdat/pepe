@@ -55,7 +55,18 @@ pub(crate) async fn run_ramp_json(
         rate_per_second: None,
         rate_missed: None,
     })?;
-    println!("{}", serde_json::to_string_pretty(&report)?);
+    crate::store::stamp_test(&mut report, args);
+    let json = serde_json::to_string_pretty(&report)?;
+    let comparison = if args.record {
+        record_result(args, &json)?
+    } else {
+        None
+    };
+    match &comparison {
+        Some(comparison) => println!("{}", comparison.to_json()?),
+        None => println!("{json}"),
+    }
     exit_if_failed(args, &ramp.total);
+    finish_rerun(args, comparison.as_ref());
     Ok(())
 }

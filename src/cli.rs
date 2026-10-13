@@ -163,6 +163,32 @@ pub struct Cli {
     #[arg(long, global = true, value_name = "FILE")]
     pub write_config: Option<std::path::PathBuf>,
 
+    /// Run a test saved on the setup screen (ctrl-s): ./.pepe/tests/NAME.toml;
+    /// flags on the command line win over it
+    #[arg(long, global = true, value_name = "NAME", conflicts_with = "config")]
+    pub load: Option<String>,
+
+    /// Keep the settings as they stand as a saved test, ./.pepe/tests/NAME.toml,
+    /// then run. With --load and no NAME, the loaded test is updated in place;
+    /// with another NAME, it's copied
+    #[arg(long, global = true, value_name = "NAME", num_args = 0..=1, default_missing_value = "")]
+    pub keep: Option<String>,
+
+    /// Keep the run's report under its saved test when it ends, as
+    /// ./.pepe/runs/NAME/<moment>.json; the run has to be a saved test
+    /// (--load NAME, or --keep NAME)
+    #[arg(long, global = true)]
+    pub record: bool,
+
+    /// `pepe rerun`: after recording, what moved since the run before
+    #[arg(skip)]
+    pub rerun: Option<RerunArgs>,
+
+    /// `-n` came from a saved test's file rather than the command line; a
+    /// ping, which runs forever by default, ends on it all the same
+    #[arg(skip)]
+    pub number_from_file: bool,
+
     /// The config file that was read, if one was
     #[arg(skip)]
     pub config_loaded: Option<std::path::PathBuf>,
@@ -212,6 +238,10 @@ pub enum Command {
     Ramp(RampArgs),
     /// Hold a run's JSON report against an earlier one and say what moved
     Compare(CompareArgs),
+    /// Run a saved test again, record the run, and say what moved since the run before
+    Rerun(RerunArgs),
+    /// The saved tests and their recorded runs
+    History(HistoryArgs),
     /// Load-test every endpoint of an OpenAPI spec
     Api(ApiArgs),
     /// Run a sequence of requests from a flow file, each step fed by the last
@@ -238,6 +268,20 @@ pub struct SchemaArgs {
     /// Which report: run, ramp, ping or compare
     #[arg(default_value = "run", value_name = "REPORT")]
     pub which: String,
+}
+
+impl PingArgs {
+    /// The arguments as `pepe ping` has them before any flag: clap's
+    /// defaults, which `Default` doesn't know
+    pub fn usual() -> Self {
+        match Cli::parse_from(["pepe", "ping", "x"]).command {
+            Some(Command::Ping(mut ping)) => {
+                ping.targets.clear();
+                ping
+            }
+            _ => PingArgs::default(),
+        }
+    }
 }
 
 #[derive(clap::Args, Debug, Clone, PartialEq, Default)]
@@ -378,10 +422,11 @@ pub enum Refused {
 
 #[derive(clap::Args, Debug, Clone, PartialEq)]
 pub struct CompareArgs {
-    /// The earlier report (`pepe --json`, `--snapshot`, or a ramp's)
+    /// The earlier report (`pepe --json`, `--snapshot`, or a ramp's), or
+    /// the name of a saved test, whose last two recorded runs are compared
     pub before: std::path::PathBuf,
     /// The later one, of the same test
-    pub after: std::path::PathBuf,
+    pub after: Option<std::path::PathBuf>,
 
     /// Exit 1 when the verdict is Slower or Worse, for CI
     #[arg(long)]
@@ -390,6 +435,23 @@ pub struct CompareArgs {
     /// Also write the verdict as a card, an SVG for a README or a page
     #[arg(long, value_name = "FILE")]
     pub svg: Option<std::path::PathBuf>,
+}
+
+#[derive(clap::Args, Debug, Clone, PartialEq)]
+pub struct RerunArgs {
+    /// The saved test, as `pepe history` lists them
+    pub name: String,
+
+    /// Exit 1 when the verdict is Slower or Worse, for CI
+    #[arg(long)]
+    pub gate: bool,
+}
+
+#[derive(clap::Args, Debug, Clone, PartialEq)]
+pub struct HistoryArgs {
+    /// One saved test: its recorded runs, the latest last. Without it,
+    /// every saved test with its last run
+    pub name: Option<String>,
 }
 
 #[derive(clap::Args, Debug, Clone, PartialEq)]
@@ -614,18 +676,12 @@ impl Cli {
         }
 
         if self.curl {
-            let request = curl_request(&self.args).map_err(|e| {
+            self.take_curl().map_err(|e| {
                 Error::raw(
                     clap::error::ErrorKind::ValueValidation,
                     format!("Invalid curl command: {e}"),
                 )
             })?;
-            // stderr, so `--json` output on stdout stays valid JSON
-            eprintln!("curl: {} {}", request.method, request.url);
-            for note in &request.notes {
-                eprintln!("  note: {note}");
-            }
-            self.apply_curl(request);
         }
 
         for header in &self.headers {
@@ -754,6 +810,24 @@ impl Cli {
         Ok(milliseconds)
     }
 
+    /// The curl command after `--curl --`, taken into the settings once:
+    /// validation does it, or `--save` earlier, to keep the request
+    pub fn take_curl(&mut self) -> Result<(), String> {
+        if !self.curl {
+            return Ok(());
+        }
+        let request = curl_request(&self.args)?;
+        // stderr, so `--json` output on stdout stays valid JSON
+        eprintln!("curl: {} {}", request.method, request.url);
+        for note in &request.notes {
+            eprintln!("  note: {note}");
+        }
+        self.apply_curl(request);
+        self.curl = false;
+        self.args.clear();
+        Ok(())
+    }
+
     /// Take the request a curl command describes. Like curl, redirects are
     /// only followed with -L.
     fn apply_curl(&mut self, request: curl::CurlRequest) {
@@ -776,6 +850,13 @@ impl Cli {
         self.disable_redirects = !request.follow_redirects;
     }
 
+    /// `command_line` with the secrets in headers masked, for a report
+    pub fn command_line_masked(&self) -> String {
+        let mut masked = self.clone();
+        masked.headers = crate::guard::Plan::headers_of(&self.headers);
+        masked.command_line()
+    }
+
     /// The pepe command that reproduces these settings, leaving out
     /// everything still at its default
     pub fn command_line(&self) -> String {
@@ -786,6 +867,7 @@ impl Cli {
             Some(Command::Api(_)) => parts.push("api".into()),
             Some(Command::Replay(_)) => parts.push("replay".into()),
             Some(Command::Flow(_)) => parts.push("flow".into()),
+            Some(Command::Ping(_)) => parts.push("ping".into()),
             _ => {}
         }
         let mut flag = |name: &str, value: &str| {
@@ -797,8 +879,47 @@ impl Cli {
             Some(Command::Ramp(ramp)) => Some(ramp),
             _ => None,
         };
+        // A ping has no concurrency, and may have several targets
+        let ping = matches!(self.command, Some(Command::Ping(_)));
         let mut target = self.url.clone();
+        let mut more_targets: Vec<String> = Vec::new();
+        // Switches with no value, added once `flag` is done with `parts`
+        let mut switches: Vec<&str> = Vec::new();
         match &self.command {
+            Some(Command::Ping(ping)) => {
+                let usual = PingArgs::usual();
+                let mut targets = ping.targets.iter();
+                target = targets.next().cloned().unwrap_or_default();
+                more_targets = targets.cloned().collect();
+                if ping.every != usual.every {
+                    flag("--every", &ping.every);
+                }
+                for name in &ping.name {
+                    flag("--name", name);
+                }
+                if let Some(slo) = &ping.slo {
+                    flag("--slo", slo);
+                }
+                if ping.port != usual.port {
+                    flag("--port", &ping.port.to_string());
+                }
+                if let Some(interface) = &ping.interface {
+                    flag("--interface", interface);
+                }
+                for (on, name) in [
+                    (ping.tcp, "--tcp"),
+                    (ping.cmd, "--cmd"),
+                    (ping.keep_alive, "--keep-alive"),
+                    (ping.http1, "--http1"),
+                    (ping.ipv4, "-4"),
+                    (ping.ipv6, "-6"),
+                    (ping.all_ips, "--all-ips"),
+                ] {
+                    if on {
+                        switches.push(name);
+                    }
+                }
+            }
             Some(Command::Ramp(ramp)) => {
                 let usual = RampArgs::default();
                 for (name, value, default) in [
@@ -841,7 +962,7 @@ impl Cli {
             _ => {}
         }
         if ramp.is_none() {
-            if self.concurrency != defaults.concurrency {
+            if self.concurrency != defaults.concurrency && !ping {
                 flag("-c", &self.concurrency.to_string());
             }
             match &self.duration {
@@ -892,7 +1013,9 @@ impl Cli {
                 parts.push(name.to_string());
             }
         }
+        parts.extend(switches.iter().map(|s| s.to_string()));
         parts.push(shell_quote(&target));
+        parts.extend(more_targets.iter().map(|t| shell_quote(t)));
         parts.join(" ")
     }
 
@@ -1157,6 +1280,38 @@ mod tests {
     }
 
     #[test]
+    fn a_pings_command_line_round_trips() {
+        let argv = [
+            "pepe",
+            "ping",
+            "--every",
+            "2s",
+            "--slo",
+            "total=500",
+            "--keep-alive",
+            "-n",
+            "30",
+            "--name",
+            "a",
+            "--name",
+            "b",
+            "https://a.io",
+            "https://b.io",
+        ];
+        let cli = Cli::parse_from(argv);
+        let line = cli.command_line();
+        assert!(line.starts_with("pepe ping "), "{line}");
+        assert!(!line.contains("-c "), "{line}");
+        let again = Cli::parse_from(crate::curl::split(&line).unwrap());
+        let (Some(Command::Ping(a)), Some(Command::Ping(b))) = (&cli.command, &again.command)
+        else {
+            panic!("{line}");
+        };
+        assert_eq!(a, b, "{line}");
+        assert_eq!(again.number, 30, "{line}");
+    }
+
+    #[test]
     fn command_line_round_trips_through_the_parser() {
         let argv = [
             "pepe",
@@ -1216,7 +1371,10 @@ mod tests {
             bare.contains("\"foo\" isn't a URL, nor a command"),
             "{bare}"
         );
-        assert!(bare.contains("ping, ramp, compare, api, flow"), "{bare}");
+        assert!(
+            bare.contains("ping, ramp, compare, rerun, history, api, flow"),
+            "{bare}"
+        );
         assert!(bare.contains("pepe self-update"), "{bare}");
         let host = trouble("example.com/x");
         assert!(host.contains("has no scheme"), "{host}");

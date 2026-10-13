@@ -4,7 +4,9 @@
 
 use std::time::Duration;
 
-use crossterm::event::{Event, EventStream, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
+use crossterm::event::{
+    Event, EventStream, KeyCode, KeyEvent, KeyEventKind, KeyModifiers, MouseEvent,
+};
 use futures::StreamExt;
 use ratatui::{
     backend::CrosstermBackend,
@@ -15,7 +17,9 @@ use ratatui::{
     Frame, Terminal,
 };
 
-use super::kit::{about_line, caption, chips_fit, help, marker, panel, tabs, FAINT, SELECTED};
+use super::kit::{
+    self, about_line, caption, help, marker, panel, tabs, Hit, SaveAs, SaveKey, FAINT, SELECTED,
+};
 use super::view::{label, status_color, truncate, value, ACCENT, BAD, GOOD, LABEL, RULE, WARN};
 use super::{body, format, mascot, settings, theme};
 use crate::cli::{ApiArgs, Command, RampArgs};
@@ -24,6 +28,7 @@ use crate::load::Plan;
 use crate::openapi;
 use crate::ramp::RampPlan;
 use crate::response::ResponseStats;
+use crate::store::{self, Store};
 use crate::Cli;
 
 const METHODS: [&str; 7] = ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"];
@@ -36,6 +41,8 @@ const WIDE: u16 = 100;
 pub enum SetupOutcome {
     /// Run a load test with these settings
     Start(Box<Cli>),
+    /// Go to the saved tests
+    Library,
     Quit,
 }
 
@@ -115,8 +122,10 @@ enum Field {
 enum Action {
     Start,
     Try,
-    /// Write the form to the config file
+    /// Save the form under the name in the prompt
     Save,
+    /// Go to the saved tests, if there are any
+    Library,
     Quit,
 }
 
@@ -124,6 +133,8 @@ enum Action {
 struct Section {
     title: &'static str,
     lines: Vec<Line<'static>>,
+    /// The field on each line, for a click; none on a heading or a gap
+    fields: Vec<Option<Field>>,
     focus: Option<usize>,
 }
 
@@ -171,8 +182,12 @@ pub struct Setup {
     fresher: Option<String>,
     /// The last "try once" response
     tried: Option<ResponseStats>,
-    /// Where ctrl-s writes the form: the config read, or ./pepe.toml
-    config_path: std::path::PathBuf,
+    /// The project's saved tests, where ctrl-s writes the form
+    store: Store,
+    /// The name this form was loaded from or last saved as, offered again
+    saved_as: Option<String>,
+    /// The name prompt, while it's open
+    naming: Option<SaveAs>,
     /// The keys overlay is open
     show_help: bool,
 }
@@ -192,6 +207,7 @@ impl Setup {
             Some(Command::Api(_)) => Mode::Api,
             _ => Mode::Single,
         };
+        let store = Store::local();
         let mut setup = Setup {
             base: cli.clone(),
             mode,
@@ -238,11 +254,13 @@ impl Setup {
             message: None,
             fresher: crate::update::known().map(|v| v.to_string()),
             tried: None,
-            config_path: cli
+            saved_as: cli
                 .config
-                .clone()
-                .or_else(|| cli.config_loaded.clone())
-                .unwrap_or_else(|| crate::config::DEFAULT_PATH.into()),
+                .as_ref()
+                .or(cli.config_loaded.as_ref())
+                .and_then(|path| store.name_of(path)),
+            store,
+            naming: None,
             show_help: false,
         };
         let first = setup.focused();
@@ -465,6 +483,16 @@ impl Setup {
             }
             return None;
         }
+        if let Some(naming) = &mut self.naming {
+            match naming.key(key) {
+                SaveKey::Quit => return Some(Action::Quit),
+                SaveKey::Cancel => self.naming = None,
+                SaveKey::Save => return Some(Action::Save),
+                SaveKey::Typed => {}
+            }
+            self.message = None;
+            return None;
+        }
         match key.code {
             KeyCode::Char('c') if ctrl => return Some(Action::Quit),
             // `?` is typed into a text field (URLs have them): F1 always works
@@ -473,7 +501,8 @@ impl Setup {
             KeyCode::Esc => return Some(Action::Quit),
             KeyCode::Enter => return Some(Action::Start),
             KeyCode::Char('t') if ctrl => return Some(Action::Try),
-            KeyCode::Char('s') if ctrl => return Some(Action::Save),
+            KeyCode::Char('s') if ctrl => self.open_naming(),
+            KeyCode::Char('o') if ctrl => return Some(Action::Library),
             KeyCode::Tab => self.switch_mode(1),
             KeyCode::BackTab => self.switch_mode(-1),
             KeyCode::Up => self.move_focus(-1),
@@ -498,9 +527,102 @@ impl Setup {
         None
     }
 
+    /// ctrl-s: ask for the name, offering the one it had or one from the URL
+    fn open_naming(&mut self) {
+        let offered = self.saved_as.clone().unwrap_or_else(|| {
+            store::suggest_name(if self.mode == Mode::Api {
+                &self.spec
+            } else {
+                &self.url
+            })
+        });
+        self.naming = Some(SaveAs::new("save as", &offered));
+    }
+
+    /// Enter in the name prompt: save the form under the name, once a
+    /// taken name has been confirmed; what to say under the form
+    fn save(&mut self) -> (String, bool) {
+        let Some(mut naming) = self.naming.take() else {
+            return ("press ctrl-s to save".into(), true);
+        };
+        let cli = match self.to_cli() {
+            Ok(cli) => cli,
+            Err(e) => {
+                naming.message = Some((e.clone(), true));
+                self.naming = Some(naming);
+                return (e, true);
+            }
+        };
+        let saved = naming.save(&self.store, self.saved_as.as_deref(), &cli);
+        let message = naming.message.clone().unwrap_or_default();
+        match saved {
+            Some(name) => self.saved_as = Some(name),
+            None => self.naming = Some(naming),
+        }
+        message
+    }
+
+    /// A click on a field focuses it, and on the focused field changes a
+    /// choice; on a mode tab switches mode; on a key chip presses the key.
+    /// The wheel moves between fields.
+    fn mouse(&mut self, event: MouseEvent) -> Option<Action> {
+        if settings::is_open() {
+            return None;
+        }
+        if self.show_help {
+            if kit::pressed(&event) {
+                self.show_help = false;
+            }
+            return None;
+        }
+        match kit::click(&event)? {
+            Hit::Key(key) => self.key(key),
+            Hit::Tab(index) if self.naming.is_none() => {
+                if let Some(at) = Mode::ALL.iter().position(|&m| m == self.mode) {
+                    if index < Mode::ALL.len() {
+                        self.switch_mode(index as isize - at as isize);
+                    }
+                }
+                self.message = None;
+                None
+            }
+            Hit::Row { index, .. } if self.naming.is_none() => {
+                let fields = self.fields();
+                if index >= fields.len() {
+                    return None;
+                }
+                if self.focus == index {
+                    let field = fields[index];
+                    let typed = self.text(field).is_some()
+                        || matches!(field, Field::AddHeader | Field::AddUntil);
+                    if !typed {
+                        self.change(1);
+                    }
+                } else {
+                    // Step there, so leaving an emptied header removes it
+                    // as the arrows would; the steps are bounded in case a
+                    // removal moves the target
+                    for _ in 0..fields.len() {
+                        if self.focus == index || index >= self.fields().len() {
+                            break;
+                        }
+                        self.move_focus(if self.focus < index { 1 } else { -1 });
+                    }
+                }
+                self.message = None;
+                None
+            }
+            _ => None,
+        }
+    }
+
     /// Pasted text: a curl command fills the whole form, an OpenAPI
     /// document is the spec, anything else goes into the focused field
     fn paste(&mut self, text: &str) {
+        if let Some(naming) = &mut self.naming {
+            naming.paste(text);
+            return;
+        }
         if self.mode == Mode::Api && openapi::is_document(text) {
             self.spec = text.trim().to_string();
             self.focus = 0;
@@ -741,6 +863,7 @@ impl Setup {
             };
             let action = match event {
                 Some(Ok(Event::Key(key))) if key.kind == KeyEventKind::Press => self.key(key),
+                Some(Ok(Event::Mouse(mouse))) => self.mouse(mouse),
                 Some(Ok(Event::Paste(text))) => {
                     if !settings::paste(&text) {
                         self.paste(&text);
@@ -765,21 +888,16 @@ impl Setup {
                         Err(e) => self.message = Some((e, true)),
                     }
                 }
-                Some(Action::Save) => {
-                    self.message = Some(
-                        match self.to_cli().and_then(|cli| {
-                            crate::config::write(&self.config_path, &cli).map(|()| cli)
-                        }) {
-                            Ok(_) => (
-                                format!(
-                                    "saved {} · `pepe` here runs it",
-                                    self.config_path.display()
-                                ),
-                                false,
-                            ),
-                            Err(e) => (e, true),
-                        },
-                    );
+                Some(Action::Save) => self.message = Some(self.save()),
+                Some(Action::Library) => {
+                    if self.store.names().is_empty() {
+                        self.message = Some((
+                            "nothing saved yet · ctrl-s saves this form as a test".into(),
+                            true,
+                        ));
+                    } else {
+                        return Ok(SetupOutcome::Library);
+                    }
                 }
                 Some(Action::Try) => {
                     self.message = Some(("sending one request…".into(), false));
@@ -811,7 +929,9 @@ impl Setup {
         self.render_form(f, main);
         self.render_command(f, command);
 
-        let line = if let Some((text, error)) = &self.message {
+        let line = if let Some(naming) = &self.naming {
+            naming.line(&self.store, status.width)
+        } else if let Some((text, error)) = &self.message {
             Line::from(vec![
                 if *error {
                     value(" ! ", WARN)
@@ -845,22 +965,22 @@ impl Setup {
         } else {
             "start"
         };
-        f.render_widget(
-            Paragraph::new(chips_fit(
-                &[
-                    ("enter", start),
-                    ("ctrl-t", "try once"),
-                    ("↑↓", "move"),
-                    ("←→", "change"),
-                    ("tab", "mode"),
-                    ("ctrl-s", "save pepe.toml"),
-                    ("F1", "keys"),
-                    ("esc", "quit"),
-                ],
-                footer.width,
-            )),
-            footer,
-        );
+        let chips: &[(&str, &str)] = if self.naming.is_some() {
+            &[("enter", "save"), ("esc", "cancel"), ("ctrl-c", "quit")]
+        } else {
+            &[
+                ("enter", start),
+                ("ctrl-t", "try once"),
+                ("↑↓", "move"),
+                ("←→", "change"),
+                ("tab", "mode"),
+                ("ctrl-s", "save as…"),
+                ("ctrl-o", "saved tests"),
+                ("F1", "keys"),
+                ("esc", "quit"),
+            ]
+        };
+        kit::footer(f, footer, chips);
         if self.show_help {
             help(
                 f,
@@ -871,7 +991,8 @@ impl Setup {
                     ("↑ ↓", "move between fields"),
                     ("← →", "change a choice, or move in the text"),
                     ("tab", "switch mode: single URL, ramp, API"),
-                    ("ctrl-s", "save the form as pepe.toml"),
+                    ("ctrl-s", "save the form as a named test, in .pepe/tests"),
+                    ("ctrl-o", "open the saved tests"),
                     ("F1 / ?", "this help (? where you can't type)"),
                     ("esc", "quit"),
                 ],
@@ -909,6 +1030,15 @@ impl Setup {
         };
         let titles: Vec<String> = Mode::ALL.iter().map(|m| m.name().to_string()).collect();
         let selected = Mode::ALL.iter().position(|&m| m == self.mode).unwrap_or(0);
+        // The tabs are the second line, under a line of air when tall
+        kit::tabs_at(
+            Rect {
+                y: area.y + if tall { 2 } else { 1 },
+                height: 1,
+                ..area
+            },
+            &titles,
+        );
         let lines = vec![
             Line::from(vec![
                 Span::styled(" pepe ", Style::new().bg(ACCENT).fg(Color::Black).bold()),
@@ -970,6 +1100,7 @@ impl Setup {
         } else {
             line
         });
+        section.fields.push(Some(field));
     }
 
     /// A field edited by typing: its text, with the caret when it's focused
@@ -1040,6 +1171,7 @@ impl Setup {
             title: "target",
             lines: Vec::new(),
             focus: None,
+            fields: Vec::new(),
         };
         if self.mode == Mode::Api {
             self.row(
@@ -1141,6 +1273,7 @@ impl Setup {
             },
             lines: Vec::new(),
             focus: None,
+            fields: Vec::new(),
         };
         if self.mode == Mode::Ramp {
             for (field, name, text, hint) in [
@@ -1231,6 +1364,7 @@ impl Setup {
             title: "options",
             lines: Vec::new(),
             focus: None,
+            fields: Vec::new(),
         };
         self.row(
             &mut options,
@@ -1375,6 +1509,21 @@ impl Setup {
             let scroll = section
                 .focus
                 .map_or(0, |line| (line + 1).saturating_sub(inner.height as usize));
+            // Each row shown is clickable as its field
+            let fields = self.fields();
+            for (line, field) in section.fields.iter().enumerate().skip(scroll) {
+                let index = field.and_then(|f| fields.iter().position(|x| *x == f));
+                if let Some(index) = index {
+                    kit::hit(
+                        Rect {
+                            y: inner.y + (line - scroll) as u16,
+                            height: 1,
+                            ..inner
+                        },
+                        Hit::Row { list: 0, index },
+                    );
+                }
+            }
             f.render_widget(
                 Paragraph::new(section.lines.clone())
                     .scroll((scroll as u16, 0))
@@ -1414,19 +1563,23 @@ impl Setup {
                 title: "setup",
                 lines: Vec::new(),
                 focus: None,
+                fields: Vec::new(),
             };
             for section in self.sections(width, width) {
                 if !all.lines.is_empty() {
                     all.lines.push(Line::raw(""));
+                    all.fields.push(None);
                 }
                 all.lines.push(Line::from(Span::styled(
                     format!(" {}", section.title.to_uppercase()),
                     Style::new().fg(LABEL).bold(),
                 )));
+                all.fields.push(None);
                 if let Some(line) = section.focus {
                     all.focus = Some(all.lines.len() + line);
                 }
                 all.lines.extend(section.lines);
+                all.fields.extend(section.fields);
             }
             card(f, &all, area);
         }
@@ -1561,6 +1714,210 @@ mod tests {
         for c in text.chars() {
             press(s, KeyCode::Char(c));
         }
+    }
+
+    fn ctrl(s: &mut Setup, c: char) -> Option<Action> {
+        s.key(KeyEvent::new(KeyCode::Char(c), KeyModifiers::CONTROL))
+    }
+
+    /// A store of its own, so tests don't touch ./.pepe or each other
+    fn temp_store(tag: &str) -> Store {
+        let root = std::env::temp_dir().join(format!("pepe-setup-{tag}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        Store::at(root)
+    }
+
+    fn naming_text(s: &Setup) -> Option<String> {
+        s.naming.as_ref().map(|n| n.input.text())
+    }
+
+    #[test]
+    fn ctrl_s_asks_for_a_name_taken_from_the_url() {
+        let mut s = setup(&["pepe", "https://api.example.com/v1/health"]);
+        assert!(ctrl(&mut s, 's').is_none());
+        assert_eq!(
+            naming_text(&s).as_deref(),
+            Some("api.example.com-v1-health")
+        );
+        // Keys go to the name, not the form
+        press(&mut s, KeyCode::Backspace);
+        type_text(&mut s, "z");
+        assert_eq!(
+            naming_text(&s).as_deref(),
+            Some("api.example.com-v1-healtz")
+        );
+        assert_eq!(s.url, "https://api.example.com/v1/health");
+        // Esc keeps the form and closes the prompt; enter would save
+        assert!(press(&mut s, KeyCode::Esc).is_none());
+        assert!(s.naming.is_none());
+        ctrl(&mut s, 's');
+        assert!(matches!(press(&mut s, KeyCode::Enter), Some(Action::Save)));
+        // ctrl-c still quits from the prompt
+        assert!(matches!(ctrl(&mut s, 'c'), Some(Action::Quit)));
+    }
+
+    #[test]
+    fn clicks_focus_fields_change_choices_switch_modes_and_press_chips() {
+        use crossterm::event::{MouseButton, MouseEvent, MouseEventKind};
+        let click_at = |area: Rect| MouseEvent {
+            kind: MouseEventKind::Down(MouseButton::Left),
+            column: area.x + 2,
+            row: area.y,
+            modifiers: KeyModifiers::NONE,
+        };
+        let find = |hit: Hit| {
+            kit::hits()
+                .into_iter()
+                .find(|(_, h)| *h == hit)
+                .map(|(area, _)| area)
+                .unwrap_or_else(|| panic!("{hit:?} isn't on screen"))
+        };
+        let mut s = setup(&["pepe", "https://x.io/"]);
+        for (w, h) in [(120, 40), (80, 24)] {
+            s.method = "GET".into();
+            s.focus = 0;
+            let mut terminal = Terminal::new(TestBackend::new(w, h)).unwrap();
+            terminal.draw(|f| theme::draw(f, |f| s.render(f))).unwrap();
+            // The method row: a click focuses it, another changes it
+            let method = s.fields().iter().position(|f| *f == Field::Method).unwrap();
+            assert!(s
+                .mouse(click_at(find(Hit::Row {
+                    list: 0,
+                    index: method
+                })))
+                .is_none());
+            assert_eq!(s.focus, method);
+            assert_eq!(s.method, "GET");
+            s.mouse(click_at(find(Hit::Row {
+                list: 0,
+                index: method,
+            })));
+            assert_eq!(s.method, "POST");
+            // A text field: focusing it puts the caret at its end
+            let url = s.fields().iter().position(|f| *f == Field::Url).unwrap();
+            s.mouse(click_at(find(Hit::Row {
+                list: 0,
+                index: url,
+            })));
+            assert_eq!((s.focus, s.cursor), (url, "https://x.io/".len()));
+            // The ramp tab
+            s.mouse(click_at(find(Hit::Tab(1))));
+            assert_eq!(s.mode, Mode::Ramp);
+            s.mouse(click_at(find(Hit::Tab(0))));
+            assert_eq!(s.mode, Mode::Single);
+            // The F1 chip opens the keys, as the key does, and a click
+            // anywhere closes them again
+            terminal.draw(|f| theme::draw(f, |f| s.render(f))).unwrap();
+            let keys = Hit::Key(KeyEvent::from(KeyCode::F(1)));
+            assert!(s.mouse(click_at(find(keys))).is_none());
+            assert!(s.show_help);
+            s.mouse(click_at(find(Hit::Tab(1))));
+            assert!(!s.show_help);
+            assert_eq!(s.mode, Mode::Single, "the click only closed the keys");
+            // In the name prompt, rows and tabs are out of reach
+            ctrl(&mut s, 's');
+            s.mouse(click_at(find(Hit::Tab(1))));
+            assert_eq!(s.mode, Mode::Single);
+            press(&mut s, KeyCode::Esc);
+            assert!(s.naming.is_none());
+            // The wheel moves between fields
+            let wheel = MouseEvent {
+                kind: MouseEventKind::ScrollDown,
+                column: 5,
+                row: 5,
+                modifiers: KeyModifiers::NONE,
+            };
+            let before = s.focus;
+            s.mouse(wheel);
+            assert_eq!(s.focus, before + 1);
+        }
+    }
+
+    #[test]
+    fn ctrl_o_asks_for_the_library() {
+        let mut s = setup(&["pepe", "https://x.io/"]);
+        assert!(matches!(ctrl(&mut s, 'o'), Some(Action::Library)));
+        // Not from the name prompt, where o is a letter
+        ctrl(&mut s, 's');
+        assert!(ctrl(&mut s, 'o').is_none());
+    }
+
+    #[test]
+    fn a_bad_name_is_refused_and_the_prompt_stays() {
+        let mut s = setup(&["pepe", "https://x.io/items"]);
+        s.store = temp_store("bad-name");
+        ctrl(&mut s, 's');
+        ctrl(&mut s, 'u');
+        type_text(&mut s, "my test");
+        let (text, error) = s.save();
+        assert!(error && text.contains("space"), "{text}");
+        assert!(s.naming.is_some());
+        ctrl(&mut s, 'u');
+        let (text, error) = s.save();
+        assert!(error && text.contains("name"), "{text}");
+        assert!(s.store.names().is_empty());
+    }
+
+    #[test]
+    fn a_name_saves_the_form_and_a_taken_one_asks_first() {
+        let mut s = setup(&["pepe", "-c", "7", "https://x.io/items"]);
+        s.store = temp_store("saves");
+        ctrl(&mut s, 's');
+        ctrl(&mut s, 'u');
+        type_text(&mut s, "items");
+        let (text, error) = s.save();
+        assert!(!error && text.contains("pepe --load items"), "{text}");
+        assert!(s.naming.is_none());
+        assert_eq!(s.saved_as.as_deref(), Some("items"));
+        let (_, config) = s.store.load("items").unwrap();
+        assert_eq!(
+            (config.url.as_deref(), config.concurrency),
+            (Some("https://x.io/items"), Some(7))
+        );
+
+        // Saving again under its own name goes straight through
+        s.concurrency = "9".into();
+        ctrl(&mut s, 's');
+        assert_eq!(naming_text(&s).as_deref(), Some("items"));
+        assert!(!s.save().1);
+        assert_eq!(s.store.load("items").unwrap().1.concurrency, Some(9));
+
+        // Another form taking that name is asked once, then replaces it
+        let mut other = setup(&["pepe", "https://y.io/"]);
+        other.store = s.store.clone();
+        ctrl(&mut other, 's');
+        ctrl(&mut other, 'u');
+        type_text(&mut other, "items");
+        let (text, error) = other.save();
+        assert!(error && text.contains("replaces"), "{text}");
+        assert!(other.naming.is_some());
+        let (text, error) = other.save();
+        assert!(!error, "{text}");
+        assert_eq!(
+            s.store.load("items").unwrap().1.url.as_deref(),
+            Some("https://y.io/")
+        );
+        // Editing the name after the warning asks again for the new name
+        ctrl(&mut other, 's');
+        type_text(&mut other, "2");
+        assert!(!other.save().1);
+        assert_eq!(s.store.names(), ["items", "items2"]);
+        let _ = std::fs::remove_dir_all(s.store.tests_dir().parent().unwrap());
+    }
+
+    #[test]
+    fn a_form_loaded_from_the_store_offers_its_name() {
+        let store = temp_store("loaded");
+        let cli = Cli::parse_from(["pepe", "https://x.io/"]);
+        let path = store.save("checkout", &cli).unwrap();
+        let mut cli = Cli::parse_from(["pepe", "https://x.io/"]);
+        cli.config_loaded = Some(path);
+        let mut s = Setup::new(&cli);
+        s.store = store.clone();
+        s.saved_as = store.name_of(cli.config_loaded.as_ref().unwrap());
+        ctrl(&mut s, 's');
+        assert_eq!(naming_text(&s).as_deref(), Some("checkout"));
+        let _ = std::fs::remove_dir_all(store.tests_dir().parent().unwrap());
     }
 
     #[test]
@@ -1891,6 +2248,24 @@ mod tests {
             }
             s.message = Some(("something to say".into(), true));
             terminal.draw(|f| s.render(f)).unwrap();
+            s.message = None;
+        }
+    }
+
+    #[test]
+    fn the_name_prompt_takes_the_status_line() {
+        let mut s = setup(&["pepe", "http://example.com/"]);
+        ctrl(&mut s, 's');
+        for (w, h) in [(40, 12), (80, 24), (120, 40)] {
+            let mut terminal = Terminal::new(TestBackend::new(w, h)).unwrap();
+            terminal.draw(|f| s.render(f)).unwrap();
+            let screen = terminal.backend().to_string();
+            assert!(screen.contains("save as"), "{w}x{h}:\n{screen}");
+            assert!(screen.contains("example.com"), "{w}x{h}:\n{screen}");
+            // A refused name is said in the same line
+            s.naming.as_mut().unwrap().message = Some(("give the test a name".into(), true));
+            terminal.draw(|f| s.render(f)).unwrap();
+            assert!(terminal.backend().to_string().contains("give the test"));
             s.message = None;
         }
     }

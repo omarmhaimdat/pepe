@@ -20,6 +20,7 @@ use crate::load::Plan;
 use crate::response::ResponseStats;
 use crate::timeline::{bin_floor_us, bin_of, LatencyBins, BINS, BINS_PER_DECADE};
 use crate::utils::num_of_cores;
+use crossterm::event::{KeyCode, KeyEvent};
 
 // ─── Palette ─────────────────────────────────────────────────────────────────
 // 256-color indexes are stable across themes; the semantic colors use the
@@ -851,13 +852,15 @@ fn render_tabs(d: &Dashboard, f: &mut Frame, area: Rect) {
             format!("{} {}", i + 1, title)
         })
         .collect();
-    f.render_widget(
-        Paragraph::new(kit::tabs(&titles, d.tab.index(d.tabs()))),
-        area,
-    );
+    kit::tab_bar(f, area, &titles, d.tab.index(d.tabs()));
 }
 
 fn render_footer(d: &Dashboard, f: &mut Frame, area: Rect) {
+    // The save-as prompt takes the whole line while it's open
+    if let Some(naming) = &d.naming {
+        f.render_widget(Paragraph::new(naming.line(&d.store, area.width)), area);
+        return;
+    }
     // The view's own keys first, then the run's, then the way around:
     // help and quit always last, so they're never the ones cut
     let mut hints: Vec<(&str, &str)> = Vec::new();
@@ -897,9 +900,12 @@ fn render_footer(d: &Dashboard, f: &mut Frame, area: Rect) {
             hints.push(("space", if d.paused { "resume" } else { "pause" }));
             hints.push(("+/-", "concurrency"));
             hints.push(("s", "stop"));
+        } else {
+            hints.push(("w", "record result"));
         }
         hints.push(("r", "restart"));
         hints.push(("e", "edit"));
+        hints.push(("ctrl-s", "save test"));
         hints.push(("tab", "view"));
         hints.push(("?", "keys"));
         hints.push(("q", "quit"));
@@ -918,12 +924,13 @@ fn render_footer(d: &Dashboard, f: &mut Frame, area: Rect) {
         format!(" {} ", truncate(&notice, room))
     });
     let notice_width = notice.as_ref().map_or(0, |n| n.chars().count() + 1);
-    f.render_widget(
-        Paragraph::new(kit::chips_fit(
-            &hints,
-            width.saturating_sub(notice_width) as u16,
-        )),
-        area,
+    kit::footer(
+        f,
+        Rect {
+            width: width.saturating_sub(notice_width) as u16,
+            ..area
+        },
+        &hints,
     );
     if let Some(notice) = notice {
         f.render_widget(
@@ -944,6 +951,11 @@ fn render_help(f: &mut Frame, area: Rect) {
         ("s", "stop the run, keep the results"),
         ("r", "restart with the same settings"),
         ("e", "edit the settings, then run again"),
+        ("ctrl-s", "save the settings as a named test (.pepe/tests)"),
+        (
+            "w",
+            "once ended: record the run under its test (.pepe/runs)",
+        ),
         ("tab / ← →", "switch view"),
         ("1 2 3", "live, stats, requests"),
         ("↑ ↓ / j k", "select a request (newer / older)"),
@@ -2389,6 +2401,16 @@ fn render_endpoints(d: &Dashboard, f: &mut Frame, area: Rect) {
         .filter(|_| d.endpoints.len() > 1);
     let height = table.height.saturating_sub(1) as usize;
     let top = (d.endpoint_cursor + 1).saturating_sub(height);
+    kit::hit_rows(
+        Rect {
+            y: table.y + 1,
+            height: table.height.saturating_sub(1),
+            ..table
+        },
+        super::ENDPOINT_ROWS,
+        top,
+        d.endpoints.len().saturating_sub(top),
+    );
     let rows = d
         .endpoints
         .iter()
@@ -2538,6 +2560,17 @@ fn render_requests_tab(d: &Dashboard, f: &mut Frame, area: Rect) {
     let height = table.height.saturating_sub(1) as usize;
     // Scroll just enough to keep the selected row on screen
     let top = (d.scroll + 1).saturating_sub(height);
+    // Under the header line, each row is clickable
+    kit::hit_rows(
+        Rect {
+            y: table.y + 1,
+            height: table.height.saturating_sub(1),
+            ..table
+        },
+        super::REQUEST_ROWS,
+        top,
+        log.len().saturating_sub(top),
+    );
     let api = !d.endpoints.is_empty();
     let rows = log.iter().enumerate().skip(top).take(height).map(|(i, e)| {
         let endpoint = d
@@ -2577,63 +2610,122 @@ fn render_requests_tab(d: &Dashboard, f: &mut Frame, area: Rect) {
 }
 
 /// "STATUS f  all 2xx 3xx …   LATENCY l  any ≥p50 …   SEARCH /  query"
+/// The filter bar over the requests: each group's name and key, then its
+/// choices, the one in force lit. Every part is clickable: a name or a
+/// key as the key, a choice as that choice, the endpoint's chip to let
+/// it go, the search to type in it.
 fn render_filter_bar(d: &Dashboard, f: &mut Frame, area: Rect) {
     let selected = Style::new().fg(Color::Black).bg(ACCENT).bold();
     let idle = Style::new().fg(LABEL);
-    let group = |spans: &mut Vec<Span<'static>>, name: &str, key: &str| {
-        spans.push(Span::styled(
-            format!("{name} "),
-            Style::new().fg(LABEL).bold(),
-        ));
-        spans.push(Span::styled(
-            format!("{key} "),
-            Style::new().fg(ACCENT).bold(),
-        ));
+    let key_of = |key: char| kit::Hit::Key(KeyEvent::from(KeyCode::Char(key)));
+
+    // Spans laid left to right, each registered where it lands
+    let mut spans: Vec<Span<'static>> = Vec::new();
+    let mut x = area.x;
+    let end = area.x.saturating_add(area.width);
+    let mut put = |spans: &mut Vec<Span<'static>>, span: Span<'static>, hit: Option<kit::Hit>| {
+        let width = span.width() as u16;
+        if let (Some(hit), true) = (hit, x < end) {
+            kit::hit(
+                Rect {
+                    x,
+                    y: area.y,
+                    width: width.min(end - x),
+                    height: 1,
+                },
+                hit,
+            );
+        }
+        x = x.saturating_add(width);
+        spans.push(span);
+    };
+    // A group's name and its key, both clickable as the key
+    let heading = |name: &str, key: char| {
+        [
+            Span::styled(format!("{name} "), Style::new().fg(LABEL).bold()),
+            Span::styled(format!("{key} "), Style::new().fg(ACCENT).bold()),
+        ]
     };
 
-    let mut spans = Vec::new();
-    group(&mut spans, "STATUS", "f");
-    for status in filter::Status::ALL {
-        let style = if status == d.filter.status {
-            selected
-        } else {
-            idle
-        };
-        spans.push(Span::styled(format!(" {} ", status.label()), style));
+    for span in heading("STATUS", 'f') {
+        put(&mut spans, span, Some(key_of('f')));
     }
-    spans.push(Span::raw("    "));
-    group(&mut spans, "LATENCY", "l");
-    for slow in filter::Slow::ALL {
-        let style = if slow == d.filter.slow {
+    for (i, status) in filter::Status::ALL.iter().enumerate() {
+        let style = if *status == d.filter.status {
             selected
         } else {
             idle
         };
-        spans.push(Span::styled(format!(" {} ", slow.label()), style));
+        put(
+            &mut spans,
+            Span::styled(format!(" {} ", status.label()), style),
+            Some(kit::Hit::Row {
+                list: super::STATUS_CHOICES,
+                index: i,
+            }),
+        );
+    }
+    put(&mut spans, Span::raw("    "), None);
+    for span in heading("LATENCY", 'l') {
+        put(&mut spans, span, Some(key_of('l')));
+    }
+    for (i, slow) in filter::Slow::ALL.iter().enumerate() {
+        let style = if *slow == d.filter.slow {
+            selected
+        } else {
+            idle
+        };
+        put(
+            &mut spans,
+            Span::styled(format!(" {} ", slow.label()), style),
+            Some(kit::Hit::Row {
+                list: super::SLOW_CHOICES,
+                index: i,
+            }),
+        );
     }
     if d.filter.slow != filter::Slow::Any {
-        spans.push(label(format!(
-            " {}",
-            format::latency(Duration::from_micros(d.slow_threshold_us))
-        )));
+        put(
+            &mut spans,
+            label(format!(
+                " {}",
+                format::latency(Duration::from_micros(d.slow_threshold_us))
+            )),
+            None,
+        );
     }
     if let Some(view) = d.filter.endpoint.and_then(|e| d.endpoints.get(e as usize)) {
-        spans.push(Span::raw("    "));
-        spans.push(Span::styled("ENDPOINT ", Style::new().fg(LABEL).bold()));
-        spans.push(Span::styled(format!(" {} ", view.label), selected));
+        put(&mut spans, Span::raw("    "), None);
+        let let_go = Some(kit::Hit::Row {
+            list: super::ENDPOINT_CHOICE,
+            index: 0,
+        });
+        put(
+            &mut spans,
+            Span::styled("ENDPOINT ", Style::new().fg(LABEL).bold()),
+            let_go,
+        );
+        put(
+            &mut spans,
+            Span::styled(format!(" {} ", view.label), selected),
+            let_go,
+        );
     }
-    spans.push(Span::raw("    "));
-    group(&mut spans, "SEARCH", "/");
-    if d.filter.editing {
-        spans.push(Span::styled(
+    put(&mut spans, Span::raw("    "), None);
+    for span in heading("SEARCH", '/') {
+        put(&mut spans, span, Some(key_of('/')));
+    }
+    let search = if d.filter.editing {
+        Span::styled(
             format!(" {}▏", d.filter.query),
             Style::new().fg(Color::Reset).bg(RULE),
-        ));
+        )
     } else if d.filter.query.is_empty() {
-        spans.push(label(" status or body text"));
+        label(" status or body text")
     } else {
-        spans.push(Span::styled(format!(" {} ", d.filter.query), selected));
-    }
+        Span::styled(format!(" {} ", d.filter.query), selected)
+    };
+    put(&mut spans, search, (!d.filter.editing).then(|| key_of('/')));
     f.render_widget(Paragraph::new(Line::from(spans)), area);
 }
 

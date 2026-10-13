@@ -2,7 +2,9 @@ mod bigtext;
 mod body;
 mod filter;
 pub mod format;
+mod history;
 mod kit;
+mod library;
 mod logs;
 pub(crate) mod mascot;
 mod ping;
@@ -13,6 +15,7 @@ mod setup;
 pub mod theme;
 mod view;
 
+pub use library::{ago, LibraryOutcome, LibraryScreen};
 pub use logs::LogsScreen;
 pub use ping::{parse_color, Look, PingScreen};
 pub use plan::{PlanOutcome, PlanScreen};
@@ -22,7 +25,9 @@ pub use setup::{Setup, SetupOutcome};
 use std::collections::VecDeque;
 use std::time::{Duration, Instant};
 
-use crossterm::event::{Event, EventStream, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
+use crossterm::event::{
+    Event, EventStream, KeyCode, KeyEvent, KeyEventKind, KeyModifiers, MouseEvent,
+};
 use futures::{FutureExt, StreamExt};
 use ratatui::{backend::CrosstermBackend, Terminal};
 use tokio::sync::mpsc::error::TryRecvError;
@@ -34,6 +39,14 @@ use crate::metrics::Metrics;
 use crate::response::ResponseStats;
 use crate::timeline::Timeline;
 use crate::Cli;
+
+/// The dashboard's clickable lists, for `kit::Hit::Row`
+const REQUEST_ROWS: u8 = 0;
+const ENDPOINT_ROWS: u8 = 1;
+/// The filter bar's choices: a status, a latency, the endpoint's chip
+const STATUS_CHOICES: u8 = 2;
+const SLOW_CHOICES: u8 = 3;
+const ENDPOINT_CHOICE: u8 = 4;
 
 /// Redraw interval while a run is live. Input redraws immediately, and a
 /// finished dashboard only redraws on input, so it costs no CPU while idle.
@@ -220,6 +233,16 @@ pub struct Dashboard {
 
     tab: Tab,
     show_help: bool,
+    /// Tells a second click on a row from the first
+    clicks: kit::Clicks,
+    /// The project's saved tests, where ctrl-s keeps this run
+    store: crate::store::Store,
+    /// The name this run's settings were loaded from or last saved as
+    saved_as: Option<String>,
+    /// The save-as prompt, while it's open
+    naming: Option<kit::SaveAs>,
+    /// `w` recorded the run under its test already
+    recorded: bool,
     /// What the request log shows
     filter: filter::Filter,
     /// Latency the slow filter requires, refreshed as results arrive
@@ -252,6 +275,11 @@ impl Dashboard {
     pub fn new(args: Cli, plan: Plan) -> Self {
         let snapshot = args.snapshot.clone();
         let warmup = args.warmup();
+        let store = crate::store::Store::local();
+        let saved_as = args
+            .config_loaded
+            .as_ref()
+            .and_then(|path| store.name_of(path));
         Self {
             concurrency: args.concurrency as usize,
             rate: args.rate,
@@ -287,6 +315,11 @@ impl Dashboard {
             frame: 0,
             tab: Tab::Live,
             show_help: false,
+            clicks: kit::Clicks::default(),
+            saved_as,
+            store,
+            naming: None,
+            recorded: false,
             filter: filter::Filter::default(),
             slow_threshold_us: 0,
             scroll: 0,
@@ -304,7 +337,7 @@ impl Dashboard {
     }
 
     /// The JSON report of the run so far, as `--json` would print it
-    fn report_json(&self, load: &LoadHandle) -> crate::json_report::JsonReport {
+    pub(crate) fn report_json(&self, load: &LoadHandle) -> crate::json_report::JsonReport {
         let report = crate::json_report::JsonReport::generate(
             &self.metrics,
             self.elapsed(),
@@ -321,6 +354,7 @@ impl Dashboard {
             &self.args.url,
             self.concurrency as u32,
         )
+        .with_test(&self.args)
         .with_warmup(self.args.warmup(), self.warmup_requests)
         .with_timeline(&self.timeline)
         .with_slowest(&self.slowest)
@@ -808,6 +842,55 @@ impl Dashboard {
         self.notify_for(message, NOTICE_TTL);
     }
 
+    /// Whether `w` recorded this run already, so the way out doesn't again
+    pub fn recorded(&self) -> bool {
+        self.recorded
+    }
+
+    /// `w` once the run has ended: its report under its saved test
+    fn record_run(&mut self, load: &LoadHandle) {
+        let Some(name) = self.saved_as.clone() else {
+            self.notify("save the test first: ctrl-s".into());
+            return;
+        };
+        let mut report = self.report_json(load);
+        // Saved on this screen, so the file isn't what was loaded
+        report.test = Some(name.clone());
+        let json = match report.to_json() {
+            Ok(json) => json,
+            Err(e) => return self.notify(e.to_string()),
+        };
+        match self.store.record(&name, &json) {
+            Ok(path) => {
+                self.recorded = true;
+                self.notify_for(
+                    format!("recorded {} · pepe history {name}", path.display()),
+                    Duration::from_secs(6),
+                );
+            }
+            Err(e) => self.notify(e),
+        }
+    }
+
+    /// Enter in the save-as prompt: this run's settings, with the
+    /// concurrency as dialed in, under the name
+    fn save_test(&mut self) {
+        let Some(mut naming) = self.naming.take() else {
+            return;
+        };
+        let mut cli = self.args.clone();
+        cli.concurrency = self.concurrency as u32;
+        match naming.save(&self.store, self.saved_as.as_deref(), &cli) {
+            Some(name) => {
+                self.saved_as = Some(name);
+                if let Some((text, _)) = naming.message.take() {
+                    self.notify_for(text, Duration::from_secs(6));
+                }
+            }
+            None => self.naming = Some(naming),
+        }
+    }
+
     fn notify_for(&mut self, message: String, ttl: Duration) {
         self.notice = Some((message, Instant::now(), ttl));
     }
@@ -929,13 +1012,78 @@ impl Dashboard {
     }
 
     fn handle(&mut self, event: Event, load: &LoadHandle) -> Option<Outcome> {
-        // Anything else (resize, focus, ...) just triggers the redraw
-        let Event::Key(key) = event else { return None };
-        // Windows reports key releases too; act on presses only
-        if key.kind != KeyEventKind::Press {
+        match event {
+            // Windows reports key releases too; act on presses only
+            Event::Key(key) if key.kind == KeyEventKind::Press => self.handle_key(key, load),
+            Event::Mouse(mouse) => self.handle_mouse(mouse, load),
+            // Anything else (resize, focus, ...) just triggers the redraw
+            _ => None,
+        }
+    }
+
+    /// A click on a request or an endpoint selects it, a second click is
+    /// enter on it; on a tab shows it; on a key chip presses the key. The
+    /// wheel scrolls.
+    fn handle_mouse(&mut self, event: MouseEvent, load: &LoadHandle) -> Option<Outcome> {
+        if settings::is_open() {
             return None;
         }
-        self.handle_key(key, load)
+        if self.show_help {
+            if kit::pressed(&event) {
+                self.show_help = false;
+            }
+            return None;
+        }
+        match kit::click(&event)? {
+            kit::Hit::Key(key) => self.handle_key(key, load),
+            _ if self.naming.is_some() => None,
+            kit::Hit::Tab(index) => {
+                if let Some(&tab) = self.tabs().get(index) {
+                    self.tab = tab;
+                }
+                None
+            }
+            // The filter bar: a click on a choice is that choice
+            kit::Hit::Row {
+                list: STATUS_CHOICES,
+                index,
+            } => {
+                if let Some(&status) = filter::Status::ALL.get(index) {
+                    self.filter.status = status;
+                    self.refilter();
+                }
+                None
+            }
+            kit::Hit::Row {
+                list: SLOW_CHOICES,
+                index,
+            } => {
+                if let Some(&slow) = filter::Slow::ALL.get(index) {
+                    self.filter.slow = slow;
+                    self.refilter();
+                }
+                None
+            }
+            kit::Hit::Row {
+                list: ENDPOINT_CHOICE,
+                ..
+            } => {
+                self.filter.endpoint = None;
+                self.refilter();
+                None
+            }
+            hit @ kit::Hit::Row { list, index } => {
+                match list {
+                    REQUEST_ROWS => self.scroll = index,
+                    ENDPOINT_ROWS => self.endpoint_cursor = index,
+                    _ => return None,
+                }
+                if self.clicks.second(hit, Instant::now()) {
+                    return self.handle_key(KeyEvent::from(KeyCode::Enter), load);
+                }
+                None
+            }
+        }
     }
 
     fn handle_key(&mut self, key: KeyEvent, load: &LoadHandle) -> Option<Outcome> {
@@ -944,6 +1092,23 @@ impl Dashboard {
             return Some(Outcome::Quit);
         }
         if settings::key(key) {
+            return None;
+        }
+        if let Some(naming) = &mut self.naming {
+            match naming.key(key) {
+                kit::SaveKey::Quit => return Some(Outcome::Quit),
+                kit::SaveKey::Cancel => self.naming = None,
+                kit::SaveKey::Save => self.save_test(),
+                kit::SaveKey::Typed => {}
+            }
+            return None;
+        }
+        if key.code == KeyCode::Char('s') && key.modifiers.contains(KeyModifiers::CONTROL) {
+            let offered = self
+                .saved_as
+                .clone()
+                .unwrap_or_else(|| crate::store::suggest_for(&self.args));
+            self.naming = Some(kit::SaveAs::new("save as", &offered));
             return None;
         }
         if self.filter.editing && self.edit_search(key) {
@@ -960,6 +1125,7 @@ impl Dashboard {
             KeyCode::Char('q') | KeyCode::Esc => return Some(Outcome::Quit),
             KeyCode::Char('r') => return Some(Outcome::Restart),
             KeyCode::Char('e') | KeyCode::Char('E') => return Some(Outcome::Edit),
+            KeyCode::Char('w') if !running => self.record_run(load),
             KeyCode::Char('s') | KeyCode::Char('i') if running => {
                 // Stop sending; results so far stay on screen
                 load.stop();
@@ -1222,6 +1388,123 @@ mod tests {
             .unwrap();
         let client = request.build_client().unwrap();
         crate::load::start(client, request, 1, Plan::Count(0), false)
+    }
+
+    #[test]
+    fn the_filter_bar_is_clickable_part_by_part() {
+        use crossterm::event::{MouseButton, MouseEvent, MouseEventKind};
+        use ratatui::{backend::TestBackend, layout::Rect, Terminal};
+        let mut d = dashboard();
+        d.tab = Tab::Requests;
+        let load = dummy_load();
+        let mut terminal = Terminal::new(TestBackend::new(120, 40)).unwrap();
+        let find = |hit: kit::Hit| {
+            kit::hits()
+                .into_iter()
+                .find(|(_, h)| *h == hit)
+                .map(|(area, _)| area)
+                .unwrap_or_else(|| panic!("{hit:?} isn't on screen"))
+        };
+        let click = |area: Rect| MouseEvent {
+            kind: MouseEventKind::Down(MouseButton::Left),
+            column: area.x + 1,
+            row: area.y,
+            modifiers: KeyModifiers::NONE,
+        };
+        terminal
+            .draw(|f| theme::draw(f, |f| view::render(&d, f)))
+            .unwrap();
+        // The letters act as the keys: f cycles the status
+        let before = d.filter.status;
+        d.handle_mouse(
+            click(find(kit::Hit::Key(KeyEvent::from(KeyCode::Char('f'))))),
+            &load,
+        );
+        assert_eq!(d.filter.status, before.next());
+        // A status is set by clicking it
+        let third = filter::Status::ALL[2];
+        d.handle_mouse(
+            click(find(kit::Hit::Row {
+                list: STATUS_CHOICES,
+                index: 2,
+            })),
+            &load,
+        );
+        assert_eq!(d.filter.status, third);
+        // So is a latency
+        d.handle_mouse(
+            click(find(kit::Hit::Row {
+                list: SLOW_CHOICES,
+                index: 1,
+            })),
+            &load,
+        );
+        assert_eq!(d.filter.slow, filter::Slow::ALL[1]);
+        // The search opens for typing
+        d.handle_mouse(
+            click(find(kit::Hit::Key(KeyEvent::from(KeyCode::Char('/'))))),
+            &load,
+        );
+        assert!(d.filter.editing);
+        d.handle_key(KeyEvent::from(KeyCode::Esc), &load);
+        assert!(!d.filter.editing);
+        // The choices are only where the bar is drawn: on another tab they're gone
+        d.tab = Tab::Live;
+        terminal
+            .draw(|f| theme::draw(f, |f| view::render(&d, f)))
+            .unwrap();
+        assert!(!kit::hits().iter().any(|(_, h)| matches!(
+            h,
+            kit::Hit::Row {
+                list: STATUS_CHOICES,
+                ..
+            }
+        )));
+    }
+
+    #[test]
+    fn ctrl_s_keeps_the_run_with_the_concurrency_as_dialed_in() {
+        let root = std::env::temp_dir().join(format!("pepe-dash-save-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let mut d = dashboard();
+        d.store = crate::store::Store::local_at(&root);
+        d.concurrency = 9;
+        let load = dummy_load();
+        let ctrl_s = KeyEvent::new(KeyCode::Char('s'), KeyModifiers::CONTROL);
+        assert!(d.handle_key(ctrl_s, &load).is_none());
+        assert_eq!(d.naming.as_ref().map(|n| n.name()).as_deref(), Some("x"));
+        // Typing goes to the name, not the dashboard: `q` doesn't quit
+        assert!(d
+            .handle_key(KeyEvent::from(KeyCode::Char('q')), &load)
+            .is_none());
+        assert_eq!(d.naming.as_ref().map(|n| n.name()).as_deref(), Some("xq"));
+        assert!(d
+            .handle_key(KeyEvent::from(KeyCode::Enter), &load)
+            .is_none());
+        assert!(d.naming.is_none());
+        assert_eq!(d.saved_as.as_deref(), Some("xq"));
+        let (_, config) = d.store.load("xq").unwrap();
+        assert_eq!(
+            (config.url.as_deref(), config.concurrency),
+            (Some("http://x"), Some(9))
+        );
+        assert!(matches!(&d.notice, Some((text, _, _)) if text.contains("--load xq")));
+        // Saved again under its own name: no question asked
+        d.concurrency = 12;
+        d.handle_key(ctrl_s, &load);
+        assert_eq!(d.naming.as_ref().map(|n| n.name()).as_deref(), Some("xq"));
+        d.handle_key(KeyEvent::from(KeyCode::Enter), &load);
+        assert!(d.naming.is_none());
+        assert_eq!(d.store.load("xq").unwrap().1.concurrency, Some(12));
+        // Esc leaves the prompt, and q quits again
+        d.handle_key(ctrl_s, &load);
+        d.handle_key(KeyEvent::from(KeyCode::Esc), &load);
+        assert!(d.naming.is_none());
+        assert!(matches!(
+            d.handle_key(KeyEvent::from(KeyCode::Char('q')), &load),
+            Some(Outcome::Quit)
+        ));
+        let _ = std::fs::remove_dir_all(&root);
     }
 
     fn stat(status: u16) -> ResponseStats {

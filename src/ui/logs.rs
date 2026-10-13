@@ -3,9 +3,11 @@
 //! the lines themselves
 
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
-use crossterm::event::{Event, EventStream, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
+use crossterm::event::{
+    Event, EventStream, KeyCode, KeyEvent, KeyEventKind, KeyModifiers, MouseEvent,
+};
 use futures::StreamExt;
 use ratatui::{
     backend::{Backend, CrosstermBackend},
@@ -18,7 +20,8 @@ use ratatui::{
 };
 use tokio::time::MissedTickBehavior;
 
-use super::kit::{about_line, chips_fit, help, marker, tabs, wrap, FAINT, FIELD, SELECTED};
+use super::kit;
+use super::kit::{about_line, help, marker, wrap, FAINT, FIELD, SELECTED};
 use super::view::{
     bar, inset, label, panel, section, status_color, truncate, value, ACCENT, BAD, GOOD, LABEL,
     RULE, WARN,
@@ -118,6 +121,8 @@ pub struct LogsScreen {
     /// The picked line's fields are open
     inspecting: bool,
     show_help: bool,
+    /// Tells a second click on a line from the first
+    clicks: kit::Clicks,
 }
 
 /// A list beside the paths: each name, its requests, and its colour
@@ -180,6 +185,7 @@ impl LogsScreen {
             searching: false,
             inspecting: false,
             show_help: false,
+            clicks: kit::Clicks::default(),
         }
     }
 
@@ -221,6 +227,44 @@ impl LogsScreen {
             Tab::Errors => self.cause = step(self.cause),
             Tab::Log => self.move_line(by),
             Tab::Dashboard | Tab::Paths => {}
+        }
+    }
+
+    /// Pick the line shown as row `index` of the log
+    fn pick_line(&mut self, index: usize) {
+        let stats = self.shared.lock();
+        self.line = self.lines(&stats).get(index).map(|(number, _)| *number);
+    }
+
+    /// The mouse: a click on a log line picks it, a second click opens it;
+    /// on a tab shows it; on a key chip presses the key. The wheel moves.
+    /// True when it asks to leave.
+    fn mouse(&mut self, event: MouseEvent, now: Instant) -> bool {
+        if settings::is_open() {
+            return false;
+        }
+        if self.show_help {
+            if kit::pressed(&event) {
+                self.show_help = false;
+            }
+            return false;
+        }
+        match kit::click(&event) {
+            Some(kit::Hit::Key(key)) => self.key(key),
+            Some(kit::Hit::Tab(index)) => {
+                if let Some(&tab) = TABS.get(index) {
+                    self.tab = tab;
+                }
+                false
+            }
+            Some(hit @ kit::Hit::Row { index, .. }) => {
+                self.pick_line(index);
+                if self.clicks.second(hit, now) {
+                    return self.key(KeyEvent::from(KeyCode::Enter));
+                }
+                false
+            }
+            None => false,
         }
     }
 
@@ -355,6 +399,11 @@ impl LogsScreen {
                             return Ok(());
                         }
                     }
+                    Some(Ok(Event::Mouse(mouse))) => {
+                        if self.mouse(mouse, Instant::now()) {
+                            return Ok(());
+                        }
+                    }
                     Some(Ok(_)) => {}
                     Some(Err(e)) => return Err(e.into()),
                     None => return Ok(()),
@@ -420,7 +469,7 @@ impl LogsScreen {
         ]
         .into();
         let at = TABS.iter().position(|t| *t == self.tab).unwrap_or(0);
-        f.render_widget(Paragraph::new(tabs(&titles, at)), tab_bar);
+        kit::tab_bar(f, tab_bar, &titles, at);
         f.render_widget(Paragraph::new(notes), notes_area);
         match self.tab {
             Tab::Dashboard => {}
@@ -491,7 +540,7 @@ impl LogsScreen {
                 ("q", "quit"),
             ],
         };
-        f.render_widget(Paragraph::new(chips_fit(&keys, footer.width)), footer);
+        kit::footer(f, footer, &keys);
 
         if self.inspecting {
             self.render_inspector(f, area, &stats);
@@ -1992,6 +2041,7 @@ impl LogsScreen {
                 .min(lines.len().saturating_sub(height)),
             None => lines.len().saturating_sub(height),
         };
+        kit::hit_rows(list, 0, from, lines.len().saturating_sub(from));
         let width = (list.width as usize).saturating_sub(1);
         let shown: Vec<Line> = lines
             .iter()

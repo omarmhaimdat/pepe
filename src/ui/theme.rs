@@ -573,6 +573,7 @@ pub fn keep(area: Rect) {
 /// Draw with `render`, then adjust the frame for the theme
 pub fn draw(f: &mut Frame, render: impl FnOnce(&mut Frame)) {
     KEPT.with(|k| k.borrow_mut().clear());
+    super::kit::hits_clear();
     render(f);
     let mut kept = KEPT.with(|k| std::mem::take(&mut *k.borrow_mut()));
     // The settings page, over whichever screen asked for it: where it

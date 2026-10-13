@@ -79,7 +79,7 @@ const MONTHS: [&str; 12] = [
 ];
 const WEEKDAYS: [&str; 7] = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
-fn days_from_civil(year: i64, month: u32, day: u32) -> i64 {
+pub(crate) fn days_from_civil(year: i64, month: u32, day: u32) -> i64 {
     let year = if month <= 2 { year - 1 } else { year };
     let era = year.div_euclid(400);
     let yoe = year.rem_euclid(400);

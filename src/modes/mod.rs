@@ -6,6 +6,7 @@
 pub mod api;
 pub mod compare;
 pub mod flow;
+pub mod history;
 pub mod logs;
 pub mod ping;
 pub mod ramp;
@@ -20,6 +21,7 @@ use crate::cli::{self, Cli};
 use crate::load::{LoadHandle, Plan};
 use crate::metrics::Metrics;
 use crate::ramp::{Ramp, RampPlan, Tick};
+use crate::store::{self, Store};
 use crate::terminal::{CtrlCWatchdog, TerminalGuard};
 use crate::{
     diagnose, exporter, guard, insights, json_report, load, metrics, request, timeline, ui, update,
@@ -98,6 +100,66 @@ pub(crate) struct Farewell {
     metrics: Option<Metrics>,
     /// The command that reproduces settings chosen on the setup screen
     command: Option<String>,
+    /// The end-of-run report as JSON, for `--record`, unless the screen
+    /// recorded it already
+    result: Option<String>,
+}
+
+/// `--record` asks for a saved test to record under, and a run or a ramp
+pub(crate) fn check_record(args: &Cli) -> Result<(), String> {
+    match &args.command {
+        None | Some(cli::Command::Ramp(_)) | Some(cli::Command::Ping(_)) => {}
+        Some(_) => {
+            return Err(
+                "--record keeps a run's, a ramp's or a ping's report, not this mode's".into(),
+            )
+        }
+    }
+    if store::test_of(args).is_none() {
+        return Err(
+            "--record needs a saved test to record under: run it with --load NAME, or add --keep NAME"
+                .into(),
+        );
+    }
+    Ok(())
+}
+
+/// `--record`: the run's report into the store under its test, said on
+/// stderr. With `pepe rerun`, what moved since the run before, when there
+/// was one.
+pub(crate) fn record_result(
+    args: &Cli,
+    json: &str,
+) -> Result<Option<crate::compare::Comparison>, Box<dyn std::error::Error>> {
+    let Some(name) = store::test_of(args) else {
+        return Ok(None);
+    };
+    let store = Store::local();
+    let previous = store.last_run(&name);
+    let path = store.record(&name, json)?;
+    eprintln!("recorded {} · pepe history {name}", path.display());
+    if args.rerun.is_none() {
+        return Ok(None);
+    }
+    let Some(previous) = previous else {
+        eprintln!("the first recorded run of `{name}`: nothing to compare with yet");
+        return Ok(None);
+    };
+    let before = crate::compare::Side::read(&previous.path)?;
+    let after = crate::compare::Side::read(&path)?;
+    Ok(Some(crate::compare::compare(&before, &after)))
+}
+
+/// After a `pepe rerun`: the comparison as text (JSON took the report's
+/// place already), and exit 1 under `--gate` on a regression
+pub(crate) fn finish_rerun(args: &Cli, comparison: Option<&crate::compare::Comparison>) {
+    let Some(comparison) = comparison else { return };
+    if !args.json {
+        print_report(&comparison.report());
+    }
+    if args.rerun.as_ref().is_some_and(|r| r.gate) && comparison.regression {
+        std::process::exit(1);
+    }
 }
 
 /// A ramp's load has no end of its own: the ramp stops it
@@ -151,8 +213,14 @@ pub(crate) async fn headless_dashboard(
     if let Some(report) = dashboard.report() {
         print_report(&report);
     }
+    let comparison = if args.record {
+        record_result(args, &dashboard.report_json(&load).to_json()?)?
+    } else {
+        None
+    };
     say_if_newer(check).await;
     exit_if_failed(args, dashboard.metrics());
+    finish_rerun(args, comparison.as_ref());
     Ok(())
 }
 
@@ -172,8 +240,16 @@ pub(crate) async fn run_headless(
         let check = update::Check::start();
         let (ramp, _load) = ramp::climb(args, plan).await?;
         print_report(&crate::ramp::report(args, &ramp));
+        let comparison = if args.record {
+            let mut report = crate::ramp::json(&ramp);
+            store::stamp_test(&mut report, args);
+            record_result(args, &serde_json::to_string_pretty(&report)?)?
+        } else {
+            None
+        };
         say_if_newer(check).await;
         exit_if_failed(args, &ramp.total);
+        finish_rerun(args, comparison.as_ref());
         return Ok(());
     }
     let (load, connects) = start_load(args, false)?;
