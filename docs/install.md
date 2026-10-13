@@ -104,4 +104,31 @@ pepe completions zsh                  # print the script, for packagers and dotf
 
 ## Themes and colour
 
-pepe draws in its own palette on terminals that say they can show true colour, and in the terminal's own 256-colour palette otherwise. `PEPE_THEME=light` or `dark` picks the palette for the terminal's background when `COLORFGBG` doesn't say; `NO_COLOR=1` draws without colour, with selections in reverse video, the heatmap in shades and the verdict uncoloured.
+pepe draws in its own palette on terminals that say they can show true colour, and in the terminal's own 256-colour palette otherwise. `F2` on any screen opens the [settings](#settings), where `←` `→` on the first line step through the themes, each drawn as it's picked and kept for next time:
+
+| Theme | |
+| --- | --- |
+| `pepe` | pepe's own: warm darks, one ember accent |
+| `nord`, `dracula`, `gruvbox`, `tokyo-night`, `catppuccin` | The same screens in those palettes, in true colour |
+| `paper` | True colour on a light ground |
+| `terminal` | The terminal's own background and 256 colours |
+| `light` | The 256 colours chosen for a light background |
+| `none` | No colour: selections in reverse video, the heatmap in shades, the verdict uncoloured |
+
+`PEPE_THEME=nord` names one for a shell or a single run, and wins over the saved theme when pepe starts. With neither, `COLORFGBG` says whether the background is light and `COLORTERM` whether the terminal has true colour. `NO_COLOR=1` is `none`, whatever else is set.
+
+## Settings
+
+`F2` (or `ctrl-o`) on any screen opens the settings for this machine: the theme, the defaults a run starts from (requests, duration, concurrency, timeout, threads, rate, warm-up, user agent, proxy, keep-alive, compression, redirects, TLS verification), a ramp's steps, the [guardrails](agents.md#guardrails), and whether pepe looks for new releases. `↑` `↓` move, `enter` types a value, `←` `→` change a choice, `del` goes back to pepe's own, `esc` closes. Every change is written as it's made, to `~/.config/pepe/settings.toml` (`$XDG_CONFIG_HOME/pepe`; `%APPDATA%\pepe` on Windows; `PEPE_CONFIG_DIR` names another directory):
+
+```toml
+theme = "nord"
+update-check = false
+
+[defaults]             # what a pepe.toml can say, for every run on this machine
+concurrency = 50
+timeout = 5
+max-rate = 500
+```
+
+The theme changes at once; the defaults are read when pepe starts. Flags win over a `pepe.toml`, which wins over these defaults, which win over pepe's own. The caps are the exception: where a `pepe.toml` and the settings both set `max-requests`, `max-rate` or `max-concurrency`, the lower one holds, so a file in a directory can't loosen what the machine is held to. They apply in every mode, with `--json` and under `pepe mcp` too.

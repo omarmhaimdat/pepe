@@ -109,6 +109,10 @@ pub(super) fn tabs(titles: &[String], selected: usize) -> Line<'static> {
 /// The `?` overlay: every key on this screen with what it does, then notes
 /// on anything that needs explaining. `?` or esc closes it, on every screen.
 pub(super) fn help(f: &mut Frame, area: Rect, rows: &[(&str, &str)], notes: &[String]) {
+    // The settings page opens from every screen: its key goes above the
+    // last two, which close the help and leave
+    let mut rows = rows.to_vec();
+    rows.insert(rows.len().saturating_sub(2), super::settings::HELP);
     let mut lines: Vec<Line> = rows
         .iter()
         .map(|(key, action)| {

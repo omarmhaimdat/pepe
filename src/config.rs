@@ -159,6 +159,93 @@ fn where_in(e: &toml::de::Error) -> String {
 }
 
 impl Config {
+    /// This file over the machine's defaults (the settings' `[defaults]`):
+    /// what it leaves unsaid is taken from `under`
+    pub fn over(mut self, under: &Config) -> Config {
+        macro_rules! fill {
+            ($($field:ident),*) => {
+                $(if self.$field.is_none() {
+                    self.$field = under.$field.clone();
+                })*
+            };
+        }
+        // How long a run is, is said once: a file with a count doesn't
+        // take a duration from under it, which would win over the count
+        if self.requests.is_none() && self.duration.is_none() {
+            fill!(requests, duration);
+        }
+        fill!(
+            url,
+            method,
+            headers,
+            body,
+            concurrency,
+            timeout,
+            threads,
+            rate,
+            warmup,
+            trace_header,
+            user_agent,
+            proxy,
+            insecure,
+            compression,
+            keep_alive,
+            redirects,
+            snapshot,
+            allow_host
+        );
+        // The caps: the lower of the two holds, so a file in a directory
+        // can't loosen what the machine is held to
+        fn lower<T: PartialOrd + Copy>(a: Option<T>, b: Option<T>) -> Option<T> {
+            match (a, b) {
+                (Some(a), Some(b)) => Some(if b < a { b } else { a }),
+                (a, b) => a.or(b),
+            }
+        }
+        self.max_requests = lower(self.max_requests, under.max_requests);
+        self.max_rate = lower(self.max_rate, under.max_rate);
+        self.max_concurrency = lower(self.max_concurrency, under.max_concurrency);
+        self.ramp = match (self.ramp.take(), &under.ramp) {
+            (Some(mut ramp), Some(under)) => {
+                macro_rules! fill {
+                    ($($field:ident),*) => {
+                        $(if ramp.$field.is_none() {
+                            ramp.$field = under.$field.clone();
+                        })*
+                    };
+                }
+                fill!(from, to, step, every, until);
+                Some(ramp)
+            }
+            (ramp, under) => ramp.or_else(|| under.clone()),
+        };
+        self.api = match (self.api.take(), &under.api) {
+            (Some(mut api), Some(under)) => {
+                macro_rules! fill {
+                    ($($field:ident),*) => {
+                        $(if api.$field.is_none() {
+                            api.$field = under.$field.clone();
+                        })*
+                    };
+                }
+                fill!(
+                    spec,
+                    server,
+                    auth,
+                    all,
+                    tag,
+                    only,
+                    skip,
+                    set,
+                    include_writes
+                );
+                Some(api)
+            }
+            (api, under) => api.or_else(|| under.clone()),
+        };
+        self
+    }
+
     /// Fill in what the command line left unsaid. `matches` says which
     /// flags were typed; those keep their value, everything else the file
     /// sets takes the file's.
@@ -542,6 +629,61 @@ mod tests {
             cli
         };
         assert_eq!(lifted(fresh).command_line(), lifted(cli).command_line());
+    }
+
+    #[test]
+    fn a_file_sits_over_the_machines_defaults() {
+        let machine = parse(
+            r#"
+            concurrency = 8
+            timeout = 5
+            duration = "30s"
+            keep-alive = false
+            insecure = true
+            max-requests = 10000
+            max-rate = 500
+            [ramp]
+            to = 200
+            every = "5s"
+            "#,
+        )
+        .unwrap();
+        let file = parse(
+            r#"
+            concurrency = 50
+            requests = 2000
+            insecure = false
+            max-requests = 50000
+            max-concurrency = 64
+            [ramp]
+            to = 80
+            "#,
+        )
+        .unwrap();
+        let both = file.over(&machine);
+        assert_eq!((both.concurrency, both.timeout), (Some(50), Some(5)));
+        assert_eq!(
+            (both.requests, both.duration.as_deref()),
+            (Some(2000), None),
+            "the file's count, not the machine's duration"
+        );
+        assert_eq!((both.keep_alive, both.insecure), (Some(false), Some(false)));
+        assert_eq!(
+            (both.max_requests, both.max_rate, both.max_concurrency),
+            (Some(10000), Some(500.0), Some(64)),
+            "the lower cap holds"
+        );
+        let ramp = both.ramp.unwrap();
+        assert_eq!((ramp.to, ramp.every.as_deref()), (Some(80), Some("5s")));
+
+        // On their own, the machine's defaults fill in a bare command line
+        // and give way to what's typed
+        let (mut cli, matches) = parse_argv(&["pepe", "-t", "9", "https://example.com/"]);
+        Config::default().over(&machine).apply(&mut cli, &matches);
+        assert_eq!((cli.concurrency, cli.timeout), (8, 9));
+        assert_eq!(cli.duration.as_deref(), Some("30s"));
+        assert!(cli.disable_keepalive && cli.insecure);
+        assert_eq!(cli.max_requests, Some(10000));
     }
 
     #[test]

@@ -18,7 +18,7 @@ use tokio::time::MissedTickBehavior;
 
 use super::kit::{about_line, caption, chips_fit, help, marker, panel, FAINT, SELECTED};
 use super::view::{label, status_color, truncate, value, ACCENT, BAD, GOOD, LABEL, RULE, WARN};
-use super::{format, mascot, theme, Outcome};
+use super::{format, mascot, settings, theme, Outcome};
 use crate::insights::Level;
 use crate::load::LoadHandle;
 use crate::ramp::{self, End, Ramp, RampPlan, Second, Step, Tick};
@@ -125,6 +125,9 @@ impl RampScreen {
     fn key(&mut self, key: KeyEvent, now: Instant) -> Effect {
         if key.code == KeyCode::Char('c') && key.modifiers.contains(KeyModifiers::CONTROL) {
             return Effect::Leave(Outcome::Quit);
+        }
+        if settings::key(key) {
+            return Effect::None;
         }
         let running = self.ramp.end.is_none();
         let last = self.ramp.plan.levels.len() - 1;

@@ -8,6 +8,7 @@ pub(crate) mod mascot;
 mod ping;
 mod plan;
 mod ramp;
+mod settings;
 mod setup;
 pub mod theme;
 mod view;
@@ -941,6 +942,9 @@ impl Dashboard {
         let running = self.finished.is_none();
         if key.code == KeyCode::Char('c') && key.modifiers.contains(KeyModifiers::CONTROL) {
             return Some(Outcome::Quit);
+        }
+        if settings::key(key) {
+            return None;
         }
         if self.filter.editing && self.edit_search(key) {
             return None;

@@ -118,7 +118,7 @@ pub(super) fn value(text: impl Into<String>, color: Color) -> Span<'static> {
 }
 
 pub(super) fn heading(text: &str) -> Line<'static> {
-    if super::theme::current() == super::theme::Theme::Pepe {
+    if super::theme::current().true_color() {
         return Line::raw(text.to_string());
     }
     Line::from(Span::styled(
@@ -130,7 +130,7 @@ pub(super) fn heading(text: &str) -> Line<'static> {
 /// Section title followed by a rule to the edge: "LATENCY ────────"
 pub(super) fn section(f: &mut Frame, area: Rect, title: &str, right: Option<Line<'static>>) {
     // On pepe's panels a title is a word, not a rule: the panel is the edge
-    if super::theme::current() == super::theme::Theme::Pepe {
+    if super::theme::current().true_color() {
         f.render_widget(Paragraph::new(Line::raw(title.to_string())), area);
         if let Some(right) = right {
             f.render_widget(Paragraph::new(right).alignment(Alignment::Right), area);

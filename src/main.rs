@@ -33,6 +33,7 @@ mod replay;
 mod request;
 mod response;
 mod schema;
+mod settings;
 mod terminal;
 mod timeline;
 mod trace;
@@ -73,12 +74,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Parsed by hand so the config file can tell typed flags from defaults
     let matches = Cli::command().get_matches();
     let mut args = Cli::from_arg_matches(&matches).unwrap_or_else(|e| e.exit());
+    // This machine's settings sit under everything: flags win over a
+    // pepe.toml, which wins over the settings' defaults
+    if let Err(e) = settings::init() {
+        eprintln!("error: {e}");
+        std::process::exit(1);
+    }
+    let defaults = settings::get().defaults;
     match config::load(args.config.as_deref()) {
         Ok(Some((path, file))) => {
-            file.apply(&mut args, &matches);
+            file.over(&defaults).apply(&mut args, &matches);
             args.config_loaded = Some(path);
         }
-        Ok(None) => {}
+        Ok(None) => defaults.apply(&mut args, &matches),
         Err(e) => {
             eprintln!("error: {e}");
             std::process::exit(1);

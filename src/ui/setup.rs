@@ -17,7 +17,7 @@ use ratatui::{
 
 use super::kit::{about_line, caption, chips_fit, help, marker, panel, tabs, FAINT, SELECTED};
 use super::view::{label, status_color, truncate, value, ACCENT, BAD, GOOD, LABEL, RULE, WARN};
-use super::{body, format, mascot, theme};
+use super::{body, format, mascot, settings, theme};
 use crate::cli::{ApiArgs, Command, RampArgs};
 use crate::curl;
 use crate::load::Plan;
@@ -451,6 +451,9 @@ impl Setup {
         // AltGr arrives as ctrl+alt on Windows, and types a character
         let ctrl = key.modifiers.contains(KeyModifiers::CONTROL)
             && !key.modifiers.contains(KeyModifiers::ALT);
+        if settings::key(key) {
+            return None;
+        }
         let field = self.focused();
         let editable =
             self.text(field).is_some() || matches!(field, Field::AddHeader | Field::AddUntil);
@@ -739,7 +742,9 @@ impl Setup {
             let action = match event {
                 Some(Ok(Event::Key(key))) if key.kind == KeyEventKind::Press => self.key(key),
                 Some(Ok(Event::Paste(text))) => {
-                    self.paste(&text);
+                    if !settings::paste(&text) {
+                        self.paste(&text);
+                    }
                     None
                 }
                 Some(Ok(_)) => None,

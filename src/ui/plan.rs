@@ -22,7 +22,7 @@ use super::kit::{
     SELECTED,
 };
 use super::view::{label, status_color, truncate, value, ACCENT, BAD, GOOD, LABEL, RULE, WARN};
-use super::{body, format, mascot, theme};
+use super::{body, format, mascot, settings, theme};
 use crate::api::ApiRun;
 use crate::load::Plan;
 use crate::openapi::{split_values, AuthKind, Credentials, Endpoint, Field, In, MASK};
@@ -577,6 +577,9 @@ impl<'a> PlanScreen<'a> {
         if key.code == KeyCode::Char('c') && key.modifiers.contains(KeyModifiers::CONTROL) {
             return Some(Action::Quit);
         }
+        if settings::key(key) {
+            return None;
+        }
         if self.prompt.is_some() {
             return self.prompt_key(key);
         }
@@ -977,7 +980,9 @@ impl<'a> PlanScreen<'a> {
             let action = match event {
                 Some(Ok(Event::Key(key))) if key.kind == KeyEventKind::Press => self.key(key),
                 Some(Ok(Event::Paste(text))) => {
-                    self.paste(&text);
+                    if !settings::paste(&text) {
+                        self.paste(&text);
+                    }
                     None
                 }
                 Some(Ok(_)) => None,

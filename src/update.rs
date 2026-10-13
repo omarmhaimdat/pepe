@@ -172,9 +172,11 @@ fn unix_now() -> u64 {
 }
 
 /// Nobody is there to read a notice in CI, and some people don't want the
-/// request made at all
+/// request made at all: the environment says so, or the settings do
 fn disabled() -> bool {
-    std::env::var_os(NO_UPDATE_CHECK_ENV).is_some() || std::env::var_os("CI").is_some()
+    std::env::var_os(NO_UPDATE_CHECK_ENV).is_some()
+        || std::env::var_os("CI").is_some()
+        || crate::settings::get().update_check == Some(false)
 }
 
 async fn fetch(url: &str) -> Option<String> {
@@ -266,6 +268,10 @@ impl Check {
 /// A newer release the last look found, for screens to mention; no request
 /// is made
 pub fn known() -> Option<Version> {
+    // Switched off in the settings, a release isn't mentioned either
+    if crate::settings::get().update_check == Some(false) {
+        return None;
+    }
     let current = Version::parse(version()).ok()?;
     Cache::read()?.newer_than(&current).map(|l| l.version)
 }

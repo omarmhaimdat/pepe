@@ -106,7 +106,7 @@ const PING_KEYS: [(&str, &str); 9] = [
     ("?", "Show all keys"),
 ];
 
-const ENVIRONMENT: [(&str, &str); 4] = [
+const ENVIRONMENT: [(&str, &str); 5] = [
     (
         "PEPE_NO_UPDATE_CHECK",
         "Set to anything to skip the look for a newer release",
@@ -121,7 +121,11 @@ const ENVIRONMENT: [(&str, &str); 4] = [
     ),
     (
         "PEPE_THEME",
-        "light or dark, for the terminal's background; otherwise COLORFGBG decides",
+        "A theme by name (pepe, nord, dracula, gruvbox, tokyo-night, catppuccin, paper, terminal, light, none); otherwise the one saved in the settings (F2 on any screen), or what the terminal suggests",
+    ),
+    (
+        "PEPE_CONFIG_DIR",
+        "Where settings.toml is kept: the theme and this machine's defaults (~/.config/pepe otherwise)",
     ),
 ];
 

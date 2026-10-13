@@ -19,7 +19,7 @@ use tokio::time::MissedTickBehavior;
 
 use super::kit::{about_line, chips_fit, help, marker, tabs, wrap, FAINT, SELECTED};
 use super::view::{label, status_color, truncate, value, ACCENT, BAD, GOOD, LABEL, RULE, WARN};
-use super::{format, theme};
+use super::{format, settings, theme};
 use crate::ping::{glyph, percent, Kind, Phases, Sample, Shared, State, TargetStats};
 
 /// How often the screen is drawn again while nothing is pressed
@@ -218,6 +218,9 @@ impl PingScreen {
     fn key(&mut self, key: KeyEvent) -> bool {
         if key.code == KeyCode::Char('c') && key.modifiers.contains(KeyModifiers::CONTROL) {
             return true;
+        }
+        if settings::key(key) {
+            return false;
         }
         if self.show_help {
             self.show_help = !matches!(key.code, KeyCode::Char('?') | KeyCode::Esc | KeyCode::F(1));
