@@ -6,6 +6,75 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+## [0.40.0](https://github.com/omarmhaimdat/pepe/compare/v0.39.1...v0.40.0) - 2026-10-12
+
+### Added
+
+- *(store)* recorded runs: --record, w on the dashboard, pepe history, pepe rerun, pepe compare NAME ([#177](https://github.com/omarmhaimdat/pepe/pull/177))
+
+  ## What
+
+  A saved test keeps its results too, when asked, and pepe can read them
+  back.
+
+  - `--record` on a run of a saved test writes the report when it ends, as
+  `.pepe/runs/NAME/<moment>.json`, in every path: `--json`, headless, the
+  dashboard and the ramp screen. It refuses a run that is not a saved test
+  (`--load NAME`, or `--keep NAME`), and modes other than a run or a ramp.
+  - `w` on the dashboard and the ramp screen records the run once it has
+  ended, with a notice saying where.
+  - Every report carries `test` and `command`, the command with header
+  secrets masked, so a recorded run can be run again from the file alone.
+  Both JSON schemas gained the two fields.
+
+    ```
+  $ pepe -n 1000 -c 10 https://api.example.com/health --keep api-health
+  --record --json
+    saved .pepe/tests/api-health.toml · `pepe --load api-health` runs it
+  recorded .pepe/runs/api-health/2026-10-12T22-55-04Z.json · pepe history
+  api-health
+    ```
+
+  - `pepe history` lists the saved tests with their run counts and last
+  run; `pepe history NAME` lists a test's runs, each against the one
+  before. Both take `--json`.
+  - `pepe rerun NAME` is `--load NAME --record` followed by the comparison
+  with the previous run; with `--json` the comparison is what gets
+  printed, the run's own report being on disk; `--gate` exits 1 on a
+  regression.
+  - `pepe compare NAME` holds a test's last two recorded runs against each
+  other. Two runs recorded in the same second are told apart and kept in
+  order.
+  - In the library, each test shows its last run (rps, p99, failures, age)
+  when the terminal is wide enough, and `h` opens its history: the runs
+  newest first, with a card saying what moved since the run before. Mouse
+  and wheel work there as everywhere.
+  - The plan screen's parameters pane takes clicks: one picks a parameter,
+  a second edits it.
+
+  The reference, completions and man pages know the two commands and the
+  flag; the load-test, compare, dashboard and agents pages document them.
+
+  ## Why
+
+  v0.37 to v0.39 gave pepe saved tests, a library to pick from, and a way
+  to keep any run. The payoff of the store is results next to the test
+  they came from: a trend over time instead of two files on a desk, and
+  "did my change regress" as one command that CI can gate on. The report
+  carrying its own invocation means no result is ever an orphan.
+
+  ## Checked
+
+  - `cargo test`, `cargo clippy --all-targets -- -D warnings`, `cargo fmt
+  --check`
+  - `UPDATE_CONTRIB=1 cargo test contrib` and `python3 site/build-docs.py`
+  - Against a local HTTP server: `--keep … --record --json` (report
+  carries `test` and the masked command), a headless `--load … --record`,
+  `pepe history` in both forms and as JSON, `pepe compare NAME`, `pepe
+  rerun NAME` as text and as JSON, the refusals for an unsaved run and an
+  unknown name, and two runs in one second kept in order.
+
+
 ## [0.39.1](https://github.com/omarmhaimdat/pepe/compare/v0.39.0...v0.39.1) - 2026-10-12
 
 ### Fixed
