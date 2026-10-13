@@ -6,6 +6,96 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+## [0.42.0](https://github.com/omarmhaimdat/pepe/compare/v0.41.0...v0.42.0) - 2026-10-13
+
+### Added
+
+- *(ui)* themes, and a settings page on every screen that keeps this machine's defaults ([#181](https://github.com/omarmhaimdat/pepe/pull/181))
+
+  ## What
+
+  **Themes.** Seven true colour themes beside `terminal`, `light` and
+  `none`: `pepe`, `nord`, `dracula`, `gruvbox`, `tokyo-night`,
+  `catppuccin`, and `paper` for a light ground. Each is a dozen colours in
+  `src/ui/theme.rs`; the rest of its palette is mixed from those, so the
+  screens still draw in one dark palette and `adjust` repaints the frame.
+
+  **A settings page on every screen.** `F2` opens it over the setup, saved
+  tests, history, API plan, dashboard, ramp, ping and logs screens, and
+  each screen's `?` help lists it.
+
+  - The first line is the theme: `←` `→` step through them and the screen
+  repaints at once.
+  - Below it: the defaults a run starts from (requests, duration,
+  concurrency, timeout, threads, rate, warm-up, user agent, proxy,
+  keep-alive, compression, redirects, TLS verification), a ramp's steps,
+  the guardrails, and whether pepe looks for new releases.
+  - `enter` types a value, which is checked; `del` goes back to pepe's
+  own; `esc` closes. Every change is saved as it's made.
+
+  **Kept on the host.** `~/.config/pepe/settings.toml`
+  (`$XDG_CONFIG_HOME/pepe`, `%APPDATA%\pepe` on Windows, or the directory
+  `PEPE_CONFIG_DIR` names):
+
+  ```toml
+  theme = "nord"
+  update-check = false
+
+  [defaults]             # what a pepe.toml can say, for every run on this machine
+  concurrency = 50
+  max-rate = 500
+  ```
+
+  ## Why
+
+  The theme could only be picked with `PEPE_THEME`, between pepe's palette
+  and the terminal's, and a default could only be changed per directory in
+  a `pepe.toml`.
+
+  ## For the reviewer
+
+  - **Precedence:** flags, then `pepe.toml`, then the settings'
+  `[defaults]`, then pepe's own. The defaults are read when pepe starts,
+  so only the theme changes mid-session.
+  - **Caps:** where a `pepe.toml` and the settings both set
+  `max-requests`, `max-rate` or `max-concurrency`, the lower holds, so a
+  file in a directory can't loosen a machine-wide cap. This is a choice,
+  and the place to push back if the project file should simply win.
+  - **Every mode:** the saved defaults apply with `--json` and under `pepe
+  mcp` too, as a `pepe.toml` does.
+  - **A settings file that doesn't parse** stops pepe with exit 1 and
+  names the file, rather than dropping a cap it holds.
+  - **`PEPE_THEME`** still wins over the saved theme at startup (the page
+  says so when it's set); `NO_COLOR` wins over everything. A theme name
+  this pepe doesn't know is not an error.
+  - **`update-check = false`** also stops the setup screen mentioning a
+  cached newer release.
+  - Where the page covers the mascot, the page shows: the kept pixel-art
+  area is cut around it.
+  - A saved test (`--load`, `pepe rerun`) sits over the defaults like a
+  `pepe.toml`; its mode is read from the test alone, so a `[ramp]` in the
+  settings doesn't make every test a ramp.
+  - While the page is up, the mouse is no screen's.
+  - No `--theme` flag and no `pepe settings` subcommand.
+
+  ## Checked
+
+  - After merging master: `cargo test` (357 pass), `cargo clippy
+  --all-targets -- -D warnings`, `cargo fmt --check`.
+  - `UPDATE_CONTRIB=1 cargo test contrib` for the man page's environment
+  section.
+  - `python3 site/build-docs.py` **not run**: `site/` had unrelated
+  uncommitted changes locally, so the built pages are not in this PR.
+  - By hand, in tmux with `PEPE_CONFIG_DIR` pointed at a scratch
+  directory: opened the page from the setup screen and from a finished
+  dashboard (40 requests at a local `python3 -m http.server`), stepped the
+  themes and read the escape codes for the new palette, typed and cleared
+  defaults, read the file back, and confirmed with `--dry-run` that a
+  saved `concurrency` reaches a run and that `-c` wins over it.
+  - The palettes are held to contrast floors by a test; the shades
+  themselves were not judged by eye in a terminal.
+
+
 ## [0.41.0](https://github.com/omarmhaimdat/pepe/compare/v0.40.0...v0.41.0) - 2026-10-13
 
 ### Added
