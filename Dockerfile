@@ -13,6 +13,9 @@ WORKDIR /src
 COPY Cargo.toml Cargo.lock ./
 COPY src ./src
 COPY contrib ./contrib
+# Embedded with include_str!: the JSON Schemas and the plugin marketplace
+COPY schema ./schema
+COPY .claude-plugin ./.claude-plugin
 RUN cargo build --release --locked && strip target/release/pepe
 
 FROM scratch
