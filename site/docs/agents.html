@@ -61,7 +61,8 @@ pepe --allow-host .staging.example.com --dry-run -n 100 https://api.staging.exam
     }
   }
 }</code></pre></figure>
-<p>In Cursor, <a href="https://github.com/omarmhaimdat/pepe/blob/master/cursor://anysphere.cursor-deeplink/mcp/install?name=pepe&amp;config=eyJjb21tYW5kIjoicGVwZSIsImFyZ3MiOlsibWNwIiwiLS1tYXgtcmVxdWVzdHMiLCIxMDAwMCIsIi0tbWF4LXJhdGUiLCI1MDAiLCItLW1heC1jb25jdXJyZW5jeSIsIjY0Il19">this link</a> adds the server with the plugin's caps.</p>
+<p>In Cursor, opening this link adds the server with the plugin's caps:</p>
+<figure class="code"><div class="bar"><span></span><button type="button" class="copy" aria-label="Copy">copy</button></div><pre><code>cursor://anysphere.cursor-deeplink/mcp/install?name=pepe&amp;config=eyJjb21tYW5kIjoicGVwZSIsImFyZ3MiOlsibWNwIiwiLS1tYXgtcmVxdWVzdHMiLCIxMDAwMCIsIi0tbWF4LXJhdGUiLCI1MDAiLCItLW1heC1jb25jdXJyZW5jeSIsIjY0Il19</code></pre></figure>
 <p>A tool call that pepe refuses (a host outside the allowed, a cap crossed) comes back as an error with pepe's reason; a limit crossed during the run (<code>fail_if</code>, a ping's <code>slo</code>) comes back as the report with a note, since the report is the answer. A <code>ping</code> without <code>count</code> or <code>duration</code> sends five pings, so no call runs forever.</p>
 <h3 id="in-codex"><a href="#in-codex">In Codex</a></h3>
 <p>Codex reads <code>AGENTS.md</code>, and takes MCP servers the same way:</p>

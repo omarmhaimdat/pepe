@@ -69,7 +69,11 @@ For a client configured with JSON (Claude Desktop, Cursor and the like):
 }
 ```
 
-In Cursor, [this link](cursor://anysphere.cursor-deeplink/mcp/install?name=pepe&config=eyJjb21tYW5kIjoicGVwZSIsImFyZ3MiOlsibWNwIiwiLS1tYXgtcmVxdWVzdHMiLCIxMDAwMCIsIi0tbWF4LXJhdGUiLCI1MDAiLCItLW1heC1jb25jdXJyZW5jeSIsIjY0Il19) adds the server with the plugin's caps.
+In Cursor, opening this link adds the server with the plugin's caps:
+
+```
+cursor://anysphere.cursor-deeplink/mcp/install?name=pepe&config=eyJjb21tYW5kIjoicGVwZSIsImFyZ3MiOlsibWNwIiwiLS1tYXgtcmVxdWVzdHMiLCIxMDAwMCIsIi0tbWF4LXJhdGUiLCI1MDAiLCItLW1heC1jb25jdXJyZW5jeSIsIjY0Il19
+```
 
 A tool call that pepe refuses (a host outside the allowed, a cap crossed) comes back as an error with pepe's reason; a limit crossed during the run (`fail_if`, a ping's `slo`) comes back as the report with a note, since the report is the answer. A `ping` without `count` or `duration` sends five pings, so no call runs forever.
 
