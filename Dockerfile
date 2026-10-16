@@ -12,6 +12,7 @@ RUN apk add --no-cache musl-dev
 WORKDIR /src
 COPY Cargo.toml Cargo.lock ./
 COPY src ./src
+COPY schema ./schema
 COPY contrib ./contrib
 RUN cargo build --release --locked && strip target/release/pepe
 
