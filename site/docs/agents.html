@@ -61,7 +61,18 @@ pepe --allow-host .staging.example.com --dry-run -n 100 https://api.staging.exam
     }
   }
 }</code></pre></figure>
+<p>In Cursor, <a href="https://github.com/omarmhaimdat/pepe/blob/master/cursor://anysphere.cursor-deeplink/mcp/install?name=pepe&amp;config=eyJjb21tYW5kIjoicGVwZSIsImFyZ3MiOlsibWNwIiwiLS1tYXgtcmVxdWVzdHMiLCIxMDAwMCIsIi0tbWF4LXJhdGUiLCI1MDAiLCItLW1heC1jb25jdXJyZW5jeSIsIjY0Il19">this link</a> adds the server with the plugin's caps.</p>
 <p>A tool call that pepe refuses (a host outside the allowed, a cap crossed) comes back as an error with pepe's reason; a limit crossed during the run (<code>fail_if</code>, a ping's <code>slo</code>) comes back as the report with a note, since the report is the answer. A <code>ping</code> without <code>count</code> or <code>duration</code> sends five pings, so no call runs forever.</p>
+<h3 id="in-codex"><a href="#in-codex">In Codex</a></h3>
+<p>Codex reads <code>AGENTS.md</code>, and takes MCP servers the same way:</p>
+<figure class="code"><div class="bar"><span>bash</span><button type="button" class="copy" aria-label="Copy">copy</button></div><pre><code>codex mcp add pepe -- pepe mcp --max-requests 10000 --max-rate 500 --max-concurrency 64</code></pre></figure>
+<p>or in <code>~/.codex/config.toml</code>:</p>
+<figure class="code"><div class="bar"><span>toml</span><button type="button" class="copy" aria-label="Copy">copy</button></div><pre><code>[mcp_servers.pepe]
+command = &quot;pepe&quot;
+args = [&quot;mcp&quot;, &quot;--max-requests&quot;, &quot;10000&quot;, &quot;--max-rate&quot;, &quot;500&quot;, &quot;--max-concurrency&quot;, &quot;64&quot;]</code></pre></figure>
+<p>The repository is laid out as a Codex plugin too (a <code>plugin.json</code> and an <code>mcp.json</code> at its root, and <code>.agents/plugins/marketplace.json</code>), with the same skill and server: <code>codex plugin marketplace add omarmhaimdat/pepe</code>, then <code>/plugins</code> in Codex to install it.</p>
+<h3 id="the-skill-alone"><a href="#the-skill-alone">The skill alone</a></h3>
+<p><code>npx skills add omarmhaimdat/pepe</code> puts the <code>pepe</code> skill where Claude Code, Codex and the other agents that read <a href="https://agentskills.io">Agent Skills</a> look for it, without the server.</p>
 <h3 id="as-a-claude-code-plugin"><a href="#as-a-claude-code-plugin">As a Claude Code plugin</a></h3>
 <p>The repository is also a Claude Code plugin. Installing it brings the <code>pepe</code> skill (how to call pepe and what to read in each report) and the MCP server above, started as <code>pepe mcp --max-requests 10000 --max-rate 500 --max-concurrency 64</code>. The plugin does not install pepe: the binary must be on <code>PATH</code> first.</p>
 <figure class="code"><div class="bar"><span>bash</span><button type="button" class="copy" aria-label="Copy">copy</button></div><pre><code>claude plugin marketplace add omarmhaimdat/pepe
@@ -80,6 +91,15 @@ claude plugin install pepe@pepe</code></pre></figure>
 <h2 id="find-the-capacity"><a href="#find-the-capacity">Find the capacity</a></h2>
 <figure class="code"><div class="bar"><span>bash</span><button type="button" class="copy" aria-label="Copy">copy</button></div><pre><code>pepe ramp --json https://api.example.com/health --to 200 --until &#x27;p99 &gt; 500ms&#x27;</code></pre></figure>
 <p>Read <code>holds_concurrency</code> (the level that held), <code>capacity.requests_per_second</code> (the estimate, <code>null</code> when the curve hadn't bent; <code>extrapolated</code> when it was read past the ramp), each <code>steps[]</code> entry, and <code>findings</code>.</p>
+<h2 id="speed-up-an-endpoint"><a href="#speed-up-an-endpoint">Speed up an endpoint</a></h2>
+<p>The loop an agent can close on its own: measure, see which part of the service the time goes to, change the code, measure again, and let the comparison say whether it worked. <code>--otlp</code> (a run's <code>otlp</code> in the MCP server) takes the service's OpenTelemetry spans, and the report's <code>spans</code> name the operation behind the time (<a href="load-test.html#inside-the-service">Inside the service</a>).</p>
+<figure class="code"><div class="bar"><span>bash</span><button type="button" class="copy" aria-label="Copy">copy</button></div><pre><code>OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 ./my-service &amp;
+pepe --json --otlp :4318 -n 2000 -c 16 http://localhost:8080/checkout &gt; before.json
+# change the code behind spans.operations[0], restart the service
+pepe --json --otlp :4318 -n 2000 -c 16 http://localhost:8080/checkout &gt; after.json
+pepe compare before.json after.json --json --gate</code></pre></figure>
+<p>Read <code>spans.operations[]</code>, the operation with the most of the slowest requests' time first: <code>name</code>, <code>service</code>, <code>kind</code>, <code>calls_per_request</code>, <code>median_ms</code>, <code>share_percent</code> (its own time over all requests) and <code>slowest_share_percent</code> (over the slowest); <code>spans.coverage_percent</code>, how many requests the service sent spans for; and <code>summary.slowest_requests[].spent</code>, one slow request's time by operation, with its <code>trace_id</code>. The comparison's <code>operations[]</code> holds each operation before and after, and its <code>findings</code> say what moved inside the service. No spans, or few, and the <code>verdict</code> findings say what to set on the service.</p>
+<p>The MCP server has the loop as a prompt, <code>speed-up</code>, with a <code>url</code> and an optional <code>goal</code>: in Claude Code it is the <code>/pepe:speed-up</code> command (or <code>/mcp__pepe__speed-up</code>). The <code>run</code>, <code>ping</code>, <code>ramp</code>, <code>api</code>, <code>flow</code> and <code>replay</code> tools take a <code>save</code> path, so their reports can be handed to <code>compare</code>.</p>
 <h2 id="compare-before-and-after"><a href="#compare-before-and-after">Compare before and after</a></h2>
 <figure class="code"><div class="bar"><span>bash</span><button type="button" class="copy" aria-label="Copy">copy</button></div><pre><code>pepe --json -n 5000 -c 20 &quot;$URL&quot; &gt; before.json
 # change something
@@ -94,7 +114,7 @@ pepe compare before.json after.json --json --gate</code></pre></figure>
     <nav class="turn"><a class="prev" href="ci.html"><small>Previous</small>CI and Docker</a><a class="next" href="reference.html"><small>Next</small>Command reference</a></nav>
     <p class="edit"><a href="https://github.com/omarmhaimdat/pepe/edit/master/docs/agents.md">Edit this page on GitHub</a></p>
   </main>
-  <aside class="toc"><div class="label">On this page</div><a href="#the-rules" class="h2">The rules</a><a href="#guardrails" class="h2">Guardrails</a><a href="#as-an-mcp-server" class="h2">As an MCP server</a><a href="#as-a-claude-code-plugin" class="h3">As a Claude Code plugin</a><a href="#diagnose-one-endpoint" class="h2">Diagnose one endpoint</a><a href="#watch-it-over-time" class="h2">Watch it over time</a><a href="#load-test" class="h2">Load-test</a><a href="#find-the-capacity" class="h2">Find the capacity</a><a href="#compare-before-and-after" class="h2">Compare before and after</a><a href="#test-a-whole-api-or-a-journey" class="h2">Test a whole API or a journey</a><a href="#the-same-request-every-mode" class="h2">The same request every mode</a></aside>
+  <aside class="toc"><div class="label">On this page</div><a href="#the-rules" class="h2">The rules</a><a href="#guardrails" class="h2">Guardrails</a><a href="#as-an-mcp-server" class="h2">As an MCP server</a><a href="#in-codex" class="h3">In Codex</a><a href="#the-skill-alone" class="h3">The skill alone</a><a href="#as-a-claude-code-plugin" class="h3">As a Claude Code plugin</a><a href="#diagnose-one-endpoint" class="h2">Diagnose one endpoint</a><a href="#watch-it-over-time" class="h2">Watch it over time</a><a href="#load-test" class="h2">Load-test</a><a href="#find-the-capacity" class="h2">Find the capacity</a><a href="#speed-up-an-endpoint" class="h2">Speed up an endpoint</a><a href="#compare-before-and-after" class="h2">Compare before and after</a><a href="#test-a-whole-api-or-a-journey" class="h2">Test a whole API or a journey</a><a href="#the-same-request-every-mode" class="h2">The same request every mode</a></aside>
 </div>
 <script src="docs.js" defer></script>
 </body>
