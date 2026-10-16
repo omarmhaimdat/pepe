@@ -6,6 +6,40 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+## [0.42.2](https://github.com/omarmhaimdat/pepe/compare/v0.42.1...v0.42.2) - 2026-10-16
+
+### Fixed
+
+- *(agents)* the plugin marketplace is one Claude Code takes ([#188](https://github.com/omarmhaimdat/pepe/pull/188))
+
+  ## What was wrong
+
+  The install line in the docs fails on master:
+
+  ```
+  $ claude plugin marketplace add omarmhaimdat/pepe
+  ✘ Failed to add marketplace: … marketplace.json: Invalid schema: … plugins.0.source: Invalid input
+  ```
+
+  Claude Code wants a plugin's `source` to be a path that starts with
+  `./`, and ours was `"."`. Since the marketplace can't be added, `claude
+  plugin install pepe@pepe` fails too. I checked it with Claude Code
+  2.1.63, adding a checkout of master as a marketplace under a throwaway
+  `HOME`.
+
+  ## The fix
+
+  - `"source": "./"`. `claude plugin validate .` passes now, and the same
+  throwaway-`HOME` test adds the marketplace and installs `pepe@pepe`.
+  - `metadata.description` on the marketplace, which the validator asks
+  for.
+  - A test (`the_plugin_marketplace_is_one_claude_code_takes`) that holds
+  every plugin source to `./`, so this can't come back unnoticed.
+
+  It's separate from the agent-loop PR so it can ship on its own as a
+  patch release.
+
+
 ## [0.42.1](https://github.com/omarmhaimdat/pepe/compare/v0.42.0...v0.42.1) - 2026-10-15
 
 ### Fixed
