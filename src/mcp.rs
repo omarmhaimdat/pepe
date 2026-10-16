@@ -584,6 +584,22 @@ mod tests {
             .contains("no tool named"));
     }
 
+    /// Claude Code refuses a marketplace whose plugin source is "." (it
+    /// wants a path that starts with "./"), and with it the install line
+    /// the docs give
+    #[test]
+    fn the_plugin_marketplace_is_one_claude_code_takes() {
+        let text = include_str!("../.claude-plugin/marketplace.json");
+        let marketplace: Value = serde_json::from_str(text).unwrap();
+        for plugin in marketplace["plugins"].as_array().unwrap() {
+            let source = plugin["source"].as_str().unwrap();
+            assert!(
+                source.starts_with("./"),
+                "source {source:?} must start with ./"
+            );
+        }
+    }
+
     #[tokio::test]
     async fn the_protocol_answers_initialize_list_and_unknowns() {
         let guard = vec!["--allow-host".to_string(), ".x.test".to_string()];

@@ -3,10 +3,13 @@
   "owner": {
     "name": "Omar Mhaimdat"
   },
+  "metadata": {
+    "description": "pepe, the HTTP load generator and latency tool, as a Claude Code plugin"
+  },
   "plugins": [
     {
       "name": "pepe",
-      "source": ".",
+      "source": "./",
       "description": "HTTP load generator and latency tool: a skill that says how to call pepe and read its reports, and pepe's MCP server under guardrails.",
       "category": "developer-tools",
       "tags": ["http", "load-testing", "latency", "benchmark", "mcp"]
