@@ -6,6 +6,122 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+## [0.43.0](https://github.com/omarmhaimdat/pepe/compare/v0.42.2...v0.43.0) - 2026-10-16
+
+### Added
+
+- *(agents)* --otlp says which operation inside the service the time went to, and the loop to make it faster ([#189](https://github.com/omarmhaimdat/pepe/pull/189))
+
+  ## Why
+
+  Every load tool, pepe included, stops at "p99 is 480 ms". The next
+  question is always which part of the code that is, and answering it
+  means leaving the tool. This PR answers it in the same command, and
+  gives an agent a loop it can close on its own: measure, find the slow
+  operation, change the code, measure again, compare.
+
+  ## What it does
+
+  **`--otlp :4318`** (plain runs for now)
+  - Each request carries a `traceparent` of pepe's making. The run id is
+  the trace id's high half and the request number, mixed, is the low half.
+  The sampled flag is set, so a parent-based sampler keeps every request.
+  - pepe runs an OTLP/HTTP receiver at `/v1/traces` that takes protobuf or
+  JSON. The protobuf reader is about 150 lines, hand-written, so there's
+  no new dependency. It keeps only spans from its own traces.
+  - `/v1/metrics` and `/v1/logs` get a 200 and are ignored. Gzip gets a
+  415, and the verdict says to set `OTEL_EXPORTER_OTLP_COMPRESSION=none`.
+  - When the run ends, pepe waits for the exporters' last batch. It stops
+  early once every request that got a response has its root span, and
+  gives up after 15 s at most.
+  - `spans` in the report: coverage, the server's own time (median, p90,
+  p99), and `operations[]`. Each operation has calls per request, median
+  and p99 call time, `share_percent` (its own time, less its children's,
+  over all requests) and `slowest_share_percent` (the same over requests
+  at or above the server's p99).
+  - `summary.slowest_requests[]` gains `trace_id`, `server_ms` and `spent`
+  (the top 3 operations).
+  - Verdict findings: where the time went; an operation that's small at
+  the median but large in the tail (it waits on a lock, a pool or a
+  queue); the gap between pepe's latency and the server's own time; and
+  what to set when no spans arrive.
+  - The text report (headless, or after the dashboard closes) prints a
+  "Where the server's time went" table.
+
+  **`pepe compare`**: two reports with spans give `operations[]` (each
+  operation before and after) and a finding for each one that moved. The
+  verdict still comes from pepe's own measurements.
+
+  **MCP**
+  - `run` takes `otlp`.
+  - `run`, `ping`, `ramp`, `api`, `flow` and `replay` take `save`, so an
+  agent has a file to pass to `compare`.
+  - A `speed-up` prompt (`/pepe:speed-up URL [goal]` in Claude Code) walks
+  the loop.
+  - Every tool has annotations: `compare` is read-only and the others
+  reach outside the machine.
+  - The server instructions now lead with the tasks pepe is for. They load
+  at session start, while tool definitions may only be looked up later.
+
+  **Discoverability**
+  - The skill's description puts its trigger words first ("slow",
+  "faster", "benchmark", "OpenTelemetry"), since that text is what Claude
+  and Codex match on. It also has a section on the loop.
+  - Codex: a root `plugin.json` and `mcp.json` (the portable format
+  OpenAI's docs describe), plus `.agents/plugins/marketplace.json`. Codex
+  also reads `.claude-plugin/marketplace.json` as a legacy marketplace.
+  - The docs now cover `codex mcp add`, `~/.codex/config.toml`, a Cursor
+  install link, and `npx skills add omarmhaimdat/pepe`.
+  - `AGENTS.md`, `llms.txt` and the Claude plugin manifests mention the
+  loop.
+  - This PR includes the marketplace `source` fix from
+  omarmhaimdat/pepe#188 (same lines), so it works whichever merges first.
+
+  ## Tested
+
+  - **End to end against a real service**: a Python service instrumented
+  with the official OpenTelemetry SDK (1.45.1, http/protobuf exporter).
+  Its `/checkout` makes a cache read and a query that holds a lock.
+  - 2,000 requests at 16 concurrent: 100% coverage. `SELECT orders` was
+  98% of the slowest requests' server time, and the slowest requests'
+  `spent` agreed.
+  - With the lock removed: `pepe compare` said "SELECT orders down 95%:
+  47.74ms → 2.57ms a call". It also showed the bottleneck *moving* to the
+  cache read, which is real: at 1.6k req/s the Python service is
+  GIL-bound.
+  - The same loop through `pepe mcp` (guardrails `--allow-host 127.0.0.1
+  --max-requests 5000`, then `run` with `otlp` and `save`).
+  - JSON export accepted, gzip refused with the message, metrics and logs
+  answered.
+  - **Unit tests**: the breakdown (shares, tail, self time with
+  overlapping children, warm-up excluded), the protobuf reader, requests
+  framed by length and by chunks, compare by operation, MCP
+  prompt/`save`/annotations, schema fit. `cargo +1.98 test`: 367 passed.
+  `clippy -D warnings` passes on 1.98.
+  - **Performance**: `bench/compare.sh master branch 3`, with `--otlp`
+  off. Results below; no regression.
+
+  | Workload | CPU ms/1k, master | branch | Peak MB, master | branch |
+  |---|---|---|---|---|
+  | tiny-c64 | 5.55 | 5.45 | 10.1 | 10.2 |
+  | body16k-c64 | 6.40 | 6.40 | 10.0 | 10.0 |
+  | slow20ms-c1000 | 6.80 | 7.00 | 13.1 | 13.0 |
+  | tls-c64 | 5.90 | 5.90 | 13.6 | 13.2 |
+
+  ## Not verified
+  - **Codex**: Codex isn't installed here, so the plugin files follow
+  OpenAI's documentation but haven't been loaded by Codex. The MCP and
+  AGENTS.md routes are standard.
+  - **Cursor**: the install link hasn't been clicked.
+
+  ## For 1.0
+  This adds a flag (`--otlp`), report fields (`spans`, and the new
+  `slowest_requests` fields), a compare field (`operations`), MCP inputs
+  (`otlp`, `save`) and a prompt. All of them are additions, and `schema/`
+  is updated, but per ROADMAP.md they restart the month-without-changes
+  clock.
+
+
 ## [0.42.2](https://github.com/omarmhaimdat/pepe/compare/v0.42.1...v0.42.2) - 2026-10-16
 
 ### Fixed
