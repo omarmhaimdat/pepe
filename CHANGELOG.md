@@ -6,6 +6,67 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+## [0.42.1](https://github.com/omarmhaimdat/pepe/compare/v0.42.0...v0.42.1) - 2026-10-15
+
+### Fixed
+
+- *(deps)* bump toml from 0.9.6 to 1.1.8+spec-1.1.0 ([#183](https://github.com/omarmhaimdat/pepe/pull/183))
+
+  Bumps [toml](https://github.com/toml-rs/toml) from 0.9.6 to
+  1.1.8+spec-1.1.0.
+  <details>
+  <summary>Commits</summary>
+  <ul>
+  <li><a
+  href="https://github.com/toml-rs/toml/commit/ceac6e4412420d5a5c19e4f7293ad005cf1a31b2"><code>ceac6e4</code></a>
+  chore: Release</li>
+  <li><a
+  href="https://github.com/toml-rs/toml/commit/0fe9e93d6d6299400e168681f7cdd7515c0693d2"><code>0fe9e93</code></a>
+  docs: Update changelog</li>
+  <li><a
+  href="https://github.com/toml-rs/toml/commit/e3a64aa201ec339abacb570417d75b327490cab4"><code>e3a64aa</code></a>
+  fix(display): Ensure all keys are encoded (<a
+  href="https://redirect.github.com/toml-rs/toml/issues/1245">#1245</a>)</li>
+  <li><a
+  href="https://github.com/toml-rs/toml/commit/76484d005a0e68e8c1876f8a3417b71a3921623f"><code>76484d0</code></a>
+  fix(display): Ensure all keys are encoded</li>
+  <li><a
+  href="https://github.com/toml-rs/toml/commit/711b1ba1ecb11e61df9a1609e24fa3b17d11d961"><code>711b1ba</code></a>
+  refactor(display): Clarify that we are working with encoded keys</li>
+  <li><a
+  href="https://github.com/toml-rs/toml/commit/4f73ebdc8bd7fdf0e6bd379baeb96dedcee6bb2b"><code>4f73ebd</code></a>
+  test(display): Reproduce the key bug</li>
+  <li><a
+  href="https://github.com/toml-rs/toml/commit/6c6a5cdcdc4d9beb16ff9bdf2dcbf360fc2bc84e"><code>6c6a5cd</code></a>
+  fix(parser): Remove risk of unsoundness with synthetic parser events and
+  'uns...</li>
+  <li><a
+  href="https://github.com/toml-rs/toml/commit/9c5e95d8d67514f2191afbee137ba40e85e4f441"><code>9c5e95d</code></a>
+  fix(parser): Remove risk of unsoundness with synthetic parser events and
+  'uns...</li>
+  <li><a
+  href="https://github.com/toml-rs/toml/commit/4d45944be2f6ee3b938dbba3d64a6d9c280bd9e9"><code>4d45944</code></a>
+  perf(parser): Remove no-op code (<a
+  href="https://redirect.github.com/toml-rs/toml/issues/1243">#1243</a>)</li>
+  <li><a
+  href="https://github.com/toml-rs/toml/commit/189c91c3d06a0f56e18f85cb00d3425534defd71"><code>189c91c</code></a>
+  perf(parser): Remove no-op code</li>
+  <li>Additional commits viewable in <a
+  href="https://github.com/toml-rs/toml/compare/toml-v0.9.6...toml-v1.1.8">compare
+  view</a></li>
+  </ul>
+  </details>
+  <br />
+
+
+  [![Dependabot compatibility
+  score](https://dependabot-badges.githubapp.com/badges/compatibility_score?dependency-name=toml&package-manager=cargo&previous-version=0.9.6&new-version=1.1.8+spec-1.1.0)](https://docs.github.com/en/github/managing-security-vulnerabilities/about-dependabot-security-updates#about-compatibility-scores)
+
+  Dependabot will resolve any conflicts with this PR as long as you don't
+  alter it yourself. You can also trigger a rebase manually by commenting
+  `@dependabot rebase`.
+
+
 ## [0.42.0](https://github.com/omarmhaimdat/pepe/compare/v0.41.0...v0.42.0) - 2026-10-13
 
 ### Added
