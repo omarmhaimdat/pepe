@@ -25,11 +25,8 @@ pub use setup::{Setup, SetupOutcome};
 use std::collections::VecDeque;
 use std::time::{Duration, Instant};
 
-use crossterm::event::{
-    Event, EventStream, KeyCode, KeyEvent, KeyEventKind, KeyModifiers, MouseEvent,
-};
+use crossterm::event::{Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers, MouseEvent};
 use futures::{FutureExt, StreamExt};
-use ratatui::{backend::CrosstermBackend, Terminal};
 use tokio::sync::mpsc::error::TryRecvError;
 use tokio::time::MissedTickBehavior;
 
@@ -920,9 +917,9 @@ impl Dashboard {
         &mut self,
         load: &mut LoadHandle,
     ) -> Result<Outcome, Box<dyn std::error::Error>> {
-        let mut terminal = Terminal::new(CrosstermBackend::new(std::io::stdout()))?;
+        let mut terminal = crate::terminal::Screen::new()?;
         terminal.clear()?;
-        let mut events = EventStream::new();
+        let mut events = crate::terminal::input();
         let mut frames = tokio::time::interval(FRAME);
         frames.set_missed_tick_behavior(MissedTickBehavior::Skip);
         let mut pump = tokio::time::interval(PUMP);
@@ -946,6 +943,8 @@ impl Dashboard {
             }
             tokio::select! {
                 _ = &mut ctrl_c => return Ok(Outcome::Quit),
+                // A frame skipped while the terminal was behind
+                _ = crate::terminal::caught_up(), if terminal.owes() => dirty = true,
                 _ = frames.tick(), if self.animating() => {
                     self.frame += 1;
                     self.drain(load);
@@ -983,7 +982,7 @@ impl Dashboard {
     async fn handle_burst(
         &mut self,
         first: Event,
-        events: &mut EventStream,
+        events: &mut crate::terminal::Input,
         load: &LoadHandle,
     ) -> Option<Outcome> {
         let mut resized = matches!(first, Event::Resize(..));

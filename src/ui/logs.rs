@@ -5,18 +5,16 @@
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use crossterm::event::{
-    Event, EventStream, KeyCode, KeyEvent, KeyEventKind, KeyModifiers, MouseEvent,
-};
+use crossterm::event::{Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers, MouseEvent};
 use futures::StreamExt;
 use ratatui::{
-    backend::{Backend, CrosstermBackend},
+    backend::Backend,
     buffer::Buffer,
     layout::{Constraint, Flex, Layout, Position, Rect},
     style::{Color, Style, Stylize},
     text::{Line, Span},
     widgets::{Block, BorderType, Clear, Paragraph},
-    Frame, Terminal,
+    Frame,
 };
 use tokio::time::MissedTickBehavior;
 
@@ -356,9 +354,9 @@ impl LogsScreen {
     }
 
     pub async fn run(&mut self) -> Result<(), Box<dyn std::error::Error>> {
-        let mut terminal = Terminal::new(CrosstermBackend::new(std::io::stdout()))?;
+        let mut terminal = crate::terminal::Screen::new()?;
         terminal.clear()?;
-        let mut events = EventStream::new();
+        let mut events = crate::terminal::input();
         let mut frame = tokio::time::interval(FRAME);
         frame.set_missed_tick_behavior(MissedTickBehavior::Skip);
         let mut repaint = tokio::time::interval(REPAINT);
@@ -378,8 +376,10 @@ impl LogsScreen {
             terminal.set_cursor_position(Position::ORIGIN)?;
             tokio::select! {
                 _ = &mut ctrl_c => return Ok(()),
+                // A frame skipped while the terminal was behind
+                _ = crate::terminal::caught_up(), if terminal.owes() => {}
                 _ = frame.tick() => {}
-                _ = repaint.tick() => {
+                _ = repaint.tick(), if !crate::terminal::behind() => {
                     // And what it overwrote is written again, every cell
                     let width = drawn.area.width.max(1) as usize;
                     let cells = drawn.content.iter().enumerate().map(|(i, cell)| {
@@ -2165,6 +2165,7 @@ impl MaxOr for Color {
 mod tests {
     use super::*;
     use ratatui::backend::TestBackend;
+    use ratatui::Terminal;
 
     /// 08 Oct 2026 11:55:36 UTC
     const AT: i64 = 1_791_460_536;

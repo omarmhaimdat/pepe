@@ -4,17 +4,14 @@
 
 use std::time::{Duration, Instant};
 
-use crossterm::event::{
-    Event, EventStream, KeyCode, KeyEvent, KeyEventKind, KeyModifiers, MouseEvent,
-};
+use crossterm::event::{Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers, MouseEvent};
 use futures::StreamExt;
 use ratatui::{
-    backend::CrosstermBackend,
     layout::{Alignment, Constraint, Layout, Rect},
     style::{Color, Style, Stylize},
     text::{Line, Span},
     widgets::{Padding, Paragraph},
-    Frame, Terminal,
+    Frame,
 };
 use tokio::time::MissedTickBehavior;
 
@@ -315,9 +312,9 @@ impl RampScreen {
         &mut self,
         load: &mut LoadHandle,
     ) -> Result<Outcome, Box<dyn std::error::Error>> {
-        let mut terminal = Terminal::new(CrosstermBackend::new(std::io::stdout()))?;
+        let mut terminal = crate::terminal::Screen::new()?;
         terminal.clear()?;
-        let mut events = EventStream::new();
+        let mut events = crate::terminal::input();
         let mut pump = tokio::time::interval(PUMP);
         pump.set_missed_tick_behavior(MissedTickBehavior::Skip);
         let ctrl_c = tokio::signal::ctrl_c();
@@ -333,6 +330,8 @@ impl RampScreen {
             }
             tokio::select! {
                 _ = &mut ctrl_c => return Ok(Outcome::Quit),
+                // A frame skipped while the terminal was behind
+                _ = crate::terminal::caught_up(), if terminal.owes() => dirty = true,
                 _ = pump.tick(), if self.ramp.end.is_none() => {
                     self.pump(load);
                     pumps += 1;
@@ -1459,6 +1458,7 @@ mod tests {
     use crate::response::ResponseStats;
     use clap::Parser;
     use ratatui::backend::TestBackend;
+    use ratatui::Terminal;
 
     fn screen(levels: &[u32]) -> RampScreen {
         let mut cli = Cli::parse_from(["pepe", "ramp", "http://x.io/a"]);

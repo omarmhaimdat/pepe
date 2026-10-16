@@ -3,17 +3,14 @@
 
 use std::time::SystemTime;
 
-use crossterm::event::{
-    Event, EventStream, KeyCode, KeyEvent, KeyEventKind, KeyModifiers, MouseEvent,
-};
+use crossterm::event::{Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers, MouseEvent};
 use futures::StreamExt;
 use ratatui::{
-    backend::CrosstermBackend,
     layout::{Constraint, Layout, Rect},
     style::{Color, Style, Stylize},
     text::{Line, Span},
     widgets::{Padding, Paragraph, Wrap},
-    Frame, Terminal,
+    Frame,
 };
 
 use super::kit::{self, about_line, caption, help, marker, panel, Hit, FAINT, SELECTED};
@@ -106,15 +103,17 @@ impl HistoryScreen {
     }
 
     pub async fn run(mut self) -> Result<(), Box<dyn std::error::Error>> {
-        let mut terminal = Terminal::new(CrosstermBackend::new(std::io::stdout()))?;
+        let mut terminal = crate::terminal::Screen::new()?;
         terminal.clear()?;
-        let mut events = EventStream::new();
+        let mut events = crate::terminal::input();
         let ctrl_c = tokio::signal::ctrl_c();
         tokio::pin!(ctrl_c);
         loop {
             terminal.draw(|f| theme::draw(f, |f| self.render(f)))?;
             let event = tokio::select! {
                 _ = &mut ctrl_c => return Ok(()),
+                // A frame skipped while the terminal was behind
+                _ = crate::terminal::caught_up(), if terminal.owes() => continue,
                 event = events.next() => event,
             };
             let leave = match event {
@@ -351,6 +350,7 @@ fn verdict_color(c: &Comparison) -> Color {
 mod tests {
     use super::*;
     use ratatui::backend::TestBackend;
+    use ratatui::Terminal;
     use std::time::{Duration, UNIX_EPOCH};
 
     fn recorded(dir: &std::path::Path, stamp: &str, rps: u32, p99: u32) -> Recorded {
