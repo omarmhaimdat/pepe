@@ -1,0 +1,21 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "pepe",
+  "description": "Find why an HTTP endpoint is slow and prove a fix: ping it by phase, load-test it, see which operation inside the service the time goes to (from its OpenTelemetry spans), and compare before and after. A skill and pepe's MCP server, under guardrails.",
+  "author": {
+    "name": "Omar Mhaimdat",
+    "url": "https://github.com/omarmhaimdat"
+  },
+  "homepage": "https://pepe.mhaimdat.com/docs/agents.html",
+  "repository": "https://github.com/omarmhaimdat/pepe",
+  "license": "MIT",
+  "keywords": ["http", "load-testing", "latency", "performance", "opentelemetry", "benchmark", "mcp"],
+  "extensions": {
+    "com.openai": {
+      "interface": {
+        "displayName": "pepe",
+        "category": "Developer Tools"
+      }
+    }
+  }
+}

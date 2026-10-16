@@ -250,6 +250,8 @@ pub struct ResponseStats {
     pub request_id: Option<(&'static str, Box<str>)>,
     /// The response's `Server-Timing` entries, when it had any
     pub server_timing: Option<Box<[ServerTiming]>>,
+    /// `--otlp`: this request's half of the trace id it was sent with
+    pub trace: Option<u64>,
 }
 
 impl ResponseStats {

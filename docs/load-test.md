@@ -249,6 +249,27 @@ pepe rerun api-health --gate               # run, record, compare with the run b
 | `PEPE_CONFIG_DIR` | Where `settings.toml` is kept (defaults to `~/.config/pepe`) ([Settings](install.md#settings)) |
 | `HTTP_PROXY`, `HTTPS_PROXY`, `ALL_PROXY` | Proxies, as curl reads them |
 
+## Inside the service
+
+A load test says how slow; the service's own traces say why. With `--otlp`, pepe takes the [OpenTelemetry](https://opentelemetry.io) spans a service exports and breaks its time down by operation: the query, the call to another service, the handler's own code.
+
+```bash
+OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 ./my-service &
+pepe --otlp :4318 -n 2000 -c 16 http://localhost:8080/checkout
+```
+
+```
+Where the server's time went  (2000 of 2000 requests traced · server median 41ms · p99 50ms)
+  operation                                    calls/req    median       all   slowest
+  shop: SELECT orders                               1.0   40.32ms       97%       98%
+  shop: GET /checkout                               1.0   41.34ms        2%        1%
+  shop: redis GET cart                              1.0     395µs        1%        1%
+```
+
+Each request goes out with a `traceparent` of its own, its sampled flag set, so a service with the usual parent-based sampler keeps every one of them; pepe listens at the address given for OTLP over HTTP (`/v1/traces`, protobuf or JSON), the way an SDK's exporter sends it, and keeps the spans of its own traces. When the run ends it waits for the last batch (an SDK exports every five seconds), then for each operation says how many calls a request made, how long a call took, and what share of the server's time was its own (less what it called), over all requests and over the slowest one percent. Something with a small share in a typical request and a large one in the slowest waits on something: a lock, a pool, a queue. The slowest requests in the report carry their trace id and what their time went on, and the verdict says the same in words. Two reports with spans [compare](compare.md) operation by operation.
+
+The service needs W3C trace context propagation, which OpenTelemetry SDKs have on by default, and its exporter pointed at pepe: `OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318`, with `OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf` (or `http/json`; gRPC isn't taken) and `OTEL_EXPORTER_OTLP_COMPRESSION=none`. When no spans come, or spans come for other traces, or compressed, the verdict says which and what to set. Metrics and logs sent to the same address are answered and set aside. `--otlp` is for a plain run for now, and doesn't change how requests are sent otherwise: the trace id is written into the request as it goes out.
+
 ## What pepe measures
 
 Min, max, mean, median, p90, p95, p99 and standard deviation of latency, and where that time goes: opening connections (TCP and TLS, once per connection), waiting for the first byte, and downloading the body, each with its own percentiles; requests per second and bytes per second; total data transferred; the error rate, with failures counted separately as non-2xx responses, connection errors and timeouts, and grouped by cause with the first response body of each, so the verdict says what a 503 actually said; status codes; cache hit rate from `X-Cache`, `CF-Cache-Status`, `X-Vercel-Cache` and similar headers; DNS lookup time, sampled once a second; `Server-Timing` segments, added up and held against the latency measured here; and the request ids the backend gave the slowest responses, from `X-Request-Id`, `traceparent`, `CF-Ray`, `X-Amzn-Trace-Id` and other common headers, or the one named with `--trace-header`.

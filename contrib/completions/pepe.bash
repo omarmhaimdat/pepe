@@ -107,7 +107,7 @@ _pepe() {
 
     case "${cmd}" in
         pepe)
-            opts="-h -n -z -m -H -t -d -p -k -i -c -u -V --help --number --duration --curl --method --headers --timeout --warmup --threads --rate --body --proxy --insecure --disable-compression --disable-keepalive --disable-redirects --json --trace-header --snapshot --allow-host --max-requests --max-rate --max-concurrency --dry-run --fail-if --metrics --setup --config --write-config --load --keep --record --concurrency --user-agent --version ping ramp compare rerun history api flow replay logs schema mcp self-update completions help"
+            opts="-h -n -z -m -H -t -d -p -k -i -c -u -V --help --number --duration --curl --method --headers --timeout --warmup --threads --rate --body --proxy --insecure --disable-compression --disable-keepalive --disable-redirects --json --trace-header --snapshot --allow-host --max-requests --max-rate --max-concurrency --dry-run --fail-if --metrics --otlp --setup --config --write-config --load --keep --record --concurrency --user-agent --version ping ramp compare rerun history api flow replay logs schema mcp self-update completions help"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 1 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -210,6 +210,10 @@ _pepe() {
                     return 0
                     ;;
                 --metrics)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --otlp)
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0
                     ;;

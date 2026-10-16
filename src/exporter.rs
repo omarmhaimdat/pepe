@@ -35,7 +35,7 @@ struct Exporter {
 static EXPORTER: OnceLock<Exporter> = OnceLock::new();
 
 /// `:9100`, `9100`, `127.0.0.1:9100` or `[::]:9100`: where to listen
-fn parse(spec: &str) -> Result<SocketAddr, String> {
+pub(crate) fn parse(spec: &str) -> Result<SocketAddr, String> {
     let spec = spec.trim();
     let text = if let Ok(port) = spec.parse::<u16>() {
         format!("0.0.0.0:{port}")

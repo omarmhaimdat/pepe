@@ -8,7 +8,7 @@ pepe \- HTTP load generator
 .ie \n(.g .ds Aq \(aq
 .el .ds Aq '
 .SH SYNOPSIS
-\fBpepe\fR [\fB\-h\fR|\fB\-\-help\fR] [\fB\-n\fR|\fB\-\-number\fR] [\fB\-c\fR|\fB\-\-concurrency\fR] [\fB\-z\fR|\fB\-\-duration\fR] [\fB\-\-curl\fR] [\fB\-m\fR|\fB\-\-method\fR] [\fB\-H\fR|\fB\-\-headers\fR] [\fB\-t\fR|\fB\-\-timeout\fR] [\fB\-\-warmup\fR] [\fB\-\-threads\fR] [\fB\-\-rate\fR] [\fB\-d\fR|\fB\-\-body\fR] [\fB\-u\fR|\fB\-\-user\-agent\fR] [\fB\-p\fR|\fB\-\-proxy\fR] [\fB\-k\fR|\fB\-\-insecure\fR] [\fB\-\-disable\-compression\fR] [\fB\-\-disable\-keepalive\fR] [\fB\-\-disable\-redirects\fR] [\fB\-\-json\fR] [\fB\-\-trace\-header\fR] [\fB\-\-snapshot\fR] [\fB\-\-allow\-host\fR] [\fB\-\-max\-requests\fR] [\fB\-\-max\-rate\fR] [\fB\-\-max\-concurrency\fR] [\fB\-\-dry\-run\fR] [\fB\-\-fail\-if\fR] [\fB\-\-metrics\fR] [\fB\-i\fR|\fB\-\-setup\fR] [\fB\-\-config\fR] [\fB\-\-write\-config\fR] [\fB\-\-load\fR] [\fB\-\-keep\fR] [\fB\-\-record\fR] [\fB\-V\fR|\fB\-\-version\fR] [\fIURL\fR] [\fIARGS\fR] [\fIsubcommands\fR]
+\fBpepe\fR [\fB\-h\fR|\fB\-\-help\fR] [\fB\-n\fR|\fB\-\-number\fR] [\fB\-c\fR|\fB\-\-concurrency\fR] [\fB\-z\fR|\fB\-\-duration\fR] [\fB\-\-curl\fR] [\fB\-m\fR|\fB\-\-method\fR] [\fB\-H\fR|\fB\-\-headers\fR] [\fB\-t\fR|\fB\-\-timeout\fR] [\fB\-\-warmup\fR] [\fB\-\-threads\fR] [\fB\-\-rate\fR] [\fB\-d\fR|\fB\-\-body\fR] [\fB\-u\fR|\fB\-\-user\-agent\fR] [\fB\-p\fR|\fB\-\-proxy\fR] [\fB\-k\fR|\fB\-\-insecure\fR] [\fB\-\-disable\-compression\fR] [\fB\-\-disable\-keepalive\fR] [\fB\-\-disable\-redirects\fR] [\fB\-\-json\fR] [\fB\-\-trace\-header\fR] [\fB\-\-snapshot\fR] [\fB\-\-allow\-host\fR] [\fB\-\-max\-requests\fR] [\fB\-\-max\-rate\fR] [\fB\-\-max\-concurrency\fR] [\fB\-\-dry\-run\fR] [\fB\-\-fail\-if\fR] [\fB\-\-metrics\fR] [\fB\-\-otlp\fR] [\fB\-i\fR|\fB\-\-setup\fR] [\fB\-\-config\fR] [\fB\-\-write\-config\fR] [\fB\-\-load\fR] [\fB\-\-keep\fR] [\fB\-\-record\fR] [\fB\-V\fR|\fB\-\-version\fR] [\fIURL\fR] [\fIARGS\fR] [\fIsubcommands\fR]
 .ie \n(.g .ds Aq \(aq
 .el .ds Aq '
 .SH DESCRIPTION
@@ -100,6 +100,9 @@ End with exit code 4 when the run crosses this, for CI and scripts: \*(Aqp99 > 3
 .TP
 \fB\-\-metrics\fR \fI<ADDR>\fR
 Serve the live numbers for Prometheus at http://ADDR/metrics while the run goes, e.g. :9100 or 127.0.0.1:9100, so a soak run or a long ping shows up in Grafana next to the server\*(Aqs own
+.TP
+\fB\-\-otlp\fR \fI<ADDR>\fR
+Take the service\*(Aqs OpenTelemetry spans at ADDR (OTLP over HTTP, as :4318) and say where its time went: each request carries its own traceparent, and the report breaks the server\*(Aqs time down by span. Point the service at it: OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
 .TP
 \fB\-i\fR, \fB\-\-setup\fR
 Open the setup screen to review or change the settings before starting (it opens by itself when no URL is given)

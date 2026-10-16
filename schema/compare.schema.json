@@ -26,6 +26,24 @@
         }
       }
     },
+    "operations": {
+      "type": "array",
+      "description": "Two run reports with spans (--otlp): each operation inside the service before and after, the ones that moved first; absent otherwise",
+      "items": {
+        "type": "object",
+        "required": ["name", "before_share_percent", "after_share_percent", "significant"],
+        "properties": {
+          "name": { "type": "string" },
+          "service": { "type": "string" },
+          "before_median_ms": { "type": "number", "description": "Its median call before; absent when it wasn't there" },
+          "after_median_ms": { "type": "number", "description": "Its median call after; absent when it is gone" },
+          "before_share_percent": { "type": "number" },
+          "after_share_percent": { "type": "number" },
+          "change_percent": { "type": "number" },
+          "significant": { "type": "boolean" }
+        }
+      }
+    },
     "findings": {
       "type": "array",
       "items": {

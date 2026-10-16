@@ -1,0 +1,10 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json",
+  "mcpServers": {
+    "pepe": {
+      "type": "stdio",
+      "command": "pepe",
+      "args": ["mcp", "--max-requests", "10000", "--max-rate", "500", "--max-concurrency", "64"]
+    }
+  }
+}

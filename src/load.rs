@@ -417,6 +417,8 @@ enum Report {
         endpoint: u16,
         warmup: bool,
         cache: Option<crate::cache::CacheStatus>,
+        /// `--otlp`: the request's half of its trace id; 0 when it had none
+        trace: u64,
     },
     Full(Box<ResponseStats>),
 }
@@ -439,6 +441,7 @@ impl From<ResponseStats> for Report {
                 endpoint: stats.endpoint,
                 warmup: stats.warmup,
                 cache: stats.cache_status,
+                trace: stats.trace.unwrap_or(0),
             },
             _ => Self::Full(Box::new(stats)),
         }
@@ -457,6 +460,7 @@ impl From<Report> for ResponseStats {
                 endpoint,
                 warmup,
                 cache,
+                trace,
             } => ResponseStats {
                 duration: Duration::from_nanos(duration),
                 ttfb: Some(Duration::from_nanos(ttfb)),
@@ -465,6 +469,7 @@ impl From<Report> for ResponseStats {
                 endpoint,
                 warmup,
                 cache_status: cache,
+                trace: (trace != 0).then_some(trace),
                 ..Default::default()
             },
         }
@@ -1328,16 +1333,19 @@ async fn send_one(
         _ => None,
     };
 
+    // `--otlp`: the trace this request goes out with
+    let trace = crate::trace::propagating().map(|run| (run, crate::trace::trace_of(turn as u64)));
+
     if let (Some(setup), Some(route)) = (&shard.sender.direct, shared.routes.get(index)) {
         let start = Instant::now();
-        let sent = lines.send(setup, route, start).await;
+        let sent = lines.send(setup, route, start, trace).await;
         let ttfb = start.elapsed();
         let response = match sent {
             Ok(direct::Sent::Answered(response)) => Ok(response),
             Err(failure) => Err(failure),
             // Sent again below, the way that follows redirects
             Ok(direct::Sent::Redirected) => {
-                return Box::pin(pooled(shard, target, dns_times)).await
+                return Box::pin(pooled(shard, target, dns_times, trace)).await
             }
         };
         let capture = shared.previews
@@ -1362,9 +1370,10 @@ async fn send_one(
                 .0;
         lines.done(setup, route, stats.error.is_some());
         stats.endpoint = target.endpoint;
+        stats.trace = trace.map(|(_, trace)| trace);
         return stats;
     }
-    Box::pin(pooled(shard, target, dns_times)).await
+    Box::pin(pooled(shard, target, dns_times, trace)).await
 }
 
 /// One request through reqwest and its connection pool: what the direct
@@ -1373,14 +1382,21 @@ async fn pooled(
     shard: &Shard,
     target: &Target,
     dns_times: Option<(Duration, Duration)>,
+    trace: Option<(u64, u64)>,
 ) -> ResponseStats {
     let shared = &shard.shared;
     let start = Instant::now();
+    let mut request = target.build();
+    if let Some((run, trace)) = trace {
+        let value = crate::trace::traceparent(run, trace);
+        if let Ok(value) = reqwest::header::HeaderValue::from_bytes(&value) {
+            request
+                .headers_mut()
+                .insert(crate::trace::TRACEPARENT, value);
+        }
+    }
     let response = match shard.sender.client() {
-        Ok(client) => client
-            .execute(target.build())
-            .await
-            .map_err(|e| Failure::from(&e)),
+        Ok(client) => client.execute(request).await.map_err(|e| Failure::from(&e)),
         Err(failure) => Err(failure),
     };
     let ttfb = start.elapsed();
@@ -1392,6 +1408,7 @@ async fn pooled(
             .await
             .0;
     stats.endpoint = target.endpoint;
+    stats.trace = trace.map(|(_, trace)| trace);
     stats
 }
 

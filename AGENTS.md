@@ -99,6 +99,25 @@ Read `holds_concurrency`, `capacity.requests_per_second` (`null` when
 the curve hadn't bent; `extrapolated` when read past the ramp), each
 `steps[]`, and `findings`.
 
+## Make it faster, and prove it
+
+```bash
+OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 ./my-service &
+pepe --json --otlp :4318 -n 2000 -c 16 http://localhost:8080/checkout > before.json
+```
+
+Each request carries its own `traceparent`; pepe takes the service's
+OpenTelemetry spans over OTLP/HTTP at `--otlp` and says where the server's
+time went. Read `spans.operations[]`, the most of the slowest requests'
+time first: `name`, `service`, `median_ms`, `calls_per_request`,
+`share_percent` (its own time over all requests) and
+`slowest_share_percent`; `spans.coverage_percent`; and
+`summary.slowest_requests[].spent` with its `trace_id`. No spans: the
+`verdict` findings say what to set on the service. Change the code behind
+the top operation, run again into `after.json`, and `pepe compare` names
+what moved inside the service in `operations[]`. As an MCP prompt:
+`speed-up`.
+
 ## Compare before and after
 
 ```bash
@@ -134,7 +153,10 @@ disk every minute.
 
 `pepe mcp` serves the modes above as tools over stdio (`run`, `ping`,
 `ramp`, `compare`, `api`, `flow`, `replay`), each returning the JSON
-report. Guardrail flags given to `pepe mcp` apply to every call. It is
+report; `run` takes `otlp`, the others but `compare` take `save` to write
+the report for `compare`, and the `speed-up` prompt walks the loop above.
+Guardrail flags given to `pepe mcp` apply to every call. In Codex:
+`codex mcp add pepe -- pepe mcp --max-requests 10000 --max-rate 500`. It is
 in the MCP registry as `io.github.omarmhaimdat/pepe` (`uvx pepe-http
 mcp`, or the `ghcr.io/omarmhaimdat/pepe` image).
 

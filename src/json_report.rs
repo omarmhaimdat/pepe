@@ -36,6 +36,9 @@ pub struct JsonReport {
     /// The pepe command that reproduces the run, secrets in headers masked
     #[serde(skip_serializing_if = "Option::is_none")]
     pub command: Option<String>,
+    /// `--otlp`: where the server's time went, from the service's spans
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub spans: Option<crate::otlp::SpansJson>,
 }
 
 #[derive(Serialize, Clone, PartialEq, Debug)]
@@ -205,6 +208,25 @@ pub struct SlowRequest {
     /// The response header the id came from
     #[serde(skip_serializing_if = "Option::is_none")]
     pub id_header: Option<String>,
+    /// `--otlp`: the trace id it was sent with, to look it up in a tracing
+    /// backend
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub trace_id: Option<String>,
+    /// `--otlp`: the server's time for it, from its spans
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub server_ms: Option<f64>,
+    /// `--otlp`: what the server's time went on, most first: each
+    /// operation's own time, less what it called
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub spent: Vec<SpentJson>,
+}
+
+#[derive(Serialize, Clone)]
+pub struct SpentJson {
+    pub name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub service: Option<String>,
+    pub ms: f64,
 }
 
 #[derive(Serialize, Clone)]
@@ -412,6 +434,52 @@ impl JsonReport {
         std::fs::rename(&tmp, path)
     }
 
+    /// `--otlp`: the spans' breakdown, the slowest requests' own, and what
+    /// the verdict says of them. After `with_slowest` and `with_verdict`.
+    pub fn with_spans(mut self, spans: &crate::otlp::Breakdown) -> Self {
+        let run = spans.run;
+        for slow in &mut self.summary.slowest_requests {
+            let Some(trace) = slow.trace_id.as_deref().and_then(|id| {
+                let (high, low) = id.split_at(16);
+                (u64::from_str_radix(high, 16).ok() == Some(run))
+                    .then(|| u64::from_str_radix(low, 16).ok())
+                    .flatten()
+            }) else {
+                continue;
+            };
+            let Some(time) = spans.kept.get(&trace) else {
+                continue;
+            };
+            slow.server_ms = Some(time.server_ns as f64 / 1e6);
+            slow.spent = time
+                .spent
+                .iter()
+                .take(3)
+                .map(|(op, ns)| SpentJson {
+                    name: op.name.to_string(),
+                    service: op.service.as_deref().map(str::to_string),
+                    ms: (*ns as f64 / 1e4).round() / 100.0,
+                })
+                .collect();
+        }
+        let median = Duration::from_secs_f64(self.summary.latency.median_ms / 1000.0);
+        if let Some(verdict) = &mut self.verdict {
+            verdict
+                .findings
+                .extend(spans.notes(median).into_iter().map(|n| FindingJson {
+                    level: n.level.headline().to_lowercase(),
+                    text: n.text,
+                }));
+        }
+        self.spans = Some(spans.json());
+        self
+    }
+
+    /// The traces of the slowest requests, to be broken down one by one
+    pub fn slowest_traces(slowest: &Slowest) -> Vec<u64> {
+        slowest.entries().iter().filter_map(|e| e.trace).collect()
+    }
+
     /// The slowest responses and their request ids
     pub fn with_slowest(mut self, slowest: &Slowest) -> Self {
         self.summary.slowest_requests = slowest
@@ -423,6 +491,12 @@ impl JsonReport {
                 status: e.status,
                 request_id: e.request_id.as_ref().map(|(_, id)| id.to_string()),
                 id_header: e.request_id.as_ref().map(|(name, _)| name.to_string()),
+                trace_id: e
+                    .trace
+                    .zip(crate::trace::propagating())
+                    .map(|(trace, run)| crate::trace::trace_id_hex(run, trace)),
+                server_ms: None,
+                spent: Vec::new(),
             })
             .collect();
         self
@@ -438,6 +512,7 @@ impl JsonReport {
             snapshot: None,
             test: None,
             command: None,
+            spans: None,
             summary: JsonSummary {
                 total_requests: metrics.total,
                 successful_requests: metrics.success,

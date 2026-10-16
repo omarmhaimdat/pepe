@@ -1,6 +1,6 @@
 ---
 name: pepe
-description: Measure an HTTP endpoint's latency or load with pepe. Use when asked why an API or page is slow, to split a request's time into DNS, connect, TLS, first byte and download, to watch an endpoint's latency over time, to check a TLS certificate's expiry, to load-test a URL, to find its capacity, or to compare two runs.
+description: Find why an HTTP endpoint or API is slow and prove a fix, with pepe. Use when an API, page or endpoint is slow, to make one faster, to load-test or benchmark a URL, to see which part of a service (a query, a call, a lock) its time goes to from its OpenTelemetry traces, to check a change made it faster or slower, to find its capacity, to split a request into DNS, connect, TLS, first byte and download, or to check a TLS certificate's expiry.
 ---
 
 # pepe
@@ -64,6 +64,38 @@ One JSON object per ping (`timings_ms`, `status`, `error`, `tls`) as it
 happens. `--csv` does the same as CSV. A person at a terminal gets the
 graph instead: `pepe ping URL` with no flags.
 
+## Make it faster, and prove it
+
+When the time is the server's own (`ttfb` the largest phase), see inside it.
+Have the service export OpenTelemetry to pepe and load it with `--otlp`:
+
+```bash
+OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 ./my-service &
+pepe --json --otlp :4318 -n 2000 -c 16 http://localhost:8080/checkout > before.json
+```
+
+- `spans.operations[]`: each operation (`service`, `name`, `kind`), the one
+  with the most of the slowest requests' time first: `median_ms`,
+  `calls_per_request`, `share_percent` (its own time, less what it called,
+  over all requests) and `slowest_share_percent` (over the slowest). Small
+  in `share_percent` and large in `slowest_share_percent`: it waits on a
+  lock, a pool or a queue.
+- `summary.slowest_requests[].spent`: one slow request's time by operation,
+  with its `trace_id`.
+- `spans.coverage_percent` low, or no `spans.operations`: the `verdict`
+  findings say what to set on the service (the exporter's endpoint,
+  `OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf`,
+  `OTEL_EXPORTER_OTLP_COMPRESSION=none`, W3C trace context). A service with
+  no OpenTelemetry: add its language's SDK or zero-code instrumentation.
+
+Then change the code behind the top operation, restart the service, run the
+same command into `after.json`, and `pepe compare before.json after.json
+--json --gate`: `verdict`, and `operations[]` with each operation before
+and after. Slower, or nothing moved: undo the change. Keep the load the
+same between the two runs. The MCP server has this loop as its `speed-up`
+prompt (`/pepe:speed-up URL` in Claude Code), and its tools take `save`
+to write the report for `compare`.
+
 ## Then load-test, find the capacity, compare
 
 ```bash
@@ -81,12 +113,14 @@ mode.
 ## As an MCP server
 
 `pepe mcp` serves the modes as tools over stdio: `run`, `ping`, `ramp`,
-`api`, `flow`, `replay` and `compare`, each returning the JSON report.
+`api`, `flow`, `replay` and `compare`, each returning the JSON report;
+`run` takes `otlp`, and the others but `compare` take `save`.
 The guardrail flags given to `pepe mcp` hold for every call, and a call
 can't loosen them; a `ping` without `count` or `duration` sends five.
 
 ```bash
 claude mcp add pepe -- pepe mcp --allow-host .staging.example.com --max-requests 10000 --max-rate 500
+codex mcp add pepe -- pepe mcp --allow-host .staging.example.com --max-requests 10000 --max-rate 500
 ```
 
 Without an install, from the MCP registry (`io.github.omarmhaimdat/pepe`):

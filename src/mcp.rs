@@ -17,13 +17,48 @@ use crate::cli::Cli;
 /// when it is one of them
 const VERSIONS: [&str; 3] = ["2025-06-18", "2025-03-26", "2024-11-05"];
 
-/// What an agent sees first
+/// What an agent sees first: loaded when the session starts, where the
+/// tools themselves may only be looked up when needed, so it says which
+/// tasks they are for
 const INSTRUCTIONS: &str =
-    "pepe load-tests and pings HTTP endpoints. Every tool returns pepe's JSON report \
-(schema_version 1; `pepe schema NAME` has the schema). Start with `ping` to see where an \
-endpoint's time goes, `run` to load it, `ramp` to find its capacity, `compare` to hold two \
-reports against each other. Only send to what you are allowed to load; the server's \
-guardrails refuse the rest with exit code 2.";
+    "pepe measures HTTP endpoints: use it when an API or page is slow, to load-test a URL, to \
+find its capacity, to check a change made it faster or slower, or to find which part of a \
+service (a query, a call, a lock) its time goes to. Every tool returns pepe's JSON report \
+(schema_version 1). `ping` splits a request into DNS, connect, TLS, first byte and download. \
+`run` loads a URL; with `otlp: \":4318\"` and the service exporting OpenTelemetry to \
+http://localhost:4318, its report's `spans` say which operation the server's time went to, \
+over all requests and in the slowest. `ramp` finds the capacity. `compare` holds two saved \
+reports (`save` on the others) against each other and names what moved, inside the service \
+too. The `speed-up` prompt walks the loop: measure, find the slow operation, change the code, \
+measure again, compare. Only send to what you are allowed to load; the server's guardrails \
+refuse the rest with exit code 2.";
+
+/// The loop the `speed-up` prompt asks for, `{url}` and `{goal}` filled in
+const SPEED_UP: &str = "Make {url} faster{goal}, and prove it with pepe's tools.
+
+1. Look first: call `ping` on {url} (count 5). If `phases_ms.ttfb` isn't the largest phase, the \
+time is outside the server (DNS, connect, TLS, download): say so and stop.
+2. Let pepe see inside the service: it should export OpenTelemetry traces to \
+OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 (OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf, \
+OTEL_EXPORTER_OTLP_COMPRESSION=none) and carry on W3C traceparent headers. If it isn't \
+instrumented, add the OpenTelemetry SDK or zero-code instrumentation for its language, then \
+restart it with those variables set.
+3. Baseline: call `run` with url {url}, otlp \":4318\", save \"pepe-before.json\", and a fixed \
+load (requests 2000 and concurrency 16, unless the service calls for other numbers). Keep \
+these settings for every run after. Read `spans.operations` (most `slowest_share_percent` \
+first), `summary.slowest_requests[].spent` and the `verdict` findings. No `spans`, or \
+`coverage_percent` low: the findings say what to set; fix that before going on.
+4. Find the code behind the operation that takes the most time, work out why (a query without \
+an index, calls in a loop, a lock held too long, work that could be cached or done once) and \
+make the smallest change that removes it. Don't change behaviour.
+5. Restart the service, then call `run` again with the same settings and save \
+\"pepe-after.json\". Call `compare` with before \"pepe-before.json\", after \"pepe-after.json\" \
+and gate true. Read `verdict`, `operations` and `findings`.
+6. Slower, worse, or nothing moved: undo the change and try the next idea. Faster: keep it; \
+if the goal isn't met and another operation now leads, go again from step 4 with the after \
+report as the new before (three rounds at most).
+7. Say what took the time, what you changed and why, and the numbers before and after: p99, \
+median, requests per second, and the operation's share of the server's time.";
 
 /// The flags `pepe mcp` was started with that go on every call
 pub fn guard_args(cli: &Cli) -> Vec<String> {
@@ -102,7 +137,10 @@ pub async fn handle(guard: &[String], message: &Value) -> Option<Value> {
                 id,
                 json!({
                     "protocolVersion": version,
-                    "capabilities": {"tools": {"listChanged": false}},
+                    "capabilities": {
+                        "tools": {"listChanged": false},
+                        "prompts": {"listChanged": false},
+                    },
                     "serverInfo": {"name": "pepe", "version": crate::utils::version()},
                     "instructions": INSTRUCTIONS,
                 }),
@@ -110,11 +148,23 @@ pub async fn handle(guard: &[String], message: &Value) -> Option<Value> {
         }
         "ping" => result(id, json!({})),
         "tools/list" => result(id, json!({"tools": tools()})),
+        "prompts/list" => result(id, json!({"prompts": prompts()})),
+        "prompts/get" => {
+            let name = params.get("name").and_then(Value::as_str).unwrap_or("");
+            let arguments = params.get("arguments").cloned().unwrap_or(json!({}));
+            match prompt(name, &arguments) {
+                Ok(prompt) => result(id, prompt),
+                Err(e) => error(id, -32602, &e),
+            }
+        }
         "tools/call" => {
             let name = params.get("name").and_then(Value::as_str).unwrap_or("");
             let arguments = params.get("arguments").cloned().unwrap_or(json!({}));
             match command_for(name, &arguments) {
-                Ok(argv) => result(id, call(guard, argv).await),
+                Ok(argv) => {
+                    let save = arguments.get("save").and_then(Value::as_str);
+                    result(id, saved(call(guard, argv).await, save))
+                }
                 Err(e) => result(
                     id,
                     json!({"content": [{"type": "text", "text": e}], "isError": true}),
@@ -176,6 +226,54 @@ async fn call(guard: &[String], argv: Vec<String>) -> Value {
         }
     }
     reply
+}
+
+/// `save`: write the report a tool call printed to `path`, for `compare`
+fn saved(mut reply: Value, path: Option<&str>) -> Value {
+    let (Some(path), Some(report)) = (path, reply.get("structuredContent")) else {
+        return reply;
+    };
+    let said = match serde_json::to_string_pretty(report)
+        .map_err(|e| e.to_string())
+        .and_then(|text| std::fs::write(path, text + "\n").map_err(|e| e.to_string()))
+    {
+        Ok(()) => format!("The report is saved at {path}, for compare"),
+        Err(e) => format!("The report couldn't be saved at {path}: {e}"),
+    };
+    if let Some(content) = reply.get_mut("content").and_then(Value::as_array_mut) {
+        content.push(json!({"type": "text", "text": said}));
+    }
+    reply
+}
+
+/// The prompts, as `prompts/list` describes them
+pub fn prompts() -> Vec<Value> {
+    vec![json!({
+        "name": "speed-up",
+        "title": "Speed up an endpoint",
+        "description": "Find what makes an endpoint slow from inside the service (its OpenTelemetry spans), change the code, and prove the change with a before and after comparison.",
+        "arguments": [
+            {"name": "url", "description": "The endpoint to make faster, on a service you can change and restart", "required": true},
+            {"name": "goal", "description": "What counts as done, e.g. 'p99 < 200ms'", "required": false},
+        ],
+    })]
+}
+
+/// A prompt's messages, its arguments filled in
+fn prompt(name: &str, args: &Value) -> Result<Value, String> {
+    if name != "speed-up" {
+        return Err(format!("no prompt named {name:?}"));
+    }
+    let url = required(args, "url")?;
+    let goal = match args.get("goal").and_then(Value::as_str).map(str::trim) {
+        Some(goal) if !goal.is_empty() => format!(" (done when {goal})"),
+        _ => String::new(),
+    };
+    let text = SPEED_UP.replace("{url}", url).replace("{goal}", &goal);
+    Ok(json!({
+        "description": "Speed up an endpoint, measured before and after",
+        "messages": [{"role": "user", "content": {"type": "text", "text": text}}],
+    }))
 }
 
 /// A flag with a value, when the argument is there
@@ -258,6 +356,7 @@ pub fn command_for(name: &str, args: &Value) -> Result<Vec<String>, String> {
             let url = required(args, "url")?;
             argv.push("--json".into());
             load_flags(&mut argv, args);
+            flag(&mut argv, args, "otlp", "--otlp");
             argv.push(url.to_string());
         }
         "ping" => {
@@ -365,6 +464,10 @@ pub fn tools() -> Vec<Value> {
             "dry_run".into(),
             boolean("Say what would be sent and send nothing"),
         );
+        props.insert(
+            "save".into(),
+            string("Also write the report to this file, to compare against later"),
+        );
     };
     let load = |props: &mut serde_json::Map<String, Value>| {
         props.insert(
@@ -395,11 +498,15 @@ pub fn tools() -> Vec<Value> {
         fill(&mut props);
         json!({"type": "object", "properties": props, "required": required})
     };
-    vec![
+    let mut tools = vec![
         json!({
             "name": "run",
-            "description": "Load-test a URL: send requests at a concurrency, for a count or a duration, and report throughput, latency percentiles and phases, status codes, failures by cause and anomalies. The report's `summary` has the numbers; `generator.peak_busy_percent` near 100 means pepe was the limit.",
-            "inputSchema": schema(&["url"], &|p| { p.insert("url".into(), string("The URL to send to")); load(p); }),
+            "description": "Load-test a URL: send requests at a concurrency, for a count or a duration, and report throughput, latency percentiles and phases, status codes, failures by cause and anomalies. The report's `summary` has the numbers; `generator.peak_busy_percent` near 100 means pepe was the limit. With `otlp`, each request carries a traceparent and the report's `spans` say where the server's time went, by operation (a query, a call, the handler's own code).",
+            "inputSchema": schema(&["url"], &|p| {
+                p.insert("url".into(), string("The URL to send to"));
+                p.insert("otlp".into(), string("Take the service's OpenTelemetry spans here, as ':4318'; the service exports to http://localhost:4318"));
+                load(p);
+            }),
         }),
         json!({
             "name": "ping",
@@ -463,7 +570,7 @@ pub fn tools() -> Vec<Value> {
         }),
         json!({
             "name": "compare",
-            "description": "Hold a pepe JSON report against an earlier one of the same test and say what moved: a verdict (faster, same, slower, better, worse), each number before and after with whether the change is beyond the usual spread, and findings. Run, ramp and ping reports all compare.",
+            "description": "Hold a pepe JSON report against an earlier one of the same test and say what moved: a verdict (faster, same, slower, better, worse), each number before and after with whether the change is beyond the usual spread, and findings. Run, ramp and ping reports all compare. Two run reports with `spans` (from `otlp`) also say which operation inside the service moved, in `operations`.",
             "inputSchema": schema(&["before", "after"], &|p| {
                 p.insert("before".into(), string("Path of the earlier report"));
                 p.insert("after".into(), string("Path of the later report"));
@@ -471,7 +578,24 @@ pub fn tools() -> Vec<Value> {
                 p.insert("svg".into(), string("Also draw the verdict as an SVG card at this path"));
             }),
         }),
-    ]
+    ];
+    // Every tool but compare sends requests to the world
+    for tool in &mut tools {
+        let name = tool["name"].as_str().unwrap_or("").to_string();
+        let title = match name.as_str() {
+            "run" => "Load-test a URL",
+            "ping" => "Ping URLs over HTTP",
+            "ramp" => "Find a URL's capacity",
+            "api" => "Load-test an OpenAPI spec",
+            "flow" => "Run a request flow",
+            "replay" => "Replay an access log",
+            _ => "Compare two reports",
+        };
+        let reads = name == "compare";
+        tool["annotations"] =
+            json!({"title": title, "readOnlyHint": reads, "openWorldHint": !reads});
+    }
+    tools
 }
 
 #[cfg(test)]
@@ -486,6 +610,15 @@ mod tests {
         )
         .unwrap();
         // A count under the core count gets a concurrency to match
+        let traced = command_for(
+            "run",
+            &json!({"url": "http://localhost:8080/", "otlp": ":4318"}),
+        )
+        .unwrap();
+        assert_eq!(
+            traced,
+            ["--json", "--otlp", ":4318", "http://localhost:8080/"]
+        );
         let few = command_for("run", &json!({"url": "https://x.test/", "requests": 2})).unwrap();
         assert_eq!(few, ["--json", "-n", "2", "-c", "2", "https://x.test/"]);
         assert_eq!(
@@ -584,6 +717,51 @@ mod tests {
             .contains("no tool named"));
     }
 
+    #[test]
+    fn a_saved_report_is_written_and_said() {
+        let dir = std::env::temp_dir().join(format!("pepe-mcp-save-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("before.json");
+        let reply = json!({"content": [{"type": "text", "text": "{}"}], "isError": false,
+            "structuredContent": {"schema_version": 1}});
+        let reply = saved(reply, path.to_str());
+        let written: Value =
+            serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+        assert_eq!(written["schema_version"], 1);
+        assert!(reply["content"][1]["text"]
+            .as_str()
+            .unwrap()
+            .contains("saved at"));
+        // Nothing to save without a report, or without a path
+        let bare = json!({"content": [], "isError": true});
+        assert_eq!(saved(bare.clone(), path.to_str()), bare);
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    /// Claude Code refuses a marketplace whose plugin source is "." (it
+    /// wants a path that starts with "./"), and with it the install line
+    /// the docs give
+    #[test]
+    fn the_plugin_marketplace_is_one_claude_code_takes() {
+        let text = include_str!("../.claude-plugin/marketplace.json");
+        let marketplace: Value = serde_json::from_str(text).unwrap();
+        for plugin in marketplace["plugins"].as_array().unwrap() {
+            let source = plugin["source"].as_str().unwrap();
+            assert!(
+                source.starts_with("./"),
+                "source {source:?} must start with ./"
+            );
+        }
+        // Codex reads the portable files at the root: the same server
+        let portable: Value = serde_json::from_str(include_str!("../mcp.json")).unwrap();
+        let claude: Value = serde_json::from_str(include_str!("../.mcp.json")).unwrap();
+        assert_eq!(
+            portable["mcpServers"]["pepe"]["args"],
+            claude["mcpServers"]["pepe"]["args"]
+        );
+        assert_eq!(portable["mcpServers"]["pepe"]["type"], "stdio");
+    }
+
     #[tokio::test]
     async fn the_protocol_answers_initialize_list_and_unknowns() {
         let guard = vec!["--allow-host".to_string(), ".x.test".to_string()];
@@ -620,7 +798,44 @@ mod tests {
         );
         for tool in list["result"]["tools"].as_array().unwrap() {
             assert_eq!(tool["inputSchema"]["type"], "object", "{}", tool["name"]);
+            let reads = tool["name"] == "compare";
+            assert_eq!(
+                tool["annotations"]["readOnlyHint"], reads,
+                "{}",
+                tool["name"]
+            );
         }
+        assert_eq!(
+            init["result"]["capabilities"]["prompts"]["listChanged"],
+            false
+        );
+        let prompts = handle(
+            &guard,
+            &json!({"jsonrpc": "2.0", "id": 7, "method": "prompts/list"}),
+        )
+        .await
+        .unwrap();
+        assert_eq!(prompts["result"]["prompts"][0]["name"], "speed-up");
+        let got = handle(&guard, &json!({"jsonrpc": "2.0", "id": 8, "method": "prompts/get",
+            "params": {"name": "speed-up", "arguments": {"url": "http://localhost:8080/checkout", "goal": "p99 < 200ms"}}}))
+            .await
+            .unwrap();
+        let text = got["result"]["messages"][0]["content"]["text"]
+            .as_str()
+            .unwrap();
+        assert!(
+            text.starts_with("Make http://localhost:8080/checkout faster (done when p99 < 200ms)"),
+            "{text}"
+        );
+        assert!(!text.contains("{url}") && !text.contains("{goal}"));
+        let missing = handle(
+            &guard,
+            &json!({"jsonrpc": "2.0", "id": 9, "method": "prompts/get",
+            "params": {"name": "speed-up", "arguments": {}}}),
+        )
+        .await
+        .unwrap();
+        assert_eq!(missing["error"]["code"], -32602);
         let unknown = handle(
             &guard,
             &json!({"jsonrpc": "2.0", "id": 4, "method": "nope"}),

@@ -4,15 +4,17 @@
 
 Install: `curl -LsSf https://pepe.mhaimdat.com/install.sh | sh` (macOS, Linux), `brew install omarmhaimdat/pepe/pepe`, `npx pepe-http` or `npm install -g pepe-http`, `pipx install pepe-http` or `uvx pepe-http`, or Docker `ghcr.io/omarmhaimdat/pepe`.
 
+To find why an endpoint is slow and prove a fix: `pepe --json --otlp :4318 -n 2000 URL` with the service exporting OpenTelemetry to http://localhost:4318 says which operation inside it (a query, a call, a lock) the time goes to, in `spans.operations`; `pepe compare before.json after.json --json --gate` says what moved, inside the service too.
+
 For a program calling pepe: pass `--json`, end the run with `-n` or `-z`, read `schema_version`, and use the exit code (0 as asked, 1 couldn't start or nothing answered, 2 usage error or a guardrail refused, 4 a limit crossed). Guardrails: `--allow-host .example.com`, `--max-requests N`, `--max-rate N`, `--max-concurrency N`, `--dry-run`.
 
-As an MCP server: `pepe mcp` serves the modes as tools over stdio (`run`, `ping`, `ramp`, `api`, `flow`, `replay`, `compare`), each returning the JSON report, under the guardrail flags it was started with. It is in the MCP registry as `io.github.omarmhaimdat/pepe` (`uvx pepe-http mcp`, or the `ghcr.io/omarmhaimdat/pepe` image), and the repository is a Claude Code plugin (`claude plugin marketplace add omarmhaimdat/pepe`, then `claude plugin install pepe@pepe`).
+As an MCP server: `pepe mcp` serves the modes as tools over stdio (`run`, `ping`, `ramp`, `api`, `flow`, `replay`, `compare`), each returning the JSON report, under the guardrail flags it was started with. It is in the MCP registry as `io.github.omarmhaimdat/pepe` (`uvx pepe-http mcp`, or the `ghcr.io/omarmhaimdat/pepe` image), and the repository is a Claude Code plugin (`claude plugin marketplace add omarmhaimdat/pepe`, then `claude plugin install pepe@pepe`) and a Codex plugin (`codex plugin marketplace add omarmhaimdat/pepe`). In Codex alone: `codex mcp add pepe -- pepe mcp`. The skill alone, for any agent: `npx skills add omarmhaimdat/pepe`. The `speed-up` MCP prompt walks the loop: measure, find the slow operation, change the code, compare.
 
 ## Docs
 
 - [Overview](https://pepe.mhaimdat.com/docs/index.html): what pepe does, a page per mode
 - [Agents and scripts](https://pepe.mhaimdat.com/docs/agents.html): the rules, the guardrails, what to read in each report
-- [Load testing](https://pepe.mhaimdat.com/docs/load-test.html): every option of `pepe URL`, warm-up, arrival rate, threads, the config file, a curl command
+- [Load testing](https://pepe.mhaimdat.com/docs/load-test.html): every option of `pepe URL`, warm-up, arrival rate, threads, the config file, a curl command, and `--otlp`: where the server's time went, from its OpenTelemetry spans
 - [Ping](https://pepe.mhaimdat.com/docs/ping.html): `pepe ping`, each phase of a request, the findings, `--once`, `--slo`
 - [Ramp](https://pepe.mhaimdat.com/docs/ramp.html): `pepe ramp`, the level that held and the capacity estimate
 - [OpenAPI](https://pepe.mhaimdat.com/docs/api.html): `pepe api`, endpoints by tag, parameters, credentials

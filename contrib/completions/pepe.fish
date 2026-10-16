@@ -1,6 +1,6 @@
 # Print an optspec for argparse to handle cmd's options that are independent of any subcommand.
 function __fish_pepe_global_optspecs
-    string join \n h/help n/number= z/duration= curl m/method= H/headers= t/timeout= warmup= threads= rate= d/body= p/proxy= k/insecure disable-compression disable-keepalive disable-redirects json trace-header= snapshot= allow-host= max-requests= max-rate= max-concurrency= dry-run fail-if= metrics= i/setup config= write-config= load= keep= record c/concurrency= u/user-agent= V/version
+    string join \n h/help n/number= z/duration= curl m/method= H/headers= t/timeout= warmup= threads= rate= d/body= p/proxy= k/insecure disable-compression disable-keepalive disable-redirects json trace-header= snapshot= allow-host= max-requests= max-rate= max-concurrency= dry-run fail-if= metrics= otlp= i/setup config= write-config= load= keep= record c/concurrency= u/user-agent= V/version
 end
 
 function __fish_pepe_needs_command
@@ -42,6 +42,7 @@ complete -c pepe -n "__fish_pepe_needs_command" -l max-rate -d 'Refuse a --rate 
 complete -c pepe -n "__fish_pepe_needs_command" -l max-concurrency -d 'Refuse a concurrency above this' -r
 complete -c pepe -n "__fish_pepe_needs_command" -l fail-if -d 'End with exit code 4 when the run crosses this, for CI and scripts: \'p99 > 300ms\', \'errors > 1%\'; repeat for more. The report is still printed. (pepe ping has --slo for the same.)' -r
 complete -c pepe -n "__fish_pepe_needs_command" -l metrics -d 'Serve the live numbers for Prometheus at http://ADDR/metrics while the run goes, e.g. :9100 or 127.0.0.1:9100, so a soak run or a long ping shows up in Grafana next to the server\'s own' -r
+complete -c pepe -n "__fish_pepe_needs_command" -l otlp -d 'Take the service\'s OpenTelemetry spans at ADDR (OTLP over HTTP, as :4318) and say where its time went: each request carries its own traceparent, and the report breaks the server\'s time down by span. Point the service at it: OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318' -r
 complete -c pepe -n "__fish_pepe_needs_command" -l config -d 'Read settings from this file instead of ./pepe.toml; flags on the command line win over it' -r -F
 complete -c pepe -n "__fish_pepe_needs_command" -l write-config -d 'Write the settings as they stand to this file, as a pepe.toml, and exit' -r -F
 complete -c pepe -n "__fish_pepe_needs_command" -l load -d 'Run a test saved on the setup screen (ctrl-s): ./.pepe/tests/NAME.toml; flags on the command line win over it' -r

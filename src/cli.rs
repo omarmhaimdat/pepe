@@ -149,6 +149,13 @@ pub struct Cli {
     #[arg(long, global = true, value_name = "ADDR")]
     pub metrics: Option<String>,
 
+    /// Take the service's OpenTelemetry spans at ADDR (OTLP over HTTP, as
+    /// :4318) and say where its time went: each request carries its own
+    /// traceparent, and the report breaks the server's time down by span.
+    /// Point the service at it: OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
+    #[arg(long, value_name = "ADDR")]
+    pub otlp: Option<String>,
+
     /// Open the setup screen to review or change the settings before
     /// starting (it opens by itself when no URL is given)
     #[arg(short = 'i', long, global = true)]
@@ -636,6 +643,12 @@ impl Cli {
                     format!("--trace-header {name:?} is not a header name; letters, digits and dashes, as in X-Request-Id"),
                 ));
             }
+        }
+        if self.otlp.is_some() && self.command.is_some() {
+            return Err(Error::raw(
+                clap::error::ErrorKind::ArgumentConflict,
+                "--otlp is for a plain run for now: pepe --otlp :4318 -n 2000 URL",
+            ));
         }
         // A ramp sets its own concurrency and runs for as long as its
         // steps; a ping sends one at a time
