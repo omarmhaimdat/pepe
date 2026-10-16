@@ -69,7 +69,35 @@ For a client configured with JSON (Claude Desktop, Cursor and the like):
 }
 ```
 
+In Cursor, opening this link adds the server with the plugin's caps:
+
+```
+cursor://anysphere.cursor-deeplink/mcp/install?name=pepe&config=eyJjb21tYW5kIjoicGVwZSIsImFyZ3MiOlsibWNwIiwiLS1tYXgtcmVxdWVzdHMiLCIxMDAwMCIsIi0tbWF4LXJhdGUiLCI1MDAiLCItLW1heC1jb25jdXJyZW5jeSIsIjY0Il19
+```
+
 A tool call that pepe refuses (a host outside the allowed, a cap crossed) comes back as an error with pepe's reason; a limit crossed during the run (`fail_if`, a ping's `slo`) comes back as the report with a note, since the report is the answer. A `ping` without `count` or `duration` sends five pings, so no call runs forever.
+
+### In Codex
+
+Codex reads `AGENTS.md`, and takes MCP servers the same way:
+
+```bash
+codex mcp add pepe -- pepe mcp --max-requests 10000 --max-rate 500 --max-concurrency 64
+```
+
+or in `~/.codex/config.toml`:
+
+```toml
+[mcp_servers.pepe]
+command = "pepe"
+args = ["mcp", "--max-requests", "10000", "--max-rate", "500", "--max-concurrency", "64"]
+```
+
+The repository is laid out as a Codex plugin too (a `plugin.json` and an `mcp.json` at its root, and `.agents/plugins/marketplace.json`), with the same skill and server: `codex plugin marketplace add omarmhaimdat/pepe`, then `/plugins` in Codex to install it.
+
+### The skill alone
+
+`npx skills add omarmhaimdat/pepe` puts the `pepe` skill where Claude Code, Codex and the other agents that read [Agent Skills](https://agentskills.io) look for it, without the server.
 
 ### As a Claude Code plugin
 
@@ -115,6 +143,22 @@ pepe ramp --json https://api.example.com/health --to 200 --until 'p99 > 500ms'
 ```
 
 Read `holds_concurrency` (the level that held), `capacity.requests_per_second` (the estimate, `null` when the curve hadn't bent; `extrapolated` when it was read past the ramp), each `steps[]` entry, and `findings`.
+
+## Speed up an endpoint
+
+The loop an agent can close on its own: measure, see which part of the service the time goes to, change the code, measure again, and let the comparison say whether it worked. `--otlp` (a run's `otlp` in the MCP server) takes the service's OpenTelemetry spans, and the report's `spans` name the operation behind the time ([Inside the service](load-test.md#inside-the-service)).
+
+```bash
+OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 ./my-service &
+pepe --json --otlp :4318 -n 2000 -c 16 http://localhost:8080/checkout > before.json
+# change the code behind spans.operations[0], restart the service
+pepe --json --otlp :4318 -n 2000 -c 16 http://localhost:8080/checkout > after.json
+pepe compare before.json after.json --json --gate
+```
+
+Read `spans.operations[]`, the operation with the most of the slowest requests' time first: `name`, `service`, `kind`, `calls_per_request`, `median_ms`, `share_percent` (its own time over all requests) and `slowest_share_percent` (over the slowest); `spans.coverage_percent`, how many requests the service sent spans for; and `summary.slowest_requests[].spent`, one slow request's time by operation, with its `trace_id`. The comparison's `operations[]` holds each operation before and after, and its `findings` say what moved inside the service. No spans, or few, and the `verdict` findings say what to set on the service.
+
+The MCP server has the loop as a prompt, `speed-up`, with a `url` and an optional `goal`: in Claude Code it is the `/pepe:speed-up` command (or `/mcp__pepe__speed-up`). The `run`, `ping`, `ramp`, `api`, `flow` and `replay` tools take a `save` path, so their reports can be handed to `compare`.
 
 ## Compare before and after
 

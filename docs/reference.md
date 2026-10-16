@@ -131,6 +131,9 @@ Options:
       --metrics <ADDR>
           Serve the live numbers for Prometheus at http://ADDR/metrics while the run goes, e.g. :9100 or 127.0.0.1:9100, so a soak run or a long ping shows up in Grafana next to the server's own
 
+      --otlp <ADDR>
+          Take the service's OpenTelemetry spans at ADDR (OTLP over HTTP, as :4318) and say where its time went: each request carries its own traceparent, and the report breaks the server's time down by span. Point the service at it: OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
+
   -i, --setup
           Open the setup screen to review or change the settings before starting (it opens by itself when no URL is given)
 

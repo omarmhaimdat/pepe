@@ -90,6 +90,81 @@ fn id_in<'v>(name: &str, value: &'v str) -> Option<&'v str> {
     (!id.is_empty()).then_some(id)
 }
 
+// ─── Sending a trace with each request ──────────────────────────────────────
+
+/// `--otlp`: the high half of every trace id this run sends. The service's
+/// spans come back with it, which tells them from the spans of anything
+/// else it served, and the low half says which request they belong to.
+static PROPAGATE: OnceLock<u64> = OnceLock::new();
+
+/// Send a `traceparent` with every request from now on. Called once,
+/// before any request is sent; the run's half of the trace ids.
+pub fn propagate() -> u64 {
+    *PROPAGATE.get_or_init(|| {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default();
+        mix(now.as_nanos() as u64 ^ ((std::process::id() as u64) << 32)) | 1
+    })
+}
+
+/// The run's half of the trace ids, when requests carry one
+pub fn propagating() -> Option<u64> {
+    PROPAGATE.get().copied()
+}
+
+/// The header a trace travels in (W3C Trace Context)
+pub const TRACEPARENT: HeaderName = HeaderName::from_static("traceparent");
+
+/// The length of a `traceparent` value: `00-<32 hex>-<16 hex>-01`
+pub const TRACEPARENT_LEN: usize = 55;
+
+/// A `traceparent` of the right length, written into each request in turn
+pub const TRACEPARENT_BLANK: &str = "00-00000000000000000000000000000000-0000000000000000-01";
+
+/// Request number `turn`'s half of its trace id. Spread over the 64 bits,
+/// so a service that samples by the id's low bytes samples evenly. Never
+/// 0: only 0 mixes to 0.
+pub fn trace_of(turn: u64) -> u64 {
+    mix(turn.wrapping_add(1))
+}
+
+/// The id of pepe's side of trace `trace`: the span the service's first
+/// span names as its parent, which is how its root is found
+pub fn client_span(trace: u64) -> u64 {
+    mix(trace ^ 0x9e37_79b9_7f4a_7c15) | 1
+}
+
+/// The `traceparent` value for the trace `trace` of run `run`; the last
+/// flag asks the service to keep it, whatever it samples otherwise
+pub fn traceparent(run: u64, trace: u64) -> [u8; TRACEPARENT_LEN] {
+    let mut out = [0u8; TRACEPARENT_LEN];
+    out.copy_from_slice(TRACEPARENT_BLANK.as_bytes());
+    hex_into(&mut out[3..19], run);
+    hex_into(&mut out[19..35], trace);
+    hex_into(&mut out[36..52], client_span(trace));
+    out
+}
+
+/// A trace id as it is written: 32 hex digits
+pub fn trace_id_hex(run: u64, trace: u64) -> String {
+    format!("{run:016x}{trace:016x}")
+}
+
+fn hex_into(out: &mut [u8], value: u64) {
+    const DIGITS: &[u8; 16] = b"0123456789abcdef";
+    for (i, byte) in out.iter_mut().enumerate() {
+        *byte = DIGITS[((value >> (60 - 4 * i)) & 0xf) as usize];
+    }
+}
+
+/// splitmix64's finalizer: a bijection, so no two requests share an id
+fn mix(mut x: u64) -> u64 {
+    x = (x ^ (x >> 30)).wrapping_mul(0xbf58_476d_1ce4_e5b9);
+    x = (x ^ (x >> 27)).wrapping_mul(0x94d0_49bb_1331_11eb);
+    x ^ (x >> 31)
+}
+
 /// One `Server-Timing` entry: `db;dur=53.2;desc="primary"`
 #[derive(Debug, Clone, PartialEq)]
 pub struct ServerTiming {

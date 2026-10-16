@@ -92,6 +92,10 @@ pub struct Comparison {
     pub before: Side,
     pub after: Side,
     pub changes: Vec<Change>,
+    /// `--otlp` on both sides: what moved inside the service, by the
+    /// operations of its spans, most moved first
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub operations: Vec<OperationChange>,
     pub findings: Vec<Finding>,
     /// The verdict in a badge's three parts, for shields.io and the like
     pub badge: Badge,
@@ -161,6 +165,47 @@ pub struct Side {
     /// The failure most often seen
     #[serde(skip)]
     main_failure: Option<String>,
+    /// `--otlp`: the operations of the service's spans
+    #[serde(skip)]
+    operations: Vec<Operation>,
+}
+
+/// An operation of a run's spans, as its report has it
+#[derive(Debug, Clone, PartialEq)]
+struct Operation {
+    name: String,
+    service: Option<String>,
+    median_ms: f64,
+    share_percent: f64,
+}
+
+impl Operation {
+    fn label(&self) -> String {
+        match &self.service {
+            Some(service) => format!("{service}: {}", self.name),
+            None => self.name.clone(),
+        }
+    }
+}
+
+/// One operation of the service's spans, held against its earlier self
+#[derive(Debug, Clone, Serialize, PartialEq)]
+pub struct OperationChange {
+    pub name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub service: Option<String>,
+    /// Its median call, before and after; absent on the side that didn't
+    /// have it
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub before_median_ms: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub after_median_ms: Option<f64>,
+    /// Its own time as a share of the server's, before and after
+    pub before_share_percent: f64,
+    pub after_share_percent: f64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub change_percent: Option<f64>,
+    pub significant: bool,
 }
 
 impl Side {
@@ -242,6 +287,7 @@ impl Side {
             // 1.1 standard deviations of a steady series
             cv: if avg > 0.0 { jitter / avg / 1.13 } else { 0.0 },
             main_failure,
+            operations: Vec::new(),
         })
     }
 
@@ -292,6 +338,25 @@ impl Side {
             download_ms: None,
             cv: if avg > 0.0 { sd / avg } else { 0.0 },
             main_failure,
+            operations: doc
+                .pointer("/spans/operations")
+                .and_then(Value::as_array)
+                .map(|ops| {
+                    ops.iter()
+                        .filter_map(|o| {
+                            Some(Operation {
+                                name: o.get("name")?.as_str()?.to_string(),
+                                service: o
+                                    .get("service")
+                                    .and_then(Value::as_str)
+                                    .map(str::to_string),
+                                median_ms: num(o, "median_ms")?,
+                                share_percent: num(o, "share_percent").unwrap_or(0.0),
+                            })
+                        })
+                        .collect()
+                })
+                .unwrap_or_default(),
         }
     }
 
@@ -324,6 +389,7 @@ impl Side {
             download_ms: None,
             cv: 0.0,
             main_failure: None,
+            operations: Vec::new(),
         }
     }
 
@@ -573,6 +639,52 @@ pub fn compare(before: &Side, after: &Side) -> Comparison {
         }
     }
 
+    // Inside the service: which operation moved, when both runs have spans.
+    // They name what changed; the verdict stays with what pepe measured.
+    let operations = operation_changes(before, after, latency_noise(0.5));
+    for change in operations.iter().filter(|c| c.significant).take(3) {
+        let label = match &change.service {
+            Some(service) => format!("{service}: {}", change.name),
+            None => change.name.clone(),
+        };
+        let text = match (change.before_median_ms, change.after_median_ms) {
+            (Some(a), Some(b)) => format!(
+                "Inside the service, {label} {} {}: {} → {} a call, {:.0}% → {:.0}% of the server's time",
+                if b > a { "up" } else { "down" },
+                pct(((b - a) / a).abs() * 100.0),
+                ms(a),
+                ms(b),
+                change.before_share_percent,
+                change.after_share_percent
+            ),
+            (Some(_), None) => format!(
+                "Inside the service, {label} is gone; it was {:.0}% of the server's time",
+                change.before_share_percent
+            ),
+            (None, Some(b)) => format!(
+                "Inside the service, {label} is new: {} a call, {:.0}% of the server's time",
+                ms(b),
+                change.after_share_percent
+            ),
+            (None, None) => continue,
+        };
+        // Slower calls, or a new one; a share that grew because the rest
+        // shrank isn't
+        let worse = match (change.before_median_ms, change.after_median_ms) {
+            (Some(a), Some(b)) => b > a,
+            (None, Some(_)) => true,
+            _ => false,
+        };
+        findings.push(note(
+            if worse {
+                Level::Degraded
+            } else {
+                Level::Healthy
+            },
+            text,
+        ));
+    }
+
     if outcome == Outcome::Same {
         outcome = match (slower, faster) {
             (true, _) => Outcome::Slower,
@@ -594,9 +706,64 @@ pub fn compare(before: &Side, after: &Side) -> Comparison {
         before: before.clone(),
         after: after.clone(),
         changes,
+        operations,
         findings,
         badge,
     }
+}
+
+/// The operations of both sides' spans, matched by service and name: a
+/// median call that moved past `noise`, or one that came or went, counts
+fn operation_changes(before: &Side, after: &Side, noise: f64) -> Vec<OperationChange> {
+    if before.operations.is_empty() || after.operations.is_empty() {
+        return Vec::new();
+    }
+    let find = |side: &Side, op: &Operation| {
+        side.operations
+            .iter()
+            .find(|o| o.name == op.name && o.service == op.service)
+            .cloned()
+    };
+    let mut seen: Vec<String> = Vec::new();
+    let mut changes = Vec::new();
+    for op in before.operations.iter().chain(&after.operations) {
+        if seen.contains(&op.label()) {
+            continue;
+        }
+        seen.push(op.label());
+        let (a, b) = (find(before, op), find(after, op));
+        let change = match (&a, &b) {
+            (Some(a), Some(b)) if a.median_ms > 0.0 => {
+                Some((b.median_ms - a.median_ms) / a.median_ms)
+            }
+            _ => None,
+        };
+        let share = |o: &Option<Operation>| o.as_ref().map_or(0.0, |o| o.share_percent);
+        // Small in both runs, it moved nothing that matters
+        let matters = share(&a).max(share(&b)) >= 5.0;
+        let significant = matters
+            && match change {
+                Some(c) => c.abs() > noise.max(0.1),
+                None => true,
+            };
+        changes.push(OperationChange {
+            name: op.name.clone(),
+            service: op.service.clone(),
+            before_median_ms: a.as_ref().map(|o| o.median_ms),
+            after_median_ms: b.as_ref().map(|o| o.median_ms),
+            before_share_percent: share(&a),
+            after_share_percent: share(&b),
+            change_percent: change.map(|c| round(c * 100.0)),
+            significant,
+        });
+    }
+    changes.sort_by(|x, y| {
+        let moved = |c: &OperationChange| (c.after_share_percent - c.before_share_percent).abs();
+        y.significant
+            .cmp(&x.significant)
+            .then(moved(y).total_cmp(&moved(x)))
+    });
+    changes
 }
 
 /// The verdict and the one number that says it most
@@ -876,6 +1043,79 @@ mod tests {
             }
         });
         Side::of_run("run.json".into(), &doc, &doc["summary"])
+    }
+
+    fn with_spans(mut side: Side, ops: &[(&str, f64, f64)]) -> Side {
+        side.operations = ops
+            .iter()
+            .map(|&(name, median_ms, share_percent)| Operation {
+                name: name.into(),
+                service: Some("shop".into()),
+                median_ms,
+                share_percent,
+            })
+            .collect();
+        side
+    }
+
+    #[test]
+    fn what_moved_inside_the_service_is_said_by_its_spans() {
+        let before = with_spans(
+            run(5000, 0, 40.0, 60.0, 5.0, 400.0),
+            &[
+                ("SELECT orders", 38.0, 95.0),
+                ("GET /checkout", 40.0, 2.0),
+                ("tiny", 0.1, 1.0),
+            ],
+        );
+        let after = with_spans(
+            run(5000, 0, 8.0, 12.0, 1.0, 2000.0),
+            &[
+                ("SELECT orders", 2.0, 40.0),
+                ("GET /checkout", 6.0, 10.0),
+                ("redis GET cart", 3.0, 45.0),
+            ],
+        );
+        let c = compare(&before, &after);
+        let names: Vec<&str> = c.operations.iter().map(|o| o.name.as_str()).collect();
+        assert_eq!(names[..2], ["SELECT orders", "redis GET cart"]);
+        let select = &c.operations[0];
+        assert_eq!(
+            (select.change_percent, select.significant),
+            (Some(-94.7), true)
+        );
+        let new = &c.operations[1];
+        assert_eq!((new.before_median_ms, new.significant), (None, true));
+        // Under 5% of the server's time on both sides: not worth a word
+        assert!(
+            !c.operations
+                .iter()
+                .find(|o| o.name == "tiny")
+                .unwrap()
+                .significant
+        );
+        let said: Vec<(&str, &str)> = c
+            .findings
+            .iter()
+            .filter(|f| f.text.starts_with("Inside"))
+            .map(|f| (f.level, f.text.as_str()))
+            .collect();
+        assert_eq!(said[0].0, "Healthy");
+        assert!(
+            said[0].1.contains("SELECT orders down 95%"),
+            "{}",
+            said[0].1
+        );
+        assert_eq!(said[1].0, "Degraded");
+        assert!(said[1].1.contains("redis GET cart is new"), "{}", said[1].1);
+        // Faster calls whose share grew are no worse for it
+        assert!(said
+            .iter()
+            .any(|(level, text)| *level == "Healthy" && text.contains("GET /checkout down")));
+        // Without spans on both sides there is nothing to say
+        assert!(compare(&before, &run(5000, 0, 8.0, 12.0, 1.0, 2000.0))
+            .operations
+            .is_empty());
     }
 
     #[test]

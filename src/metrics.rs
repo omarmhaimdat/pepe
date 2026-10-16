@@ -271,6 +271,8 @@ pub struct SlowResponse {
     pub latency: Duration,
     pub status: u16,
     pub request_id: Option<(&'static str, Box<str>)>,
+    /// `--otlp`: its half of the trace id it was sent with
+    pub trace: Option<u64>,
 }
 
 impl Slowest {
@@ -287,6 +289,7 @@ impl Slowest {
             latency: stat.duration,
             status: status.as_u16(),
             request_id: stat.request_id.clone(),
+            trace: stat.trace,
         };
         let index = self
             .entries

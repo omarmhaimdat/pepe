@@ -65,7 +65,22 @@
               "latency_ms": { "type": "number" },
               "status": { "type": "integer" },
               "request_id": { "type": "string" },
-              "id_header": { "type": "string" }
+              "id_header": { "type": "string" },
+              "trace_id": { "type": "string", "description": "--otlp: the trace id it was sent with (32 hex digits)" },
+              "server_ms": { "type": "number", "description": "--otlp: the server's time for it, from its spans" },
+              "spent": {
+                "type": "array",
+                "description": "--otlp: what the server's time went on, most first: each operation's own time, less what it called",
+                "items": {
+                  "type": "object",
+                  "required": ["name", "ms"],
+                  "properties": {
+                    "name": { "type": "string" },
+                    "service": { "type": "string" },
+                    "ms": { "type": "number" }
+                  }
+                }
+              }
             }
           }
         },
@@ -179,6 +194,52 @@
         "distinct_urls": { "type": "integer", "minimum": 0 },
         "left_out": { "type": "object", "additionalProperties": { "type": "integer" } },
         "urls": { "type": "array", "items": { "$ref": "#/$defs/row" } }
+      }
+    },
+    "spans": {
+      "type": "object",
+      "description": "--otlp: where the server's time went, from the OpenTelemetry spans the service sent for the run's requests",
+      "required": ["requests", "traces", "spans", "coverage_percent", "operations"],
+      "properties": {
+        "receiver": { "type": "string", "description": "The address the spans were taken at" },
+        "requests": { "type": "integer", "minimum": 0, "description": "Requests measured that the service answered" },
+        "traces": { "type": "integer", "minimum": 0, "description": "Of those, the ones the service sent spans for" },
+        "spans": { "type": "integer", "minimum": 0 },
+        "coverage_percent": { "type": "number" },
+        "other_spans": { "type": "integer", "minimum": 0, "description": "Spans of traces pepe didn't start, set aside" },
+        "dropped_spans": { "type": "integer", "minimum": 0, "description": "Spans past what is kept, not in the numbers" },
+        "refused": { "type": "array", "items": { "type": "string" }, "description": "Why exports were turned away" },
+        "server": {
+          "type": "object",
+          "description": "The server's time for each request: its first span, start to end",
+          "required": ["median_ms", "p90_ms", "p99_ms", "slowest_requests"],
+          "properties": {
+            "median_ms": { "type": "number" },
+            "p90_ms": { "type": "number" },
+            "p99_ms": { "type": "number" },
+            "slowest_requests": { "type": "integer", "minimum": 0, "description": "Requests at or over the server's p99: what slowest_share_percent is of" }
+          }
+        },
+        "operations": {
+          "type": "array",
+          "description": "Each operation (service, span name and kind), most of the slowest requests' time first",
+          "items": {
+            "type": "object",
+            "required": ["name", "kind", "calls", "calls_per_request", "errors", "median_ms", "p99_ms", "share_percent", "slowest_share_percent"],
+            "properties": {
+              "name": { "type": "string", "description": "The span's name" },
+              "service": { "type": "string", "description": "The service.name of the service that sent it" },
+              "kind": { "type": "string", "enum": ["server", "client", "internal", "producer", "consumer", "unspecified"] },
+              "calls": { "type": "integer", "minimum": 0 },
+              "calls_per_request": { "type": "number" },
+              "errors": { "type": "integer", "minimum": 0, "description": "Calls whose status was an error" },
+              "median_ms": { "type": "number", "description": "Each call, start to end" },
+              "p99_ms": { "type": "number" },
+              "share_percent": { "type": "number", "description": "Its own time (less what it called) as a share of the server's time over all requests" },
+              "slowest_share_percent": { "type": "number", "description": "The same over the slowest requests" }
+            }
+          }
+        }
       }
     }
   },

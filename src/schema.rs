@@ -210,6 +210,56 @@ mod tests {
     }
 
     #[test]
+    fn a_report_with_spans_fits_its_schema_and_names_every_field() {
+        use crate::otlp::{Breakdown, Op, Operation};
+        let mut durations = crate::metrics::Histogram::default();
+        durations.record(2_000);
+        let mut server = crate::metrics::Histogram::default();
+        server.record(2_500);
+        let op = Op {
+            service: Some("shop".into()),
+            name: "SELECT orders".into(),
+            kind: 3,
+        };
+        let spans = Breakdown {
+            requests: 10,
+            traces: 10,
+            spans: 30,
+            other: 2,
+            refused: vec!["an export came compressed".into()],
+            server,
+            tail_traces: 1,
+            operations: vec![Operation {
+                op,
+                calls: 10,
+                errors: 0,
+                durations,
+                share: 80.0,
+                tail_share: 90.0,
+            }],
+            ..Default::default()
+        };
+        let report =
+            crate::json_report::JsonReport::generate(&metrics(), Duration::from_secs(2), false)
+                .with_spans(&spans);
+        let doc: Value = serde_json::from_str(&report.to_json().unwrap()).unwrap();
+        let run = schema("run");
+        assert_eq!(check(&run, &doc), Vec::<String>::new());
+        // The checker passes fields it doesn't know; every one is in the schema
+        let known = &run["properties"]["spans"]["properties"];
+        for key in doc["spans"].as_object().unwrap().keys() {
+            assert!(known.get(key).is_some(), "spans.{key} isn't in the schema");
+        }
+        let known = &known["operations"]["items"]["properties"];
+        for key in doc["spans"]["operations"][0].as_object().unwrap().keys() {
+            assert!(
+                known.get(key).is_some(),
+                "spans.operations[].{key} isn't in the schema"
+            );
+        }
+    }
+
+    #[test]
     fn a_ramp_report_fits_its_schema() {
         use crate::ramp::{Ramp, RampPlan};
         let plan = RampPlan::from_args(&crate::cli::RampArgs {

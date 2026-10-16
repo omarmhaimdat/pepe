@@ -220,6 +220,8 @@ pub struct Dashboard {
     warming: bool,
     warmup_left: Option<Duration>,
     warmup_requests: u64,
+    /// `--otlp`: the warm-up's traces, left out of the spans' breakdown
+    warmup_traces: std::collections::HashSet<u64>,
     /// Set once every request has finished (or the run was stopped)
     finished: Option<Duration>,
     interrupted: bool,
@@ -307,6 +309,7 @@ impl Dashboard {
             warming: warmup.is_some(),
             warmup_left: warmup,
             warmup_requests: 0,
+            warmup_traces: Default::default(),
             finished: None,
             interrupted: false,
             verdict: None,
@@ -363,6 +366,19 @@ impl Dashboard {
             Some(connects) => report.with_connects(connects),
             None => report,
         }
+    }
+
+    /// `--otlp`: what to ask of the spans once the run is over; None when
+    /// spans weren't asked for
+    pub fn spans(&self) -> Option<crate::otlp::Query> {
+        crate::otlp::address()?;
+        Some(crate::otlp::Query {
+            // Only a request the service answered can have spans
+            requests: self.metrics.success + self.metrics.failed,
+            warmup: self.warmup_requests,
+            excluded: self.warmup_traces.clone(),
+            keep: crate::json_report::JsonReport::slowest_traces(&self.slowest),
+        })
     }
 
     /// Write the snapshot, if one was asked for; a failure is said once
@@ -447,6 +463,7 @@ impl Dashboard {
     fn record(&mut self, stat: ResponseStats) {
         if stat.warmup {
             self.warmup_requests += 1;
+            self.warmup_traces.extend(stat.trace);
             return;
         }
         self.metrics.record(&stat);

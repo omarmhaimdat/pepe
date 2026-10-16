@@ -10,9 +10,9 @@
     {
       "name": "pepe",
       "source": "./",
-      "description": "HTTP load generator and latency tool: a skill that says how to call pepe and read its reports, and pepe's MCP server under guardrails.",
+      "description": "Find why an HTTP endpoint is slow and prove a fix: latency by phase, load tests, the service's time by operation from its OpenTelemetry spans, before and after compared. A skill and pepe's MCP server under guardrails.",
       "category": "developer-tools",
-      "tags": ["http", "load-testing", "latency", "benchmark", "mcp"]
+      "tags": ["http", "load-testing", "latency", "performance", "opentelemetry", "benchmark", "mcp"]
     }
   ]
 }

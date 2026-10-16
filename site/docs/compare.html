@@ -53,6 +53,7 @@ pepe compare api-health          # a saved test: its last two recorded runs</cod
   ▲ Connect up 150%: 10.00ms → 25.00ms
   ▲ TLS handshake up 60%: 25.00ms → 40.00ms
   ✔ First byte within the usual spread: 6.00ms → 6.00ms (±5%)</code></pre></figure>
+<p>Two run reports made with <a href="load-test.html#inside-the-service"><code>--otlp</code></a> also say what moved inside the service: each operation of its spans before and after (<code>operations[]</code> in the JSON), and a finding for each that moved, such as <em>Inside the service, shop: SELECT orders down 95%: 47.74ms → 2.57ms a call, 98% → 46% of the server's time</em>. They name what changed; the verdict stays with what pepe measured.</p>
 <h2 id="flags"><a href="#flags">Flags</a></h2>
 <div class="table"><table><thead><tr><th>Flag</th><th>What it does</th></tr></thead><tbody><tr><td><code>--gate</code></td><td>Exit 1 when the verdict is Slower or Worse, for CI</td></tr><tr><td><code>--json</code></td><td>The verdict, each number before and after with its change and the spread it was held against, the findings, and the verdict as a badge's three parts</td></tr><tr><td><code>--svg &lt;FILE&gt;</code></td><td>Draw the verdict as a card, the way the dashboard draws, for a README, a site or a report</td></tr></tbody></table></div>
 <p>The badge is <code>pepe | slower · p99 +38%</code>, in a colour, as shields.io and the like draw one. <code>pepe schema compare</code> prints the JSON's schema.</p>

@@ -44,6 +44,8 @@ pepe · compare before.json → after.json
   ✔ First byte within the usual spread: 6.00ms → 6.00ms (±5%)
 ```
 
+Two run reports made with [`--otlp`](load-test.md#inside-the-service) also say what moved inside the service: each operation of its spans before and after (`operations[]` in the JSON), and a finding for each that moved, such as *Inside the service, shop: SELECT orders down 95%: 47.74ms → 2.57ms a call, 98% → 46% of the server's time*. They name what changed; the verdict stays with what pepe measured.
+
 ## Flags
 
 | Flag | What it does |

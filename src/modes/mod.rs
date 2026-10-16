@@ -80,6 +80,15 @@ pub(crate) fn print_report(report: &str) {
     print!("{}", ui::theme::color_report(report, color));
 }
 
+/// `--otlp`, after the text report: the breakdown and what it says
+pub(crate) fn print_spans(spans: &crate::otlp::Breakdown, metrics: &Metrics) {
+    let mut text = spans.text();
+    for note in spans.notes(metrics.percentile(50.0)) {
+        text.push_str(&format!("  · {}\n", note.text));
+    }
+    print_report(&text);
+}
+
 /// After the report: Pepe mentions a newer release, if the look that
 /// started with the run found one
 pub(crate) async fn say_if_newer(check: update::Check) {
@@ -103,6 +112,8 @@ pub(crate) struct Farewell {
     /// The end-of-run report as JSON, for `--record`, unless the screen
     /// recorded it already
     result: Option<String>,
+    /// `--otlp`: what to ask of the spans
+    spans: Option<crate::otlp::Query>,
 }
 
 /// `--record` asks for a saved test to record under, and a run or a ramp
@@ -210,11 +221,22 @@ pub(crate) async fn headless_dashboard(
 ) -> Result<(), Box<dyn std::error::Error>> {
     let check = update::Check::start();
     dashboard.run_headless(&mut load).await?;
+    let spans = match dashboard.spans() {
+        Some(query) => query.answer().await,
+        None => None,
+    };
     if let Some(report) = dashboard.report() {
         print_report(&report);
     }
+    if let Some(spans) = &spans {
+        print_spans(spans, dashboard.metrics());
+    }
     let comparison = if args.record {
-        record_result(args, &dashboard.report_json(&load).to_json()?)?
+        let mut json = dashboard.report_json(&load);
+        if let Some(spans) = &spans {
+            json = json.with_spans(spans);
+        }
+        record_result(args, &json.to_json()?)?
     } else {
         None
     };

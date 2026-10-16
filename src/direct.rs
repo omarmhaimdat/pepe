@@ -31,6 +31,8 @@ use std::time::{Duration, Instant};
 
 use bytes::Bytes;
 use reqwest::header::{HeaderMap, HeaderName, HeaderValue, ACCEPT, HOST, USER_AGENT};
+
+use crate::trace::TRACEPARENT;
 use reqwest::{Method, StatusCode, Version};
 use tokio::io::{AsyncReadExt, AsyncWriteExt, BufReader};
 use tokio::net::TcpStream;
@@ -209,6 +211,9 @@ pub struct Route {
     line: usize,
     /// The whole request, head and body, as it is written
     bytes: Bytes,
+    /// `--otlp`: where in `bytes` the `traceparent` value is, to be
+    /// written anew for each request
+    trace_at: Option<usize>,
     /// A HEAD: its answer describes a body and has none
     head: bool,
     /// Sending it twice does what sending it once does, so it may go out
@@ -258,6 +263,7 @@ impl Routes {
         Lines {
             connections: (0..self.origins.len()).map(|_| None).collect(),
             watch: Watch::new(),
+            stamped: Vec::new(),
         }
     }
 }
@@ -318,12 +324,25 @@ impl Route {
             path.push('?');
             path.push_str(query);
         }
+        if crate::trace::propagating().is_some() {
+            headers.insert(
+                TRACEPARENT,
+                HeaderValue::from_static(crate::trace::TRACEPARENT_BLANK),
+            );
+        }
         let body = request.body.as_deref().unwrap_or_default();
         let method = &request.method;
+        let bytes = wire::request(method, &path, &headers, body);
+        let trace_at = crate::trace::propagating().and_then(|_| {
+            let name = b"\r\ntraceparent: ";
+            let at = bytes.windows(name.len()).position(|w| w == name)?;
+            Some(at + name.len())
+        });
         Some(Self {
             origin: origins[line].clone(),
             line,
-            bytes: wire::request(method, &path, &headers, body),
+            bytes,
+            trace_at,
             head: method == Method::HEAD,
             replayable: [Method::GET, Method::HEAD, Method::OPTIONS, Method::TRACE]
                 .contains(method),
@@ -478,12 +497,17 @@ impl Connection {
         .await
     }
 
-    /// Write `route`'s request and read the head of its response
-    async fn exchange(&mut self, route: &Route, now: Instant) -> Result<wire::Head, Broken> {
+    /// Write `bytes`, `route`'s request, and read the head of its response
+    async fn exchange(
+        &mut self,
+        route: &Route,
+        bytes: &[u8],
+        now: Instant,
+    ) -> Result<wire::Head, Broken> {
         self.used = Some(now);
         self.reusable = false;
         self.release();
-        if let Err(e) = self.stream.send(&route.bytes).await {
+        if let Err(e) = self.stream.send(bytes).await {
             return Err(Broken::Closed(Failure::other(&e)));
         }
         loop {
@@ -532,6 +556,8 @@ impl Connection {
 pub struct Lines {
     connections: Vec<Option<Connection>>,
     watch: Watch,
+    /// `--otlp`: the request with this one's trace written into it
+    stamped: Vec<u8>,
 }
 
 /// A response's head, with its body still to come. The headers are where
@@ -648,17 +674,33 @@ pub enum Sent<'a> {
 impl Lines {
     /// Send `route`'s request on this worker's connection to its origin,
     /// opening it first if need be. `start` is when the request began,
-    /// which is when its timeout counts from.
+    /// which is when its timeout counts from. `trace`: under `--otlp`, the
+    /// trace the request goes out with.
     pub async fn send<'a>(
         &'a mut self,
         setup: &Setup,
         route: &Route,
         start: Instant,
+        trace: Option<(u64, u64)>,
     ) -> Result<Sent<'a>, Failure> {
-        let Lines { connections, watch } = self;
+        let Lines {
+            connections,
+            watch,
+            stamped,
+        } = self;
+        let bytes: &[u8] = match (route.trace_at, trace) {
+            (Some(at), Some((run, trace))) => {
+                stamped.clear();
+                stamped.extend_from_slice(&route.bytes);
+                let value = crate::trace::traceparent(run, trace);
+                stamped[at..at + value.len()].copy_from_slice(&value);
+                stamped
+            }
+            _ => &route.bytes,
+        };
         let line = &mut connections[route.line];
         watch.deadline = (start + setup.timeout).into();
-        let head = match watch.guard(send_on(setup, route, line, start)).await {
+        let head = match watch.guard(send_on(setup, route, bytes, line, start)).await {
             Ok(Ok(head)) => head,
             Ok(Err(failure)) => {
                 *line = None;
@@ -722,6 +764,7 @@ impl Lines {
 async fn send_on(
     setup: &Setup,
     route: &Route,
+    bytes: &[u8],
     line: &mut Option<Connection>,
     now: Instant,
 ) -> Result<wire::Head, Failure> {
@@ -742,7 +785,7 @@ async fn send_on(
         }
         let connection = line.as_mut().expect("opened above");
         let kept = connection.used.is_some();
-        match connection.exchange(route, now).await {
+        match connection.exchange(route, bytes, now).await {
             Ok(head) => return Ok(head),
             Err(Broken::Closed(_)) if kept && again && route.replayable => {
                 again = false;

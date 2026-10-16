@@ -27,6 +27,7 @@ mod mcp;
 mod metrics;
 mod modes;
 mod openapi;
+mod otlp;
 mod ping;
 mod ramp;
 mod replay;
@@ -210,6 +211,23 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             Ok(addr) => eprintln!("metrics: http://{addr}/metrics"),
             Err(e) => {
                 eprintln!("error: --metrics: {e}");
+                std::process::exit(1);
+            }
+        }
+    }
+    // Before any request is built: each carries a trace from now on
+    if let Some(spec) = args
+        .otlp
+        .as_ref()
+        .filter(|_| args.command.is_none() && !args.dry_run)
+    {
+        match otlp::start(spec).await {
+            Ok(addr) => eprintln!(
+                "spans: OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:{}",
+                addr.port()
+            ),
+            Err(e) => {
+                eprintln!("error: --otlp: {e}");
                 std::process::exit(1);
             }
         }

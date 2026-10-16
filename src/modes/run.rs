@@ -9,6 +9,8 @@ pub(crate) async fn run_json(args: &Cli) -> Result<(), Box<dyn std::error::Error
     let mut started = Instant::now();
     let mut warming = load.warming();
     let mut warmup_requests = 0;
+    // `--otlp`: the warm-up's traces, left out of the spans' breakdown
+    let mut warmup_traces = std::collections::HashSet::new();
     let mut metrics = Metrics::default();
     let mut timeline = timeline::Timeline::default();
     let mut slowest = metrics::Slowest::default();
@@ -60,6 +62,7 @@ pub(crate) async fn run_json(args: &Cli) -> Result<(), Box<dyn std::error::Error
                 let over = !load.drain(|stat| {
                     if stat.warmup {
                         warmup_requests += 1;
+                        warmup_traces.extend(stat.trace);
                         return;
                     }
                     metrics.record(&stat);
@@ -98,7 +101,7 @@ pub(crate) async fn run_json(args: &Cli) -> Result<(), Box<dyn std::error::Error
     }
 
     timeline.finish(started.elapsed());
-    let report = report(
+    let mut report = report(
         &metrics,
         &timeline,
         &slowest,
@@ -108,6 +111,15 @@ pub(crate) async fn run_json(args: &Cli) -> Result<(), Box<dyn std::error::Error
         warmup_requests,
         interrupted,
     );
+    if crate::otlp::address().is_some() {
+        // Only a request the service answered can have spans
+        let answered = metrics.success + metrics.failed;
+        crate::otlp::settle(answered + warmup_requests).await;
+        let keep = json_report::JsonReport::slowest_traces(&slowest);
+        if let Some(spans) = crate::otlp::analyse(answered, &warmup_traces, &keep) {
+            report = report.with_spans(&spans);
+        }
+    }
     if let Some(path) = &args.snapshot {
         report.clone().with_snapshot(false).write_to(path)?;
     }
@@ -238,6 +250,9 @@ pub(crate) async fn run_interactive(
                     ui::Outcome::Quit => {
                         farewell.report = dashboard.report();
                         farewell.metrics = Some(dashboard.metrics().clone());
+                        // Answered once the terminal is back: the last
+                        // spans can take seconds to come
+                        farewell.spans = dashboard.spans();
                         if !dashboard.recorded() {
                             farewell.result = Some(dashboard.report_json(&load).to_json()?);
                         }
@@ -256,6 +271,13 @@ pub(crate) async fn run_screens(args: &Cli, setup: bool) -> Result<(), Box<dyn s
     let farewell = run_interactive(args, setup).await?;
     if let Some(report) = farewell.report {
         print_report(&report);
+    }
+    let spans = match farewell.spans {
+        Some(query) => query.answer().await,
+        None => None,
+    };
+    if let (Some(spans), Some(metrics)) = (&spans, &farewell.metrics) {
+        print_spans(spans, metrics);
     }
     if let Some(command) = farewell.command {
         println!("Run this again with:\n  {command}");
