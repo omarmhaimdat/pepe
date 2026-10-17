@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Upload the site to the R2 bucket behind pepe.mhaimdat.com: the install
-# page, the documentation site, the recordings and images they show, and
-# the JSON Schema of each report. Run by the release (publish-r2.yml) and
-# on its own whenever any of it changes on master (publish-site.yml).
+# page, robots.txt and the sitemap, the documentation site, the recordings
+# and images they show, and the JSON Schema of each report. Run by the
+# release (publish-r2.yml) and on its own whenever any of it changes on
+# master (publish-site.yml).
 #
 #   site/publish.sh REPO_ROOT
 #
@@ -12,9 +13,13 @@ set -euo pipefail
 root="${1:-.}"
 r2() { aws s3 cp --endpoint-url "$R2_ENDPOINT" --only-show-errors "$@"; }
 
-# The install page and what it shows
+# The install page and what it shows, and what a search engine reads first
 r2 "$root/site/index.html" "s3://$R2_BUCKET/index.html" \
   --content-type "text/html; charset=utf-8" --cache-control "public, max-age=300"
+r2 "$root/site/robots.txt" "s3://$R2_BUCKET/robots.txt" \
+  --content-type "text/plain; charset=utf-8" --cache-control "public, max-age=300"
+r2 "$root/site/sitemap.xml" "s3://$R2_BUCKET/sitemap.xml" \
+  --content-type "application/xml; charset=utf-8" --cache-control "public, max-age=300"
 r2 "$root/assets/logo.svg" "s3://$R2_BUCKET/assets/logo.svg" \
   --content-type "image/svg+xml" --cache-control "public, max-age=86400"
 for png in "$root"/site/img/*.png; do
