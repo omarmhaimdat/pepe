@@ -130,9 +130,9 @@ Load that looks like production.
 - [x] **Replay from access logs** (M): `pepe replay access.log` reads an
       nginx, Apache, Caddy or ALB log and sends its URLs in their real
       proportions — v0.14.0
-- [ ] **Data-driven requests** (M). `--vars users.csv` and `{{email}}` in
-      the URL, headers and body, so every request is different. Flows
-      already have the `{{holes}}`; this fills them from a file.
+- [x] **Data-driven requests** (M). `--vars users.csv` and `{{email}}` in
+      the URL, headers and body, so every request is different; in a
+      flow, each chain starts with the next row — next release
 
 ## 5. Output and integration
 
@@ -267,8 +267,8 @@ Before the tag:
       freeze is a description rather than a wish. The clock restarted
       with v0.42.0 (2026-10-13, the settings page); 2026-11-13 at the
       earliest
-- [ ] **The data-driven requests** (`--vars`, section 4), the one flag
-      still likely to shape the config file's keys
+- [x] **The data-driven requests** (`--vars`, section 4), the one flag
+      still likely to shape the config file's keys — next release
 - [ ] **A release note that says it**, with the frozen list above
 
 ## Not now

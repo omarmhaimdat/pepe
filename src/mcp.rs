@@ -357,6 +357,7 @@ pub fn command_for(name: &str, args: &Value) -> Result<Vec<String>, String> {
             argv.push("--json".into());
             load_flags(&mut argv, args);
             flag(&mut argv, args, "otlp", "--otlp");
+            flag(&mut argv, args, "vars", "--vars");
             argv.push(url.to_string());
         }
         "ping" => {
@@ -396,6 +397,7 @@ pub fn command_for(name: &str, args: &Value) -> Result<Vec<String>, String> {
             flags(&mut argv, args, "until", "--until");
             flag(&mut argv, args, "timeout", "-t");
             flags(&mut argv, args, "fail_if", "--fail-if");
+            flag(&mut argv, args, "vars", "--vars");
             request_flags(&mut argv, args);
             argv.push(url.to_string());
         }
@@ -417,6 +419,7 @@ pub fn command_for(name: &str, args: &Value) -> Result<Vec<String>, String> {
             let file = required(args, "file")?;
             argv.extend(["flow".to_string(), "--json".to_string()]);
             load_flags(&mut argv, args);
+            flag(&mut argv, args, "vars", "--vars");
             argv.push(file.to_string());
         }
         "replay" => {
@@ -440,6 +443,9 @@ pub fn command_for(name: &str, args: &Value) -> Result<Vec<String>, String> {
     }
     Ok(argv)
 }
+
+/// What the `vars` argument of `run` and `ramp` is
+const VARS: &str = "A CSV file whose first line names the {{holes}} in the URL, headers and body; each request takes the next row";
 
 /// The tools, as `tools/list` describes them
 pub fn tools() -> Vec<Value> {
@@ -505,6 +511,7 @@ pub fn tools() -> Vec<Value> {
             "inputSchema": schema(&["url"], &|p| {
                 p.insert("url".into(), string("The URL to send to"));
                 p.insert("otlp".into(), string("Take the service's OpenTelemetry spans here, as ':4318'; the service exports to http://localhost:4318"));
+                p.insert("vars".into(), string(VARS));
                 load(p);
             }),
         }),
@@ -534,6 +541,7 @@ pub fn tools() -> Vec<Value> {
                 p.insert("every".into(), string("How long each step is held: '10s'"));
                 p.insert("until".into(), strings("End once a step crosses one: 'p99 > 500ms', 'errors > 1%'"));
                 p.insert("fail_if".into(), strings("Conditions that make the exit code 4"));
+                p.insert("vars".into(), string(VARS));
                 request(p);
             }),
         }),
@@ -556,7 +564,11 @@ pub fn tools() -> Vec<Value> {
         json!({
             "name": "flow",
             "description": "Run a flow file: a sequence of requests where a value from one response feeds the next; the report has an entry per step and how many chains completed.",
-            "inputSchema": schema(&["file"], &|p| { p.insert("file".into(), string("The flow file, TOML")); load(p); }),
+            "inputSchema": schema(&["file"], &|p| {
+                p.insert("file".into(), string("The flow file, TOML"));
+                p.insert("vars".into(), string("A CSV file whose first line names values; each chain starts with the next row's"));
+                load(p);
+            }),
         }),
         json!({
             "name": "replay",

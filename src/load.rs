@@ -853,7 +853,12 @@ const MAX_SCHEDULE: usize = 4_096;
 
 /// The order targets are sent in: each appears in proportion to its weight,
 /// spread out rather than in runs
-fn schedule(targets: &[Target]) -> Vec<u16> {
+fn schedule(targets: &[Target]) -> Vec<u32> {
+    // Weighted alike (a `--vars` file's rows): each in turn, which the
+    // round-robin below would come to at a cost that grows as their square
+    if targets.iter().all(|t| t.weight == targets[0].weight) {
+        return (0..targets.len() as u32).collect();
+    }
     let total: u64 = targets.iter().map(|t| t.weight.max(1) as u64).sum();
     let scale = (MAX_SCHEDULE as f64 / total as f64).min(1.0);
     let counts: Vec<usize> = targets
@@ -870,7 +875,7 @@ fn schedule(targets: &[Target]) -> Vec<u16> {
         }
         let next = (0..targets.len()).max_by_key(|&i| credit[i]).unwrap_or(0);
         credit[next] -= len as i64;
-        order.push(next as u16);
+        order.push(next as u32);
     }
     order
 }
@@ -902,7 +907,7 @@ impl FailureBodies {
 struct Shared {
     targets: Vec<Target>,
     /// Indexes into `targets`, cycled through
-    schedule: Vec<u16>,
+    schedule: Vec<u32>,
     next: AtomicUsize,
     dns: DnsSampler,
     /// Keep the start of each body for the dashboard's preview column, and
@@ -1234,6 +1239,11 @@ async fn flow_worker(shard: Arc<Shard>, slot: usize) {
         }
         vars.clear();
         vars.extend(flow.vars.iter().cloned());
+        // `--vars`: the next row, over the flow's own values
+        if let Some(rows) = &flow.rows {
+            let turn = shard.shared.next.fetch_add(1, Ordering::Relaxed);
+            vars.extend(rows.row(turn).map(|(n, v)| (n.to_string(), v.to_string())));
+        }
         for (index, step) in flow.steps.iter().enumerate() {
             // A chain that has started gets to finish when the plan ends;
             // a pause holds it between steps, a stop ends it

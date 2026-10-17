@@ -40,6 +40,8 @@ pub fn request(method: &Method, path: &str, headers: &HeaderMap, body: &[u8]) ->
     }
     out.extend_from_slice(b"\r\n");
     out.extend_from_slice(body);
+    // Kept for the whole run, one per target: a `--vars` file has a row each
+    out.shrink_to_fit();
     Bytes::from(out)
 }
 

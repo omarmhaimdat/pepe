@@ -59,6 +59,7 @@ In the dashboard, `space` pauses, `+` and `-` change concurrency, `tab` switches
 | `--config <FILE>` | `./pepe.toml` if present | Read settings from a file ([Config file](#config-file)) |
 | `--write-config <FILE>` | | Write the settings as given to a file and exit |
 | `--trace-header <NAME>` | | Response header holding the request id, if not one of the usual ones |
+| `--vars <FILE>` | | Fill the `{{holes}}` in the URL, headers and body from a CSV file, a row a request |
 
 The full list, including every subcommand's own flags, is in the [command reference](reference.md).
 
@@ -70,6 +71,27 @@ pepe -n 1000 -c 10 -m PUT -d "$(cat payload.json)" -H 'Content-Type: application
 ```
 
 Repeated headers are kept (several `Cookie` headers are sent as several), and a `User-Agent` given with `-H` wins over the default. A body's `Content-Length` is added unless a header already says how the body ends.
+
+## Values from a file
+
+`--vars users.csv` makes every request different: `{{name}}` holes in the URL, the headers and the body take their values from a CSV file whose first line names them. Each request takes the next row, in the file's order, and the rows go round again.
+
+```csv
+id,email,token
+1,ada@example.com,aaa
+2,"lin, the second",bbb
+```
+
+```bash
+pepe -z 30s -c 20 --vars users.csv \
+  -H 'Authorization: Bearer {{token}}' \
+  -m POST -d '{"email": "{{email}}"}' \
+  'https://api.example.com/users/{{id}}'
+```
+
+Values are put in as they are written, so a value that goes in a URL is written the way the URL needs it. A value with a comma, a quote or a line break in it is quoted, a quote inside doubled (RFC 4180). Every hole must be a column of the file, and the request must have one: either is an error that names it before anything is sent. A hole can be anywhere in the URL, the host included, and `--allow-host` checks every row's host. `pepe ramp` takes `--vars` the same way, and [a flow](flow.md#values-from-a-file) starts each chain with the next row's values. Without `--vars`, `{{` in a URL is sent as written.
+
+The rows are made into requests before the run starts, so a request costs the same as one without values; each row takes about 1.6 KB of memory, and a file may have up to a million of them.
 
 ## Timed runs
 
@@ -190,6 +212,7 @@ threads = "auto"       # or a number
 rate = 500             # requests started per second
 warmup = "5s"
 trace-header = "X-Request-Id"
+vars = "users.csv"     # values for the {{holes}}, a row a request
 user-agent = "pepe-ci"
 proxy = "http://proxy:3128"
 insecure = false

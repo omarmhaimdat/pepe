@@ -4,6 +4,7 @@ use reqwest::Proxy;
 use crate::curl;
 use crate::request::{parse_header, Request, RequestSettings};
 use crate::utils::{default_user_agent, num_of_cores, version};
+use crate::vars::{Fill, Vars};
 use crate::PepeError;
 
 #[derive(Parser, Debug, Clone)]
@@ -104,6 +105,13 @@ pub struct Cli {
     /// X-Amzn-Trace-Id and other common ones are looked for
     #[arg(long, global = true, value_name = "NAME")]
     pub trace_header: Option<String>,
+
+    /// Fill the {{holes}} in the URL, headers and body from this CSV
+    /// file, whose first line names them: each request takes the next
+    /// row, and the rows go round again. In a flow, each chain starts
+    /// with the next row's values
+    #[arg(long, global = true, value_name = "FILE")]
+    pub vars: Option<std::path::PathBuf>,
 
     /// Write the JSON report so far to this file every minute while the
     /// run goes, and once more when it ends, so a long run's numbers
@@ -729,7 +737,9 @@ impl Cli {
         }
         // Parsed once more when the run starts; checked here for a clean
         // message rather than a dashboard full of failures
-        if !self.url.is_empty() {
+        if let Some(path) = &self.vars {
+            self.check_vars(path)?;
+        } else if !self.url.is_empty() {
             if let Err(e) = reqwest::Url::parse(&self.url) {
                 return Err(Error::raw(
                     clap::error::ErrorKind::ValueValidation,
@@ -990,6 +1000,9 @@ impl Cli {
         if let Some(warmup) = &self.warmup {
             flag("--warmup", warmup);
         }
+        if let Some(path) = &self.vars {
+            flag("--vars", &path.display().to_string());
+        }
         if let Some(rate) = self.rate {
             flag("--rate", &rate.to_string());
         }
@@ -1079,14 +1092,111 @@ impl Cli {
             .map(std::time::Duration::from_millis)
     }
 
+    /// The request; with `--vars`, the first row's
     pub fn request(&self) -> Result<Request, PepeError> {
+        match self.rows()? {
+            Some((vars, fill)) => self.row_request(&vars, &fill, 0),
+            None => Request::new(
+                self.url.clone(),
+                self.method.clone(),
+                self.body(),
+                &self.headers,
+                self.settings(),
+            ),
+        }
+    }
+
+    /// `--vars`: the file, and the request with holes its rows fill
+    pub fn rows(&self) -> Result<Option<(Vars, Fill)>, PepeError> {
+        let Some(path) = &self.vars else {
+            return Ok(None);
+        };
+        let vars = Vars::load(path).map_err(PepeError::Vars)?;
+        Ok(Some((vars, self.fill())))
+    }
+
+    /// The request of row `index`
+    pub fn row_request(
+        &self,
+        vars: &Vars,
+        fill: &Fill,
+        index: usize,
+    ) -> Result<Request, PepeError> {
+        let row = fill.row(vars, index);
         Request::new(
-            self.url.clone(),
+            row.url,
             self.method.clone(),
-            self.body(),
-            &self.headers,
+            row.body,
+            &row.headers,
             self.settings(),
         )
+        .map_err(|e| {
+            PepeError::Vars(format!(
+                "--vars {} row {}: {e}",
+                vars.path.display(),
+                index + 1
+            ))
+        })
+    }
+
+    /// The request as written, holes and all
+    pub fn fill(&self) -> Fill {
+        Fill::of(&self.url, &self.headers, self.body())
+    }
+
+    /// Every URL a run sends to, each once: the one, or with `--vars`
+    /// each row's
+    pub fn target_urls(&self) -> Result<Vec<String>, String> {
+        let Some(path) = &self.vars else {
+            return Ok(vec![self.url.clone()]);
+        };
+        let vars = Vars::load(path)?;
+        let fill = self.fill();
+        let mut urls: Vec<String> = (0..vars.rows.len())
+            .map(|i| fill.row(&vars, i).url)
+            .collect();
+        urls.sort_unstable();
+        urls.dedup();
+        Ok(urls)
+    }
+
+    /// `--vars` with a run or a ramp: the file is read, every hole is one
+    /// of its columns, and the first row makes a URL
+    fn check_vars(&self, path: &std::path::Path) -> Result<(), Error> {
+        let fail = |e: String| Error::raw(clap::error::ErrorKind::ValueValidation, e);
+        match &self.command {
+            None | Some(Command::Ramp(_)) | Some(Command::Flow(_)) => {}
+            Some(_) => {
+                return Err(fail(
+                    "--vars fills the {{holes}} of a run, a ramp or a flow".into(),
+                ))
+            }
+        }
+        // A flow's holes are checked as the flow is read
+        if matches!(self.command, Some(Command::Flow(_))) || self.url.is_empty() {
+            return Ok(());
+        }
+        let vars = Vars::load(path).map_err(fail)?;
+        let fill = self.fill();
+        let holes = fill.holes();
+        if holes.is_empty() {
+            return Err(fail(format!(
+                "--vars {}: the request has no {{{{holes}}}} to fill; put one where a value goes, as in https://api.example.com/users/{{{{{}}}}}",
+                path.display(),
+                vars.names[0]
+            )));
+        }
+        vars.check(holes)
+            .map_err(|e| fail(format!("--vars: {e}")))?;
+        let url = fill.row(&vars, 0).url;
+        reqwest::Url::parse(&url).map_err(|e| {
+            fail(format!(
+                "--vars {} row 1: {}",
+                path.display(),
+                Self::url_trouble(&url, e)
+            ))
+        })?;
+        Ok(())
     }
 }
 

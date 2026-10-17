@@ -177,4 +177,4 @@ Read `verdict` (`faster`, `same`, `slower`, `better`, `worse`), `regression`, ea
 
 ## The same request every mode
 
-`-H 'Name: value'`, `-m`, `-d`, `-u`, `-p`, `-k`, `-t`, `--disable-compression`, `--disable-keepalive` and `--disable-redirects` apply to every mode. `--curl -- curl ...` takes a request as a curl command. A `pepe.toml` next to the code holds a test's settings so that `pepe` alone runs it ([Config file](load-test.md#config-file)).
+`-H 'Name: value'`, `-m`, `-d`, `-u`, `-p`, `-k`, `-t`, `--disable-compression`, `--disable-keepalive` and `--disable-redirects` apply to every mode. `--curl -- curl ...` takes a request as a curl command. `--vars users.csv` fills `{{holes}}` in the URL, headers and body from a CSV file, a row a request in turn ([Values from a file](load-test.md#values-from-a-file)). A `pepe.toml` next to the code holds a test's settings so that `pepe` alone runs it ([Config file](load-test.md#config-file)).

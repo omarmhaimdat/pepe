@@ -51,7 +51,7 @@ expect = 201
 
 ## Holes and captures
 
-`{{name}}` holes are filled from `[vars]` and from earlier steps' captures; a hole nothing fills is an error when the file is read, naming the step and the variable. A capture is one of:
+`{{name}}` holes are filled from `[vars]`, from the row of [`--vars`](#values-from-a-file), and from earlier steps' captures; a hole nothing fills is an error when the file is read, naming the step and the variable. A capture is one of:
 
 | Spec | Takes |
 | --- | --- |
@@ -61,6 +61,14 @@ expect = 201
 | `body` | The whole body, trimmed |
 
 A step passes when it gets a 2xx, or the status `expect` names; a step that fails, or whose capture finds nothing, ends the chain with that said in the failure causes, and the user starts over. Up to a megabyte of each response is kept for its captures.
+
+## Values from a file
+
+`--vars users.csv` gives each chain the next row of a CSV file whose first line names the values, as in [a run](load-test.md#values-from-a-file): a flow that logs in with `{{email}}` and `{{password}}` logs in as a different user each time. A row's values are over `[vars]`'s, and a capture's over both. The columns count as filled when the file is read, so a hole only a column fills is no error.
+
+```bash
+pepe flow checkout.toml -z 1m -c 20 --vars users.csv
+```
 
 ## Running it
 

@@ -107,6 +107,9 @@ Options:
       --trace-header <NAME>
           Response header holding the request id to show for the slowest requests and in the inspector, so they can be found in the server's logs; without it, X-Request-Id, traceparent, CF-Ray, X-Amzn-Trace-Id and other common ones are looked for
 
+      --vars <FILE>
+          Fill the {{holes}} in the URL, headers and body from this CSV file, whose first line names them: each request takes the next row, and the rows go round again. In a flow, each chain starts with the next row's values
+
       --snapshot <FILE>
           Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run's numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run
 
@@ -323,6 +326,9 @@ Options:
       --trace-header <NAME>
           Response header holding the request id to show for the slowest requests and in the inspector, so they can be found in the server's logs; without it, X-Request-Id, traceparent, CF-Ray, X-Amzn-Trace-Id and other common ones are looked for
 
+      --vars <FILE>
+          Fill the {{holes}} in the URL, headers and body from this CSV file, whose first line names them: each request takes the next row, and the rows go round again. In a flow, each chain starts with the next row's values
+
       --snapshot <FILE>
           Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run's numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run
 
@@ -466,6 +472,9 @@ Options:
       --trace-header <NAME>
           Response header holding the request id to show for the slowest requests and in the inspector, so they can be found in the server's logs; without it, X-Request-Id, traceparent, CF-Ray, X-Amzn-Trace-Id and other common ones are looked for
 
+      --vars <FILE>
+          Fill the {{holes}} in the URL, headers and body from this CSV file, whose first line names them: each request takes the next row, and the rows go round again. In a flow, each chain starts with the next row's values
+
       --snapshot <FILE>
           Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run's numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run
 
@@ -594,6 +603,9 @@ Options:
 
       --trace-header <NAME>
           Response header holding the request id to show for the slowest requests and in the inspector, so they can be found in the server's logs; without it, X-Request-Id, traceparent, CF-Ray, X-Amzn-Trace-Id and other common ones are looked for
+
+      --vars <FILE>
+          Fill the {{holes}} in the URL, headers and body from this CSV file, whose first line names them: each request takes the next row, and the rows go round again. In a flow, each chain starts with the next row's values
 
       --snapshot <FILE>
           Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run's numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run
@@ -739,6 +751,9 @@ Options:
       --trace-header <NAME>
           Response header holding the request id to show for the slowest requests and in the inspector, so they can be found in the server's logs; without it, X-Request-Id, traceparent, CF-Ray, X-Amzn-Trace-Id and other common ones are looked for
 
+      --vars <FILE>
+          Fill the {{holes}} in the URL, headers and body from this CSV file, whose first line names them: each request takes the next row, and the rows go round again. In a flow, each chain starts with the next row's values
+
       --snapshot <FILE>
           Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run's numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run
 
@@ -858,6 +873,9 @@ Options:
 
       --trace-header <NAME>
           Response header holding the request id to show for the slowest requests and in the inspector, so they can be found in the server's logs; without it, X-Request-Id, traceparent, CF-Ray, X-Amzn-Trace-Id and other common ones are looked for
+
+      --vars <FILE>
+          Fill the {{holes}} in the URL, headers and body from this CSV file, whose first line names them: each request takes the next row, and the rows go round again. In a flow, each chain starts with the next row's values
 
       --snapshot <FILE>
           Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run's numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run
@@ -989,6 +1007,9 @@ Options:
 
       --trace-header <NAME>
           Response header holding the request id to show for the slowest requests and in the inspector, so they can be found in the server's logs; without it, X-Request-Id, traceparent, CF-Ray, X-Amzn-Trace-Id and other common ones are looked for
+
+      --vars <FILE>
+          Fill the {{holes}} in the URL, headers and body from this CSV file, whose first line names them: each request takes the next row, and the rows go round again. In a flow, each chain starts with the next row's values
 
       --snapshot <FILE>
           Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run's numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run
@@ -1132,6 +1153,9 @@ Options:
       --trace-header <NAME>
           Response header holding the request id to show for the slowest requests and in the inspector, so they can be found in the server's logs; without it, X-Request-Id, traceparent, CF-Ray, X-Amzn-Trace-Id and other common ones are looked for
 
+      --vars <FILE>
+          Fill the {{holes}} in the URL, headers and body from this CSV file, whose first line names them: each request takes the next row, and the rows go round again. In a flow, each chain starts with the next row's values
+
       --snapshot <FILE>
           Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run's numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run
 
@@ -1255,6 +1279,9 @@ Options:
       --trace-header <NAME>
           Response header holding the request id to show for the slowest requests and in the inspector, so they can be found in the server's logs; without it, X-Request-Id, traceparent, CF-Ray, X-Amzn-Trace-Id and other common ones are looked for
 
+      --vars <FILE>
+          Fill the {{holes}} in the URL, headers and body from this CSV file, whose first line names them: each request takes the next row, and the rows go round again. In a flow, each chain starts with the next row's values
+
       --snapshot <FILE>
           Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run's numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run
 
@@ -1374,6 +1401,9 @@ Options:
 
       --trace-header <NAME>
           Response header holding the request id to show for the slowest requests and in the inspector, so they can be found in the server's logs; without it, X-Request-Id, traceparent, CF-Ray, X-Amzn-Trace-Id and other common ones are looked for
+
+      --vars <FILE>
+          Fill the {{holes}} in the URL, headers and body from this CSV file, whose first line names them: each request takes the next row, and the rows go round again. In a flow, each chain starts with the next row's values
 
       --snapshot <FILE>
           Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run's numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run
@@ -1497,6 +1527,9 @@ Options:
       --trace-header <NAME>
           Response header holding the request id to show for the slowest requests and in the inspector, so they can be found in the server's logs; without it, X-Request-Id, traceparent, CF-Ray, X-Amzn-Trace-Id and other common ones are looked for
 
+      --vars <FILE>
+          Fill the {{holes}} in the URL, headers and body from this CSV file, whose first line names them: each request takes the next row, and the rows go round again. In a flow, each chain starts with the next row's values
+
       --snapshot <FILE>
           Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run's numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run
 
@@ -1612,6 +1645,9 @@ Options:
 
       --trace-header <NAME>
           Response header holding the request id to show for the slowest requests and in the inspector, so they can be found in the server's logs; without it, X-Request-Id, traceparent, CF-Ray, X-Amzn-Trace-Id and other common ones are looked for
+
+      --vars <FILE>
+          Fill the {{holes}} in the URL, headers and body from this CSV file, whose first line names them: each request takes the next row, and the rows go round again. In a flow, each chain starts with the next row's values
 
       --snapshot <FILE>
           Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run's numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run
@@ -1734,6 +1770,9 @@ Options:
 
       --trace-header <NAME>
           Response header holding the request id to show for the slowest requests and in the inspector, so they can be found in the server's logs; without it, X-Request-Id, traceparent, CF-Ray, X-Amzn-Trace-Id and other common ones are looked for
+
+      --vars <FILE>
+          Fill the {{holes}} in the URL, headers and body from this CSV file, whose first line names them: each request takes the next row, and the rows go round again. In a flow, each chain starts with the next row's values
 
       --snapshot <FILE>
           Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run's numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run
@@ -1862,6 +1901,9 @@ Options:
 
       --trace-header <NAME>
           Response header holding the request id to show for the slowest requests and in the inspector, so they can be found in the server's logs; without it, X-Request-Id, traceparent, CF-Ray, X-Amzn-Trace-Id and other common ones are looked for
+
+      --vars <FILE>
+          Fill the {{holes}} in the URL, headers and body from this CSV file, whose first line names them: each request takes the next row, and the rows go round again. In a flow, each chain starts with the next row's values
 
       --snapshot <FILE>
           Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run's numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run

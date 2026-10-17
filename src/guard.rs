@@ -334,6 +334,16 @@ impl Plan {
         if let Some(threads) = &cli.threads {
             out.push(format!("threads {threads:?}").to_lowercase());
         }
+        if let Some(path) = &cli.vars {
+            let unit = match cli.command {
+                Some(crate::cli::Command::Flow(_)) => "chain",
+                _ => "request",
+            };
+            out.push(match crate::vars::Vars::load(path) {
+                Ok(vars) => vars.describe(unit),
+                Err(e) => e,
+            });
+        }
         out
     }
 
