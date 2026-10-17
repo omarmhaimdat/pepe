@@ -229,7 +229,7 @@ fn main_page() -> String {
 }
 
 /// Each subcommand's page: (subcommand, page name, how it's typed)
-const SUBCOMMANDS: [(&str, &str, &str); 13] = [
+const SUBCOMMANDS: [(&str, &str, &str); 14] = [
     ("ping", "pepe-ping", "pepe ping"),
     ("ramp", "pepe-ramp", "pepe ramp"),
     ("compare", "pepe-compare", "pepe compare"),
@@ -243,6 +243,7 @@ const SUBCOMMANDS: [(&str, &str, &str); 13] = [
     ("mcp", "pepe-mcp", "pepe mcp"),
     ("self-update", "pepe-self-update", "pepe self-update"),
     ("completions", "pepe-completions", "pepe completions"),
+    ("slack", "pepe-slack", "pepe slack"),
 ];
 
 /// `pepe-<sub>.1` for each subcommand

@@ -126,6 +126,13 @@ pub struct Cli {
     #[arg(long, global = true, value_name = "EVENTS")]
     pub webhook_on: Option<String>,
 
+    /// Keep a Slack message up to date as the run goes: posted at the
+    /// start, edited with the numbers, anomalies in its thread, the
+    /// verdict at the end. --slack alone posts in the channel `pepe slack
+    /// connect` kept; --slack=#channel elsewhere
+    #[arg(long, global = true, value_name = "CHANNEL", num_args = 0..=1, require_equals = true, default_missing_value = "")]
+    pub slack: Option<String>,
+
     /// Webhooks from a pepe.toml, the settings or the screens, when no
     /// --webhook was given
     #[arg(skip)]
@@ -291,6 +298,38 @@ pub enum Command {
     SelfUpdate(SelfUpdateArgs),
     /// Tab completion for your shell: print the script, or --install it
     Completions(CompletionsArgs),
+    /// Connect pepe to Slack from here, so --slack keeps a message there up to date as a run goes
+    Slack(SlackArgs),
+}
+
+#[derive(clap::Args, Debug, Clone, PartialEq, Default)]
+pub struct SlackArgs {
+    #[command(subcommand)]
+    pub what: Option<SlackCommand>,
+}
+
+#[derive(Subcommand, Debug, Clone, PartialEq)]
+pub enum SlackCommand {
+    /// Make pepe's Slack app, take its token, pick a channel, post a test (the default)
+    Connect {
+        /// The bot token (xoxb-…), instead of asking for it
+        #[arg(long)]
+        token: Option<String>,
+        /// The channel, instead of asking which
+        #[arg(long)]
+        channel: Option<String>,
+    },
+    /// What is connected, checked with Slack
+    Status,
+    /// Post a test message
+    Test {
+        /// Where, if not the connected channel
+        channel: Option<String>,
+    },
+    /// Remove the kept token
+    Forget,
+    /// Print the app's manifest, for Slack's "From a manifest"
+    Manifest,
 }
 
 #[derive(clap::Args, Debug, Clone, PartialEq, Default)]
@@ -926,6 +965,8 @@ impl Cli {
             Some(Command::Ping(_)) => parts.push("ping".into()),
             _ => {}
         }
+        // `--slack` and `--slack=#channel`, added once `flag` is done
+        let mut slack_flags: Vec<String> = Vec::new();
         let mut flag = |name: &str, value: &str| {
             parts.push(name.to_string());
             parts.push(shell_quote(value));
@@ -1045,11 +1086,20 @@ impl Cli {
                 && h.mention.is_none()
                 && h.format == crate::webhook::Format::Auto
         }) {
+            // `slack:` hooks as --slack; the rest as --webhook
+            let (slack, hooks): (Vec<_>, Vec<_>) =
+                hooks.iter().partition(|h| h.is_slack() && h.on.is_empty());
             for hook in &hooks {
                 if masked {
                     flag("--webhook", &hook.masked_url());
                 } else {
                     flag("--webhook", &hook.url);
+                }
+            }
+            for hook in slack {
+                match hook.url.trim_start().trim_start_matches("slack:") {
+                    "" => slack_flags.push("--slack".into()),
+                    channel => slack_flags.push(format!("--slack={}", shell_quote(channel))),
                 }
             }
             if let Some(first) = hooks.first() {
@@ -1096,6 +1146,7 @@ impl Cli {
             }
         }
         parts.extend(switches.iter().map(|s| s.to_string()));
+        parts.extend(slack_flags);
         parts.push(shell_quote(&target));
         parts.extend(more_targets.iter().map(|t| shell_quote(t)));
         parts.join(" ")
@@ -1201,6 +1252,17 @@ impl Cli {
         if let Some(edited) = crate::webhook::edited() {
             return edited;
         }
+        let mut hooks = self.flag_hooks();
+        if let Some(channel) = &self.slack {
+            let url = format!("slack:{channel}");
+            if !hooks.iter().any(|h| h.url == url) {
+                hooks.push(crate::webhook::Webhook::to(&url));
+            }
+        }
+        hooks
+    }
+
+    fn flag_hooks(&self) -> Vec<crate::webhook::Webhook> {
         if self.webhook.is_empty() {
             return self.webhooks.clone();
         }

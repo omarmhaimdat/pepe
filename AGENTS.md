@@ -155,7 +155,9 @@ is sent, and `--allow-host` checks every row's host.
 other the JSON report); `--webhook-on start,progress,anomaly,end,fail`
 says when. `[[webhook]]` in `pepe.toml` takes `on`, `format`, `headers`,
 a `body` with `{{holes}}`, `every` and `mention`; `${NAME}` is read from
-the environment.
+the environment. `--slack` (or `--slack=#channel`) keeps one Slack message
+up to date as the run goes, after `pepe slack connect`, or with
+`PEPE_SLACK_TOKEN` set.
 
 ## Live numbers
 
