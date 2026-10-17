@@ -73,7 +73,7 @@ Say more about what the numbers mean.
 - [x] **Reading nginx logs** (M): `pepe logs access.log error.log` follows
       the logs and holds the request rate now against each minute, hour
       and day they go back, with the paths, the clients, the error log's
-      messages by cause and the lines themselves — next release
+      messages by cause and the lines themselves — v0.19.0
 
 ## 3b. Every day
 
@@ -86,11 +86,39 @@ same engine at one request a second is the reason to have pepe open.
       window or the run; the TLS session (full or resumed) and the
       certificate's expiry; SLO limits that mark pings and set the exit
       code; TCP pings, commands, cloud regions and address ranges as
-      targets; JSON, JSON Lines or CSV when there's no terminal — next
-      release
+      targets; JSON, JSON Lines or CSV when there's no terminal — v0.25.0
 - [ ] **A ping in the background** (S). `pepe ping --daemon` keeps the
       JSON Lines going to a file, so the screen can be opened on a run
       that started yesterday.
+
+## 3c. Tests worth keeping
+
+A test worked out on screen should be one keystroke from being run
+again, and its results should pile up somewhere with a name. Plain files
+in `.pepe/` next to the code, meant for git; no database.
+
+- [x] **Saved tests** (S): `ctrl-s` on the setup form writes
+      `.pepe/tests/NAME.toml`, `pepe --load NAME` runs it — v0.37.0
+- [x] **A library to pick from** (M): `pepe` alone opens on the saved
+      tests, the file decides the mode, and every screen takes the
+      mouse — v0.38.0
+- [x] **Any run kept** (S): `--keep NAME`, `ctrl-s` on the dashboard and
+      the ramp, `c` to copy in the library — v0.39.0
+- [x] **Recorded runs** (M): `--record` and `w` keep the report under the
+      test; `pepe history`, `pepe rerun NAME --gate`, `pepe compare NAME`
+      — v0.40.0
+- [x] **A ping is a saved test too** (S): `[ping]` in the file, `ctrl-s`
+      and `r` on its screen — v0.41.0
+- [x] **This machine's defaults** (M): `F2` on every screen opens the
+      settings, kept in `~/.config/pepe/settings.toml`: the theme, the
+      defaults a run starts from, the guardrails — v0.42.0
+- [ ] **Find the spec** (M). `pepe api http://localhost:8000` looks where
+      FastAPI, Nest, Spring, .NET and Django serve their OpenAPI spec,
+      so a local server needs no file.
+- [ ] **`pepe init URL`** (S). A saved test per endpoint of a spec, to
+      start a project's `.pepe/` from.
+- [ ] **Server-Timing recipes** (S). A few lines per framework, in the
+      docs, so the phases the verdict reads are there to read.
 
 ## 4. Scenarios and realism
 
@@ -112,23 +140,22 @@ Get the results where they're needed.
 
 - [x] **Thresholds that fail CI** (S): `--fail-if 'p99 > 300ms'`, the
       ramp's conditions, in every mode that measures requests, with exit
-      code 4 — next release
+      code 4 — v0.29.0
 - [x] **A report when there's no terminal** (S): piped or run by a script,
-      the run goes to its end and the dashboard's report is printed — next
-      release
+      the run goes to its end and the dashboard's report is printed — v0.29.0
 - [x] **A versioned report** (S): `"schema_version": 1` in every report,
       and the JSON Schema of each (`pepe schema run|ramp|ping|compare`)
-      in every release and at pepe.mhaimdat.com/schema/ — next release
+      in every release and at pepe.mhaimdat.com/schema/ — v0.29.0
 - [x] **Compare two runs** (M): `pepe compare before.json after.json` says
       what moved, in the verdict's language, and only when it moved more
-      than runs of that size wobble; `--gate` exits 1 on a regression — next release
+      than runs of that size wobble; `--gate` exits 1 on a regression; ping reports
+      compare phase by phase — v0.22.0
 - [ ] **CSV and per-request export** (S). One line per request for
       spreadsheets and notebooks.
 - [ ] **JUnit XML** (S). So CI systems show thresholds as test results.
 - [x] **Prometheus metrics** (M): `--metrics :9100` serves the live
       numbers at `/metrics`, for runs, API mode, flows, replays and pings,
-      so a soak run shows up in Grafana next to the server's own — next
-      release
+      so a soak run shows up in Grafana next to the server's own — v0.27.0
 - [ ] **Webhook summary** (S). Post the verdict when a run ends.
 - [ ] **HTML report** (M). One self-contained file with the charts, for
       people who weren't at the terminal.
@@ -144,7 +171,7 @@ in [bench/README.md](bench/README.md)).
 - [x] **Name the gap** (M): on Linux a third of pepe's CPU was reqwest's
       per-request plumbing (the pool, the connector, the timer, the
       URL parsed again for every response), and a twentieth was pepe
-      looking up twenty header names in every response — next release
+      looking up twenty header names in every response — v0.17.0
 - [x] **A lean HTTP/1.1 path** (L): each worker keeps its own connection
       and reads and writes it itself. The request is bytes made before
       the run; the response is parsed where it was read; nothing is
@@ -152,16 +179,16 @@ in [bench/README.md](bench/README.md)).
       buffer. reqwest is left the proxies, the redirects and the flows.
       On Linux 37 to 76% less CPU per request and 35 to 89% less memory
       than v0.16.0: ahead of wrk on both, on one thread, with ten
-      million requests in 4.5 MB — next release
+      million requests in 4.5 MB — v0.17.0
 - [x] **Threads on their own** (S): `--threads auto` adds a sending
       thread whenever those sending are all past 90% of a core, and
       takes it back if it didn't pay, so a script gets the throughput
-      without reading the footer — next release
+      without reading the footer — v0.17.0
 - [x] **wrk and k6 in the table** (S): `bench/run.sh` measures them next
       to oha and vegeta when they are installed, and the suite has a
       million-request workload; its target server is Rust now, at half
       the CPU of the Go one it replaces, and the Linux record is taken
-      with the musl build that is released — next release
+      with the musl build that is released — v0.17.0
 - [ ] **A fixed machine for the numbers** (S). Shared runners move the
       same binary from 13 to 26 ms per 1,000 requests, and the Linux
       tables so far are from a VM on a laptop that was in use. A
@@ -195,14 +222,18 @@ can act on. The thresholds and the versioned report above are the base;
 these build on them.
 
 - [x] **Agent docs** (S): `AGENTS.md`, `llms.txt` at the site's root,
-      and a page on the docs site — next release
+      and a page on the docs site — v0.30.0
 - [x] **Guardrails** (S): `--allow-host`, `--max-requests`, `--max-rate`,
       `--max-concurrency` and `--dry-run`, in every mode, in `pepe.toml`
-      too — next release
+      too — v0.30.0
 - [x] **MCP server** (M): `pepe mcp` serves a run, a ping, a ramp, an
       API, a flow, a replay and a comparison as typed tools over stdio,
       each returning the JSON report, under the guardrails it was started
-      with — next release
+      with — v0.33.0
+- [x] **Where agents look** (S): a Claude Code plugin with the skill and
+      the MCP server, capped by default — v0.34.0; `pepe-http` on npm and
+      PyPI — v0.35.0; `io.github.omarmhaimdat/pepe` in the MCP registry —
+      v0.36.0
 - [ ] **The engine as a crate** (M). The load engine and the report as a
       library, for Rust harnesses and agents that would rather not start
       a process.
@@ -231,9 +262,11 @@ Before the tag:
 
 - [x] **Agent docs, guardrails and the MCP server** (section 7)
 - [x] **A versioned report with a published schema** (section 5)
-- [x] **`cargo audit` in CI** and Dependabot on
+- [x] **`cargo audit` in CI** and Dependabot on — v0.34.0
 - [ ] **A month without a schema or flag change** on master, so the
-      freeze is a description rather than a wish
+      freeze is a description rather than a wish. The clock restarted
+      with v0.42.0 (2026-10-13, the settings page); 2026-11-13 at the
+      earliest
 - [ ] **The data-driven requests** (`--vars`, section 4), the one flag
       still likely to shape the config file's keys
 - [ ] **A release note that says it**, with the frozen list above
@@ -246,5 +279,6 @@ Considered and set aside, so they aren't re-argued every month:
   load engine is best; these each deserve a release of their own once the
   above is done. `pepe ping` speaks HTTP/2 since the ping is one request
   at a time and the phases are what matter there; the load path doesn't.
-- **Dashboard extras** (replaying a saved run, side-by-side runs, themes).
-  Nice, not pressing.
+- **Dashboard extras** (replaying a saved run on screen, two runs side by
+  side). Nice, not pressing; `pepe compare NAME` covers most of the
+  second, and the themes shipped in v0.42.0.
