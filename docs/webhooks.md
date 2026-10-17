@@ -9,6 +9,23 @@ pepe -z 30s -c 50 --fail-if 'p99 > 300ms' https://api.example.com/health \
 
 When the run ends, the channel gets the verdict: passed or failed (and which `--fail-if` was crossed), the requests, requests a second, p50, p95 and p99, the error rate, how long it ran, what pepe found, and the command that runs it again. `pepe ramp` sends its capacity and the concurrency it held; `pepe ping` each target's latency and loss.
 
+## Slack, live
+
+```bash
+pepe slack connect                       # once per machine, all from the terminal
+pepe -z 10m -c 50 --slack https://api.example.com/health
+```
+
+With `--slack` the run is one message in the channel, kept up to date: posted when it starts, edited every 10 seconds with a progress bar, requests, requests a second, p50, p99 and errors, each anomaly as a reply in its thread, and at the end the verdict in its place. When the run fails and the hook has a `mention`, the mention is a reply shown in the channel too, since an edited message notifies no one. `--slack=#another` posts somewhere else; in a file it's `webhook = "slack:"` or a `[[webhook]]` table with `url = "slack:#load-tests"`, which takes `on`, `every` and `mention` like any other.
+
+`pepe slack connect` needs no form filled in and nothing hosted: the app is yours, in your workspace.
+
+1. It opens Slack's "create an app" page with everything already said (name, permissions) in the link. You pick the workspace and click **Create**, then **Install to Workspace** and **Allow**.
+2. You paste the **Bot User OAuth Token** (`xoxb-…`) it shows. pepe checks it with Slack straight away.
+3. You say which channel, by name or part of one. pepe joins it (a private one needs `/invite @pepe` first), posts a test message there, and keeps the token and the channel in `slack.toml` beside the settings, readable by you alone.
+
+The same steps are on the [webhook page](#from-the-screens): `S` there connects Slack without leaving the run, and adds the hook. `pepe slack status` checks the connection, `pepe slack test` posts a test message, `pepe slack forget` removes the file, and `pepe slack manifest` prints the app's manifest, for Slack's "From a manifest" if the link doesn't fill the page in. In CI, `PEPE_SLACK_TOKEN` stands in for the file: `PEPE_SLACK_TOKEN=xoxb-… pepe --slack=#load-tests …`.
+
 ## Where it goes
 
 The URL says how the message is laid out:
@@ -80,7 +97,7 @@ A hole pepe doesn't fill is an error when the run starts.
 
 ## From the screens
 
-F3 opens the webhook page over any screen. On the setup form it sets the hooks of the run you're about to start; while a run goes, a hook added or changed there is sent to from then on, so a long soak can be pointed at a channel after it started. Paste or type a URL on the last line; on each hook, 1 to 5 tick the events, ← → change the format, enter edits the URL, the interval and the mention, `t` sends a test message and says what came back, del removes it. What the page leaves stays for the rest of the session: a restart, ctrl-s and the command printed at the end keep it.
+F3 opens the webhook page over any screen. On the setup form it sets the hooks of the run you're about to start; while a run goes, a hook added or changed there is sent to from then on, so a long soak can be pointed at a channel after it started. Paste or type a URL on the last line, or press `S` for Slack (connected right there if it isn't yet); on each hook, 1 to 5 tick the events, ← → change the format, enter edits the URL, the interval and the mention, `t` sends a test message and says what came back, del removes it. What the page leaves stays for the rest of the session: a restart, ctrl-s and the command printed at the end keep it.
 
 ## Delivery
 

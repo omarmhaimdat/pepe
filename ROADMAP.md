@@ -160,10 +160,12 @@ Get the results where they're needed.
       Discord, Teams, Google Chat or JSON, on start, progress, anomaly,
       end or fail, from flags, `pepe.toml` and F3 on any screen — next
       release
-- [ ] **Slack, live and interactive** (M). One message edited in place
-      as the run goes, anomalies in its thread (a bot token); then
-      buttons to stop, rerun and edit-and-rerun from the channel
-      (Socket Mode, saved tests only, allowed users).
+- [x] **Slack, live** (M). One message edited in place as the run
+      goes, anomalies in its thread, `pepe slack connect` from the
+      terminal and `S` on the webhook page — next release
+- [ ] **Slack, interactive** (M). Buttons to stop, rerun and
+      edit-and-rerun from the channel (Socket Mode, saved tests only,
+      allowed users).
 - [ ] **HTML report** (M). One self-contained file with the charts, for
       people who weren't at the terminal.
 

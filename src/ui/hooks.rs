@@ -23,7 +23,7 @@ use crate::webhook::{self, Event, Format, Webhook};
 pub(super) const HELP: (&str, &str) = ("F3", "webhooks: Slack, Discord, Teams, any URL");
 
 const WIDTH: u16 = 80;
-const LABELS: usize = 10;
+const LABELS: usize = 12;
 
 /// A line of the page
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -77,6 +77,27 @@ impl Row {
     }
 }
 
+/// Connecting Slack from the page, a step at a time
+#[derive(Debug, Clone, PartialEq)]
+enum Connect {
+    /// Waiting for the bot token to be pasted
+    Token,
+    Checking,
+    /// The token works: which channel?
+    Channel {
+        token: String,
+        team: String,
+        url: String,
+    },
+    Joining,
+}
+
+/// What an answer from Slack brought, for the next draw to take in
+enum Answer {
+    Checked(Result<(String, String, String), String>),
+    Joined(Result<String, String>),
+}
+
 /// What a key did to the page
 #[derive(Debug, Default, PartialEq)]
 struct Did {
@@ -94,6 +115,9 @@ struct Page {
     message: Option<(String, bool)>,
     /// What a test send said, when it answers
     tested: Arc<Mutex<Option<(String, bool)>>>,
+    /// Slack being connected from here, and what Slack last answered
+    connect: Option<Connect>,
+    answer: Arc<Mutex<Option<Answer>>>,
 }
 
 impl Page {
@@ -106,6 +130,142 @@ impl Page {
             editing: None,
             message: None,
             tested: Arc::default(),
+            connect: None,
+            answer: Arc::default(),
+        }
+    }
+
+    /// `S`: a Slack hook, connecting Slack first when it isn't
+    fn slack(&mut self) -> bool {
+        if crate::slack::token().is_some() && crate::slack::default_channel().is_some() {
+            if !self.hooks.iter().any(|h| h.is_slack()) {
+                self.hooks.push(Webhook::to("slack:"));
+            }
+            let at = self.hooks.iter().position(|h| h.is_slack()).unwrap_or(0);
+            self.at = at * 5;
+            let channel = crate::slack::load()
+                .and_then(|c| c.channel)
+                .unwrap_or_default();
+            self.message = Some((format!("the run's message goes to {channel}"), false));
+            return true;
+        }
+        let opened = crate::slack::open_browser(&crate::slack::manifest_link());
+        self.at = self.rows().len() - 1;
+        self.connect = Some(Connect::Token);
+        self.editing = Some(String::new());
+        self.message = Some((
+            if opened {
+                "Slack opened in your browser: Create, Install, then paste the Bot User OAuth Token"
+            } else {
+                "run `pepe slack manifest` for Slack's \"From a manifest\", or paste a bot token"
+            }
+            .into(),
+            false,
+        ));
+        false
+    }
+
+    /// Typed while connecting Slack: the token, then the channel
+    fn connect_key(&mut self, key: KeyEvent, ctrl: bool) {
+        let Some(step) = self.connect.clone() else {
+            return;
+        };
+        if key.code == KeyCode::Esc {
+            self.connect = None;
+            self.editing = None;
+            self.message = Some(("Slack left as it was".into(), false));
+            return;
+        }
+        let Some(text) = &mut self.editing else {
+            return;
+        };
+        match key.code {
+            KeyCode::Backspace => {
+                text.pop();
+            }
+            KeyCode::Char('u') if ctrl => text.clear(),
+            KeyCode::Char(c) if !ctrl => text.push(c),
+            KeyCode::Enter => {
+                let text = text.trim().to_string();
+                let answer = self.answer.clone();
+                match step {
+                    Connect::Token => {
+                        self.connect = Some(Connect::Checking);
+                        self.message = Some(("checking the token with Slack…".into(), false));
+                        tokio::spawn(async move {
+                            let checked = crate::slack::check(&text)
+                                .await
+                                .map(|(team, url)| (text, team, url));
+                            if let Ok(mut a) = answer.lock() {
+                                *a = Some(Answer::Checked(checked));
+                            }
+                        });
+                    }
+                    Connect::Channel { token, team, url } => {
+                        self.connect = Some(Connect::Joining);
+                        self.message = Some((format!("joining {text}…"), false));
+                        tokio::spawn(async move {
+                            let joined = async {
+                                let (name, id) = crate::slack::find_channel(&token, &text).await?;
+                                crate::slack::finish(&token, &team, &url, &name, &id).await?;
+                                Ok(format!("#{name}"))
+                            }
+                            .await;
+                            if let Ok(mut a) = answer.lock() {
+                                *a = Some(Answer::Joined(joined));
+                            }
+                        });
+                    }
+                    Connect::Checking | Connect::Joining => {}
+                }
+            }
+            _ => {}
+        }
+    }
+
+    /// What Slack answered, taken in
+    fn take_answer(&mut self) {
+        let Some(answer) = self.answer.lock().ok().and_then(|mut a| a.take()) else {
+            return;
+        };
+        match answer {
+            Answer::Checked(Ok((token, team, url))) => {
+                self.message = Some((
+                    format!("✓ {team}: which channel? a name or part of one"),
+                    false,
+                ));
+                self.connect = Some(Connect::Channel { token, team, url });
+                self.editing = Some(String::new());
+            }
+            Answer::Checked(Err(e)) => {
+                self.message = Some((e, true));
+                self.connect = Some(Connect::Token);
+                self.editing = Some(String::new());
+            }
+            Answer::Joined(Ok(channel)) => {
+                self.connect = None;
+                self.editing = None;
+                self.hooks.push(Webhook::to("slack:"));
+                self.at = (self.hooks.len() - 1) * 5;
+                let said = webhook::edit(self.hooks.clone());
+                self.message = Some(match said {
+                    Ok(()) => (
+                        format!(
+                            "✓ connected: the run's message goes to {channel}, a test is there"
+                        ),
+                        false,
+                    ),
+                    Err(e) => (e, true),
+                });
+            }
+            Answer::Joined(Err(e)) => {
+                self.message = Some((e, true));
+                if let Some(Connect::Joining) = self.connect {
+                    // Back to the channel, the token still good
+                    self.connect = None;
+                    self.editing = None;
+                }
+            }
         }
     }
 
@@ -150,7 +310,7 @@ impl Page {
             Row::Add | Row::Url(_) if text.is_empty() => {
                 return Err("a webhook needs its URL".into())
             }
-            Row::Add | Row::Url(_) if !text.starts_with("${") => {
+            Row::Add | Row::Url(_) if !text.starts_with("${") && !text.starts_with("slack:") => {
                 let url = reqwest::Url::parse(text).map_err(|e| format!("not a URL: {e}"))?;
                 if !matches!(url.scheme(), "http" | "https") {
                     return Err("http:// or https:// only".into());
@@ -227,6 +387,10 @@ impl Page {
             changed: true,
             close: false,
         };
+        if self.connect.is_some() {
+            self.connect_key(key, ctrl);
+            return Did::default();
+        }
         if let Some(text) = &mut self.editing {
             match key.code {
                 KeyCode::Esc => self.editing = None,
@@ -268,6 +432,12 @@ impl Page {
             (KeyCode::PageDown, _) => self.move_by(5),
             (KeyCode::Home, _) => self.at = 0,
             (KeyCode::End, _) => self.move_by(i64::MAX / 2),
+            // S, which no URL starts with: Slack, connected from here first
+            (KeyCode::Char('S'), _) => {
+                if self.slack() {
+                    return changed;
+                }
+            }
             (
                 KeyCode::Char('t'),
                 Row::Url(_) | Row::Events(_) | Row::Format(_) | Row::Every(_) | Row::Mention(_),
@@ -323,6 +493,9 @@ impl Page {
 
     fn paste(&mut self, pasted: &str) {
         let clean: String = pasted.trim().chars().filter(|c| !c.is_control()).collect();
+        if matches!(self.connect, Some(Connect::Checking | Connect::Joining)) {
+            return;
+        }
         if let Some(text) = &mut self.editing {
             text.push_str(&clean);
             return;
@@ -344,15 +517,30 @@ impl Page {
 
     fn line(&self, row: Row, selected: bool, width: usize) -> Line<'static> {
         let room = width.saturating_sub(LABELS + 3);
+        // Connecting Slack takes the last line: the token, as dots, then
+        // the channel
+        let connecting = match (&self.connect, row) {
+            (Some(step), Row::Add) => Some(step),
+            _ => None,
+        };
+        let label = match connecting {
+            Some(Connect::Token | Connect::Checking) => "Slack token",
+            Some(Connect::Channel { .. } | Connect::Joining) => "Channel",
+            None => row.label(),
+        };
         let mut spans = vec![
             marker(selected, true),
             Span::styled(
-                format!(" {:<LABELS$}", row.label()),
+                format!(" {label:<LABELS$}"),
                 Style::new().fg(if selected { Color::Reset } else { LABEL }),
             ),
         ];
         match (&self.editing, selected) {
             (Some(text), true) => {
+                let text = match connecting {
+                    Some(Connect::Token) => "•".repeat(text.chars().count()),
+                    _ => text.clone(),
+                };
                 let chars: Vec<char> = text.chars().collect();
                 let from = chars.len().saturating_sub(room.saturating_sub(2));
                 let shown: String = chars[from..].iter().collect();
@@ -475,6 +663,7 @@ impl Page {
         if let Some(said) = self.tested.lock().ok().and_then(|mut t| t.take()) {
             self.message = Some(said);
         }
+        self.take_answer();
         let area = f.area();
         let width = WIDTH.min(area.width);
         let inner_width = width.saturating_sub(2) as usize;
@@ -513,8 +702,15 @@ impl Page {
             .min(lines.len().saturating_sub(room));
         let shown: Vec<Line> = lines.into_iter().skip(top).take(room).collect();
         f.render_widget(Paragraph::new(shown), list);
+        let about_text = match &self.connect {
+            Some(Connect::Token | Connect::Checking) => {
+                "Slack's page: Create, Install to Workspace, Allow; the token is under OAuth & Permissions"
+            }
+            Some(_) => "pepe joins a public channel; a private one needs /invite @pepe first",
+            None => self.row().about(),
+        };
         f.render_widget(
-            Paragraph::new(Line::from(label(format!("  {}", self.row().about())))),
+            Paragraph::new(Line::from(label(format!("  {about_text}")))),
             about,
         );
         let wrong = self
@@ -537,11 +733,18 @@ impl Page {
             )),
         };
         f.render_widget(Paragraph::new(note), message);
-        let pairs: &[(&str, &str)] = if self.editing.is_some() {
+        let pairs: &[(&str, &str)] = if self.connect.is_some() {
+            &[("enter", "next"), ("esc", "stop connecting")]
+        } else if self.editing.is_some() {
             &[("enter", "keep"), ("esc", "leave as it was")]
         } else {
             match self.row() {
-                Row::Add => &[("↑↓", "move"), ("type", "a URL"), ("esc", "close")],
+                Row::Add => &[
+                    ("↑↓", "move"),
+                    ("type", "a URL"),
+                    ("S", "Slack"),
+                    ("esc", "close"),
+                ],
                 Row::Events(_) => &[
                     ("1-5", "tick"),
                     ("← →", "pick"),

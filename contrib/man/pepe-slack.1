@@ -1,0 +1,32 @@
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.TH pepe-slack 1  pepe "User Commands"
+.SH NAME
+pepe\-slack \- Connect pepe to Slack from here, so \-\-slack keeps a message there up to date as a run goes
+.SH SYNOPSIS
+\fBpepe slack\fR [\fB\-h\fR|\fB\-\-help\fR] [\fIsubcommands\fR]
+.SH DESCRIPTION
+Connect pepe to Slack from here, so \-\-slack keeps a message there up to date as a run goes
+.SH OPTIONS
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Print help
+.SH SUBCOMMANDS
+.TP
+pepe\-slack\-connect(1)
+Make pepe\*(Aqs Slack app, take its token, pick a channel, post a test (the default)
+.TP
+pepe\-slack\-status(1)
+What is connected, checked with Slack
+.TP
+pepe\-slack\-test(1)
+Post a test message
+.TP
+pepe\-slack\-forget(1)
+Remove the kept token
+.TP
+pepe\-slack\-manifest(1)
+Print the app\*(Aqs manifest, for Slack\*(Aqs "From a manifest"
+.TP
+pepe\-slack\-help(1)
+Print this message or the help of the given subcommand(s)

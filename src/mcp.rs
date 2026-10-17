@@ -348,6 +348,13 @@ fn request_flags(argv: &mut Vec<String>, args: &Value) {
     switch(argv, args, "dry_run", "--dry-run");
     flags(argv, args, "webhook", "--webhook");
     flag(argv, args, "webhook_on", "--webhook-on");
+    // `--slack` takes its channel after an =
+    match args.get("slack") {
+        Some(Value::Bool(true)) => argv.push("--slack".into()),
+        Some(Value::String(channel)) if channel.is_empty() => argv.push("--slack".into()),
+        Some(Value::String(channel)) => argv.push(format!("--slack={channel}")),
+        _ => {}
+    }
 }
 
 /// pepe's arguments for a tool call, `--json` included
@@ -479,6 +486,10 @@ pub fn tools() -> Vec<Value> {
         props.insert(
             "webhook".into(),
             strings("Send the verdict here when it ends: a Slack, Discord, Teams or Google Chat webhook, or any URL for the JSON report"),
+        );
+        props.insert(
+            "slack".into(),
+            json!({"type": ["string", "boolean"], "description": "Keep a Slack message up to date as the run goes: true for the channel `pepe slack connect` kept, or '#channel'"}),
         );
         props.insert(
             "webhook_on".into(),

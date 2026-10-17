@@ -35,6 +35,7 @@ mod request;
 mod response;
 mod schema;
 mod settings;
+mod slack;
 mod store;
 mod terminal;
 mod timeline;
@@ -197,6 +198,38 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     if let Some(cli::Command::Schema(what)) = &args.command {
         return schema::print(Some(&what.which));
+    }
+    if let Some(cli::Command::Slack(what)) = args.command.clone() {
+        use cli::SlackCommand;
+        let done = match what.what.unwrap_or(SlackCommand::Connect {
+            token: None,
+            channel: None,
+        }) {
+            SlackCommand::Connect { token, channel } => slack::connect(token, channel).await,
+            SlackCommand::Status => slack::status().await,
+            SlackCommand::Test { channel } => {
+                let hook = webhook::Webhook::to(&format!("slack:{}", channel.unwrap_or_default()));
+                let run = webhook::Run {
+                    mode: "test".into(),
+                    target: "pepe slack test".into(),
+                    load: "nothing sent".into(),
+                    ..Default::default()
+                };
+                webhook::try_hook(&hook, &run)
+                    .await
+                    .map(|()| eprintln!("✓ posted a test message"))
+            }
+            SlackCommand::Forget => slack::forget(),
+            SlackCommand::Manifest => {
+                println!("{}", serde_json::to_string_pretty(&slack::manifest())?);
+                Ok(())
+            }
+        };
+        if let Err(e) = done {
+            eprintln!("error: {e}");
+            std::process::exit(1);
+        }
+        return Ok(());
     }
     if let Some(cli::Command::Mcp(_)) = &args.command {
         return mcp::serve(mcp::guard_args(&args)).await;

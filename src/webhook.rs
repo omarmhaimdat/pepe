@@ -25,6 +25,9 @@ use crate::flow::Template;
 pub const PROGRESS_EVERY: Duration = Duration::from_secs(60);
 /// Shortest progress interval: a chat channel is not a dashboard
 pub const PROGRESS_FLOOR: Duration = Duration::from_secs(5);
+/// How often a Slack message is edited as the run goes: an edit adds no
+/// line to the channel, so it can be often
+pub const SLACK_EVERY: Duration = Duration::from_secs(10);
 /// How long the end of a run waits for the last messages to go out
 const FLUSH: Duration = Duration::from_secs(15);
 const ATTEMPTS: u32 = 3;
@@ -134,6 +137,9 @@ impl Format {
         if self != Format::Auto {
             return self;
         }
+        if url.trim_start().starts_with("slack:") {
+            return Format::Slack;
+        }
         let host = reqwest::Url::parse(url)
             .ok()
             .and_then(|u| u.host_str().map(str::to_lowercase))
@@ -201,11 +207,17 @@ impl Webhook {
 
     /// The events it is sent on
     pub fn events(&self) -> Vec<Event> {
-        if self.on.is_empty() {
-            vec![Event::End]
-        } else {
-            self.on.clone()
+        match (self.on.is_empty(), self.is_slack()) {
+            (false, _) => self.on.clone(),
+            // A Slack message is kept up to date as the run goes
+            (true, true) => vec![Event::Start, Event::Progress, Event::Anomaly, Event::End],
+            (true, false) => vec![Event::End],
         }
+    }
+
+    /// `slack:#channel`: a message of pepe's Slack app (`pepe slack connect`)
+    pub fn is_slack(&self) -> bool {
+        self.url.trim_start().starts_with("slack:")
     }
 
     /// Only a URL: written as one string in a file
@@ -222,6 +234,9 @@ impl Webhook {
     /// Ready to send: the environment's values in, the headers parsed, the
     /// body's holes checked
     pub fn resolve(&self) -> Result<Resolved, String> {
+        if self.is_slack() {
+            return self.resolve_slack();
+        }
         let url = env(&self.url)?;
         let parsed = reqwest::Url::parse(&url)
             .map_err(|e| format!("webhook {}: not a URL ({e})", mask(&url)))?;
@@ -257,6 +272,7 @@ impl Webhook {
             None => PROGRESS_EVERY,
         };
         Ok(Resolved {
+            slack: None,
             format: self.format.of(&url),
             events: self.events(),
             mention: self.mention.as_deref().map(env).transpose()?,
@@ -265,6 +281,53 @@ impl Webhook {
             body,
             every,
             webhook: self.clone(),
+        })
+    }
+}
+
+impl Webhook {
+    fn resolve_slack(&self) -> Result<Resolved, String> {
+        let given = env(self.url.trim_start().trim_start_matches("slack:"))?;
+        let given = given.trim();
+        if !self.headers.is_empty() || self.body.is_some() {
+            return Err(format!(
+                "{}: a Slack message is laid out by pepe; headers and a body are for a URL",
+                self.url
+            ));
+        }
+        let token = crate::slack::token().ok_or_else(|| {
+            format!(
+                "{}: Slack isn't connected; run pepe slack connect (or set {})",
+                self.url,
+                crate::slack::TOKEN_ENV
+            )
+        })?;
+        let channel = if given.is_empty() {
+            crate::slack::default_channel()
+                .ok_or_else(|| format!("{}: no channel; say one, as slack:#load-tests", self.url))?
+        } else if given.starts_with('#') || given.chars().all(|c| c.is_ascii_alphanumeric()) {
+            given.to_string()
+        } else {
+            format!("#{given}")
+        };
+        let every = match &self.every {
+            Some(text) => {
+                let ms = crate::cli::Cli::parse_duration_for("every", text)
+                    .map_err(|e| format!("{}: {e}", self.url))?;
+                Duration::from_millis(ms).max(Duration::from_secs(3))
+            }
+            None => SLACK_EVERY,
+        };
+        Ok(Resolved {
+            webhook: self.clone(),
+            url: self.url.clone(),
+            format: Format::Slack,
+            events: self.events(),
+            headers: Default::default(),
+            body: None,
+            every,
+            mention: self.mention.as_deref().map(env).transpose()?,
+            slack: Some((token, channel)),
         })
     }
 }
@@ -296,7 +359,7 @@ fn env(text: &str) -> Result<String, String> {
 /// `https://hooks.slack.com/••••`: scheme and host, the rest hidden. A URL
 /// still written as `${NAME}` is shown as it is, since it holds no secret.
 pub fn mask(url: &str) -> String {
-    if url.starts_with("${") {
+    if url.starts_with("${") || url.trim_start().starts_with("slack:") {
         return url.to_string();
     }
     match reqwest::Url::parse(url) {
@@ -363,6 +426,8 @@ pub struct Resolved {
     body: Option<Template>,
     every: Duration,
     mention: Option<String>,
+    /// A `slack:` hook's token and channel
+    slack: Option<(String, String)>,
 }
 
 /// The holes a body template can have
@@ -880,32 +945,10 @@ impl Message {
                 }
                 data
             }
-            Format::Slack => {
-                let mut blocks = vec![
-                    json!({"type": "header", "text": {"type": "plain_text", "text": cut(&self.title, 150), "emoji": true}}),
-                    json!({"type": "section", "text": {"type": "mrkdwn", "text": cut(&format!("{mention}{}", self.status), 3000)}}),
-                ];
-                if !self.fields.is_empty() {
-                    let fields: Vec<Value> = self
-                        .fields
-                        .iter()
-                        .take(10)
-                        .map(|(n, v)| json!({"type": "mrkdwn", "text": cut(&format!("*{n}*\n{v}"), 2000)}))
-                        .collect();
-                    blocks.push(json!({"type": "section", "fields": fields}));
-                }
-                if !findings.is_empty() {
-                    blocks.push(json!({"type": "section", "text": {"type": "mrkdwn", "text": cut(&findings.join("\n"), 3000)}}));
-                }
-                blocks.push(json!({"type": "context", "elements": [{"type": "mrkdwn", "text": cut(&format!("`{}`", self.footer), 3000)}]}));
-                // Progress and anomalies are short: one line, no header
-                if matches!(self.event, Event::Progress | Event::Anomaly) {
-                    blocks = vec![
-                        json!({"type": "section", "text": {"type": "mrkdwn", "text": cut(&format!("*{}*\n{}", self.title, self.status), 3000)}}),
-                    ];
-                }
-                json!({"text": cut(&format!("{mention}{} · {}", self.status, self.title), 3000), "blocks": blocks})
-            }
+            Format::Slack => self.slack_payload(
+                &mention,
+                matches!(self.event, Event::Progress | Event::Anomaly),
+            ),
             Format::Discord => {
                 let fields: Vec<Value> = self
                     .fields
@@ -963,6 +1006,42 @@ impl Message {
         (body.to_string(), "application/json")
     }
 
+    /// Slack's blocks: the title, the status, the numbers, the findings and
+    /// the command; `compact` is one line under the title, for progress
+    /// and anomalies sent as messages of their own
+    fn slack_payload(&self, mention: &str, compact: bool) -> Value {
+        let findings: Vec<String> = self
+            .findings
+            .iter()
+            .take(6)
+            .map(|f| format!("• {f}"))
+            .collect();
+        let mut blocks = vec![
+            json!({"type": "header", "text": {"type": "plain_text", "text": cut(&self.title, 150), "emoji": true}}),
+            json!({"type": "section", "text": {"type": "mrkdwn", "text": cut(&format!("{mention}{}", self.status), 3000)}}),
+        ];
+        if !self.fields.is_empty() {
+            let fields: Vec<Value> = self
+                .fields
+                .iter()
+                .take(10)
+                .map(|(n, v)| json!({"type": "mrkdwn", "text": cut(&format!("*{n}*\n{v}"), 2000)}))
+                .collect();
+            blocks.push(json!({"type": "section", "fields": fields}));
+        }
+        if !findings.is_empty() {
+            blocks.push(json!({"type": "section", "text": {"type": "mrkdwn", "text": cut(&findings.join("\n"), 3000)}}));
+        }
+        blocks.push(json!({"type": "context", "elements": [{"type": "mrkdwn", "text": cut(&format!("`{}`", self.footer), 3000)}]}));
+        // Progress and anomalies are short: one line, no header
+        if compact {
+            blocks = vec![
+                json!({"type": "section", "text": {"type": "mrkdwn", "text": cut(&format!("*{}*\n{}", self.title, self.status), 3000)}}),
+            ];
+        }
+        json!({"text": cut(&format!("{mention}{} · {}", self.status, self.title), 3000), "blocks": blocks})
+    }
+
     /// The message as text: a few lines
     fn plain(&self, mention: &str) -> String {
         let mut out = format!("{mention}{}\n{}", self.status, self.title);
@@ -985,7 +1064,7 @@ impl Message {
 /// One webhook's queue, sent in order by its own task
 struct Line {
     hook: Resolved,
-    tx: Option<mpsc::UnboundedSender<(String, &'static str)>>,
+    tx: Option<mpsc::UnboundedSender<Message>>,
     task: Option<tokio::task::JoinHandle<()>>,
     /// When progress last went out
     last: Instant,
@@ -993,13 +1072,29 @@ struct Line {
 
 impl Line {
     fn open(hook: Resolved, client: reqwest::Client) -> Line {
-        let (tx, mut rx) = mpsc::unbounded_channel::<(String, &'static str)>();
+        let (tx, mut rx) = mpsc::unbounded_channel::<Message>();
         let task = tokio::spawn({
             let hook = hook.clone();
             async move {
-                while let Some((body, kind)) = rx.recv().await {
-                    if let Err(e) = deliver(&client, &hook, body, kind).await {
-                        problem(e);
+                // Slack: one message for the run, kept up to date
+                let mut live = hook
+                    .slack
+                    .as_ref()
+                    .map(|(token, channel)| crate::slack::Live::new(token, channel));
+                while let Some(message) = rx.recv().await {
+                    let sent = match &mut live {
+                        Some(live) => to_slack(live, &hook, &message).await,
+                        None => {
+                            let (body, kind) = message.render(&hook);
+                            deliver(&client, &hook, body, kind).await
+                        }
+                    };
+                    match sent {
+                        Err(e) if hook.slack.is_some() => {
+                            problem(format!("{}: {e}", hook.webhook.masked_url()))
+                        }
+                        Err(e) => problem(e),
+                        Ok(()) => {}
                     }
                 }
             }
@@ -1014,7 +1109,35 @@ impl Line {
 
     fn send(&self, message: &Message) {
         if let Some(tx) = &self.tx {
-            let _ = tx.send(message.render(&self.hook));
+            let _ = tx.send(message.clone());
+        }
+    }
+}
+
+/// One event, to the run's Slack message: the start posts it, progress
+/// edits it, an anomaly goes in its thread, the end makes it the verdict
+/// (and a failed run's mention goes in the thread, shown in the channel
+/// too, since an edit notifies no one)
+async fn to_slack(
+    live: &mut crate::slack::Live,
+    hook: &Resolved,
+    message: &Message,
+) -> Result<(), String> {
+    match message.event {
+        Event::Start | Event::Progress => live.show(&message.slack_payload("", false)).await,
+        Event::Anomaly => {
+            live.reply(
+                &format!("{} {}", message.tone.icon(), message.values["findings"]),
+                false,
+            )
+            .await
+        }
+        Event::End | Event::Fail => {
+            let mention = hook
+                .mention
+                .as_deref()
+                .filter(|_| message.tone == Tone::Bad);
+            live.end(&message.slack_payload("", false), mention).await
         }
     }
 }
@@ -1379,6 +1502,11 @@ pub async fn try_hook(hook: &Webhook, run: &Run) -> Result<(), String> {
         format!("🔔 {} · a test from pepe", run.title()),
     );
     message.data["event"] = json!("test");
+    if let Some((token, channel)) = &resolved.slack {
+        return crate::slack::Live::new(token, channel)
+            .show(&message.slack_payload("", false))
+            .await;
+    }
     let (body, kind) = message.render(&resolved);
     deliver(&client(), &resolved, body, kind).await
 }

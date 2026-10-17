@@ -62,6 +62,7 @@ In the dashboard, `space` pauses, `+` and `-` change concurrency, `tab` switches
 | `--vars <FILE>` | | Fill the `{{holes}}` in the URL, headers and body from a CSV file, a row a request |
 | `--webhook <URL>` | | Send the verdict to Slack, Discord, Teams, Google Chat or any URL when the run ends ([Webhooks](webhooks.md)) |
 | `--webhook-on <EVENTS>` | `end` | When: `start`, `progress`, `anomaly`, `end`, `fail` |
+| `--slack[=CHANNEL]` | | One Slack message kept up to date as the run goes; `pepe slack connect` first ([Slack](webhooks.md#slack-live)) |
 
 The full list, including every subcommand's own flags, is in the [command reference](reference.md).
 
