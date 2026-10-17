@@ -6,6 +6,654 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+## [0.43.1](https://github.com/omarmhaimdat/pepe/compare/v0.43.0...v0.43.1) - 2026-10-17
+
+### Fixed
+
+- *(docker)* the from-source image copies the schemas and the plugin marketplace it embeds ([#192](https://github.com/omarmhaimdat/pepe/pull/192))
+
+  The from-source `Dockerfile` copied `src` and `contrib` only, but the
+  binary embeds `schema/*.schema.json` and
+  `.claude-plugin/marketplace.json` with `include_str!`, so `docker build
+  .` failed with `couldn't read src/../schema/run.schema.json` (seen on
+  #185's "The from-source image" check). It now copies both.
+
+
+- *(ui)* the screen no longer freezes when the terminal falls behind ([#191](https://github.com/omarmhaimdat/pepe/pull/191))
+
+  The dashboard could freeze, for example in the request inspector while
+  scrolling a response with the trackpad.
+
+  ## Why
+
+  Every screen wrote its frames on the same loop that reads keys and the
+  mouse. When the terminal stopped reading for a moment, that write
+  blocked and pepe stopped reading input. A terminal that was itself
+  waiting to hand pepe input (a flood of wheel events, and since v0.38
+  every pointer move) then never read again. A stack sample of the frozen
+  process shows the main thread blocked in `write()`.
+  [a3fae55](https://github.com/omarmhaimdat/pepe/commit/a3fae55) made
+  Ctrl-C work in that state; this removes the state itself.
+
+  ## What changes
+
+  - **Frames are written on a thread of their own** (`terminal::Screen`).
+  A screen skips drawing while the terminal hasn't taken the last frame,
+  then draws again as soon as it has (`caught_up()`), so input is always
+  read. Leaving the screen waits up to a second for the last frames, so
+  none lands on the shell. All eight screens use it.
+  - **Only clicks and the wheel are requested** (modes 1000, 1015, 1006).
+  crossterm's `EnableMouseCapture` also turned on 1002 and 1003 (every
+  pointer move), which no screen uses and which redrew the whole screen on
+  each move.
+  - **Split mouse reports no longer act as keys.** When a read ended right
+  after the ESC of a mouse report, crossterm reported Esc, and
+  `[<65;80;25M` arrived as typed keys: the inspector closed, the digits
+  changed tabs, and a second Esc quit. Now an Esc followed within 30ms by
+  `[` is dropped up to the end of the sequence (`terminal::input()`).
+
+  ## Testing
+
+  - `cargo test`: 361 pass, including new tests for the split-sequence
+  filter. `cargo clippy --all-targets` is clean.
+  - Each harness drove the release binary in a pty against a local server
+  returning a 27 KiB JSON body, with the inspector open.
+  - **A terminal that writes input before reading output:** master froze
+  in 7 of 7 runs; this branch froze in none of 6, with about 20,000 events
+  in 8 seconds each.
+  - **A flood of motion and wheel events:** master quit on a stray Esc;
+  this branch kept running and still answered a key afterwards.
+  - Quitting still leaves the alternate screen before the verdict is
+  printed.
+  - Not yet tried by hand in Ghostty or iTerm2.
+
+
+
+### Other
+
+- *(roadmap)* the versions that shipped each item, and the saved tests ([#186](https://github.com/omarmhaimdat/pepe/pull/186))
+
+  - Every "next release" now names the version that shipped it (v0.17.0 to
+  v0.36.0).
+  - A new section, **3c. Tests worth keeping**: saved tests, the library,
+  `--keep`, recorded runs, a ping as a saved test, and the settings page
+  (v0.37.0 to v0.42.0), and three open items: finding the spec from a base
+  URL, `pepe init URL`, and Server-Timing recipes.
+  - Agents: the Claude Code plugin, npm and PyPI, and the MCP registry.
+  - 1.0: `cargo audit` gets its version; the month without a flag change
+  restarted with v0.42.0, so 2026-11-13 at the earliest.
+  - Not now: themes shipped, so they're out of the dashboard extras.
+
+
+- bump the github-actions group across 1 directory with 3 updates ([#185](https://github.com/omarmhaimdat/pepe/pull/185))
+
+  Bumps the github-actions group with 3 updates in the / directory:
+  [actions/cache](https://github.com/actions/cache),
+  [actions/setup-node](https://github.com/actions/setup-node) and
+  [actions/setup-python](https://github.com/actions/setup-python).
+
+  Updates `actions/cache` from 4 to 6
+  <details>
+  <summary>Release notes</summary>
+  <p><em>Sourced from <a
+  href="https://github.com/actions/cache/releases">actions/cache's
+  releases</a>.</em></p>
+  <blockquote>
+  <h2>v6.0.0</h2>
+  <h2>What's Changed</h2>
+  <ul>
+  <li>Update packages, migrate to ESM by <a
+  href="https://github.com/Samirat"><code>@​Samirat</code></a> in <a
+  href="https://redirect.github.com/actions/cache/pull/1760">actions/cache#1760</a></li>
+  </ul>
+  <p><strong>Full Changelog</strong>: <a
+  href="https://github.com/actions/cache/compare/v5...v6.0.0">https://github.com/actions/cache/compare/v5...v6.0.0</a></p>
+  <h2>v5.1.0</h2>
+  <h2>What's Changed</h2>
+  <ul>
+  <li>Bump <code>@​actions/cache</code> to v5.1.0 - handle read-only cache
+  access by <a
+  href="https://github.com/jasongin"><code>@​jasongin</code></a> in <a
+  href="https://redirect.github.com/actions/cache/pull/1775">actions/cache#1775</a></li>
+  </ul>
+  <p><strong>Full Changelog</strong>: <a
+  href="https://github.com/actions/cache/compare/v5...v5.1.0">https://github.com/actions/cache/compare/v5...v5.1.0</a></p>
+  <h2>v5.0.5</h2>
+  <h2>What's Changed</h2>
+  <ul>
+  <li>Update ts-http-runtime dependency by <a
+  href="https://github.com/yacaovsnc"><code>@​yacaovsnc</code></a> in <a
+  href="https://redirect.github.com/actions/cache/pull/1747">actions/cache#1747</a></li>
+  </ul>
+  <p><strong>Full Changelog</strong>: <a
+  href="https://github.com/actions/cache/compare/v5...v5.0.5">https://github.com/actions/cache/compare/v5...v5.0.5</a></p>
+  <h2>v5.0.4</h2>
+  <h2>What's Changed</h2>
+  <ul>
+  <li>Add release instructions and update maintainer docs by <a
+  href="https://github.com/Link"><code>@​Link</code></a>- in <a
+  href="https://redirect.github.com/actions/cache/pull/1696">actions/cache#1696</a></li>
+  <li>Potential fix for code scanning alert no. 52: Workflow does not
+  contain permissions by <a
+  href="https://github.com/Link"><code>@​Link</code></a>- in <a
+  href="https://redirect.github.com/actions/cache/pull/1697">actions/cache#1697</a></li>
+  <li>Fix workflow permissions and cleanup workflow names / formatting by
+  <a href="https://github.com/Link"><code>@​Link</code></a>- in <a
+  href="https://redirect.github.com/actions/cache/pull/1699">actions/cache#1699</a></li>
+  <li>docs: Update examples to use the latest version by <a
+  href="https://github.com/XZTDean"><code>@​XZTDean</code></a> in <a
+  href="https://redirect.github.com/actions/cache/pull/1690">actions/cache#1690</a></li>
+  <li>Fix proxy integration tests by <a
+  href="https://github.com/Link"><code>@​Link</code></a>- in <a
+  href="https://redirect.github.com/actions/cache/pull/1701">actions/cache#1701</a></li>
+  <li>Fix cache key in examples.md for bun.lock by <a
+  href="https://github.com/RyPeck"><code>@​RyPeck</code></a> in <a
+  href="https://redirect.github.com/actions/cache/pull/1722">actions/cache#1722</a></li>
+  <li>Update dependencies &amp; patch security vulnerabilities by <a
+  href="https://github.com/Link"><code>@​Link</code></a>- in <a
+  href="https://redirect.github.com/actions/cache/pull/1738">actions/cache#1738</a></li>
+  </ul>
+  <h2>New Contributors</h2>
+  <ul>
+  <li><a href="https://github.com/XZTDean"><code>@​XZTDean</code></a> made
+  their first contribution in <a
+  href="https://redirect.github.com/actions/cache/pull/1690">actions/cache#1690</a></li>
+  <li><a href="https://github.com/RyPeck"><code>@​RyPeck</code></a> made
+  their first contribution in <a
+  href="https://redirect.github.com/actions/cache/pull/1722">actions/cache#1722</a></li>
+  </ul>
+  <p><strong>Full Changelog</strong>: <a
+  href="https://github.com/actions/cache/compare/v5...v5.0.4">https://github.com/actions/cache/compare/v5...v5.0.4</a></p>
+  <h2>v5.0.3</h2>
+  <h2>What's Changed</h2>
+  <ul>
+  <li>Bump <code>@actions/cache</code> to v5.0.5 (Resolves: <a
+  href="https://github.com/actions/cache/security/dependabot/33">https://github.com/actions/cache/security/dependabot/33</a>)</li>
+  <li>Bump <code>@actions/core</code> to v2.0.3</li>
+  </ul>
+  <p><strong>Full Changelog</strong>: <a
+  href="https://github.com/actions/cache/compare/v5...v5.0.3">https://github.com/actions/cache/compare/v5...v5.0.3</a></p>
+  <h2>v.5.0.2</h2>
+  <h1>v5.0.2</h1>
+  <h2>What's Changed</h2>
+  <!-- raw HTML omitted -->
+  </blockquote>
+  <p>... (truncated)</p>
+  </details>
+  <details>
+  <summary>Changelog</summary>
+  <p><em>Sourced from <a
+  href="https://github.com/actions/cache/blob/main/RELEASES.md">actions/cache's
+  changelog</a>.</em></p>
+  <blockquote>
+  <h1>Releases</h1>
+  <h2>How to prepare a release</h2>
+  <blockquote>
+  <p>[!NOTE]
+  Relevant for maintainers with write access only.</p>
+  </blockquote>
+  <ol>
+  <li>Switch to a new branch from <code>main</code>.</li>
+  <li>Run <code>npm test</code> to ensure all tests are passing.</li>
+  <li>Update the version in <a
+  href="https://github.com/actions/cache/blob/main/package.json"><code>https://github.com/actions/cache/blob/main/package.json</code></a>.</li>
+  <li>Run <code>npm run build</code> to update the compiled files.</li>
+  <li>Update this <a
+  href="https://github.com/actions/cache/blob/main/RELEASES.md"><code>https://github.com/actions/cache/blob/main/RELEASES.md</code></a>
+  with the new version and changes in the <code>## Changelog</code>
+  section.</li>
+  <li>Run <code>licensed cache</code> to update the license report.</li>
+  <li>Run <code>licensed status</code> and resolve any warnings by
+  updating the <a
+  href="https://github.com/actions/cache/blob/main/.licensed.yml"><code>https://github.com/actions/cache/blob/main/.licensed.yml</code></a>
+  file with the exceptions.</li>
+  <li>Commit your changes and push your branch upstream.</li>
+  <li>Open a pull request against <code>main</code> and get it reviewed
+  and merged.</li>
+  <li>Draft a new release <a
+  href="https://github.com/actions/cache/releases">https://github.com/actions/cache/releases</a>
+  use the same version number used in <code>package.json</code>
+  <ol>
+  <li>Create a new tag with the version number.</li>
+  <li>Auto generate release notes and update them to match the changes you
+  made in <code>RELEASES.md</code>.</li>
+  <li>Toggle the set as the latest release option.</li>
+  <li>Publish the release.</li>
+  </ol>
+  </li>
+  <li>Navigate to <a
+  href="https://github.com/actions/cache/actions/workflows/release-new-action-version.yml">https://github.com/actions/cache/actions/workflows/release-new-action-version.yml</a>
+  <ol>
+  <li>There should be a workflow run queued with the same version
+  number.</li>
+  <li>Approve the run to publish the new version and update the major tags
+  for this action.</li>
+  </ol>
+  </li>
+  </ol>
+  <h2>Changelog</h2>
+  <h3>6.1.0</h3>
+  <ul>
+  <li>Bump <code>@actions/cache</code> to v6.1.0 to pick up <a
+  href="https://redirect.github.com/actions/toolkit/pull/2435">actions/toolkit#2435
+  Handle cache write error due to read-only token</a></li>
+  <li>Switch redundant &quot;Cache save failed&quot; warning to debug log
+  in save-only</li>
+  </ul>
+  <h3>6.0.0</h3>
+  <ul>
+  <li>Updated <code>@actions/cache</code> to ^6.0.1,
+  <code>@actions/core</code> to ^3.0.1, <code>@actions/exec</code> to
+  ^3.0.0, <code>@actions/io</code> to ^3.0.2</li>
+  <li>Migrated to ESM module system</li>
+  <li>Upgraded Jest to v30 and test infrastructure to be ESM
+  compatible</li>
+  </ul>
+  <h3>5.0.4</h3>
+  <ul>
+  <li>Bump <code>minimatch</code> to v3.1.5 (fixes ReDoS via globstar
+  patterns)</li>
+  <li>Bump <code>undici</code> to v6.24.1 (WebSocket decompression bomb
+  protection, header validation fixes)</li>
+  <li>Bump <code>fast-xml-parser</code> to v5.5.6</li>
+  </ul>
+  <h3>5.0.3</h3>
+  <ul>
+  <li>Bump <code>@actions/cache</code> to v5.0.5 (Resolves: <a
+  href="https://github.com/actions/cache/security/dependabot/33">https://github.com/actions/cache/security/dependabot/33</a>)</li>
+  <li>Bump <code>@actions/core</code> to v2.0.3</li>
+  </ul>
+  <h3>5.0.2</h3>
+  <!-- raw HTML omitted -->
+  </blockquote>
+  <p>... (truncated)</p>
+  </details>
+  <details>
+  <summary>Commits</summary>
+  <ul>
+  <li><a
+  href="https://github.com/actions/cache/commit/55cc8345863c7cc4c66a329aec7e433d2d1c52a9"><code>55cc834</code></a>
+  Merge pull request <a
+  href="https://redirect.github.com/actions/cache/issues/1768">#1768</a>
+  from jasongin/readonly-cache</li>
+  <li><a
+  href="https://github.com/actions/cache/commit/d8cd72f230726cdf4457ebb61ec1b593a8d12337"><code>d8cd72f</code></a>
+  Bump <code>@​actions/cache</code> to v6.1.0 - handle cache write error
+  due to RO token</li>
+  <li><a
+  href="https://github.com/actions/cache/commit/2c8a9bd7457de244a408f35966fab2fb45fda9c8"><code>2c8a9bd</code></a>
+  Merge pull request <a
+  href="https://redirect.github.com/actions/cache/issues/1760">#1760</a>
+  from actions/samirat/esm_migration_and_package_update</li>
+  <li><a
+  href="https://github.com/actions/cache/commit/e9b91fdc3fea7d79165fceb79042ef45c2d51023"><code>e9b91fd</code></a>
+  Prettier fixes</li>
+  <li><a
+  href="https://github.com/actions/cache/commit/e4884b8ff7f92ef6b52c79eda480bbc86e685adb"><code>e4884b8</code></a>
+  Rebuild dist</li>
+  <li><a
+  href="https://github.com/actions/cache/commit/10baf0191a3c426ea0fa4a3253a5c04233b6e18f"><code>10baf01</code></a>
+  Fixed licenses</li>
+  <li><a
+  href="https://github.com/actions/cache/commit/e39b386c9004d72a15d864ade8c0b3a702d47a37"><code>e39b386</code></a>
+  Fix test mock return order</li>
+  <li><a
+  href="https://github.com/actions/cache/commit/b6928203372a8571ff984c0c883ef3a1adfb0c06"><code>b692820</code></a>
+  PR feedback</li>
+  <li><a
+  href="https://github.com/actions/cache/commit/60749128a44d25d3c520a489e576380cf00ff3f1"><code>6074912</code></a>
+  Rebuild dist bundles as ESM to match type:module</li>
+  <li><a
+  href="https://github.com/actions/cache/commit/5a912e8b4af820fa082a0e75cfd2c782f8fbfe0e"><code>5a912e8</code></a>
+  Fix lint and jest issues</li>
+  <li>Additional commits viewable in <a
+  href="https://github.com/actions/cache/compare/v4...v6">compare
+  view</a></li>
+  </ul>
+  </details>
+  <br />
+
+  Updates `actions/setup-node` from 6 to 7
+  <details>
+  <summary>Release notes</summary>
+  <p><em>Sourced from <a
+  href="https://github.com/actions/setup-node/releases">actions/setup-node's
+  releases</a>.</em></p>
+  <blockquote>
+  <h2>v7.0.0</h2>
+  <h2>What's Changed</h2>
+  <h3>Enhancements:</h3>
+  <ul>
+  <li>Add cache-primary-key and cache-matched-key as outputs by <a
+  href="https://github.com/gowridurgad"><code>@​gowridurgad</code></a> in
+  <a
+  href="https://redirect.github.com/actions/setup-node/pull/1577">actions/setup-node#1577</a></li>
+  <li>Migrate to ESM and upgrade dependencies by <a
+  href="https://github.com/gowridurgad"><code>@​gowridurgad</code></a> in
+  <a
+  href="https://redirect.github.com/actions/setup-node/pull/1574">actions/setup-node#1574</a></li>
+  </ul>
+  <h3>Bug fixes:</h3>
+  <ul>
+  <li>Remove dummy NODE_AUTH_TOKEN export by <a
+  href="https://github.com/gowridurgad"><code>@​gowridurgad</code></a> in
+  <a
+  href="https://redirect.github.com/actions/setup-node/pull/1558">actions/setup-node#1558</a></li>
+  <li>Only use <code>mirrorToken</code> in <code>getManifest</code> if
+  it's provided by <a
+  href="https://github.com/deiga"><code>@​deiga</code></a> in <a
+  href="https://redirect.github.com/actions/setup-node/pull/1548">actions/setup-node#1548</a></li>
+  </ul>
+  <h3>Documentation updates:</h3>
+  <ul>
+  <li>Add documentation for publishing to npm with Trusted Publisher
+  (OIDC) by <a
+  href="https://github.com/chiranjib-swain"><code>@​chiranjib-swain</code></a>
+  in <a
+  href="https://redirect.github.com/actions/setup-node/pull/1536">actions/setup-node#1536</a></li>
+  <li>docs: Update restore-only cache documentation by <a
+  href="https://github.com/priya-kinthali"><code>@​priya-kinthali</code></a>
+  in <a
+  href="https://redirect.github.com/actions/setup-node/pull/1550">actions/setup-node#1550</a></li>
+  <li>docs: Update caching recommendations to mitigate cache poisoning
+  risks by <a
+  href="https://github.com/chiranjib-swain"><code>@​chiranjib-swain</code></a>
+  in <a
+  href="https://redirect.github.com/actions/setup-node/pull/1567">actions/setup-node#1567</a></li>
+  </ul>
+  <h3>Dependency update:</h3>
+  <ul>
+  <li>Upgrade <code>@​actions/cache</code> to 5.1.0, log cache write
+  denied by <a
+  href="https://github.com/jasongin"><code>@​jasongin</code></a> in <a
+  href="https://redirect.github.com/actions/setup-node/pull/1569">actions/setup-node#1569</a></li>
+  </ul>
+  <h2>New Contributors</h2>
+  <ul>
+  <li><a
+  href="https://github.com/chiranjib-swain"><code>@​chiranjib-swain</code></a>
+  made their first contribution in <a
+  href="https://redirect.github.com/actions/setup-node/pull/1536">actions/setup-node#1536</a></li>
+  <li><a href="https://github.com/deiga"><code>@​deiga</code></a> made
+  their first contribution in <a
+  href="https://redirect.github.com/actions/setup-node/pull/1548">actions/setup-node#1548</a></li>
+  <li><a href="https://github.com/jasongin"><code>@​jasongin</code></a>
+  made their first contribution in <a
+  href="https://redirect.github.com/actions/setup-node/pull/1569">actions/setup-node#1569</a></li>
+  </ul>
+  <p><strong>Full Changelog</strong>: <a
+  href="https://github.com/actions/setup-node/compare/v6...v7.0.0">https://github.com/actions/setup-node/compare/v6...v7.0.0</a></p>
+  <h2>v6.5.0</h2>
+  <h2>What's Changed</h2>
+  <ul>
+  <li>Update <code>@​actions/cache</code> to 5.1.0 and add security
+  overrides for undici and fast-xml-parser by <a
+  href="https://github.com/HarithaVattikuti"><code>@​HarithaVattikuti</code></a>
+  in <a
+  href="https://redirect.github.com/actions/setup-node/pull/1579">actions/setup-node#1579</a></li>
+  </ul>
+  <p><strong>Full Changelog</strong>: <a
+  href="https://github.com/actions/setup-node/compare/v6.4.0...v6.5.0">https://github.com/actions/setup-node/compare/v6.4.0...v6.5.0</a></p>
+  <h2>v6.4.0</h2>
+  <h2>What's Changed</h2>
+  <h3>Dependency updates:</h3>
+  <ul>
+  <li>Upgrade <a
+  href="https://github.com/actions"><code>@​actions</code></a>
+  dependencies by <a
+  href="https://github.com/Copilot"><code>@​Copilot</code></a> in <a
+  href="https://redirect.github.com/actions/setup-node/pull/1525">actions/setup-node#1525</a></li>
+  <li>Update Node.js versions in versions.yml and bump package to v6.4.0
+  by <a
+  href="https://github.com/priya-kinthali"><code>@​priya-kinthali</code></a>
+  in <a
+  href="https://redirect.github.com/actions/setup-node/pull/1533">actions/setup-node#1533</a></li>
+  </ul>
+  <h2>New Contributors</h2>
+  <ul>
+  <li><a href="https://github.com/Copilot"><code>@​Copilot</code></a> made
+  their first contribution in <a
+  href="https://redirect.github.com/actions/setup-node/pull/1525">actions/setup-node#1525</a></li>
+  </ul>
+  <p><strong>Full Changelog</strong>: <a
+  href="https://github.com/actions/setup-node/compare/v6...v6.4.0">https://github.com/actions/setup-node/compare/v6...v6.4.0</a></p>
+  <h2>v6.3.0</h2>
+  <h2>What's Changed</h2>
+  <h3>Enhancements:</h3>
+  <ul>
+  <li>Support parsing <code>devEngines</code> field by <a
+  href="https://github.com/susnux"><code>@​susnux</code></a> in <a
+  href="https://redirect.github.com/actions/setup-node/pull/1283">actions/setup-node#1283</a></li>
+  </ul>
+  <!-- raw HTML omitted -->
+  </blockquote>
+  <p>... (truncated)</p>
+  </details>
+  <details>
+  <summary>Commits</summary>
+  <ul>
+  <li><a
+  href="https://github.com/actions/setup-node/commit/949feb2413d6458794dcd2491c4babbbce0c15c1"><code>949feb2</code></a>
+  Bump eslint from 10.5.0 to 10.11.0 and package.json from 7.0.0 to 7.1.0
+  (<a
+  href="https://redirect.github.com/actions/setup-node/issues/1635">#1635</a>)</li>
+  <li><a
+  href="https://github.com/actions/setup-node/commit/7207c4f1189c7ee83ddf20c7c68bd1af6fdd751c"><code>7207c4f</code></a>
+  chore: update dependencies and add license files (<a
+  href="https://redirect.github.com/actions/setup-node/issues/1642">#1642</a>)</li>
+  <li><a
+  href="https://github.com/actions/setup-node/commit/54337e0d02de9202d0948aaff36ad556375497b9"><code>54337e0</code></a>
+  Bump eslint-plugin-n from 18.1.0 to 18.3.0 (<a
+  href="https://redirect.github.com/actions/setup-node/issues/1638">#1638</a>)</li>
+  <li><a
+  href="https://github.com/actions/setup-node/commit/fb54fa8c14c63410cc752f0ae3b7b3ca6af161fc"><code>fb54fa8</code></a>
+  Bump jest-each from 30.4.1 to 30.5.2 (<a
+  href="https://redirect.github.com/actions/setup-node/issues/1636">#1636</a>)</li>
+  <li><a
+  href="https://github.com/actions/setup-node/commit/7f84f1d52d0c56afb45c62fee31a93b843cea4d6"><code>7f84f1d</code></a>
+  Bump pnpm/action-setup from 6.0.10 to 6.1.0 (<a
+  href="https://redirect.github.com/actions/setup-node/issues/1631">#1631</a>)</li>
+  <li><a
+  href="https://github.com/actions/setup-node/commit/0c54c7b07420dcba69a7d832587f55ebdf771c9e"><code>0c54c7b</code></a>
+  Bump <code>@​typescript-eslint/parser</code> from 8.62.0 to 8.70.0 (<a
+  href="https://redirect.github.com/actions/setup-node/issues/1615">#1615</a>)</li>
+  <li><a
+  href="https://github.com/actions/setup-node/commit/a8294190049a9c296f01b9a432aff41dd83d8284"><code>a829419</code></a>
+  Bump <code>@​types/semver</code> from 7.7.1 to 7.8.0 (<a
+  href="https://redirect.github.com/actions/setup-node/issues/1616">#1616</a>)</li>
+  <li><a
+  href="https://github.com/actions/setup-node/commit/680d1e489b82f1243de15bc7665c0007e3c9a860"><code>680d1e4</code></a>
+  Support absolute paths in node-version-file (<a
+  href="https://redirect.github.com/actions/setup-node/issues/1633">#1633</a>)</li>
+  <li><a
+  href="https://github.com/actions/setup-node/commit/db0fb3a98ed314b69026b6e8c9be26a7e2fe65a8"><code>db0fb3a</code></a>
+  Bump baseline-browser-mapping from 2.10.38 to 2.11.22 (<a
+  href="https://redirect.github.com/actions/setup-node/issues/1629">#1629</a>)</li>
+  <li><a
+  href="https://github.com/actions/setup-node/commit/94196ee1d15439c1b6651cd87ef14e88ec435966"><code>94196ee</code></a>
+  Bump pnpm/action-setup from 6.0.9 to 6.0.10 (<a
+  href="https://redirect.github.com/actions/setup-node/issues/1602">#1602</a>)</li>
+  <li>Additional commits viewable in <a
+  href="https://github.com/actions/setup-node/compare/v6...v7">compare
+  view</a></li>
+  </ul>
+  </details>
+  <br />
+
+  Updates `actions/setup-python` from 6 to 7
+  <details>
+  <summary>Release notes</summary>
+  <p><em>Sourced from <a
+  href="https://github.com/actions/setup-python/releases">actions/setup-python's
+  releases</a>.</em></p>
+  <blockquote>
+  <h2>v7.0.0</h2>
+  <h2>What's Changed</h2>
+  <h3>Enhancements</h3>
+  <ul>
+  <li>Migrate to ESM and upgrade dependencies by <a
+  href="https://github.com/priyagupta108"><code>@​priyagupta108</code></a>
+  in <a
+  href="https://redirect.github.com/actions/setup-python/pull/1330">actions/setup-python#1330</a></li>
+  <li>Pin SHA commits and update docs with latest versions by <a
+  href="https://github.com/HarithaVattikuti"><code>@​HarithaVattikuti</code></a>
+  in <a
+  href="https://redirect.github.com/actions/setup-python/pull/1338">actions/setup-python#1338</a></li>
+  <li>Remove the pip-install input by <a
+  href="https://github.com/gowridurgad"><code>@​gowridurgad</code></a> in
+  <a
+  href="https://redirect.github.com/actions/setup-python/pull/1336">actions/setup-python#1336</a></li>
+  </ul>
+  <h3>Bug Fix</h3>
+  <ul>
+  <li>Fix to Classify stderr warning messages as warnings instead of
+  errors in annotations by <a
+  href="https://github.com/lmvysakh"><code>@​lmvysakh</code></a> in <a
+  href="https://redirect.github.com/actions/setup-python/pull/1335">actions/setup-python#1335</a></li>
+  <li>Validate and retry manifest fetch to prevent silent failures by <a
+  href="https://github.com/priyagupta108"><code>@​priyagupta108</code></a>
+  in <a
+  href="https://redirect.github.com/actions/setup-python/pull/1332">actions/setup-python#1332</a></li>
+  </ul>
+  <h3>Dependency Upgrade</h3>
+  <ul>
+  <li>Bump certifi from 2020.6.20 to 2024.7.4 in
+  /<strong>tests</strong>/data by <a
+  href="https://github.com/dependabot"><code>@​dependabot</code></a> in <a
+  href="https://redirect.github.com/actions/setup-python/pull/1328">actions/setup-python#1328</a></li>
+  <li>Remove EOL Python versions and Bumps numpy text fixture by <a
+  href="https://github.com/priya-kinthali"><code>@​priya-kinthali</code></a>
+  in <a
+  href="https://redirect.github.com/actions/setup-python/pull/1333">actions/setup-python#1333</a></li>
+  <li>Upgrade <code>@​actions/cache</code> to 6.2.0 by <a
+  href="https://github.com/philip-gai"><code>@​philip-gai</code></a> in <a
+  href="https://redirect.github.com/actions/setup-python/pull/1337">actions/setup-python#1337</a></li>
+  </ul>
+  <h2>New Contributors</h2>
+  <ul>
+  <li><a href="https://github.com/lmvysakh"><code>@​lmvysakh</code></a>
+  made their first contribution in <a
+  href="https://redirect.github.com/actions/setup-python/pull/1335">actions/setup-python#1335</a></li>
+  <li><a
+  href="https://github.com/philip-gai"><code>@​philip-gai</code></a> made
+  their first contribution in <a
+  href="https://redirect.github.com/actions/setup-python/pull/1337">actions/setup-python#1337</a></li>
+  </ul>
+  <p><strong>Full Changelog</strong>: <a
+  href="https://github.com/actions/setup-python/compare/v6...v7.0.0">https://github.com/actions/setup-python/compare/v6...v7.0.0</a></p>
+  <h2>v6.3.0</h2>
+  <h2>What's Changed</h2>
+  <h3>Enhancement</h3>
+  <ul>
+  <li>Add RHEL support and include Linux distro in cache keys by <a
+  href="https://github.com/priyagupta108"><code>@​priyagupta108</code></a>
+  in <a
+  href="https://redirect.github.com/actions/setup-python/pull/1323">actions/setup-python#1323</a></li>
+  <li>Fix pip cache error handling on Windows by <a
+  href="https://github.com/priyagupta108"><code>@​priyagupta108</code></a>
+  in <a
+  href="https://redirect.github.com/actions/setup-python/pull/1040">actions/setup-python#1040</a></li>
+  </ul>
+  <h3>Dependency update</h3>
+  <ul>
+  <li>Upgrade minimatch from 3.1.2 to 3.1.5 by <a
+  href="https://github.com/dependabot"><code>@​dependabot</code></a> in <a
+  href="https://redirect.github.com/actions/setup-python/pull/1281">actions/setup-python#1281</a></li>
+  <li>Upgrade actions dependencies by <a
+  href="https://github.com/gowridurgad"><code>@​gowridurgad</code></a>
+  with <a href="https://github.com/Copilot"><code>@​Copilot</code></a> in
+  <a
+  href="https://redirect.github.com/actions/setup-python/pull/1303">actions/setup-python#1303</a></li>
+  <li>Upgrade <code>@​actions/cache</code> to 5.1.0, log cache write
+  denied by <a
+  href="https://github.com/jasongin"><code>@​jasongin</code></a> in <a
+  href="https://redirect.github.com/actions/setup-python/pull/1324">actions/setup-python#1324</a></li>
+  <li>Upgrade dependency versions and test workflow configuration by <a
+  href="https://github.com/HarithaVattikuti"><code>@​HarithaVattikuti</code></a>
+  in <a
+  href="https://redirect.github.com/actions/setup-python/pull/1322">actions/setup-python#1322</a></li>
+  </ul>
+  <h3>Documentation</h3>
+  <ul>
+  <li>Update advanced-usage.md by <a
+  href="https://github.com/Dunky-Z"><code>@​Dunky-Z</code></a> in <a
+  href="https://redirect.github.com/actions/setup-python/pull/811">actions/setup-python#811</a></li>
+  </ul>
+  <h2>New Contributors</h2>
+  <ul>
+  <li><a
+  href="https://github.com/gowridurgad"><code>@​gowridurgad</code></a>
+  with <a href="https://github.com/Copilot"><code>@​Copilot</code></a>
+  made their first contribution in <a
+  href="https://redirect.github.com/actions/setup-python/pull/1303">actions/setup-python#1303</a></li>
+  <li><a href="https://github.com/jasongin"><code>@​jasongin</code></a>
+  made their first contribution in <a
+  href="https://redirect.github.com/actions/setup-python/pull/1324">actions/setup-python#1324</a></li>
+  <li><a href="https://github.com/Dunky-Z"><code>@​Dunky-Z</code></a> made
+  their first contribution in <a
+  href="https://redirect.github.com/actions/setup-python/pull/811">actions/setup-python#811</a></li>
+  </ul>
+  <p><strong>Full Changelog</strong>: <a
+  href="https://github.com/actions/setup-python/compare/v6.2.0...v6.3.0">https://github.com/actions/setup-python/compare/v6.2.0...v6.3.0</a></p>
+  <h2>v6.2.0</h2>
+  <h2>What's Changed</h2>
+  <h3>Dependency Upgrades</h3>
+  <ul>
+  <li>Upgrade dependencies to Node 24 compatible versions by <a
+  href="https://github.com/salmanmkc"><code>@​salmanmkc</code></a> in <a
+  href="https://redirect.github.com/actions/setup-python/pull/1259">actions/setup-python#1259</a></li>
+  </ul>
+  <!-- raw HTML omitted -->
+  </blockquote>
+  <p>... (truncated)</p>
+  </details>
+  <details>
+  <summary>Commits</summary>
+  <ul>
+  <li><a
+  href="https://github.com/actions/setup-python/commit/5fda3b95a4ea91299a34e894583c3862153e4b97"><code>5fda3b9</code></a>
+  Pin SHA commits and update docs with latest versions (<a
+  href="https://redirect.github.com/actions/setup-python/issues/1338">#1338</a>)</li>
+  <li><a
+  href="https://github.com/actions/setup-python/commit/4ab7e95f05e168b4356aebde89dd84f59c283d8e"><code>4ab7e95</code></a>
+  Merge pull request <a
+  href="https://redirect.github.com/actions/setup-python/issues/1337">#1337</a>
+  from actions/philip-gai/bump-actions-cache-6-2-0</li>
+  <li><a
+  href="https://github.com/actions/setup-python/commit/0f3a009f475dbea83c0371cd85d099690fee8c5c"><code>0f3a009</code></a>
+  Remove the pip-install input (<a
+  href="https://redirect.github.com/actions/setup-python/issues/1336">#1336</a>)</li>
+  <li><a
+  href="https://github.com/actions/setup-python/commit/f8cf4291c8b8e273ddd26e569454615c7315d932"><code>f8cf429</code></a>
+  Migrate to ESM and upgrade dependencies (<a
+  href="https://redirect.github.com/actions/setup-python/issues/1330">#1330</a>)</li>
+  <li><a
+  href="https://github.com/actions/setup-python/commit/54baeea5b34417d10a7479663a23cca53ea209b5"><code>54baeea</code></a>
+  Validate and retry manifest fetch to prevent silent failures (<a
+  href="https://redirect.github.com/actions/setup-python/issues/1332">#1332</a>)</li>
+  <li><a
+  href="https://github.com/actions/setup-python/commit/c7092773a316760f4ecfe498e4af668a4dafeac5"><code>c709277</code></a>
+  Annotation code fix (<a
+  href="https://redirect.github.com/actions/setup-python/issues/1335">#1335</a>)</li>
+  <li><a
+  href="https://github.com/actions/setup-python/commit/6849080452e69b330395e8a6d23cf90f56d76a1a"><code>6849080</code></a>
+  remove EOL Python versions and Bumps numpy text fixture (<a
+  href="https://redirect.github.com/actions/setup-python/issues/1333">#1333</a>)</li>
+  <li><a
+  href="https://github.com/actions/setup-python/commit/0903b469fbf4441aadfe4f4b249dc5b1fba3a73e"><code>0903b46</code></a>
+  Bump certifi from 2020.6.20 to 2024.7.4 in /<strong>tests</strong>/data
+  (<a
+  href="https://redirect.github.com/actions/setup-python/issues/1328">#1328</a>)</li>
+  <li>See full diff in <a
+  href="https://github.com/actions/setup-python/compare/v6...v7">compare
+  view</a></li>
+  </ul>
+  </details>
+  <br />
+
+  ---------
+
+
 ## [0.43.0](https://github.com/omarmhaimdat/pepe/compare/v0.42.2...v0.43.0) - 2026-10-16
 
 ### Added
