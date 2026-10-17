@@ -108,7 +108,9 @@ Read `summary` (counts, `latency`, `failures`, `anomalies`) and
 `generator.peak_busy_percent` (near 100: add `--threads auto`); a ramp's
 `holds_concurrency` and `capacity`; a compare's `verdict`, `changes[]`
 and `findings`. The same `-H`, `-m`, `-d`, `-k` and `-t` apply to every
-mode.
+mode. For a different request each time, put `{{name}}` holes in the URL,
+headers or body and pass `--vars users.csv` (a CSV whose first line
+names them; a row a request, or a row a chain in a flow).
 
 ## As an MCP server
 

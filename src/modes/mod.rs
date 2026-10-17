@@ -54,19 +54,59 @@ pub(crate) fn start_load(
     args: &Cli,
     previews: bool,
 ) -> Result<(LoadHandle, Arc<request::ConnectTimes>), PepeError> {
-    let request = args.request()?;
-    let (clients, connects) = clients_for(&request, args, args.concurrency as usize)?;
-    let load = load::start(
-        clients,
-        request,
+    let (load, connects) = start_requests(
+        args,
+        args.concurrency as usize,
         args.concurrency as usize,
         plan(args),
         previews,
-    );
+    )?;
     if let Some(warmup) = args.warmup() {
         load.set_warmup(warmup);
     }
     load.set_rate(args.rate);
+    Ok((load, connects))
+}
+
+/// The load of a run or a ramp: its request, or with `--vars` one for
+/// each row, sent in turn. `peak` is the most concurrency it will reach.
+pub(crate) fn start_requests(
+    args: &Cli,
+    peak: usize,
+    concurrency: usize,
+    plan: Plan,
+    previews: bool,
+) -> Result<(LoadHandle, Arc<request::ConnectTimes>), PepeError> {
+    let Some((vars, fill)) = args.rows()? else {
+        let request = args.request()?;
+        let (clients, connects) = clients_for(&request, args, peak)?;
+        let load = load::start(clients, request, concurrency, plan, previews);
+        return Ok((load, connects));
+    };
+    // The clients' shared headers are the first row's; each row keeps
+    // only the ones with holes, which win over those name by name. A row
+    // is a request kept ready, so it holds no more than it must.
+    let (clients, connects) = clients_for(&args.row_request(&vars, &fill, 0)?, args, peak)?;
+    let filled = fill.filled_headers();
+    // Sized once: grown by doubling, a million rows would be there twice
+    let mut targets = Vec::with_capacity(vars.rows.len());
+    for index in 0..vars.rows.len() {
+        let mut request = args.row_request(&vars, &fill, index)?;
+        let mut headers = reqwest::header::HeaderMap::new();
+        for (name, value) in std::mem::take(&mut request.headers).iter() {
+            if filled.iter().any(|n| name.as_str().eq_ignore_ascii_case(n)) {
+                headers.append(name, value.clone());
+            }
+        }
+        targets.push(load::Target {
+            headers,
+            request,
+            endpoint: 0,
+            weight: 1,
+        });
+    }
+    drop(vars);
+    let load = load::start_targets(clients, targets, concurrency, plan, previews);
     Ok((load, connects))
 }
 
@@ -301,5 +341,137 @@ pub(crate) fn exit_if_failed(args: &Cli, metrics: &Metrics) {
     }
     if failed {
         std::process::exit(4);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use clap::Parser;
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+    /// A server that answers every request on a kept connection and
+    /// keeps each one's head
+    async fn heads() -> (String, Arc<std::sync::Mutex<Vec<String>>>) {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let url = format!("http://{}", listener.local_addr().unwrap());
+        let seen = Arc::new(std::sync::Mutex::new(Vec::new()));
+        let kept = seen.clone();
+        tokio::spawn(async move {
+            loop {
+                let (mut sock, _) = listener.accept().await.unwrap();
+                let kept = kept.clone();
+                tokio::spawn(async move {
+                    let mut raw = Vec::new();
+                    let mut buf = [0u8; 4096];
+                    loop {
+                        let Ok(n) = sock.read(&mut buf).await else {
+                            return;
+                        };
+                        if n == 0 {
+                            return;
+                        }
+                        raw.extend_from_slice(&buf[..n]);
+                        while let Some(end) = raw.windows(4).position(|w| w == b"\r\n\r\n") {
+                            let head = String::from_utf8_lossy(&raw[..end]).into_owned();
+                            let length = head
+                                .to_lowercase()
+                                .lines()
+                                .find_map(|l| {
+                                    l.strip_prefix("content-length: ").map(str::to_string)
+                                })
+                                .map_or(0, |v| v.trim().parse().unwrap());
+                            if raw.len() < end + 4 + length {
+                                break;
+                            }
+                            let body = String::from_utf8_lossy(&raw[end + 4..end + 4 + length]);
+                            kept.lock().unwrap().push(format!("{head}\r\n\r\n{body}"));
+                            raw.drain(..end + 4 + length);
+                            let _ = sock
+                                .write_all(b"HTTP/1.1 200 OK\r\ncontent-length: 0\r\n\r\n")
+                                .await;
+                        }
+                    }
+                });
+            }
+        });
+        (url, seen)
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn each_request_takes_the_next_row() {
+        let (url, seen) = heads().await;
+        let dir = std::env::temp_dir().join(format!("pepe-vars-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let file = dir.join("users.csv");
+        std::fs::write(&file, "id,token\n1,aaa\n2,bbb\n3,ccc\n").unwrap();
+        let mut args = Cli::parse_from([
+            "pepe",
+            "-n",
+            "4",
+            "-c",
+            "1",
+            "-m",
+            "POST",
+            "-H",
+            "Authorization: Bearer {{token}}",
+            "-H",
+            "X-Static: kept",
+            "-d",
+            "id={{id}}",
+            "--vars",
+            file.to_str().unwrap(),
+            &format!("{url}/users/{{{{id}}}}"),
+        ]);
+        args.validate().unwrap();
+        let (mut load, _) = start_requests(&args, 1, 1, plan(&args), false).unwrap();
+        while load.recv().await.is_some() {}
+        let seen = seen.lock().unwrap().clone();
+        assert_eq!(seen.len(), 4, "{seen:?}");
+        for (head, (id, token)) in
+            seen.iter()
+                .zip([("1", "aaa"), ("2", "bbb"), ("3", "ccc"), ("1", "aaa")])
+        {
+            let lower = head.to_lowercase();
+            assert!(
+                head.starts_with(&format!("POST /users/{id} HTTP/1.1")),
+                "{head}"
+            );
+            assert!(
+                lower.contains(&format!("authorization: bearer {token}")),
+                "{head}"
+            );
+            assert!(lower.contains("x-static: kept"), "{head}");
+            assert!(head.ends_with(&format!("id={id}")), "{head}");
+        }
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn vars_are_checked_before_anything_is_sent() {
+        let dir = std::env::temp_dir().join(format!("pepe-vars-check-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let file = dir.join("ids.csv");
+        std::fs::write(&file, "id\n1\n").unwrap();
+        let file = file.to_str().unwrap();
+        let check = |argv: &[&str]| {
+            let mut args = Cli::parse_from(argv);
+            if let Some(cli::Command::Ramp(ramp)) = &args.command {
+                args.url = ramp.url.clone();
+            }
+            args.validate().map_err(|e| e.to_string())
+        };
+        let n = ["pepe", "-n", "2", "-c", "1", "--vars", file];
+        assert!(check(&[&n[..], &["https://x.io/{{id}}"]].concat()).is_ok());
+        let missing = check(&[&n[..], &["https://x.io/{{uid}}"]].concat()).unwrap_err();
+        assert!(missing.contains("{{uid}} isn't a column"), "{missing}");
+        let none = check(&[&n[..], &["https://x.io/"]].concat()).unwrap_err();
+        assert!(none.contains("no {{holes}}"), "{none}");
+        // The host itself may be a value
+        assert!(check(&[&n[..], &["https://{{id}}.x.io/"]].concat()).is_ok());
+        assert!(check(&["pepe", "ramp", "--vars", file, "https://x.io/{{id}}"]).is_ok());
+        let api = check(&["pepe", "api", "spec.yaml", "--vars", file]).unwrap_err();
+        assert!(api.contains("a run, a ramp or a flow"), "{api}");
+        let _ = std::fs::remove_dir_all(dir);
     }
 }

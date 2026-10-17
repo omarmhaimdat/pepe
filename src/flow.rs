@@ -51,6 +51,8 @@ pub struct Flow {
     pub name: String,
     pub vars: Vec<(String, String)>,
     pub steps: Vec<Step>,
+    /// `--vars`: each chain starts with the next row's values, over `vars`
+    pub rows: Option<std::sync::Arc<crate::vars::Vars>>,
 }
 
 #[derive(Debug, Clone)]
@@ -246,10 +248,13 @@ fn json_path(path: &str) -> Result<Vec<Key>, String> {
     Ok(keys)
 }
 
-pub fn load(path: &Path) -> Result<Flow, String> {
+/// The flow in `path`, with `--vars`'s rows when given
+pub fn load(path: &Path, rows: Option<crate::vars::Vars>) -> Result<Flow, String> {
     let text = std::fs::read_to_string(path)
         .map_err(|e| format!("couldn't read {}: {e}", path.display()))?;
-    let mut flow = parse(&text).map_err(|e| format!("{}: {e}", path.display()))?;
+    let mut flow =
+        parse_with(&text, rows.as_ref()).map_err(|e| format!("{}: {e}", path.display()))?;
+    flow.rows = rows.map(std::sync::Arc::new);
     if flow.name.is_empty() {
         flow.name = path
             .file_stem()
@@ -259,12 +264,20 @@ pub fn load(path: &Path) -> Result<Flow, String> {
     Ok(flow)
 }
 
+#[cfg(test)]
 pub fn parse(text: &str) -> Result<Flow, String> {
+    parse_with(text, None)
+}
+
+/// The flow, its holes checked against `[vars]`, the captures before
+/// each step, and `rows`' columns
+fn parse_with(text: &str, rows: Option<&crate::vars::Vars>) -> Result<Flow, String> {
     let file: FlowFile = toml::from_str(text).map_err(|e| e.message().to_string())?;
     if file.step.is_empty() {
         return Err("a flow needs at least one [[step]]".into());
     }
     let mut known: Vec<String> = file.vars.keys().cloned().collect();
+    known.extend(rows.iter().flat_map(|r| r.names.iter().cloned()));
     let mut steps = Vec::new();
     for (i, step) in file.step.into_iter().enumerate() {
         let name = step.name.unwrap_or_else(|| format!("step {}", i + 1));
@@ -290,8 +303,12 @@ pub fn parse(text: &str) -> Result<Flow, String> {
             .chain(body.iter().flat_map(|t| t.vars()));
         for var in needs {
             if !known.iter().any(|k| k == var) {
+                let columns = match rows {
+                    Some(rows) => format!(", nor is it a column of {}", rows.path.display()),
+                    None => String::new(),
+                };
                 return Err(format!(
-                    "step {name:?} uses {{{{{var}}}}}, which no earlier step captures and [vars] doesn't set"
+                    "step {name:?} uses {{{{{var}}}}}, which no earlier step captures and [vars] doesn't set{columns}"
                 ));
             }
         }
@@ -316,6 +333,7 @@ pub fn parse(text: &str) -> Result<Flow, String> {
         name: file.name.unwrap_or_default(),
         vars: file.vars.into_iter().collect(),
         steps,
+        rows: None,
     })
 }
 
@@ -339,10 +357,20 @@ impl Flow {
             .collect()
     }
 
+    /// The values chain `index` starts with: `[vars]`, and over them the
+    /// row of `--vars` it takes
+    pub fn start(&self, index: usize) -> HashMap<String, String> {
+        let mut vars: HashMap<String, String> = self.vars.iter().cloned().collect();
+        if let Some(rows) = &self.rows {
+            vars.extend(rows.row(index).map(|(n, v)| (n.to_string(), v.to_string())));
+        }
+        vars
+    }
+
     /// A URL the clients can be built around: the first step's, with the
-    /// starting values filled in where they reach
+    /// first chain's values filled in where they reach
     pub fn base_url(&self) -> String {
-        let vars: HashMap<String, String> = self.vars.iter().cloned().collect();
+        let vars = self.start(0);
         self.steps[0]
             .url
             .render(&vars)

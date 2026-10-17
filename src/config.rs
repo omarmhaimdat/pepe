@@ -51,6 +51,9 @@ pub struct Config {
     /// `--trace-header`: the response header holding the request id
     #[serde(skip_serializing_if = "Option::is_none")]
     pub trace_header: Option<String>,
+    /// `--vars`: the CSV file whose rows fill the request's `{{holes}}`
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub vars: Option<PathBuf>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub user_agent: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -337,6 +340,9 @@ impl Config {
         if cli.trace_header.is_none() {
             cli.trace_header = self.trace_header.clone();
         }
+        if cli.vars.is_none() {
+            cli.vars = self.vars.clone();
+        }
         if cli.proxy.is_none() {
             cli.proxy = self.proxy.clone();
         }
@@ -486,6 +492,7 @@ impl Config {
             rate: cli.rate,
             warmup: cli.warmup.clone(),
             trace_header: cli.trace_header.clone(),
+            vars: cli.vars.clone(),
             user_agent: differs(&cli.user_agent, &default_user_agent()),
             proxy: cli.proxy.clone(),
             insecure: cli.insecure.then_some(true),
@@ -662,6 +669,7 @@ mod tests {
             rate = 500
             warmup = "5s"
             trace-header = "X-Req"
+            vars = "users.csv"
             "#,
         )
         .unwrap();
@@ -681,6 +689,7 @@ mod tests {
             (cli.rate, cli.warmup.as_deref(), cli.trace_header.as_deref()),
             (Some(500.0), Some("5s"), Some("X-Req"))
         );
+        assert_eq!(cli.vars.as_deref(), Some(Path::new("users.csv")));
 
         // Typed flags win, including ones that equal the default
         let (mut cli, matches) = parse_argv(&[
@@ -767,6 +776,8 @@ mod tests {
             "3s",
             "--trace-header",
             "X-Req",
+            "--vars",
+            "users.csv",
             "--disable-redirects",
             "-k",
             "https://example.com/",

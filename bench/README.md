@@ -750,6 +750,28 @@ reading the file from the kernel, finding the fields, and looking up
 the path, the client and the user agent. No other log reader has been
 measured against it yet.
 
+## Values from a file
+
+`--vars users.csv` makes one request per row before the run starts, each
+sent on the direct path like any other target, so a request costs the
+same with values as without. Measured on the M4 Pro against the Rust
+server, 200,000 requests at 64, three runs each, CPU ms per 1,000
+requests:
+
+| Run | CPU ms / 1k | Peak RSS |
+| --- | --- | --- |
+| v0.43.1, `/` | 6.10 – 6.45 | 10.1 – 10.6 MB |
+| with `--vars`, `/` without holes | 6.20 – 6.30 | 9.6 – 10.2 MB |
+| `--vars` of 10,000 rows, `/?id={{id}}` | 6.25 – 6.40 | 18.3 – 18.6 MB |
+
+The rows are what costs: about 1.6 KB of memory each while the run is
+built (190 MB for 100,000 rows with a header filled, 1.6 GB for a
+million, the most a file may have), and 2 s of CPU to make a million
+ready. Two things keep it there: each row keeps only the headers that
+have holes (the rest are the clients' own), and the order the targets go
+out in is the rows' when they weigh the same, rather than the weighted
+round-robin, which costs the square of their number to work out.
+
 ## Reproducing
 
 ```bash

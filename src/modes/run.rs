@@ -199,14 +199,13 @@ pub(crate) async fn run_interactive(
                         continue;
                     }
                 };
-                let request = args.request()?;
-                let mut load = load::start(
-                    clients_for(&request, &args, plan.peak() as usize)?.0,
-                    request,
+                let (mut load, _) = start_requests(
+                    &args,
+                    plan.peak() as usize,
                     plan.levels[0] as usize,
                     Plan::Duration(UNTIL_STOPPED),
                     false,
-                );
+                )?;
                 let mut screen = ui::RampScreen::new(args.clone(), plan);
                 match screen.run(&mut load).await? {
                     ui::Outcome::Restart => continue,

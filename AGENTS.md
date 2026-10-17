@@ -143,6 +143,11 @@ checkout.toml --json` with `flow.steps[]`; `pepe replay access.log
 `--disable-compression`, `--disable-keepalive`, `--disable-redirects`.
 `--curl -- curl ...` takes a request as a curl command.
 
+`--vars users.csv` fills `{{holes}}` in the URL, headers and body from a
+CSV file whose first line names them, a row a request in turn (a row a
+chain in a flow); a hole that isn't a column is refused before anything
+is sent, and `--allow-host` checks every row's host.
+
 ## Live numbers
 
 `--metrics :9100` serves Prometheus metrics at `/metrics` while a run or

@@ -33,6 +33,7 @@ _pepe() {
 '-p+[Proxy server URL\: http\://user\:pass@host\:port or socks5\://host\:port]:PROXY:_default' \
 '--proxy=[Proxy server URL\: http\://user\:pass@host\:port or socks5\://host\:port]:PROXY:_default' \
 '--trace-header=[Response header holding the request id to show for the slowest requests and in the inspector, so they can be found in the server'\''s logs; without it, X-Request-Id, traceparent, CF-Ray, X-Amzn-Trace-Id and other common ones are looked for]:NAME:_default' \
+'--vars=[Fill the {{holes}} in the URL, headers and body from this CSV file, whose first line names them\: each request takes the next row, and the rows go round again. In a flow, each chain starts with the next row'\''s values]:FILE:_files' \
 '--snapshot=[Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run'\''s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run]:FILE:_files' \
 '*--allow-host=[Refuse to send anywhere but these hosts\: api.example.com exactly, or .example.com for it and its subdomains; repeat for more. Every target is checked before anything is sent]:HOST:_default' \
 '--max-requests=[Refuse a run that would send more requests than this\: -n above it, or -z without a --rate that bounds it]:N:_default' \
@@ -108,6 +109,7 @@ fail\:"A failure"))' \
 '-p+[Proxy server URL\: http\://user\:pass@host\:port or socks5\://host\:port]:PROXY:_default' \
 '--proxy=[Proxy server URL\: http\://user\:pass@host\:port or socks5\://host\:port]:PROXY:_default' \
 '--trace-header=[Response header holding the request id to show for the slowest requests and in the inspector, so they can be found in the server'\''s logs; without it, X-Request-Id, traceparent, CF-Ray, X-Amzn-Trace-Id and other common ones are looked for]:NAME:_default' \
+'--vars=[Fill the {{holes}} in the URL, headers and body from this CSV file, whose first line names them\: each request takes the next row, and the rows go round again. In a flow, each chain starts with the next row'\''s values]:FILE:_files' \
 '--snapshot=[Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run'\''s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run]:FILE:_files' \
 '*--allow-host=[Refuse to send anywhere but these hosts\: api.example.com exactly, or .example.com for it and its subdomains; repeat for more. Every target is checked before anything is sent]:HOST:_default' \
 '--max-requests=[Refuse a run that would send more requests than this\: -n above it, or -z without a --rate that bounds it]:N:_default' \
@@ -178,6 +180,7 @@ _arguments "${_arguments_options[@]}" : \
 '-p+[Proxy server URL\: http\://user\:pass@host\:port or socks5\://host\:port]:PROXY:_default' \
 '--proxy=[Proxy server URL\: http\://user\:pass@host\:port or socks5\://host\:port]:PROXY:_default' \
 '--trace-header=[Response header holding the request id to show for the slowest requests and in the inspector, so they can be found in the server'\''s logs; without it, X-Request-Id, traceparent, CF-Ray, X-Amzn-Trace-Id and other common ones are looked for]:NAME:_default' \
+'--vars=[Fill the {{holes}} in the URL, headers and body from this CSV file, whose first line names them\: each request takes the next row, and the rows go round again. In a flow, each chain starts with the next row'\''s values]:FILE:_files' \
 '--snapshot=[Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run'\''s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run]:FILE:_files' \
 '*--allow-host=[Refuse to send anywhere but these hosts\: api.example.com exactly, or .example.com for it and its subdomains; repeat for more. Every target is checked before anything is sent]:HOST:_default' \
 '--max-requests=[Refuse a run that would send more requests than this\: -n above it, or -z without a --rate that bounds it]:N:_default' \
@@ -229,6 +232,7 @@ _arguments "${_arguments_options[@]}" : \
 '-p+[Proxy server URL\: http\://user\:pass@host\:port or socks5\://host\:port]:PROXY:_default' \
 '--proxy=[Proxy server URL\: http\://user\:pass@host\:port or socks5\://host\:port]:PROXY:_default' \
 '--trace-header=[Response header holding the request id to show for the slowest requests and in the inspector, so they can be found in the server'\''s logs; without it, X-Request-Id, traceparent, CF-Ray, X-Amzn-Trace-Id and other common ones are looked for]:NAME:_default' \
+'--vars=[Fill the {{holes}} in the URL, headers and body from this CSV file, whose first line names them\: each request takes the next row, and the rows go round again. In a flow, each chain starts with the next row'\''s values]:FILE:_files' \
 '--snapshot=[Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run'\''s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run]:FILE:_files' \
 '*--allow-host=[Refuse to send anywhere but these hosts\: api.example.com exactly, or .example.com for it and its subdomains; repeat for more. Every target is checked before anything is sent]:HOST:_default' \
 '--max-requests=[Refuse a run that would send more requests than this\: -n above it, or -z without a --rate that bounds it]:N:_default' \
@@ -281,6 +285,7 @@ _arguments "${_arguments_options[@]}" : \
 '-p+[Proxy server URL\: http\://user\:pass@host\:port or socks5\://host\:port]:PROXY:_default' \
 '--proxy=[Proxy server URL\: http\://user\:pass@host\:port or socks5\://host\:port]:PROXY:_default' \
 '--trace-header=[Response header holding the request id to show for the slowest requests and in the inspector, so they can be found in the server'\''s logs; without it, X-Request-Id, traceparent, CF-Ray, X-Amzn-Trace-Id and other common ones are looked for]:NAME:_default' \
+'--vars=[Fill the {{holes}} in the URL, headers and body from this CSV file, whose first line names them\: each request takes the next row, and the rows go round again. In a flow, each chain starts with the next row'\''s values]:FILE:_files' \
 '--snapshot=[Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run'\''s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run]:FILE:_files' \
 '*--allow-host=[Refuse to send anywhere but these hosts\: api.example.com exactly, or .example.com for it and its subdomains; repeat for more. Every target is checked before anything is sent]:HOST:_default' \
 '--max-requests=[Refuse a run that would send more requests than this\: -n above it, or -z without a --rate that bounds it]:N:_default' \
@@ -332,6 +337,7 @@ _arguments "${_arguments_options[@]}" : \
 '-p+[Proxy server URL\: http\://user\:pass@host\:port or socks5\://host\:port]:PROXY:_default' \
 '--proxy=[Proxy server URL\: http\://user\:pass@host\:port or socks5\://host\:port]:PROXY:_default' \
 '--trace-header=[Response header holding the request id to show for the slowest requests and in the inspector, so they can be found in the server'\''s logs; without it, X-Request-Id, traceparent, CF-Ray, X-Amzn-Trace-Id and other common ones are looked for]:NAME:_default' \
+'--vars=[Fill the {{holes}} in the URL, headers and body from this CSV file, whose first line names them\: each request takes the next row, and the rows go round again. In a flow, each chain starts with the next row'\''s values]:FILE:_files' \
 '--snapshot=[Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run'\''s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run]:FILE:_files' \
 '*--allow-host=[Refuse to send anywhere but these hosts\: api.example.com exactly, or .example.com for it and its subdomains; repeat for more. Every target is checked before anything is sent]:HOST:_default' \
 '--max-requests=[Refuse a run that would send more requests than this\: -n above it, or -z without a --rate that bounds it]:N:_default' \
@@ -388,6 +394,7 @@ _arguments "${_arguments_options[@]}" : \
 '-p+[Proxy server URL\: http\://user\:pass@host\:port or socks5\://host\:port]:PROXY:_default' \
 '--proxy=[Proxy server URL\: http\://user\:pass@host\:port or socks5\://host\:port]:PROXY:_default' \
 '--trace-header=[Response header holding the request id to show for the slowest requests and in the inspector, so they can be found in the server'\''s logs; without it, X-Request-Id, traceparent, CF-Ray, X-Amzn-Trace-Id and other common ones are looked for]:NAME:_default' \
+'--vars=[Fill the {{holes}} in the URL, headers and body from this CSV file, whose first line names them\: each request takes the next row, and the rows go round again. In a flow, each chain starts with the next row'\''s values]:FILE:_files' \
 '--snapshot=[Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run'\''s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run]:FILE:_files' \
 '*--allow-host=[Refuse to send anywhere but these hosts\: api.example.com exactly, or .example.com for it and its subdomains; repeat for more. Every target is checked before anything is sent]:HOST:_default' \
 '--max-requests=[Refuse a run that would send more requests than this\: -n above it, or -z without a --rate that bounds it]:N:_default' \
@@ -440,6 +447,7 @@ _arguments "${_arguments_options[@]}" : \
 '-p+[Proxy server URL\: http\://user\:pass@host\:port or socks5\://host\:port]:PROXY:_default' \
 '--proxy=[Proxy server URL\: http\://user\:pass@host\:port or socks5\://host\:port]:PROXY:_default' \
 '--trace-header=[Response header holding the request id to show for the slowest requests and in the inspector, so they can be found in the server'\''s logs; without it, X-Request-Id, traceparent, CF-Ray, X-Amzn-Trace-Id and other common ones are looked for]:NAME:_default' \
+'--vars=[Fill the {{holes}} in the URL, headers and body from this CSV file, whose first line names them\: each request takes the next row, and the rows go round again. In a flow, each chain starts with the next row'\''s values]:FILE:_files' \
 '--snapshot=[Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run'\''s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run]:FILE:_files' \
 '*--allow-host=[Refuse to send anywhere but these hosts\: api.example.com exactly, or .example.com for it and its subdomains; repeat for more. Every target is checked before anything is sent]:HOST:_default' \
 '--max-requests=[Refuse a run that would send more requests than this\: -n above it, or -z without a --rate that bounds it]:N:_default' \
@@ -492,6 +500,7 @@ _arguments "${_arguments_options[@]}" : \
 '-p+[Proxy server URL\: http\://user\:pass@host\:port or socks5\://host\:port]:PROXY:_default' \
 '--proxy=[Proxy server URL\: http\://user\:pass@host\:port or socks5\://host\:port]:PROXY:_default' \
 '--trace-header=[Response header holding the request id to show for the slowest requests and in the inspector, so they can be found in the server'\''s logs; without it, X-Request-Id, traceparent, CF-Ray, X-Amzn-Trace-Id and other common ones are looked for]:NAME:_default' \
+'--vars=[Fill the {{holes}} in the URL, headers and body from this CSV file, whose first line names them\: each request takes the next row, and the rows go round again. In a flow, each chain starts with the next row'\''s values]:FILE:_files' \
 '--snapshot=[Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run'\''s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run]:FILE:_files' \
 '*--allow-host=[Refuse to send anywhere but these hosts\: api.example.com exactly, or .example.com for it and its subdomains; repeat for more. Every target is checked before anything is sent]:HOST:_default' \
 '--max-requests=[Refuse a run that would send more requests than this\: -n above it, or -z without a --rate that bounds it]:N:_default' \
@@ -547,6 +556,7 @@ _arguments "${_arguments_options[@]}" : \
 '-p+[Proxy server URL\: http\://user\:pass@host\:port or socks5\://host\:port]:PROXY:_default' \
 '--proxy=[Proxy server URL\: http\://user\:pass@host\:port or socks5\://host\:port]:PROXY:_default' \
 '--trace-header=[Response header holding the request id to show for the slowest requests and in the inspector, so they can be found in the server'\''s logs; without it, X-Request-Id, traceparent, CF-Ray, X-Amzn-Trace-Id and other common ones are looked for]:NAME:_default' \
+'--vars=[Fill the {{holes}} in the URL, headers and body from this CSV file, whose first line names them\: each request takes the next row, and the rows go round again. In a flow, each chain starts with the next row'\''s values]:FILE:_files' \
 '--snapshot=[Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run'\''s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run]:FILE:_files' \
 '*--allow-host=[Refuse to send anywhere but these hosts\: api.example.com exactly, or .example.com for it and its subdomains; repeat for more. Every target is checked before anything is sent]:HOST:_default' \
 '--max-requests=[Refuse a run that would send more requests than this\: -n above it, or -z without a --rate that bounds it]:N:_default' \
@@ -599,6 +609,7 @@ _arguments "${_arguments_options[@]}" : \
 '-p+[Proxy server URL\: http\://user\:pass@host\:port or socks5\://host\:port]:PROXY:_default' \
 '--proxy=[Proxy server URL\: http\://user\:pass@host\:port or socks5\://host\:port]:PROXY:_default' \
 '--trace-header=[Response header holding the request id to show for the slowest requests and in the inspector, so they can be found in the server'\''s logs; without it, X-Request-Id, traceparent, CF-Ray, X-Amzn-Trace-Id and other common ones are looked for]:NAME:_default' \
+'--vars=[Fill the {{holes}} in the URL, headers and body from this CSV file, whose first line names them\: each request takes the next row, and the rows go round again. In a flow, each chain starts with the next row'\''s values]:FILE:_files' \
 '--snapshot=[Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run'\''s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run]:FILE:_files' \
 '*--allow-host=[Refuse to send anywhere but these hosts\: api.example.com exactly, or .example.com for it and its subdomains; repeat for more. Every target is checked before anything is sent]:HOST:_default' \
 '--max-requests=[Refuse a run that would send more requests than this\: -n above it, or -z without a --rate that bounds it]:N:_default' \
@@ -649,6 +660,7 @@ _arguments "${_arguments_options[@]}" : \
 '-p+[Proxy server URL\: http\://user\:pass@host\:port or socks5\://host\:port]:PROXY:_default' \
 '--proxy=[Proxy server URL\: http\://user\:pass@host\:port or socks5\://host\:port]:PROXY:_default' \
 '--trace-header=[Response header holding the request id to show for the slowest requests and in the inspector, so they can be found in the server'\''s logs; without it, X-Request-Id, traceparent, CF-Ray, X-Amzn-Trace-Id and other common ones are looked for]:NAME:_default' \
+'--vars=[Fill the {{holes}} in the URL, headers and body from this CSV file, whose first line names them\: each request takes the next row, and the rows go round again. In a flow, each chain starts with the next row'\''s values]:FILE:_files' \
 '--snapshot=[Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run'\''s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run]:FILE:_files' \
 '*--allow-host=[Refuse to send anywhere but these hosts\: api.example.com exactly, or .example.com for it and its subdomains; repeat for more. Every target is checked before anything is sent]:HOST:_default' \
 '--max-requests=[Refuse a run that would send more requests than this\: -n above it, or -z without a --rate that bounds it]:N:_default' \
@@ -698,6 +710,7 @@ _arguments "${_arguments_options[@]}" : \
 '-p+[Proxy server URL\: http\://user\:pass@host\:port or socks5\://host\:port]:PROXY:_default' \
 '--proxy=[Proxy server URL\: http\://user\:pass@host\:port or socks5\://host\:port]:PROXY:_default' \
 '--trace-header=[Response header holding the request id to show for the slowest requests and in the inspector, so they can be found in the server'\''s logs; without it, X-Request-Id, traceparent, CF-Ray, X-Amzn-Trace-Id and other common ones are looked for]:NAME:_default' \
+'--vars=[Fill the {{holes}} in the URL, headers and body from this CSV file, whose first line names them\: each request takes the next row, and the rows go round again. In a flow, each chain starts with the next row'\''s values]:FILE:_files' \
 '--snapshot=[Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run'\''s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run]:FILE:_files' \
 '*--allow-host=[Refuse to send anywhere but these hosts\: api.example.com exactly, or .example.com for it and its subdomains; repeat for more. Every target is checked before anything is sent]:HOST:_default' \
 '--max-requests=[Refuse a run that would send more requests than this\: -n above it, or -z without a --rate that bounds it]:N:_default' \
@@ -749,6 +762,7 @@ _arguments "${_arguments_options[@]}" : \
 '-p+[Proxy server URL\: http\://user\:pass@host\:port or socks5\://host\:port]:PROXY:_default' \
 '--proxy=[Proxy server URL\: http\://user\:pass@host\:port or socks5\://host\:port]:PROXY:_default' \
 '--trace-header=[Response header holding the request id to show for the slowest requests and in the inspector, so they can be found in the server'\''s logs; without it, X-Request-Id, traceparent, CF-Ray, X-Amzn-Trace-Id and other common ones are looked for]:NAME:_default' \
+'--vars=[Fill the {{holes}} in the URL, headers and body from this CSV file, whose first line names them\: each request takes the next row, and the rows go round again. In a flow, each chain starts with the next row'\''s values]:FILE:_files' \
 '--snapshot=[Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run'\''s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run]:FILE:_files' \
 '*--allow-host=[Refuse to send anywhere but these hosts\: api.example.com exactly, or .example.com for it and its subdomains; repeat for more. Every target is checked before anything is sent]:HOST:_default' \
 '--max-requests=[Refuse a run that would send more requests than this\: -n above it, or -z without a --rate that bounds it]:N:_default' \

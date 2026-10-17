@@ -7,14 +7,13 @@ pub(crate) async fn climb(
     args: &Cli,
     plan: RampPlan,
 ) -> Result<(Ramp, LoadHandle), Box<dyn std::error::Error>> {
-    let request = args.request()?;
-    let mut load = load::start(
-        clients_for(&request, args, plan.peak() as usize)?.0,
-        request,
+    let (mut load, _) = start_requests(
+        args,
+        plan.peak() as usize,
         plan.levels[0] as usize,
         Plan::Duration(UNTIL_STOPPED),
         false,
-    );
+    )?;
     let mut ramp = Ramp::new(plan, Instant::now());
     let mut clock = tokio::time::interval(std::time::Duration::from_millis(50));
     let mut pump = tokio::time::interval(PUMP);

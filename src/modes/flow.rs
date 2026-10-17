@@ -8,7 +8,13 @@ pub(crate) async fn run_flow(
     args: &Cli,
     what: &cli::FlowArgs,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let flow = match crate::flow::load(&what.file) {
+    let flow = match args
+        .vars
+        .as_deref()
+        .map(crate::vars::Vars::load)
+        .transpose()
+        .and_then(|rows| crate::flow::load(&what.file, rows))
+    {
         Ok(flow) => flow,
         Err(e) => {
             eprintln!("error: {e}");
@@ -17,18 +23,23 @@ pub(crate) async fn run_flow(
     };
     // The guardrails: each step's host, as its URL stands before the run
     // (a host filled in by a capture can't be checked, and is refused
-    // when hosts are named)
+    // when hosts are named), for every row of `--vars`
     let guard = guard::Guard::of(args);
-    let vars: std::collections::HashMap<String, String> = flow.vars.iter().cloned().collect();
+    let chains = flow.rows.as_ref().map_or(1, |rows| rows.rows.len());
     let mut urls = Vec::new();
     for step in &flow.steps {
-        match step.url.render(&vars) {
-            Ok(url) => {
-                if let Err(e) = guard.check_url(&url) {
-                    eprintln!("error: step {:?}: {e}", step.name);
-                    std::process::exit(2);
+        match (0..chains)
+            .map(|chain| step.url.render(&flow.start(chain)))
+            .collect::<Result<Vec<_>, _>>()
+        {
+            Ok(filled) => {
+                for url in &filled {
+                    if let Err(e) = guard.check_url(url) {
+                        eprintln!("error: step {:?}: {e}", step.name);
+                        std::process::exit(2);
+                    }
                 }
-                urls.push(format!("{} {} {url}", step.name, step.method));
+                urls.push(format!("{} {} {}", step.name, step.method, filled[0]));
             }
             Err(var) if guard.hosts.is_empty() => {
                 urls.push(format!(
