@@ -6,6 +6,96 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+## [0.45.0](https://github.com/omarmhaimdat/pepe/compare/v0.44.0...v0.45.0) - 2026-10-17
+
+### Added
+
+- *(webhooks)* --webhook sends the verdict to Slack, Discord, Teams, Google Chat or any URL, and F3 sets them on any screen ([#199](https://github.com/omarmhaimdat/pepe/pull/199))
+
+  Part 1 of the webhooks work: easy by default, customisable in every
+  place a run is configured.
+
+  ```bash
+  pepe -z 30s -c 50 --fail-if 'p99 > 300ms' --webhook "$SLACK_WEBHOOK_URL" https://api.example.com/health
+  ```
+
+  ## What it does
+
+  - **The URL picks the layout.**
+    - `hooks.slack.com`: Slack blocks.
+    - `discord.com/api/webhooks`: a Discord embed coloured by the outcome.
+  - Teams (`*.webhook.office.com`, workflows on `*.logic.azure.com`): an
+  Adaptive Card.
+    - `chat.googleapis.com`: Google Chat text.
+    - Anything else: JSON with the event, the run and the whole report.
+
+    `format` can force any of these, or `text`.
+  - **Events**: `start`, `progress` (a bar, requests, req/s, p50, p99 and
+  errors, every `every`), `anomaly` (sent as it happens), `end`, and
+  `fail`. `fail` fires when a `--fail-if` was crossed, a ping's SLO was
+  broken, or nothing answered. The default is `end`.
+  - **Config**: `webhook = "URL"` or `[[webhook]]` tables in `pepe.toml`.
+  The same key works under the settings' `[defaults]` (machine-wide) and
+  in saved tests (`--keep`, ctrl-s). Each table takes `on`, `format`,
+  `headers`, `every`, `mention`, and a `body` template with `{{holes}}`
+  (status, p99, rps, report, …).
+  - **Secrets**: `${NAME}` is read from the environment. An unset name, a
+  bad URL or an unknown hole is refused before anything is sent. URLs are
+  masked in reports and in the recorded command
+  (`https://hooks.slack.com/••••`).
+  - **F3 on every screen** opens a webhook page next to F2's settings.
+  - On the setup form, it sets the hooks of the run you're about to start.
+    - During a run, a hook added or changed is sent to from then on.
+  - Paste or type a URL; `1`–`5` tick events; ← → step the format; `t`
+  sends a test and shows the answer; del removes the hook.
+  - Edits are kept for restarts, ctrl-s and the command printed at the
+  end.
+  - The dashboard, ramp and ping screens now pass pasted text to the
+  pages.
+  - **Every mode sends**: run, flow, api and replay (on screen, headless,
+  `--json`), plus ramp and ping.
+  - **Delivery**:
+  - Each webhook has its own in-order queue, with three tries on a dropped
+  connection, a 429 or a 5xx, following `Retry-After`.
+  - The run never waits on webhooks. pepe waits up to 15 s at the end and
+  reports failures on stderr; the exit code is unchanged.
+    - `--dry-run` lists the webhooks and sends nothing.
+  - **MCP**: the tools take `webhook` and `webhook_on`.
+
+  ## Checked
+
+  - Unit tests:
+    - format detection;
+    - the file forms (URL, table, list) round-trip;
+    - `${ENV}` and masking;
+    - each layout;
+    - templates;
+    - the progress line;
+    - in-order delivery with a retried 503;
+    - the page's keys and drawing;
+    - saved tests keep hooks and mask them in the command.
+  - By hand against a local receiver: flags with start/end/fail,
+  `pepe.toml` tables with headers, progress, Slack layout and a template.
+  - Driving the real TUI in a pseudo-terminal: F3 mid-run, paste a URL,
+  and the run's end arrives there. Also F3 on the setup form, then start.
+  The recorded command shows the URL masked.
+  - Speed is unchanged (bench server, 200k at 64, three runs each): master
+  6.10–6.20 CPU ms per 1k, this branch 6.05–6.10.
+
+  ## Not in this PR (the next two)
+
+  - A Slack bot token: one message edited in place as the run goes, with
+  anomalies threaded under it.
+  - Socket Mode: stop, rerun and edit-and-rerun buttons, and `/pepe`.
+  These act on saved tests only, for allowed users.
+
+  ## 1.0
+
+  Adds `--webhook`, `--webhook-on`, the `webhook` key and the MCP
+  arguments, which restarts the freeze clock. The report schema is
+  unchanged.
+
+
 ## [0.44.0](https://github.com/omarmhaimdat/pepe/compare/v0.43.1...v0.44.0) - 2026-10-17
 
 ### Added
