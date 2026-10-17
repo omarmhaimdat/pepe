@@ -148,6 +148,15 @@ CSV file whose first line names them, a row a request in turn (a row a
 chain in a flow); a hole that isn't a column is refused before anything
 is sent, and `--allow-host` checks every row's host.
 
+## Tell a channel
+
+`--webhook "$SLACK_WEBHOOK_URL"` sends the verdict when the run ends
+(Slack, Discord, Teams and Google Chat URLs get their own layout, any
+other the JSON report); `--webhook-on start,progress,anomaly,end,fail`
+says when. `[[webhook]]` in `pepe.toml` takes `on`, `format`, `headers`,
+a `body` with `{{holes}}`, `every` and `mention`; `${NAME}` is read from
+the environment.
+
 ## Live numbers
 
 `--metrics :9100` serves Prometheus metrics at `/metrics` while a run or

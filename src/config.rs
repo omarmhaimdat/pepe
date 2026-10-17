@@ -54,6 +54,14 @@ pub struct Config {
     /// `--vars`: the CSV file whose rows fill the request's `{{holes}}`
     #[serde(skip_serializing_if = "Option::is_none")]
     pub vars: Option<PathBuf>,
+    /// Where the run is said: a URL, a `[[webhook]]` table, or a list
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "crate::webhook::deserialize",
+        serialize_with = "crate::webhook::serialize"
+    )]
+    pub webhook: Option<Vec<crate::webhook::Webhook>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub user_agent: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -226,6 +234,7 @@ impl Config {
             rate,
             warmup,
             trace_header,
+            webhook,
             user_agent,
             proxy,
             insecure,
@@ -342,6 +351,9 @@ impl Config {
         }
         if cli.vars.is_none() {
             cli.vars = self.vars.clone();
+        }
+        if let (Some(hooks), true) = (&self.webhook, cli.webhook.is_empty()) {
+            cli.webhooks = hooks.clone();
         }
         if cli.proxy.is_none() {
             cli.proxy = self.proxy.clone();
@@ -493,6 +505,7 @@ impl Config {
             warmup: cli.warmup.clone(),
             trace_header: cli.trace_header.clone(),
             vars: cli.vars.clone(),
+            webhook: Some(cli.hooks()).filter(|h| !h.is_empty()),
             user_agent: differs(&cli.user_agent, &default_user_agent()),
             proxy: cli.proxy.clone(),
             insecure: cli.insecure.then_some(true),
@@ -778,12 +791,27 @@ mod tests {
             "X-Req",
             "--vars",
             "users.csv",
+            "--webhook",
+            "https://hooks.slack.com/services/T/B/x",
+            "--webhook-on",
+            "start,fail",
             "--disable-redirects",
             "-k",
             "https://example.com/",
         ]);
         let text = Config::from_cli(&cli).to_toml();
         assert!(text.starts_with("# pepe load test"), "{text}");
+        assert!(
+            text.contains("[[webhook]]") && text.contains(r#"on = ["start", "fail"]"#),
+            "{text}"
+        );
+        // A report's command hides where the hook goes
+        let masked = cli.command_line_masked();
+        assert!(
+            masked.contains("--webhook 'https://hooks.slack.com/••••'")
+                && !masked.contains("/T/B/x"),
+            "{masked}"
+        );
         let again = parse(&text).unwrap();
         assert_eq!(again, Config::from_cli(&cli));
         let (mut fresh, matches) = parse_argv(&["pepe"]);

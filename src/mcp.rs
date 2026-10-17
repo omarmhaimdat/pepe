@@ -346,6 +346,8 @@ fn request_flags(argv: &mut Vec<String>, args: &Value) {
     flag(argv, args, "proxy", "-p");
     switch(argv, args, "insecure", "-k");
     switch(argv, args, "dry_run", "--dry-run");
+    flags(argv, args, "webhook", "--webhook");
+    flag(argv, args, "webhook_on", "--webhook-on");
 }
 
 /// pepe's arguments for a tool call, `--json` included
@@ -473,6 +475,14 @@ pub fn tools() -> Vec<Value> {
         props.insert(
             "save".into(),
             string("Also write the report to this file, to compare against later"),
+        );
+        props.insert(
+            "webhook".into(),
+            strings("Send the verdict here when it ends: a Slack, Discord, Teams or Google Chat webhook, or any URL for the JSON report"),
+        );
+        props.insert(
+            "webhook_on".into(),
+            string("When the webhooks are sent, comma-separated: start, progress, anomaly, end, fail (end)"),
         );
     };
     let load = |props: &mut serde_json::Map<String, Value>| {

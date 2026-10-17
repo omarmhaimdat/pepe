@@ -110,6 +110,12 @@ Options:
       --vars <FILE>
           Fill the {{holes}} in the URL, headers and body from this CSV file, whose first line names them: each request takes the next row, and the rows go round again. In a flow, each chain starts with the next row's values
 
+      --webhook <URL>
+          Send the run's verdict to this URL when it ends: a Slack, Discord, Teams or Google Chat webhook gets a message laid out for it, anything else the JSON report; repeat for more. ${NAME} is taken from the environment. A [[webhook]] table in pepe.toml says more
+
+      --webhook-on <EVENTS>
+          When the --webhook URLs are sent: start, progress, anomaly, end, fail (the end when a --fail-if was crossed), comma-separated; end by default
+
       --snapshot <FILE>
           Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run's numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run
 
@@ -329,6 +335,12 @@ Options:
       --vars <FILE>
           Fill the {{holes}} in the URL, headers and body from this CSV file, whose first line names them: each request takes the next row, and the rows go round again. In a flow, each chain starts with the next row's values
 
+      --webhook <URL>
+          Send the run's verdict to this URL when it ends: a Slack, Discord, Teams or Google Chat webhook gets a message laid out for it, anything else the JSON report; repeat for more. ${NAME} is taken from the environment. A [[webhook]] table in pepe.toml says more
+
+      --webhook-on <EVENTS>
+          When the --webhook URLs are sent: start, progress, anomaly, end, fail (the end when a --fail-if was crossed), comma-separated; end by default
+
       --snapshot <FILE>
           Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run's numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run
 
@@ -475,6 +487,12 @@ Options:
       --vars <FILE>
           Fill the {{holes}} in the URL, headers and body from this CSV file, whose first line names them: each request takes the next row, and the rows go round again. In a flow, each chain starts with the next row's values
 
+      --webhook <URL>
+          Send the run's verdict to this URL when it ends: a Slack, Discord, Teams or Google Chat webhook gets a message laid out for it, anything else the JSON report; repeat for more. ${NAME} is taken from the environment. A [[webhook]] table in pepe.toml says more
+
+      --webhook-on <EVENTS>
+          When the --webhook URLs are sent: start, progress, anomaly, end, fail (the end when a --fail-if was crossed), comma-separated; end by default
+
       --snapshot <FILE>
           Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run's numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run
 
@@ -606,6 +624,12 @@ Options:
 
       --vars <FILE>
           Fill the {{holes}} in the URL, headers and body from this CSV file, whose first line names them: each request takes the next row, and the rows go round again. In a flow, each chain starts with the next row's values
+
+      --webhook <URL>
+          Send the run's verdict to this URL when it ends: a Slack, Discord, Teams or Google Chat webhook gets a message laid out for it, anything else the JSON report; repeat for more. ${NAME} is taken from the environment. A [[webhook]] table in pepe.toml says more
+
+      --webhook-on <EVENTS>
+          When the --webhook URLs are sent: start, progress, anomaly, end, fail (the end when a --fail-if was crossed), comma-separated; end by default
 
       --snapshot <FILE>
           Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run's numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run
@@ -754,6 +778,12 @@ Options:
       --vars <FILE>
           Fill the {{holes}} in the URL, headers and body from this CSV file, whose first line names them: each request takes the next row, and the rows go round again. In a flow, each chain starts with the next row's values
 
+      --webhook <URL>
+          Send the run's verdict to this URL when it ends: a Slack, Discord, Teams or Google Chat webhook gets a message laid out for it, anything else the JSON report; repeat for more. ${NAME} is taken from the environment. A [[webhook]] table in pepe.toml says more
+
+      --webhook-on <EVENTS>
+          When the --webhook URLs are sent: start, progress, anomaly, end, fail (the end when a --fail-if was crossed), comma-separated; end by default
+
       --snapshot <FILE>
           Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run's numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run
 
@@ -876,6 +906,12 @@ Options:
 
       --vars <FILE>
           Fill the {{holes}} in the URL, headers and body from this CSV file, whose first line names them: each request takes the next row, and the rows go round again. In a flow, each chain starts with the next row's values
+
+      --webhook <URL>
+          Send the run's verdict to this URL when it ends: a Slack, Discord, Teams or Google Chat webhook gets a message laid out for it, anything else the JSON report; repeat for more. ${NAME} is taken from the environment. A [[webhook]] table in pepe.toml says more
+
+      --webhook-on <EVENTS>
+          When the --webhook URLs are sent: start, progress, anomaly, end, fail (the end when a --fail-if was crossed), comma-separated; end by default
 
       --snapshot <FILE>
           Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run's numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run
@@ -1010,6 +1046,12 @@ Options:
 
       --vars <FILE>
           Fill the {{holes}} in the URL, headers and body from this CSV file, whose first line names them: each request takes the next row, and the rows go round again. In a flow, each chain starts with the next row's values
+
+      --webhook <URL>
+          Send the run's verdict to this URL when it ends: a Slack, Discord, Teams or Google Chat webhook gets a message laid out for it, anything else the JSON report; repeat for more. ${NAME} is taken from the environment. A [[webhook]] table in pepe.toml says more
+
+      --webhook-on <EVENTS>
+          When the --webhook URLs are sent: start, progress, anomaly, end, fail (the end when a --fail-if was crossed), comma-separated; end by default
 
       --snapshot <FILE>
           Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run's numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run
@@ -1156,6 +1198,12 @@ Options:
       --vars <FILE>
           Fill the {{holes}} in the URL, headers and body from this CSV file, whose first line names them: each request takes the next row, and the rows go round again. In a flow, each chain starts with the next row's values
 
+      --webhook <URL>
+          Send the run's verdict to this URL when it ends: a Slack, Discord, Teams or Google Chat webhook gets a message laid out for it, anything else the JSON report; repeat for more. ${NAME} is taken from the environment. A [[webhook]] table in pepe.toml says more
+
+      --webhook-on <EVENTS>
+          When the --webhook URLs are sent: start, progress, anomaly, end, fail (the end when a --fail-if was crossed), comma-separated; end by default
+
       --snapshot <FILE>
           Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run's numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run
 
@@ -1282,6 +1330,12 @@ Options:
       --vars <FILE>
           Fill the {{holes}} in the URL, headers and body from this CSV file, whose first line names them: each request takes the next row, and the rows go round again. In a flow, each chain starts with the next row's values
 
+      --webhook <URL>
+          Send the run's verdict to this URL when it ends: a Slack, Discord, Teams or Google Chat webhook gets a message laid out for it, anything else the JSON report; repeat for more. ${NAME} is taken from the environment. A [[webhook]] table in pepe.toml says more
+
+      --webhook-on <EVENTS>
+          When the --webhook URLs are sent: start, progress, anomaly, end, fail (the end when a --fail-if was crossed), comma-separated; end by default
+
       --snapshot <FILE>
           Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run's numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run
 
@@ -1404,6 +1458,12 @@ Options:
 
       --vars <FILE>
           Fill the {{holes}} in the URL, headers and body from this CSV file, whose first line names them: each request takes the next row, and the rows go round again. In a flow, each chain starts with the next row's values
+
+      --webhook <URL>
+          Send the run's verdict to this URL when it ends: a Slack, Discord, Teams or Google Chat webhook gets a message laid out for it, anything else the JSON report; repeat for more. ${NAME} is taken from the environment. A [[webhook]] table in pepe.toml says more
+
+      --webhook-on <EVENTS>
+          When the --webhook URLs are sent: start, progress, anomaly, end, fail (the end when a --fail-if was crossed), comma-separated; end by default
 
       --snapshot <FILE>
           Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run's numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run
@@ -1530,6 +1590,12 @@ Options:
       --vars <FILE>
           Fill the {{holes}} in the URL, headers and body from this CSV file, whose first line names them: each request takes the next row, and the rows go round again. In a flow, each chain starts with the next row's values
 
+      --webhook <URL>
+          Send the run's verdict to this URL when it ends: a Slack, Discord, Teams or Google Chat webhook gets a message laid out for it, anything else the JSON report; repeat for more. ${NAME} is taken from the environment. A [[webhook]] table in pepe.toml says more
+
+      --webhook-on <EVENTS>
+          When the --webhook URLs are sent: start, progress, anomaly, end, fail (the end when a --fail-if was crossed), comma-separated; end by default
+
       --snapshot <FILE>
           Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run's numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run
 
@@ -1648,6 +1714,12 @@ Options:
 
       --vars <FILE>
           Fill the {{holes}} in the URL, headers and body from this CSV file, whose first line names them: each request takes the next row, and the rows go round again. In a flow, each chain starts with the next row's values
+
+      --webhook <URL>
+          Send the run's verdict to this URL when it ends: a Slack, Discord, Teams or Google Chat webhook gets a message laid out for it, anything else the JSON report; repeat for more. ${NAME} is taken from the environment. A [[webhook]] table in pepe.toml says more
+
+      --webhook-on <EVENTS>
+          When the --webhook URLs are sent: start, progress, anomaly, end, fail (the end when a --fail-if was crossed), comma-separated; end by default
 
       --snapshot <FILE>
           Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run's numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run
@@ -1773,6 +1845,12 @@ Options:
 
       --vars <FILE>
           Fill the {{holes}} in the URL, headers and body from this CSV file, whose first line names them: each request takes the next row, and the rows go round again. In a flow, each chain starts with the next row's values
+
+      --webhook <URL>
+          Send the run's verdict to this URL when it ends: a Slack, Discord, Teams or Google Chat webhook gets a message laid out for it, anything else the JSON report; repeat for more. ${NAME} is taken from the environment. A [[webhook]] table in pepe.toml says more
+
+      --webhook-on <EVENTS>
+          When the --webhook URLs are sent: start, progress, anomaly, end, fail (the end when a --fail-if was crossed), comma-separated; end by default
 
       --snapshot <FILE>
           Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run's numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run
@@ -1904,6 +1982,12 @@ Options:
 
       --vars <FILE>
           Fill the {{holes}} in the URL, headers and body from this CSV file, whose first line names them: each request takes the next row, and the rows go round again. In a flow, each chain starts with the next row's values
+
+      --webhook <URL>
+          Send the run's verdict to this URL when it ends: a Slack, Discord, Teams or Google Chat webhook gets a message laid out for it, anything else the JSON report; repeat for more. ${NAME} is taken from the environment. A [[webhook]] table in pepe.toml says more
+
+      --webhook-on <EVENTS>
+          When the --webhook URLs are sent: start, progress, anomaly, end, fail (the end when a --fail-if was crossed), comma-separated; end by default
 
       --snapshot <FILE>
           Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run's numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run

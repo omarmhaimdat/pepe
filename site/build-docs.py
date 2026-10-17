@@ -44,6 +44,7 @@ GROUPS = [
     ("Integrate", [
         ("output", "Output and exit codes"),
         ("ci", "CI and Docker"),
+        ("webhooks", "Webhooks"),
         ("agents", "Agents and scripts"),
     ]),
     ("Reference", [("reference", "Command reference"), ("benchmarks", "Benchmarks")]),
@@ -66,6 +67,7 @@ TITLES = {
     "compare": "pepe compare · what changed between two load tests",
     "output": "Output, JSON report and exit codes · pepe",
     "ci": "pepe in CI · GitHub Action, Docker and --fail-if thresholds",
+    "webhooks": "pepe webhooks · load-test results in Slack, Discord and Teams",
     "agents": "pepe for agents and scripts · MCP server and guardrails",
     "reference": "pepe command reference · every flag and subcommand",
     "benchmarks": "Benchmarks · pepe against wrk, oha, vegeta and k6",

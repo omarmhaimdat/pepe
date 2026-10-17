@@ -90,7 +90,7 @@ pub(crate) async fn run_replay(
     }
     say_if_newer(check).await;
     if let Some(metrics) = metrics {
-        exit_if_failed(&shown, &metrics);
+        exit_if_failed(&shown, &metrics).await;
     }
     Ok(())
 }
@@ -165,6 +165,7 @@ pub(crate) async fn run_replay_json(
     if let Some(warmup) = args.warmup() {
         load.set_warmup(warmup);
     }
+    crate::webhook::begin(hook_run(args), &args.hooks());
     let mut started = Instant::now();
     let mut warming = load.warming();
     let mut warmup_requests = 0;
@@ -201,6 +202,9 @@ pub(crate) async fn run_replay_json(
                         &rows,
                     )
                 });
+                if !warming {
+                    crate::webhook::progress(|| hook_progress(&total, started.elapsed(), plan(args)));
+                }
                 if over {
                     break;
                 }
@@ -273,6 +277,7 @@ pub(crate) async fn run_replay_json(
         "urls": urls,
     });
     println!("{}", serde_json::to_string_pretty(&report)?);
-    exit_if_failed(args, &total);
+    hooks_end(&report, &crossed(args, &total));
+    exit_if_failed(args, &total).await;
     Ok(())
 }

@@ -467,6 +467,9 @@ impl PingScreen {
                             return Ok(());
                         }
                     }
+                    Some(Ok(Event::Paste(text))) => {
+                        super::settings::paste(&text);
+                    }
                     Some(Ok(_)) => {}
                     Some(Err(e)) => return Err(e.into()),
                     None => return Ok(()),

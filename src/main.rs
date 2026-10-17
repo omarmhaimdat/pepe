@@ -43,6 +43,7 @@ mod ui;
 mod update;
 mod utils;
 mod vars;
+mod webhook;
 mod wire;
 
 #[derive(Debug)]

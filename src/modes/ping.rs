@@ -161,6 +161,7 @@ pub(crate) async fn run_ping(
         && stdout().is_terminal()
         && stdin().is_terminal();
     let shared = crate::ping::start(targets, settings.clone());
+    crate::webhook::begin(hook_run(args), &args.hooks());
     if exporter::address().is_some() {
         let shared = shared.clone();
         tokio::spawn(async move {
@@ -278,57 +279,70 @@ pub(crate) async fn run_ping(
             print_report(&crate::ping::report(&state, &settings));
         }
     }
-    let state = shared.lock();
-    // `--record`: the report under the saved test, unless the screen did
-    let comparison = if args.record && !recorded {
-        let mut report = crate::ping::json_report(&state, &settings, interrupted);
-        crate::store::stamp_test(&mut report, args);
-        record_result(args, &serde_json::to_string_pretty(&report)?)?
-    } else {
-        None
-    };
-    if let (Some(comparison), true) = (&comparison, args.json) {
-        println!("{}", comparison.to_json()?);
-    } else if args.json && args.rerun.is_some() && !screen {
-        // A rerun with nothing to compare with yet: the report after all
-        println!(
-            "{}",
-            serde_json::to_string_pretty(&crate::ping::json_report(
+    // The lock is let go before waiting on the webhooks
+    let (comparison, code) = {
+        let state = shared.lock();
+        // `--record`: the report under the saved test, unless the screen did
+        let comparison = if args.record && !recorded {
+            let mut report = crate::ping::json_report(&state, &settings, interrupted);
+            crate::store::stamp_test(&mut report, args);
+            record_result(args, &serde_json::to_string_pretty(&report)?)?
+        } else {
+            None
+        };
+        if let (Some(comparison), true) = (&comparison, args.json) {
+            println!("{}", comparison.to_json()?);
+        } else if args.json && args.rerun.is_some() && !screen {
+            // A rerun with nothing to compare with yet: the report after all
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&crate::ping::json_report(
+                    &state,
+                    &settings,
+                    interrupted
+                ))?
+            );
+        }
+        if let Some(path) = &what.save {
+            let report = serde_json::to_string_pretty(&crate::ping::json_report(
                 &state,
                 &settings,
-                interrupted
-            ))?
-        );
-    }
-    if let Some(path) = &what.save {
-        let report = serde_json::to_string_pretty(&crate::ping::json_report(
-            &state,
-            &settings,
-            interrupted,
-        ))?;
-        if let Err(e) = std::fs::write(path, report) {
-            eprintln!("couldn't write {}: {e}", path.display());
-        }
-    }
-    if let Some(path) = &what.save_body {
-        match state.targets.iter().find_map(|t| t.last_body.as_ref()) {
-            Some(body) => {
-                if let Err(e) = std::fs::write(path, body) {
-                    eprintln!("couldn't write {}: {e}", path.display());
-                }
+                interrupted,
+            ))?;
+            if let Err(e) = std::fs::write(path, report) {
+                eprintln!("couldn't write {}: {e}", path.display());
             }
-            None => eprintln!("no body to write to {}", path.display()),
         }
-    }
-    // Like ping: 1 when nothing ever answered; 4 when the SLO was broken
-    let code = if state.any_violation() {
-        4
-    } else if state.nothing_answered() {
-        1
-    } else {
-        0
+        if let Some(path) = &what.save_body {
+            match state.targets.iter().find_map(|t| t.last_body.as_ref()) {
+                Some(body) => {
+                    if let Err(e) = std::fs::write(path, body) {
+                        eprintln!("couldn't write {}: {e}", path.display());
+                    }
+                }
+                None => eprintln!("no body to write to {}", path.display()),
+            }
+        }
+        // Like ping: 1 when nothing ever answered; 4 when the SLO was broken
+        let code = if state.any_violation() {
+            4
+        } else if state.nothing_answered() {
+            1
+        } else {
+            0
+        };
+        let crossed = match code {
+            4 => vec!["the SLO was broken".to_string()],
+            1 => vec!["nothing answered".to_string()],
+            _ => Vec::new(),
+        };
+        hooks_end(
+            &crate::ping::json_report(&state, &settings, interrupted),
+            &crossed,
+        );
+        (comparison, code)
     };
-    drop(state);
+    crate::webhook::flush().await;
     if code != 0 {
         std::process::exit(code);
     }

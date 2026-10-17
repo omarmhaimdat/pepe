@@ -113,6 +113,24 @@ pub struct Cli {
     #[arg(long, global = true, value_name = "FILE")]
     pub vars: Option<std::path::PathBuf>,
 
+    /// Send the run's verdict to this URL when it ends: a Slack, Discord,
+    /// Teams or Google Chat webhook gets a message laid out for it,
+    /// anything else the JSON report; repeat for more. ${NAME} is taken
+    /// from the environment. A [[webhook]] table in pepe.toml says more
+    #[arg(long, global = true, value_name = "URL")]
+    pub webhook: Vec<String>,
+
+    /// When the --webhook URLs are sent: start, progress, anomaly, end,
+    /// fail (the end when a --fail-if was crossed), comma-separated; end
+    /// by default
+    #[arg(long, global = true, value_name = "EVENTS")]
+    pub webhook_on: Option<String>,
+
+    /// Webhooks from a pepe.toml, the settings or the screens, when no
+    /// --webhook was given
+    #[arg(skip)]
+    pub webhooks: Vec<crate::webhook::Webhook>,
+
     /// Write the JSON report so far to this file every minute while the
     /// run goes, and once more when it ends, so a long run's numbers
     /// survive a crash or a lost terminal; it has a minute-by-minute
@@ -652,6 +670,16 @@ impl Cli {
                 ));
             }
         }
+        if let Some(on) = &self.webhook_on {
+            crate::webhook::Event::parse_list(on).map_err(|e| {
+                Error::raw(
+                    clap::error::ErrorKind::ValueValidation,
+                    format!("--webhook-on: {e}"),
+                )
+            })?;
+        }
+        crate::webhook::check(&self.hooks())
+            .map_err(|e| Error::raw(clap::error::ErrorKind::ValueValidation, e))?;
         if self.otlp.is_some() && self.command.is_some() {
             return Err(Error::raw(
                 clap::error::ErrorKind::ArgumentConflict,
@@ -877,12 +905,17 @@ impl Cli {
     pub fn command_line_masked(&self) -> String {
         let mut masked = self.clone();
         masked.headers = crate::guard::Plan::headers_of(&self.headers);
-        masked.command_line()
+        masked.command_line_of(true)
     }
 
     /// The pepe command that reproduces these settings, leaving out
     /// everything still at its default
     pub fn command_line(&self) -> String {
+        self.command_line_of(false)
+    }
+
+    /// `masked`: a webhook's URL, its secret, as `webhook::mask` shows it
+    fn command_line_of(&self, masked: bool) -> String {
         let defaults = Cli::parse_from(["pepe", "x"]);
         let mut parts = vec!["pepe".to_string()];
         match &self.command {
@@ -1002,6 +1035,29 @@ impl Cli {
         }
         if let Some(path) = &self.vars {
             flag("--vars", &path.display().to_string());
+        }
+        // A hook a file says more of than a URL is the file's to say
+        let hooks = self.hooks();
+        if hooks.iter().all(|h| {
+            h.headers.is_empty()
+                && h.body.is_none()
+                && h.every.is_none()
+                && h.mention.is_none()
+                && h.format == crate::webhook::Format::Auto
+        }) {
+            for hook in &hooks {
+                if masked {
+                    flag("--webhook", &hook.masked_url());
+                } else {
+                    flag("--webhook", &hook.url);
+                }
+            }
+            if let Some(first) = hooks.first() {
+                if !first.on.is_empty() && hooks.iter().all(|h| h.on == first.on) {
+                    let on: Vec<&str> = first.on.iter().map(|e| e.name()).collect();
+                    flag("--webhook-on", &on.join(","));
+                }
+            }
         }
         if let Some(rate) = self.rate {
             flag("--rate", &rate.to_string());
@@ -1137,6 +1193,29 @@ impl Cli {
                 index + 1
             ))
         })
+    }
+
+    /// The run's webhooks: those the screens' webhook page set, else those
+    /// of `--webhook`, else of a file
+    pub fn hooks(&self) -> Vec<crate::webhook::Webhook> {
+        if let Some(edited) = crate::webhook::edited() {
+            return edited;
+        }
+        if self.webhook.is_empty() {
+            return self.webhooks.clone();
+        }
+        let on = self
+            .webhook_on
+            .as_deref()
+            .and_then(|t| crate::webhook::Event::parse_list(t).ok())
+            .unwrap_or_default();
+        self.webhook
+            .iter()
+            .map(|url| crate::webhook::Webhook {
+                on: on.clone(),
+                ..crate::webhook::Webhook::to(url)
+            })
+            .collect()
     }
 
     /// The request as written, holes and all
