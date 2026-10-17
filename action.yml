@@ -138,7 +138,7 @@ runs:
     # matches whole, so the restore key finds the newest
     - name: Restore the baseline
       if: inputs.baseline == 'auto'
-      uses: actions/cache/restore@v4
+      uses: actions/cache/restore@v6
       with:
         path: ${{ runner.temp }}/pepe-baseline
         key: pepe-baseline-${{ github.base_ref || github.ref_name }}-${{ github.run_id }}
@@ -198,7 +198,7 @@ runs:
         mkdir -p "${RUNNER_TEMP}/pepe-baseline"
         cp "$REPORT" "${RUNNER_TEMP}/pepe-baseline/report.json"
     - if: inputs.baseline == 'auto' && github.event_name != 'pull_request' && github.event_name != 'pull_request_target'
-      uses: actions/cache/save@v4
+      uses: actions/cache/save@v6
       with:
         path: ${{ runner.temp }}/pepe-baseline
         key: pepe-baseline-${{ github.ref_name }}-${{ github.run_id }}
