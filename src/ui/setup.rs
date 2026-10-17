@@ -4,17 +4,14 @@
 
 use std::time::Duration;
 
-use crossterm::event::{
-    Event, EventStream, KeyCode, KeyEvent, KeyEventKind, KeyModifiers, MouseEvent,
-};
+use crossterm::event::{Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers, MouseEvent};
 use futures::StreamExt;
 use ratatui::{
-    backend::CrosstermBackend,
     layout::{Constraint, Layout, Rect},
     style::{Color, Modifier, Style, Stylize},
     text::{Line, Span},
     widgets::{Padding, Paragraph, Wrap},
-    Frame, Terminal,
+    Frame,
 };
 
 use super::kit::{
@@ -849,9 +846,9 @@ impl Setup {
     }
 
     pub async fn run(mut self) -> Result<SetupOutcome, Box<dyn std::error::Error>> {
-        let mut terminal = Terminal::new(CrosstermBackend::new(std::io::stdout()))?;
+        let mut terminal = crate::terminal::Screen::new()?;
         terminal.clear()?;
-        let mut events = EventStream::new();
+        let mut events = crate::terminal::input();
         let ctrl_c = tokio::signal::ctrl_c();
         tokio::pin!(ctrl_c);
 
@@ -859,6 +856,8 @@ impl Setup {
             terminal.draw(|f| theme::draw(f, |f| self.render(f)))?;
             let event = tokio::select! {
                 _ = &mut ctrl_c => return Ok(SetupOutcome::Quit),
+                // A frame skipped while the terminal was behind
+                _ = crate::terminal::caught_up(), if terminal.owes() => continue,
                 event = events.next() => event,
             };
             let action = match event {
@@ -1701,6 +1700,7 @@ mod tests {
     use super::*;
     use clap::Parser;
     use ratatui::backend::TestBackend;
+    use ratatui::Terminal;
 
     fn setup(argv: &[&str]) -> Setup {
         Setup::new(&Cli::parse_from(argv))

@@ -5,17 +5,14 @@ use std::io::Write as _;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use crossterm::event::{
-    Event, EventStream, KeyCode, KeyEvent, KeyEventKind, KeyModifiers, MouseEvent,
-};
+use crossterm::event::{Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers, MouseEvent};
 use futures::StreamExt;
 use ratatui::{
-    backend::CrosstermBackend,
     layout::{Alignment, Constraint, Flex, Layout, Rect},
     style::{Color, Style, Stylize},
     text::{Line, Span},
     widgets::{Block, BorderType, Clear, Paragraph},
-    Frame, Terminal,
+    Frame,
 };
 use tokio::time::MissedTickBehavior;
 
@@ -436,9 +433,9 @@ impl PingScreen {
     }
 
     pub async fn run(&mut self) -> Result<(), Box<dyn std::error::Error>> {
-        let mut terminal = Terminal::new(CrosstermBackend::new(std::io::stdout()))?;
+        let mut terminal = crate::terminal::Screen::new()?;
         terminal.clear()?;
-        let mut events = EventStream::new();
+        let mut events = crate::terminal::input();
         let mut frame = tokio::time::interval(FRAME);
         frame.set_missed_tick_behavior(MissedTickBehavior::Skip);
         let ctrl_c = tokio::signal::ctrl_c();
@@ -456,6 +453,8 @@ impl PingScreen {
             terminal.draw(|f| theme::draw(f, |f| self.render(f)))?;
             tokio::select! {
                 _ = &mut ctrl_c => return Ok(()),
+                // A frame skipped while the terminal was behind
+                _ = crate::terminal::caught_up(), if terminal.owes() => {}
                 _ = frame.tick() => {}
                 event = events.next() => match event {
                     Some(Ok(Event::Key(key))) if key.kind == KeyEventKind::Press => {
@@ -1620,6 +1619,7 @@ mod tests {
     use crate::ping::{self, Settings, Slo, Target};
     use clap::Parser;
     use ratatui::backend::TestBackend;
+    use ratatui::Terminal;
 
     fn settings() -> Settings {
         Settings {

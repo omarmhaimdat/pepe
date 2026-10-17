@@ -6,17 +6,14 @@
 
 use std::time::{Instant, SystemTime};
 
-use crossterm::event::{
-    Event, EventStream, KeyCode, KeyEvent, KeyEventKind, KeyModifiers, MouseEvent,
-};
+use crossterm::event::{Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers, MouseEvent};
 use futures::StreamExt;
 use ratatui::{
-    backend::CrosstermBackend,
     layout::{Constraint, Layout, Rect},
     style::{Color, Style, Stylize},
     text::{Line, Span},
     widgets::{Padding, Paragraph, Wrap},
-    Frame, Terminal,
+    Frame,
 };
 
 use super::history::{HistoryScreen, Recorded};
@@ -194,9 +191,9 @@ impl LibraryScreen {
     }
 
     pub async fn run(mut self) -> Result<LibraryOutcome, Box<dyn std::error::Error>> {
-        let mut terminal = Terminal::new(CrosstermBackend::new(std::io::stdout()))?;
+        let mut terminal = crate::terminal::Screen::new()?;
         terminal.clear()?;
-        let mut events = EventStream::new();
+        let mut events = crate::terminal::input();
         let ctrl_c = tokio::signal::ctrl_c();
         tokio::pin!(ctrl_c);
 
@@ -204,6 +201,8 @@ impl LibraryScreen {
             terminal.draw(|f| theme::draw(f, |f| self.render(f)))?;
             let event = tokio::select! {
                 _ = &mut ctrl_c => return Ok(LibraryOutcome::Quit),
+                // A frame skipped while the terminal was behind
+                _ = crate::terminal::caught_up(), if terminal.owes() => continue,
                 event = events.next() => event,
             };
             let action = match event {
@@ -600,6 +599,7 @@ mod tests {
     use super::*;
     use clap::Parser;
     use ratatui::backend::TestBackend;
+    use ratatui::Terminal;
     use std::time::Duration;
 
     fn entry(name: &str, argv: &[&str]) -> Entry {
