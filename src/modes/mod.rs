@@ -281,7 +281,7 @@ pub(crate) async fn headless_dashboard(
         None
     };
     say_if_newer(check).await;
-    exit_if_failed(args, dashboard.metrics());
+    exit_if_failed(args, dashboard.metrics()).await;
     finish_rerun(args, comparison.as_ref());
     Ok(())
 }
@@ -310,7 +310,7 @@ pub(crate) async fn run_headless(
             None
         };
         say_if_newer(check).await;
-        exit_if_failed(args, &ramp.total);
+        exit_if_failed(args, &ramp.total).await;
         finish_rerun(args, comparison.as_ref());
         return Ok(());
     }
@@ -319,10 +319,10 @@ pub(crate) async fn run_headless(
     headless_dashboard(args, dashboard, load).await
 }
 
-/// `--fail-if`: say which conditions the run crossed and end with exit
-/// code 4; nothing happens when none was, or none was given
-pub(crate) fn exit_if_failed(args: &Cli, metrics: &Metrics) {
-    let mut failed = false;
+/// Each `--fail-if` the run crossed, and what the measure was:
+/// "p99 > 300ms: p99 was 412ms"
+pub(crate) fn crossed(args: &Cli, metrics: &Metrics) -> Vec<String> {
+    let mut out = Vec::new();
     for text in &args.fail_if {
         let Ok(condition) = crate::ramp::Condition::parse(text) else {
             continue;
@@ -330,17 +330,100 @@ pub(crate) fn exit_if_failed(args: &Cli, metrics: &Metrics) {
         if !condition.crossed(metrics) {
             continue;
         }
-        failed = true;
         let was = match condition.measure {
             crate::ramp::Measure::Latency(p) => {
                 format!("p{p} was {}", ui::format::latency(metrics.percentile(p)))
             }
             crate::ramp::Measure::Errors => format!("errors were {:.1}%", metrics.error_rate()),
         };
-        eprintln!("✖ --fail-if {}: {was}", condition.text);
+        out.push(format!("{}: {was}", condition.text));
     }
-    if failed {
+    out
+}
+
+/// `--fail-if`: say which conditions the run crossed and end with exit
+/// code 4; nothing happens when none was, or none was given. The
+/// webhooks' last messages go out first.
+pub(crate) async fn exit_if_failed(args: &Cli, metrics: &Metrics) {
+    crate::webhook::flush().await;
+    let crossed = crossed(args, metrics);
+    for text in &crossed {
+        eprintln!("✖ --fail-if {text}");
+    }
+    if !crossed.is_empty() {
         std::process::exit(4);
+    }
+}
+
+/// What the webhooks call this run
+pub(crate) fn hook_run(args: &Cli) -> crate::webhook::Run {
+    let mut shown = args.clone();
+    // A flow's dashboard shows FLOW for its method; the command has none
+    let flow = args.method == "FLOW";
+    if flow {
+        shown.method = "GET".into();
+    }
+    let (mode, load) = match &args.command {
+        Some(cli::Command::Ramp(r)) => (
+            "ramp",
+            format!(
+                "concurrency {} to {} by {}, each step held {}",
+                r.from, r.to, r.step, r.every
+            ),
+        ),
+        Some(cli::Command::Ping(p)) => ("ping", format!("a ping every {}", p.every)),
+        Some(cli::Command::Api(_)) => ("api", guard::Plan::load_of(args, "requests")),
+        Some(cli::Command::Replay(_)) => ("replay", guard::Plan::load_of(args, "requests")),
+        Some(cli::Command::Flow(_)) => ("flow", guard::Plan::load_of(args, "chains")),
+        _ => ("run", guard::Plan::load_of(args, "requests")),
+    };
+    let target = match &args.command {
+        Some(cli::Command::Ping(p)) => p.targets.join(", "),
+        _ if flow => args.url.clone(),
+        _ => args.target_label(),
+    };
+    crate::webhook::Run {
+        mode: mode.into(),
+        target,
+        test: store::test_of(args),
+        command: shown.command_line_masked(),
+        load,
+    }
+}
+
+/// The run's numbers so far, for a webhook's progress
+pub(crate) fn hook_progress(
+    metrics: &Metrics,
+    elapsed: std::time::Duration,
+    plan: Plan,
+) -> crate::webhook::Progress {
+    let done = match plan {
+        Plan::Count(0) => None,
+        Plan::Count(n) => Some(metrics.total as f64 / n as f64),
+        Plan::Duration(d) if d.is_zero() || d >= UNTIL_STOPPED => None,
+        Plan::Duration(d) => Some(elapsed.as_secs_f64() / d.as_secs_f64()),
+    };
+    crate::webhook::Progress {
+        elapsed,
+        done: done.map(|d| d.clamp(0.0, 1.0)),
+        requests: metrics.total,
+        failed: metrics.total - metrics.success,
+        rps: metrics.total as f64 / elapsed.as_secs_f64().max(0.001),
+        p50: metrics.percentile(50.0),
+        p99: metrics.percentile(99.0),
+    }
+}
+
+/// A ramp's numbers so far: all its steps' requests, through its length
+pub(crate) fn ramp_progress(ramp: &Ramp, now: Instant) -> crate::webhook::Progress {
+    let length = ramp.plan.every * ramp.plan.levels.len() as u32;
+    hook_progress(&ramp.total, ramp.elapsed(now), Plan::Duration(length))
+}
+
+/// The run's end to the webhooks: its report, and what made it fail
+pub(crate) fn hooks_end(report: &impl serde::Serialize, crossed: &[String]) {
+    if let Ok(report) = serde_json::to_value(report) {
+        crate::webhook::end(&report, crossed);
     }
 }
 

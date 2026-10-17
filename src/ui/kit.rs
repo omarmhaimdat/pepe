@@ -100,21 +100,30 @@ pub(super) fn fitting(
 
 /// A footer narrower than this keeps its whole width for the screen's keys
 const ROOM_FOR_SETTINGS: u16 = 56;
+/// And narrower than this has no room for the webhook page's key
+const ROOM_FOR_WEBHOOKS: u16 = 96;
 
 /// The footer drawn at `area`: the key chips that fit, each clickable as
 /// its key, and at the right-hand end the key that opens the settings.
 /// Every screen's footer goes through here.
 pub(super) fn footer(f: &mut Frame, area: Rect, pairs: &[(&'static str, &'static str)]) {
-    // ` F2 ` and ` settings`, with a space between it and the keys
-    let (key, action) = ("F2", "settings");
-    let settings = (key.len() + action.len() + 3) as u16;
-    let keys = if area.width >= ROOM_FOR_SETTINGS {
+    // ` F2 ` and ` settings`, with a space between it and the keys; and
+    // before it ` F3 ` and ` webhooks` when there's room
+    let mut keys = area;
+    for (key, action, code, room) in [
+        ("F2", "settings", 2, ROOM_FOR_SETTINGS),
+        ("F3", "webhooks", 3, ROOM_FOR_WEBHOOKS),
+    ] {
+        if area.width < room {
+            break;
+        }
+        let width = (key.len() + action.len() + 3) as u16;
         let at = Rect {
-            x: area.right() - settings,
-            width: settings,
-            ..area
+            x: keys.right() - width,
+            width,
+            ..keys
         };
-        hit(at, Hit::Key(KeyEvent::from(KeyCode::F(2))));
+        hit(at, Hit::Key(KeyEvent::from(KeyCode::F(code))));
         f.render_widget(
             Paragraph::new(Line::from(vec![
                 Span::styled(
@@ -125,13 +134,11 @@ pub(super) fn footer(f: &mut Frame, area: Rect, pairs: &[(&'static str, &'static
             ])),
             at,
         );
-        Rect {
-            width: area.width - settings - 1,
-            ..area
-        }
-    } else {
-        area
-    };
+        keys = Rect {
+            width: keys.width - width - 1,
+            ..keys
+        };
+    }
     let shown = fitting(pairs, keys.width);
     let mut x = keys.x;
     for (key, action) in &shown {
@@ -337,6 +344,7 @@ pub(super) fn help(f: &mut Frame, area: Rect, rows: &[(&str, &str)], notes: &[St
     // last two, which close the help and leave
     let mut rows = rows.to_vec();
     rows.insert(rows.len().saturating_sub(2), super::settings::HELP);
+    rows.insert(rows.len().saturating_sub(2), super::hooks::HELP);
     let mut lines: Vec<Line> = rows
         .iter()
         .map(|(key, action)| {

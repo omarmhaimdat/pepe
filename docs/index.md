@@ -25,6 +25,7 @@ pepe https://example.com
 - [Compare](compare.md) — `pepe compare`: what moved between two reports, as a verdict, a badge and a card.
 - [Output and exit codes](output.md) — The report in the shell, JSON and its schema, `--fail-if`, Prometheus metrics, exit codes.
 - [CI and Docker](ci.md) — The GitHub Action, a pull request held against its base branch, Docker, soak runs.
+- [Webhooks](webhooks.md) — The verdict, progress and anomalies in Slack, Discord, Teams, Google Chat or any URL.
 - [Agents and scripts](agents.md) — What a program needs to know to call pepe and read the answer.
 - [Command reference](reference.md) — Every command and flag, as `--help` prints them.
 :::

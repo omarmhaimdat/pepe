@@ -15,6 +15,7 @@ pub(crate) async fn climb(
         false,
     )?;
     let mut ramp = Ramp::new(plan, Instant::now());
+    crate::webhook::begin(hook_run(args), &args.hooks());
     let mut clock = tokio::time::interval(std::time::Duration::from_millis(50));
     let mut pump = tokio::time::interval(PUMP);
     while ramp.end.is_none() {
@@ -24,6 +25,7 @@ pub(crate) async fn climb(
                 if !load.drain(|stat| ramp.record(&stat, now)) {
                     break;
                 }
+                crate::webhook::progress(|| ramp_progress(&ramp, now));
             }
             _ = clock.tick() => {
                 if let Tick::Level(level) = ramp.tick(Instant::now()) {
@@ -36,6 +38,9 @@ pub(crate) async fn climb(
         }
     }
     load.stop();
+    let mut report = crate::ramp::json(&ramp);
+    crate::store::stamp_test(&mut report, args);
+    hooks_end(&report, &crossed(args, &ramp.total));
     Ok((ramp, load))
 }
 
@@ -65,7 +70,7 @@ pub(crate) async fn run_ramp_json(
         Some(comparison) => println!("{}", comparison.to_json()?),
         None => println!("{json}"),
     }
-    exit_if_failed(args, &ramp.total);
+    exit_if_failed(args, &ramp.total).await;
     finish_rerun(args, comparison.as_ref());
     Ok(())
 }

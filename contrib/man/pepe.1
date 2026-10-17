@@ -8,7 +8,7 @@ pepe \- HTTP load generator
 .ie \n(.g .ds Aq \(aq
 .el .ds Aq '
 .SH SYNOPSIS
-\fBpepe\fR [\fB\-h\fR|\fB\-\-help\fR] [\fB\-n\fR|\fB\-\-number\fR] [\fB\-c\fR|\fB\-\-concurrency\fR] [\fB\-z\fR|\fB\-\-duration\fR] [\fB\-\-curl\fR] [\fB\-m\fR|\fB\-\-method\fR] [\fB\-H\fR|\fB\-\-headers\fR] [\fB\-t\fR|\fB\-\-timeout\fR] [\fB\-\-warmup\fR] [\fB\-\-threads\fR] [\fB\-\-rate\fR] [\fB\-d\fR|\fB\-\-body\fR] [\fB\-u\fR|\fB\-\-user\-agent\fR] [\fB\-p\fR|\fB\-\-proxy\fR] [\fB\-k\fR|\fB\-\-insecure\fR] [\fB\-\-disable\-compression\fR] [\fB\-\-disable\-keepalive\fR] [\fB\-\-disable\-redirects\fR] [\fB\-\-json\fR] [\fB\-\-trace\-header\fR] [\fB\-\-vars\fR] [\fB\-\-snapshot\fR] [\fB\-\-allow\-host\fR] [\fB\-\-max\-requests\fR] [\fB\-\-max\-rate\fR] [\fB\-\-max\-concurrency\fR] [\fB\-\-dry\-run\fR] [\fB\-\-fail\-if\fR] [\fB\-\-metrics\fR] [\fB\-\-otlp\fR] [\fB\-i\fR|\fB\-\-setup\fR] [\fB\-\-config\fR] [\fB\-\-write\-config\fR] [\fB\-\-load\fR] [\fB\-\-keep\fR] [\fB\-\-record\fR] [\fB\-V\fR|\fB\-\-version\fR] [\fIURL\fR] [\fIARGS\fR] [\fIsubcommands\fR]
+\fBpepe\fR [\fB\-h\fR|\fB\-\-help\fR] [\fB\-n\fR|\fB\-\-number\fR] [\fB\-c\fR|\fB\-\-concurrency\fR] [\fB\-z\fR|\fB\-\-duration\fR] [\fB\-\-curl\fR] [\fB\-m\fR|\fB\-\-method\fR] [\fB\-H\fR|\fB\-\-headers\fR] [\fB\-t\fR|\fB\-\-timeout\fR] [\fB\-\-warmup\fR] [\fB\-\-threads\fR] [\fB\-\-rate\fR] [\fB\-d\fR|\fB\-\-body\fR] [\fB\-u\fR|\fB\-\-user\-agent\fR] [\fB\-p\fR|\fB\-\-proxy\fR] [\fB\-k\fR|\fB\-\-insecure\fR] [\fB\-\-disable\-compression\fR] [\fB\-\-disable\-keepalive\fR] [\fB\-\-disable\-redirects\fR] [\fB\-\-json\fR] [\fB\-\-trace\-header\fR] [\fB\-\-vars\fR] [\fB\-\-webhook\fR] [\fB\-\-webhook\-on\fR] [\fB\-\-snapshot\fR] [\fB\-\-allow\-host\fR] [\fB\-\-max\-requests\fR] [\fB\-\-max\-rate\fR] [\fB\-\-max\-concurrency\fR] [\fB\-\-dry\-run\fR] [\fB\-\-fail\-if\fR] [\fB\-\-metrics\fR] [\fB\-\-otlp\fR] [\fB\-i\fR|\fB\-\-setup\fR] [\fB\-\-config\fR] [\fB\-\-write\-config\fR] [\fB\-\-load\fR] [\fB\-\-keep\fR] [\fB\-\-record\fR] [\fB\-V\fR|\fB\-\-version\fR] [\fIURL\fR] [\fIARGS\fR] [\fIsubcommands\fR]
 .ie \n(.g .ds Aq \(aq
 .el .ds Aq '
 .SH DESCRIPTION
@@ -79,6 +79,12 @@ Response header holding the request id to show for the slowest requests and in t
 .TP
 \fB\-\-vars\fR \fI<FILE>\fR
 Fill the {{holes}} in the URL, headers and body from this CSV file, whose first line names them: each request takes the next row, and the rows go round again. In a flow, each chain starts with the next row\*(Aqs values
+.TP
+\fB\-\-webhook\fR \fI<URL>\fR
+Send the run\*(Aqs verdict to this URL when it ends: a Slack, Discord, Teams or Google Chat webhook gets a message laid out for it, anything else the JSON report; repeat for more. ${NAME} is taken from the environment. A [[webhook]] table in pepe.toml says more
+.TP
+\fB\-\-webhook\-on\fR \fI<EVENTS>\fR
+When the \-\-webhook URLs are sent: start, progress, anomaly, end, fail (the end when a \-\-fail\-if was crossed), comma\-separated; end by default
 .TP
 \fB\-\-snapshot\fR \fI<FILE>\fR
 Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run\*(Aqs numbers survive a crash or a lost terminal; it has a minute\-by\-minute timeline of the whole run

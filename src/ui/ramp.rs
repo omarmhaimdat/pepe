@@ -312,6 +312,7 @@ impl RampScreen {
         &mut self,
         load: &mut LoadHandle,
     ) -> Result<Outcome, Box<dyn std::error::Error>> {
+        crate::webhook::begin(crate::modes::hook_run(&self.cli), &self.cli.hooks());
         let mut terminal = crate::terminal::Screen::new()?;
         terminal.clear()?;
         let mut events = crate::terminal::input();
@@ -322,7 +323,14 @@ impl RampScreen {
 
         let mut pumps = 0u64;
         let mut dirty = true;
+        // The end goes to the webhooks once, however the ramp ended
+        let mut said_end = false;
         loop {
+            if self.ramp.end.is_some() && !said_end {
+                said_end = true;
+                let crossed = crate::modes::crossed(&self.cli, &self.ramp.total);
+                crate::modes::hooks_end(&self.result_json(), &crossed);
+            }
             if dirty {
                 let now = Instant::now();
                 terminal.draw(|f| theme::draw(f, |f| self.render(f, now)))?;
@@ -334,6 +342,8 @@ impl RampScreen {
                 _ = crate::terminal::caught_up(), if terminal.owes() => dirty = true,
                 _ = pump.tick(), if self.ramp.end.is_none() => {
                     self.pump(load);
+                    let now = Instant::now();
+                    crate::webhook::progress(|| crate::modes::ramp_progress(&self.ramp, now));
                     pumps += 1;
                     dirty |= pumps % PUMPS_PER_FRAME == 0 || self.ramp.end.is_some();
                 }
@@ -344,6 +354,10 @@ impl RampScreen {
                                 self.key(key, Instant::now())
                             }
                             Event::Mouse(mouse) => self.mouse(mouse, Instant::now()),
+                            Event::Paste(text) => {
+                                super::settings::paste(&text);
+                                Effect::None
+                            }
                             _ => Effect::None,
                         };
                         match effect {

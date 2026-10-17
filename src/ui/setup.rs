@@ -191,6 +191,8 @@ pub struct Setup {
 
 impl Setup {
     pub fn new(cli: &Cli) -> Self {
+        // F3 on the form edits the hooks of the run it starts
+        crate::webhook::seed(&cli.hooks());
         let ramp = match &cli.command {
             Some(Command::Ramp(ramp)) => ramp.clone(),
             _ => RampArgs::default(),

@@ -334,6 +334,18 @@ impl Plan {
         if let Some(threads) = &cli.threads {
             out.push(format!("threads {threads:?}").to_lowercase());
         }
+        for hook in cli.hooks() {
+            let on: Vec<&str> = hook.events().iter().map(|e| e.name()).collect();
+            let format = hook
+                .format
+                .of(&hook.resolve().map(|_| hook.url.clone()).unwrap_or_default());
+            out.push(format!(
+                "webhook {} ({}) on {}, not sent in a dry run",
+                hook.masked_url(),
+                format.name(),
+                on.join(", ")
+            ));
+        }
         if let Some(path) = &cli.vars {
             let unit = match cli.command {
                 Some(crate::cli::Command::Flow(_)) => "chain",
