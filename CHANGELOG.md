@@ -6,6 +6,114 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+## [0.44.0](https://github.com/omarmhaimdat/pepe/compare/v0.43.1...v0.44.0) - 2026-10-17
+
+### Added
+
+- *(vars)* --vars users.csv fills the {{holes}} in a request, a row a request ([#197](https://github.com/omarmhaimdat/pepe/pull/197))
+
+  The data-driven requests from the roadmap (section 4), and the last 1.0
+  item that could shape `pepe.toml`'s keys.
+
+  ```bash
+  pepe -z 30s -c 20 --vars users.csv \
+    -H 'Authorization: Bearer {{token}}' -m POST -d '{"email": "{{email}}"}' \
+    'https://api.example.com/users/{{id}}'
+  pepe flow checkout.toml -z 1m --vars users.csv
+  ```
+
+  ## What it does
+
+  - `{{name}}` holes in the URL (host included), headers and body take
+  their values from a CSV file whose first line names them (RFC 4180
+  quoting, a BOM and CRLF are fine).
+  - **Run and ramp**: one request per row, in the file's order, round
+  again.
+  - **Flow**: each chain starts with the next row's values, over `[vars]`;
+  captures go over both. Columns count as known when the flow is checked.
+  - **Checked before anything is sent**: every hole must be a column, and
+  the request must have at least one hole (both are errors that name the
+  cause). Every row's host is held to `--allow-host`. `--dry-run` says how
+  many rows there are and what the columns are. `api`, `replay` and `ping`
+  refuse `--vars`.
+  - **Config, saved tests and MCP**: `vars = "users.csv"` in `pepe.toml`
+  (and so in `--keep` tests and `--write-config`); a `vars` argument on
+  the MCP `run`, `ramp` and `flow` tools. It is not taken from the
+  machine's `[defaults]`.
+  - Without `--vars`, nothing changes: `{{` in a URL is sent as written.
+
+  ## Cost
+
+  Each row becomes a prepared request before the run, on the direct path
+  like any target, so sending is unchanged (bench server, 200k requests at
+  64, three runs each, CPU ms per 1k):
+
+  | | CPU ms / 1k | Peak RSS |
+  | --- | --- | --- |
+  | master | 6.10 – 6.45 | 10.1 – 10.6 MB |
+  | this branch, no `--vars` | 6.20 – 6.30 | 9.6 – 10.2 MB |
+  | `--vars` 10,000 rows | 6.25 – 6.40 | 18.3 – 18.6 MB |
+
+  Memory is about 1.6 KB per row (190 MB for 100k rows, 1.6 GB for a
+  million, which is the cap). A million rows take about 2 s to prepare.
+  Two fixes keep it at that size:
+  - Each row keeps only the headers that have holes.
+  - Targets with equal weights are sent in turn. The weighted round-robin
+  cost the square of their number to compute.
+
+  The schedule index went from `u16` to `u32`, so more than 65,535 targets
+  now fit. Recorded in `bench/README.md`.
+
+  ## 1.0
+
+  This adds a flag (`--vars`), a `pepe.toml` key (`vars`) and an MCP
+  argument. That restarts the month-without-a-flag-change clock. It is
+  also the 1.0 prerequisite ticked in ROADMAP.md. The report schema is
+  unchanged: the command line the report already records includes
+  `--vars`.
+
+  ## Tests
+
+  - CSV parsing and error locations.
+  - Filling a request row by row.
+  - A live run checked request by request: rows in order, templated and
+  static headers, body.
+  - Validation, including the modes that refuse `--vars`.
+  - The config round-trip.
+  - Checked by hand: flows, ramps, guardrails, dry runs.
+
+  `site/docs/*.html` is rebuilt here from master's generator. It will
+  conflict with omarmhaimdat/pepe#196; rebuild with `python3
+  site/build-docs.py` after whichever lands second.
+
+
+
+### Other
+
+- *(site)* titles, descriptions and structured data a search engine reads, a sitemap and robots.txt ([#196](https://github.com/omarmhaimdat/pepe/pull/196))
+
+  The documentation site and the install page, made easier to find.
+
+  - **Titles**: each docs page's `<title>` carries the words someone would
+  search for (\`pepe ping · HTTP ping with latency split by phase\`); the
+  sidebar keeps the short names.
+  - **Descriptions**: the page's opening, cut at a sentence end near 160
+  characters instead of mid-word at 300.
+  - **Cards**: Open Graph (`og:url`, `og:site_name`, image size and alt)
+  and Twitter large-image cards on every page.
+  - **Structured data**: `TechArticle` and `BreadcrumbList` JSON-LD on
+  docs pages; the install page's `SoftwareApplication` now names the npm
+  and PyPI packages, the install and docs pages, plus a `WebSite` entry.
+  - **Sitemap and robots.txt**: `build-docs.py` writes `site/sitemap.xml`
+  (no dates, so it isn't stale after every merge); `robots.txt` points to
+  it; `publish.sh` uploads both, and `publish-site.yml` checks they answer
+  200 after publishing.
+
+  No change to the binary, flags or reports.
+
+  `python3 site/build-docs.py --check` passes.
+
+
 ## [0.43.1](https://github.com/omarmhaimdat/pepe/compare/v0.43.0...v0.43.1) - 2026-10-17
 
 ### Fixed
