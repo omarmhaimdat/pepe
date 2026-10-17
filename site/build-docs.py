@@ -7,7 +7,8 @@ quotes, and two small blocks of its own: `:::cards` and `:::note`), and a
 converter for that is shorter than a dependency. Every page gets the same
 frame (site/docs/docs.css, docs.js): a top bar with search and a theme
 switch, a grouped sidebar, an "on this page" column, copy buttons on code,
-and previous/next links. A search index is written beside the pages.
+and previous/next links. A search index is written beside the pages, and
+a sitemap at the site's root.
 
     python3 site/build-docs.py           # write site/docs/
     python3 site/build-docs.py --check   # exit 1 when site/docs/ is stale
@@ -48,6 +49,30 @@ GROUPS = [
     ("Reference", [("reference", "Command reference"), ("benchmarks", "Benchmarks")]),
 ]
 PAGES = [page for _, pages in GROUPS for page in pages]
+
+# What the browser tab and a search result say, with the words someone
+# would search for; the sidebar keeps the short name above.
+TITLES = {
+    "index": "pepe documentation · HTTP load testing and latency tools",
+    "install": "Install pepe · macOS, Linux, Windows, Homebrew, Docker, Nix",
+    "load-test": "Load testing an HTTP endpoint with pepe",
+    "dashboard": "The live load-test dashboard · pepe",
+    "ping": "pepe ping · HTTP ping with latency split by phase",
+    "ramp": "pepe ramp · find an API's capacity step by step",
+    "api": "pepe api · load-test every endpoint of an OpenAPI spec",
+    "flow": "pepe flow · chained requests, each step fed by the last",
+    "replay": "pepe replay · an access log replayed as real traffic",
+    "logs": "pepe logs · a live dashboard for nginx access and error logs",
+    "compare": "pepe compare · what changed between two load tests",
+    "output": "Output, JSON report and exit codes · pepe",
+    "ci": "pepe in CI · GitHub Action, Docker and --fail-if thresholds",
+    "agents": "pepe for agents and scripts · MCP server and guardrails",
+    "reference": "pepe command reference · every flag and subcommand",
+    "benchmarks": "Benchmarks · pepe against wrk, oha, vegeta and k6",
+}
+HOME = "https://pepe.mhaimdat.com/"
+OG_IMAGE = HOME + "img/og.png"
+AUTHOR = {"@type": "Person", "name": "Omar Mhaimdat", "url": "https://github.com/omarmhaimdat"}
 
 INLINE_CODE = re.compile(r"`([^`]+)`")
 BOLD = re.compile(r"\*\*(.+?)\*\*")
@@ -276,12 +301,30 @@ def first_paragraph(text):
         for line in m.group(1).split("\n"):
             line = line.strip()
             if line and not line.startswith(("#", "!")) and LINK.sub("", line).strip():
-                return plain(line)[:300]
+                return plain(line)
     for block in text.split("\n\n"):
         block = block.strip()
         if block and not block.startswith(("#", "```", "|", "-", "!", ">", ":::")):
-            return plain(block).replace("\n", " ")[:300]
+            return plain(block).replace("\n", " ")
     return ""
+
+
+def description(text, limit=160):
+    """The page's opening, cut at the end of a sentence to about what a
+    search result shows, never in the middle of a word."""
+    paragraph = re.sub(r"\s+", " ", first_paragraph(text)).strip()
+    out = ""
+    for sentence in re.split(r"(?<=[.!?])\s+", paragraph):
+        if out and len(out) + 1 + len(sentence) > limit:
+            # A short opening says too little on its own: take the start
+            # of the next sentence too
+            if len(out) < limit // 2:
+                out = out + " " + sentence
+            break
+        out = (out + " " + sentence).strip()
+    if len(out) > limit:
+        out = out[:limit - 1].rsplit(" ", 1)[0].rstrip(",;:") + "…"
+    return out
 
 
 def sidebar(stem):
@@ -307,12 +350,38 @@ def page(stem, title, body, headings, description):
         if level <= 3
     )
     canonical = SITE if stem == "index" else SITE + stem + ".html"
+    full_title = TITLES.get(stem, title + " · pepe")
+    crumbs = [("pepe", HOME), ("Docs", SITE)] + ([] if stem == "index" else [(title, canonical)])
+    data = [
+        {
+            "@context": "https://schema.org",
+            "@type": "TechArticle",
+            "headline": title if stem != "index" else "pepe documentation",
+            "description": description,
+            "url": canonical,
+            "image": OG_IMAGE,
+            "inLanguage": "en",
+            "author": AUTHOR,
+            "publisher": AUTHOR,
+            "isPartOf": {"@type": "WebSite", "name": "pepe", "url": HOME},
+            "about": {"@type": "SoftwareApplication", "name": "pepe", "url": HOME},
+        },
+        {
+            "@context": "https://schema.org",
+            "@type": "BreadcrumbList",
+            "itemListElement": [
+                {"@type": "ListItem", "position": n + 1, "name": name, "item": url}
+                for n, (name, url) in enumerate(crumbs)
+            ],
+        },
+    ]
+    ld = json.dumps(data, ensure_ascii=False, separators=(",", ":")).replace("</", "<\\/")
     return f"""<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{html.escape(title)} · pepe</title>
+<title>{html.escape(full_title)}</title>
 <meta name="description" content="{html.escape(description, quote=True)}">
 <link rel="canonical" href="{canonical}">
 <link rel="icon" href="../assets/logo.svg" type="image/svg+xml">
@@ -320,9 +389,19 @@ def page(stem, title, body, headings, description):
 <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#121010" media="(prefers-color-scheme: dark)">
 <meta property="og:type" content="article">
-<meta property="og:title" content="{html.escape(title, quote=True)} · pepe">
+<meta property="og:site_name" content="pepe">
+<meta property="og:url" content="{canonical}">
+<meta property="og:title" content="{html.escape(full_title, quote=True)}">
 <meta property="og:description" content="{html.escape(description, quote=True)}">
-<meta property="og:image" content="https://pepe.mhaimdat.com/img/og.png">
+<meta property="og:image" content="{OG_IMAGE}">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="pepe: an HTTP load generator with a live terminal dashboard">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="{html.escape(full_title, quote=True)}">
+<meta name="twitter:description" content="{html.escape(description, quote=True)}">
+<meta name="twitter:image" content="{OG_IMAGE}">
+<script type="application/ld+json">{ld}</script>
 <link rel="stylesheet" href="docs.css">
 <script>try{{var t=localStorage.getItem('pepe-theme');if(t)document.documentElement.dataset.theme=t;}}catch(e){{}}</script>
 </head>
@@ -357,11 +436,24 @@ def build():
         with open(path, encoding="utf-8") as f:
             text = f.read()
         body, headings, sections = convert(text)
-        pages[stem + ".html"] = page(stem, title, body, headings, first_paragraph(text))
+        pages[stem + ".html"] = page(stem, title, body, headings, description(text))
         for s in sections:
             index.append({"p": stem + ".html", "n": title, "t": s["t"], "a": s["a"], "x": s["x"]})
     pages["search.json"] = json.dumps(index, ensure_ascii=False, separators=(",", ":")) + "\n"
+    pages["../sitemap.xml"] = sitemap()
     return pages
+
+
+def sitemap():
+    """Every page the site serves, for search engines; site/robots.txt
+    points here. No dates: a date written at build time would make the
+    committed file stale on every merge."""
+    urls = [HOME, SITE] + [SITE + stem + ".html" for stem, _ in PAGES if stem != "index"]
+    out = ['<?xml version="1.0" encoding="UTF-8"?>',
+           '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">']
+    out += ["  <url><loc>%s</loc></url>" % html.escape(u) for u in urls]
+    out.append("</urlset>")
+    return "\n".join(out) + "\n"
 
 
 def main():
@@ -370,7 +462,7 @@ def main():
     stale = []
     os.makedirs(OUT, exist_ok=True)
     for name, content in pages.items():
-        path = os.path.join(OUT, name)
+        path = os.path.normpath(os.path.join(OUT, name))
         current = None
         if os.path.exists(path):
             with open(path, encoding="utf-8") as f:
