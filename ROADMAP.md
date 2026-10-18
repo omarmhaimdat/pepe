@@ -163,9 +163,10 @@ Get the results where they're needed.
 - [x] **Slack, live** (M). One message edited in place as the run
       goes, anomalies in its thread, `pepe slack connect` from the
       terminal and `S` on the webhook page — next release
-- [ ] **Slack, interactive** (M). Buttons to stop, rerun and
-      edit-and-rerun from the channel (Socket Mode, saved tests only,
-      allowed users).
+- [x] **Slack, interactive** (M). Stop, Run again, Edit and run and
+      History on the messages, and `/pepe`, answered by `pepe slack
+      serve` over Socket Mode, saved tests only, allowed users — next
+      release
 - [ ] **HTML report** (M). One self-contained file with the charts, for
       people who weren't at the terminal.
 

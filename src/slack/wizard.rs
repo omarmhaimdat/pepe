@@ -91,7 +91,14 @@ struct Wizard {
 
 impl Wizard {
     fn new() -> Wizard {
-        let titles = ["Create the app", "Bot token", "Channel", "Test message"];
+        let titles = [
+            "Create the app",
+            "Bot token",
+            "Channel",
+            "Test message",
+            "Buttons",
+            "Who may press them",
+        ];
         Wizard {
             steps: titles
                 .iter()
@@ -133,7 +140,7 @@ impl Wizard {
                 ),
                 State::Done(what) => (good("✓"), step.title.to_string(), faint(what)),
             };
-            let pad = " ".repeat(18usize.saturating_sub(step.title.chars().count()));
+            let pad = " ".repeat(21usize.saturating_sub(step.title.chars().count()));
             lines.push(format!("  {mark} {n}  {title}{pad}{detail}"));
             if matches!(step.state, State::Active) {
                 lines.extend(self.below.iter().map(|l| format!("        {l}")));
@@ -200,24 +207,42 @@ impl Wizard {
 
     /// The token, typed or pasted, shown as dots
     async fn token(&mut self) -> Result<String, String> {
-        let mut token = String::new();
+        let hint = [faint(
+            "the Bot User OAuth Token (xoxb-…), under OAuth & Permissions after Install",
+        )];
+        self.typed(true, &hint, false).await
+    }
+
+    /// A line typed or pasted: as dots when `secret`; `hint` under it; an
+    /// empty one only when `empty` lets it be
+    async fn typed(
+        &mut self,
+        secret: bool,
+        hint: &[String],
+        empty: bool,
+    ) -> Result<String, String> {
+        let mut text = String::new();
         loop {
-            let dots = "•".repeat(token.chars().count().min(40));
-            self.below = vec![
-                format!("{}{}", dots, ember("▏")),
-                faint("the Bot User OAuth Token (xoxb-…), under OAuth & Permissions after Install"),
-            ];
+            let shown = if secret {
+                "•".repeat(text.chars().count().min(40))
+            } else {
+                text.clone()
+            };
+            self.below = vec![format!("{}{}", shown, ember("▏"))];
+            self.below.extend(hint.iter().cloned());
             self.draw();
             match self.input().await? {
-                Input::Enter if !token.trim().is_empty() => return Ok(token.trim().to_string()),
+                Input::Enter if empty || !text.trim().is_empty() => {
+                    return Ok(text.trim().to_string())
+                }
                 Input::Text(t) => {
                     self.error = None;
-                    token.push_str(&t);
+                    text.push_str(&t);
                 }
                 Input::Back => {
-                    token.pop();
+                    text.pop();
                 }
-                Input::Clear => token.clear(),
+                Input::Clear => text.clear(),
                 _ => {}
             }
         }
@@ -416,7 +441,7 @@ pub(super) async fn run(link: &str) -> Result<super::Done, String> {
             super::finish(&token, &team, &url, &channel.name, &channel.id),
         )
         .await;
-    match posted {
+    let mut done = match posted {
         Ok(done) => {
             let shown = done
                 .permalink
@@ -424,13 +449,82 @@ pub(super) async fn run(link: &str) -> Result<super::Done, String> {
                 .unwrap_or_else(|| format!("posted in #{}", channel.name));
             w.set(3, State::Done(shown));
             w.error = None;
-            w.draw();
-            Ok(done)
+            done
         }
         Err(e) => {
             w.error = Some(e.clone());
             w.draw();
-            Err(e)
+            return Err(e);
         }
+    };
+
+    // Buttons: an app-level token for `pepe slack serve`, or skipped
+    w.hint = "enter with nothing skips: pepe slack connect again adds them later".into();
+    let app = loop {
+        w.set(4, State::Active);
+        let hint = [
+            faint("for Stop, Run again, Edit and run, and /pepe: the app's Basic Information →"),
+            faint("App-Level Tokens → Generate Token and Scopes, add connections:write, Generate (xapp-…)"),
+        ];
+        let app = w.typed(true, &hint, true).await?;
+        w.below.clear();
+        if app.is_empty() {
+            w.set(4, State::Done("skipped".into()));
+            w.set(5, State::Done("no buttons, no one to ask".into()));
+            break None;
+        }
+        match w
+            .busy(
+                4,
+                "opening a Socket Mode connection…",
+                super::check_app(&app),
+            )
+            .await
+        {
+            Ok(()) => {
+                w.set(
+                    4,
+                    State::Done("Socket Mode answers · pepe slack serve listens with it".into()),
+                );
+                w.error = None;
+                break Some(app);
+            }
+            Err(e) => w.error = Some(e),
+        }
+    };
+
+    // Who may press them
+    if let Some(app) = app {
+        w.hint = "@names, Slack ids, or * for anyone in the channel".into();
+        let (ids, names) = loop {
+            w.set(5, State::Active);
+            let hint = [faint("you, at least: your Slack @name")];
+            let who = w.typed(false, &hint, false).await?;
+            w.below.clear();
+            match w
+                .busy(5, "looking them up…", super::people(&token, &who))
+                .await
+            {
+                Ok(found) => {
+                    w.error = None;
+                    break found;
+                }
+                Err(e) => w.error = Some(e),
+            }
+        };
+        w.set(5, State::Done(names.join(", ")));
+        let kept = super::update(|c| {
+            c.app_token = Some(app.clone());
+            c.allow = ids;
+            c.allow_names = names.clone();
+        });
+        if let Err(e) = kept {
+            w.error = Some(e);
+        }
+        done.buttons = true;
+        done.allowed = names;
     }
+    w.hint = String::new();
+    w.draw();
+    Ok(done)
 }

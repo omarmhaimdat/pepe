@@ -100,9 +100,11 @@ fn about(run: &Run) -> String {
         Some(planned) => parts.push(span(planned)),
         None => parts.push(run.load.clone()),
     }
-    match (run.host.is_empty(), run.who.is_empty()) {
-        (false, false) => parts.push(format!("on {} by {}", run.host, run.who)),
-        (false, true) => parts.push(format!("on {}", run.host)),
+    match (&run.by, run.host.is_empty(), run.who.is_empty()) {
+        (Some(by), false, _) => parts.push(format!("from Slack by <@{by}> · on {}", run.host)),
+        (Some(by), true, _) => parts.push(format!("from Slack by <@{by}>")),
+        (None, false, false) => parts.push(format!("on {} by {}", run.host, run.who)),
+        (None, false, true) => parts.push(format!("on {}", run.host)),
         _ => {}
     }
     if run.mode != "run" {
@@ -140,6 +142,44 @@ fn fields(pairs: &[(String, String)]) -> Value {
     json!({"type": "section", "fields": fields})
 }
 
+fn button(text: &str, action: &str, value: &str, style: Option<&str>) -> Value {
+    let mut b = json!({
+        "type": "button",
+        "text": {"type": "plain_text", "text": text, "emoji": true},
+        "action_id": action,
+        "value": value,
+    });
+    if let Some(style) = style {
+        b["style"] = json!(style);
+    }
+    b
+}
+
+/// Stop, while a run `pepe slack serve` started goes
+fn stop_button(run: &Run) -> Option<Value> {
+    let id = run.served.as_ref()?;
+    let mut stop = button("■ Stop", "pepe:stop", id, Some("danger"));
+    stop["confirm"] = json!({
+        "title": {"type": "plain_text", "text": "Stop this run?"},
+        "text": {"type": "mrkdwn", "text": "It ends now, and the message says what it measured."},
+        "confirm": {"type": "plain_text", "text": "Stop"},
+        "deny": {"type": "plain_text", "text": "Keep it going"},
+        "style": "danger",
+    });
+    Some(json!({"type": "actions", "elements": [stop]}))
+}
+
+/// Run again, Edit and run, History: a saved test's verdict, when
+/// `pepe slack serve` is set up to answer them
+fn verdict_buttons(run: &Run) -> Option<Value> {
+    let test = run.test.as_ref().filter(|_| run.buttons)?;
+    Some(json!({"type": "actions", "elements": [
+        button("↻ Run again", "pepe:run", test, Some("primary")),
+        button("✎ Edit and run", "pepe:edit", test, None),
+        button("History", "pepe:history", test, None),
+    ]}))
+}
+
 fn message(text: String, color: &str, blocks: Vec<Value>, mood: &str) -> Value {
     json!({
         "text": text,
@@ -174,6 +214,7 @@ pub(super) fn live(m: &Message) -> Value {
         blocks.push(header(format!("🚀 Starting · {}", name(run))));
         blocks.push(context(about(run)));
         blocks.push(section(format!("_{}_", run.load)));
+        blocks.extend(stop_button(run));
         blocks.push(context(format!(
             "{} · pepe {}",
             now_token("started"),
@@ -258,6 +299,7 @@ pub(super) fn live(m: &Message) -> Value {
             ),
         ),
     ]));
+    blocks.extend(stop_button(run));
     blocks.push(context(format!(
         "{} · pepe {}",
         now_token("updated"),
@@ -415,6 +457,7 @@ pub(super) fn verdict(m: &Message) -> Value {
             ));
         }
     }
+    blocks.extend(verdict_buttons(run));
     blocks.push(context(format!(
         "`{}`{} · pepe {}",
         run.command,
@@ -644,6 +687,39 @@ fn notes(report: &Value) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn buttons_only_where_something_answers_them() {
+        let run = Run::default();
+        assert!(stop_button(&run).is_none() && verdict_buttons(&run).is_none());
+        let served = Run {
+            served: Some("41-1".into()),
+            test: Some("checkout".into()),
+            buttons: true,
+            ..Run::default()
+        };
+        let stop = stop_button(&served).unwrap();
+        assert_eq!(stop["elements"][0]["action_id"], "pepe:stop");
+        assert_eq!(stop["elements"][0]["value"], "41-1");
+        assert!(
+            stop["elements"][0]["confirm"].is_object(),
+            "a stop is confirmed"
+        );
+        let after = verdict_buttons(&served).unwrap();
+        let ids: Vec<&str> = after["elements"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|b| b["action_id"].as_str().unwrap())
+            .collect();
+        assert_eq!(ids, ["pepe:run", "pepe:edit", "pepe:history"]);
+        // A run that isn't a saved test has nothing to run again
+        let adhoc = Run {
+            buttons: true,
+            ..Run::default()
+        };
+        assert!(verdict_buttons(&adhoc).is_none());
+    }
 
     #[test]
     fn sparklines_and_bars_read_at_a_glance() {

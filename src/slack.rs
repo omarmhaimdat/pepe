@@ -16,7 +16,10 @@ use std::time::Duration;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
+mod serve;
 mod wizard;
+
+pub use serve::run as serve;
 
 /// The environment variable that holds a token, over the file
 pub const TOKEN_ENV: &str = "PEPE_SLACK_TOKEN";
@@ -39,6 +42,31 @@ pub struct Connection {
     pub channel: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub channel_id: Option<String>,
+    /// The app-level token (xapp-…) `pepe slack serve` listens with, for
+    /// the buttons and /pepe
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub app_token: Option<String>,
+    /// Who may press them: Slack user ids, or `*` for anyone in the channel
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub allow: Vec<String>,
+    /// The same, as names to show
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub allow_names: Vec<String>,
+}
+
+/// The app-level token, over the file's: as in CI
+pub const APP_TOKEN_ENV: &str = "PEPE_SLACK_APP_TOKEN";
+/// Set by `pepe slack serve` on the runs it starts: the run's id, for its
+/// Stop button, and who asked for it
+pub const RUN_ENV: &str = "PEPE_SLACK_RUN";
+pub const BY_ENV: &str = "PEPE_SLACK_BY";
+
+/// The app-level token: `PEPE_SLACK_APP_TOKEN`, else the file's
+pub fn app_token() -> Option<String> {
+    std::env::var(APP_TOKEN_ENV)
+        .ok()
+        .filter(|t| !t.trim().is_empty())
+        .or_else(|| load().and_then(|c| c.app_token))
 }
 
 /// `slack.toml`, beside the settings
@@ -104,16 +132,23 @@ pub fn manifest() -> Value {
             "background_color": "#121010"
         },
         "features": {
-            "bot_user": {"display_name": "pepe", "always_online": false}
+            "bot_user": {"display_name": "pepe", "always_online": false},
+            "slash_commands": [{
+                "command": "/pepe",
+                "description": "Run the saved load tests pepe slack serve has",
+                "usage_hint": "run checkout · stop · history checkout · list",
+                "should_escape": false
+            }]
         },
         "oauth_config": {
             "scopes": {
-                "bot": ["chat:write", "chat:write.public", "chat:write.customize", "channels:read", "channels:join", "groups:read"]
+                "bot": ["chat:write", "chat:write.public", "chat:write.customize", "channels:read", "channels:join", "groups:read", "commands", "users:read"]
             }
         },
         "settings": {
+            "interactivity": {"is_enabled": true},
             "org_deploy_enabled": false,
-            "socket_mode_enabled": false,
+            "socket_mode_enabled": true,
             "token_rotation_enabled": false
         }
     })
@@ -586,6 +621,9 @@ pub struct Done {
     pub icon: Option<PathBuf>,
     pub team: String,
     pub channel: String,
+    /// `pepe slack serve` has what it needs, and who may ask it
+    pub buttons: bool,
+    pub allowed: Vec<String>,
 }
 
 /// Pepe's face as Slack asks an app's icon to be: 512 pixels square
@@ -638,6 +676,7 @@ pub async fn finish(
         url: url.to_string(),
         channel: Some(format!("#{name}")),
         channel_id: Some(id.to_string()),
+        ..Connection::default()
     })?;
     let icon = path.with_file_name("pepe-icon.png");
     let icon = std::fs::write(&icon, ICON).ok().map(|()| icon);
@@ -647,7 +686,103 @@ pub async fn finish(
         icon,
         team: team.to_string(),
         channel: format!("#{name}"),
+        buttons: false,
+        allowed: Vec::new(),
     })
+}
+
+/// The app-level token works: Slack opens a Socket Mode connection for it
+pub async fn check_app(app_token: &str) -> Result<(), String> {
+    let app_token = app_token.trim();
+    if !app_token.starts_with("xapp-") {
+        return Err("that isn't an app-level token: it starts with xapp-, under Basic Information → App-Level Tokens".into());
+    }
+    match Api::new(app_token).call("apps.connections.open", &[]).await {
+        Ok(_) => Ok(()),
+        Err(e) if e.contains("isn't valid") => Err("Slack didn't take that app token: generate one with connections:write".into()),
+        Err(e) => Err(format!(
+            "{e}: an app made before pepe 0.48 has no Socket Mode; pepe slack connect makes one that has"
+        )),
+    }
+}
+
+/// The people `text` names (@names, display names, Slack ids, or `*` for
+/// anyone in the channel): their ids, and how to show them
+pub async fn people(token: &str, text: &str) -> Result<(Vec<String>, Vec<String>), String> {
+    let wanted: Vec<String> = text
+        .split(|c: char| c == ',' || c.is_whitespace())
+        .map(|w| w.trim().trim_start_matches('@').to_string())
+        .filter(|w| !w.is_empty())
+        .collect();
+    if wanted.is_empty() {
+        return Err("name someone: @you, a few @names, or * for anyone in the channel".into());
+    }
+    if wanted.iter().any(|w| w == "*") {
+        return Ok((vec!["*".into()], vec!["anyone in the channel".into()]));
+    }
+    let api = Api::new(token);
+    let mut members = Vec::new();
+    let mut cursor = String::new();
+    for _ in 0..20 {
+        let mut args = vec![("limit", "200".to_string())];
+        if !cursor.is_empty() {
+            args.push(("cursor", cursor.clone()));
+        }
+        let page = api.call("users.list", &args).await?;
+        members.extend(page["members"].as_array().cloned().unwrap_or_default());
+        cursor = page["response_metadata"]["next_cursor"]
+            .as_str()
+            .unwrap_or("")
+            .to_string();
+        if cursor.is_empty() {
+            break;
+        }
+    }
+    let (mut ids, mut names) = (Vec::new(), Vec::new());
+    for want in &wanted {
+        let lower = want.to_lowercase();
+        let found = members.iter().find(|m| {
+            m["deleted"] != true
+                && [
+                    &m["id"],
+                    &m["name"],
+                    &m["profile"]["display_name"],
+                    &m["real_name"],
+                ]
+                .iter()
+                .any(|v| v.as_str().is_some_and(|s| s.to_lowercase() == lower))
+        });
+        match found {
+            Some(m) => {
+                ids.push(m["id"].as_str().unwrap_or_default().to_string());
+                names.push(format!("@{}", m["name"].as_str().unwrap_or(want)));
+            }
+            None => return Err(format!("no one called @{want} in the workspace")),
+        }
+    }
+    Ok((ids, names))
+}
+
+/// Change what `slack.toml` keeps
+pub fn update(change: impl FnOnce(&mut Connection)) -> Result<PathBuf, String> {
+    let mut connection = load().ok_or("Slack isn't connected: pepe slack connect")?;
+    change(&mut connection);
+    save(&connection)
+}
+
+/// `pepe slack allow @a @b`: who may press the buttons, from now on
+pub async fn allow(names: &[String]) -> Result<(), String> {
+    let token = token().ok_or("Slack isn't connected: pepe slack connect")?;
+    let (ids, shown) = people(&token, &names.join(" ")).await?;
+    update(|c| {
+        c.allow = ids;
+        c.allow_names = shown.clone();
+    })?;
+    say(&format!(
+        "✓ {} may run tests from Slack · pepe slack serve picks it up when it starts",
+        shown.join(", ")
+    ));
+    Ok(())
 }
 
 /// What to do now, after connecting
@@ -689,9 +824,22 @@ fn done(d: &Done) {
             faint("into Basic Information → App icon, at https://api.slack.com/apps")
         ));
     }
+    if d.buttons {
+        say("");
+        say(&format!(
+            "  {} {}",
+            ember("◆"),
+            bold("The buttons answer while this runs, in your project")
+        ));
+        say(&format!(
+            "    {:<58}{}",
+            "pepe slack serve",
+            faint(&format!("for {}", d.allowed.join(", ")))
+        ));
+    }
     say("");
     say(&format!("  {} {}", ember("◆"), bold("Try it")));
-    let row = |cmd: String, what: &str| say(&format!("    {cmd:<52}{}", faint(what)));
+    let row = |cmd: String, what: &str| say(&format!("    {cmd:<58}{}", faint(what)));
     row(
         "pepe --slack -z 30s https://api.example.com/health".into(),
         "a run, live in the channel",

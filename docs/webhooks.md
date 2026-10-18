@@ -37,6 +37,23 @@ The same steps are on the [webhook page](#from-the-screens): `S` there connects 
 
 An app made by pepe 0.46 can't show Pepe's faces (it lacks the `chat:write.customize` permission): run `pepe slack connect` again for one that can.
 
+## Buttons and /pepe
+
+```bash
+pepe slack serve          # in the project, left running: the buttons and /pepe answer here
+```
+
+With the buttons set up (step 5 of `pepe slack connect`: an app-level token), a saved test's verdict has **↻ Run again**, **✎ Edit and run** and **History**, and a run started from Slack has **■ Stop** while it goes (asked twice, since it ends the run). `/pepe run checkout`, `/pepe stop`, `/pepe history checkout` and `/pepe list` work in any channel the app is in.
+
+- **Run again** runs the test as it is saved, its message in the channel the button was pressed in, saying who started it.
+- **Edit and run** opens a form filled with the test: concurrency, the duration or a number of requests, the rate, `--fail-if` conditions, and whether to keep the settings in the test. A value that won't do is said beside its field.
+- **Stop** ends the run as ctrl-c would: the message becomes the verdict of what it measured.
+- **History** shows the test's recorded runs, to the one who asked.
+
+Slack sends every click of an app to one of its open connections, not to the run that posted the message, so one listener answers them all: `pepe slack serve`, left running on a machine (a server, a CI runner, your laptop). It runs the saved tests of the directory it was started in, each as `pepe --load NAME --slack=#channel`, so that directory's `pepe.toml` guardrails hold for them, and it says each click, run and result in its terminal. Run one per app.
+
+Only the people step 6 named may use them (`pepe slack allow @maya @omar` changes who, `*` lets anyone in the channel); anyone else is told so, and no one else sees it. Nothing can be run from Slack that isn't a saved test in that directory. In CI, `PEPE_SLACK_APP_TOKEN` stands in for the file's app token.
+
 ## Where it goes
 
 The URL says how the message is laid out:

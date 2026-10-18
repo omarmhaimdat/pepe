@@ -326,6 +326,13 @@ pub enum SlackCommand {
         /// Where, if not the connected channel
         channel: Option<String>,
     },
+    /// Answer the buttons and /pepe: run this directory's saved tests for the people allowed, and stop them
+    Serve,
+    /// Who may press the buttons and use /pepe: @names, Slack ids, or * for anyone in the channel
+    Allow {
+        #[arg(required = true, value_name = "WHO")]
+        names: Vec<String>,
+    },
     /// Remove the kept token
     Forget,
     /// Print the app's manifest, for Slack's "From a manifest"
@@ -1255,9 +1262,16 @@ impl Cli {
         let mut hooks = self.flag_hooks();
         if let Some(channel) = &self.slack {
             let url = format!("slack:{channel}");
-            if !hooks.iter().any(|h| h.url == url) {
-                hooks.push(crate::webhook::Webhook::to(&url));
+            // One Slack message a run: --slack takes the place of the file's
+            // Slack hook, keeping what it says beside the channel
+            match hooks.iter_mut().find(|h| h.is_slack()) {
+                Some(hook) => hook.url = url,
+                None => hooks.push(crate::webhook::Webhook::to(&url)),
             }
+            hooks.retain({
+                let mut seen = false;
+                move |h| !h.is_slack() || !std::mem::replace(&mut seen, true)
+            });
         }
         hooks
     }

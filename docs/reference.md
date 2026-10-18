@@ -2083,6 +2083,8 @@ Commands:
   connect   Make pepe's Slack app, take its token, pick a channel, post a test (the default)
   status    What is connected, checked with Slack
   test      Post a test message
+  serve     Answer the buttons and /pepe: run this directory's saved tests for the people allowed, and stop them
+  allow     Who may press the buttons and use /pepe: @names, Slack ids, or * for anyone in the channel
   forget    Remove the kept token
   manifest  Print the app's manifest, for Slack's "From a manifest"
   help      Print this message or the help of the given subcommand(s)

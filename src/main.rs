@@ -46,6 +46,7 @@ mod utils;
 mod vars;
 mod webhook;
 mod wire;
+mod ws;
 
 #[derive(Debug)]
 #[allow(clippy::enum_variant_names)]
@@ -219,6 +220,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     .await
                     .map(|()| eprintln!("✓ posted a test message"))
             }
+            SlackCommand::Serve => slack::serve().await,
+            SlackCommand::Allow { names } => slack::allow(&names).await,
             SlackCommand::Forget => slack::forget(),
             SlackCommand::Manifest => {
                 println!("{}", serde_json::to_string_pretty(&slack::manifest())?);
