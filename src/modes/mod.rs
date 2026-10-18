@@ -446,7 +446,7 @@ pub(crate) fn hook_progress(
     if other > 0 {
         failures.push(("no answer".into(), other));
     }
-    failures.sort_by(|a, b| b.1.cmp(&a.1));
+    failures.sort_by_key(|a| std::cmp::Reverse(a.1));
     crate::webhook::Progress {
         elapsed,
         done: done.map(|d| d.clamp(0.0, 1.0)),
