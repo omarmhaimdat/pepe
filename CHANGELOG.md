@@ -6,6 +6,75 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+## [0.51.0](https://github.com/omarmhaimdat/pepe/compare/v0.50.0...v0.51.0) - 2026-10-18
+
+### Added
+
+- *(slack)* a quiet thread: what changed goes in the message, and @pepe answers questions there ([#213](https://github.com/omarmhaimdat/pepe/pull/213))
+
+  Feedback from using it: a reply in the thread for every anomaly was too
+  many messages. The data now lives in one denser message, and the thread
+  is for questions.
+
+  ## The live message
+
+  It's still edited every 10 s, and now also immediately when something
+  changes or someone steers the run.
+
+  **Six fields:**
+  - **Throughput:** current value, the run's peak, and which way it has
+  moved lately.
+  - **Latency:** p50 · p95 · p99, with a sparkline.
+  - **Errors:** by cause, with the first body the server sent.
+  - **Where the time goes:** waiting for the first byte versus reading the
+  body.
+  - **Sent:** requests and bytes received.
+  - **Load:** connections in flight and the rate cap, plus who changed it
+  last.
+
+  **What changed:** each anomaly is one timestamped line in the message,
+  latest five, e.g. `` `1m26s` 📉 Throughput dropped 52% · 5.9k req/s ``.
+  The verdict lists them too.
+
+  The thread gets nothing for anomalies. The only unprompted thread
+  message left is the single result line at the end. It's also shown in
+  the channel and carries the `mention` when a run fails.
+
+  ## Ask in the thread
+
+  With `pepe slack serve` running, mentioning `@pepe` in the thread of a
+  run it started gets an answer there. Topics: *p99*, *errors* (what
+  failed, what the server said, when it began), *slowest*, *where does the
+  time go*, *codes*, *compare* (against the test's last recorded run),
+  *status*, *help*.
+
+  - **While the run goes,** the run answers from its live numbers. `serve`
+  passes the question over the control channel; the run told `serve` its
+  message id on stderr when it posted the message.
+  - **After it ends,** `serve` answers from the recorded report, compared
+  with the run before it.
+  - **A mention anywhere else** gets a note on where to ask.
+
+  The manifest adds `app_mentions:read` and the `app_mention` event. **An
+  existing app needs `pepe slack connect` again.**
+
+  ## Checked
+
+  - 407 tests pass; clippy 1.98 is clean. New tests cover:
+    - the format of the "What changed" lines;
+    - the live message's six fields and its "What changed" list;
+    - matching a question to its topic, and each topic's answer;
+    - the `ask` command on the control channel.
+  - Against the fake Slack (which rejects repeated action ids) and a fake
+  Socket Mode server:
+  - "why are errors up?" and "p99?" mid-run were answered in the live
+  message's thread;
+    - the live edits were accepted;
+    - "compare" after the stop was answered from the recorded report;
+    - a mention in another thread got the note;
+    - no anomaly replies were posted.
+
+
 ## [0.50.0](https://github.com/omarmhaimdat/pepe/compare/v0.49.1...v0.50.0) - 2026-10-18
 
 ### Added
