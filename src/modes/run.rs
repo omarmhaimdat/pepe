@@ -75,7 +75,7 @@ pub(crate) async fn run_json(args: &Cli) -> Result<(), Box<dyn std::error::Error
                 if !warming {
                     timeline.advance(started.elapsed());
                     for anomaly in watch.observe(timeline.samples(), false) {
-                        crate::webhook::anomaly(&anomaly.text);
+                        crate::webhook::anomaly(anomaly.kind.name(), &anomaly.text);
                         anomalies.push(anomaly);
                     }
                     crate::webhook::progress(|| hook_progress(&metrics, started.elapsed(), plan(args), Some(&timeline), anomalies.len()));

@@ -566,6 +566,8 @@ struct Detail {
     ending: Option<Ending>,
     /// The last progress's seconds, for a short run's sparklines at its end
     series: Vec<(f64, f64)>,
+    /// What an anomaly is about: latency, throughput or errors
+    kind: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -1498,11 +1500,13 @@ pub fn progress(numbers: impl FnOnce() -> Progress) {
 }
 
 /// Something changed during the run
-pub fn anomaly(text: &str) {
+/// `kind` is what moved: latency, throughput or errors
+pub fn anomaly(kind: &str, text: &str) {
     let Ok(state) = STATE.lock() else { return };
     let Some(state) = state.as_ref() else { return };
     let mut message = state.run.anomaly(text);
     message.detail.run = state.run.clone();
+    message.detail.kind = Some(kind.to_string());
     for line in state
         .lines
         .iter()
@@ -1922,7 +1926,7 @@ mod tests {
             ..Webhook::to(&url)
         };
         begin(run(), &[hook]);
-        anomaly("p99 jumped 4.5× to 45ms at 26s");
+        anomaly("latency", "p99 jumped 4.5× to 45ms at 26s");
         end(
             &report(),
             &Ending {

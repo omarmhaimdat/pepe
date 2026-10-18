@@ -157,7 +157,7 @@ fn button(text: &str, action: &str, value: &str, style: Option<&str>) -> Value {
 }
 
 /// The run's controls, while a run `pepe slack serve` started goes:
-/// pause or resume, a quarter less or more concurrency, stop
+/// pause or resume, one less or one more in flight, stop
 fn controls(run: &Run, progress: Option<&Progress>) -> Option<Value> {
     let id = run.served.as_ref()?;
     let paused = progress.is_some_and(|p| p.paused);
@@ -172,18 +172,18 @@ fn controls(run: &Run, progress: Option<&Progress>) -> Option<Value> {
             .and_then(|p| p.concurrency)
             .unwrap_or(run.concurrency)
             .max(1);
-        let less = (now * 3 / 4).max(1);
-        let more = (now * 5 / 4).max(now + 1);
-        if less < now {
+        let less = now - 1;
+        let more = now + 1;
+        if less >= 1 {
             elements.push(button(
-                &format!("− 25%  ({less})"),
+                &format!("− 1  ({less})"),
                 "pepe:size",
                 &format!("{id}:{less}"),
                 None,
             ));
         }
         elements.push(button(
-            &format!("+ 25%  ({more})"),
+            &format!("+ 1  ({more})"),
             "pepe:size",
             &format!("{id}:{more}"),
             None,
@@ -360,13 +360,44 @@ pub(super) fn live(m: &Message) -> Value {
 
 /// A line in the thread: something changed
 pub(super) fn anomaly(m: &Message) -> (String, String) {
-    (
-        format!(
-            "⚠️ {}",
-            m.values.get("findings").cloned().unwrap_or_default()
+    let text = m.values.get("findings").cloned().unwrap_or_default();
+    let (line, mood) = thread_line(m.detail.kind.as_deref(), &text);
+    (line, face(mood))
+}
+
+/// A thing that changed, as a short line for the thread: what moved and
+/// which way, to what, and when. "throughput fell 52% to 5.9k req/s at
+/// 1m26s" becomes "📉 Throughput dropped 52% · 5.9k req/s · at 1m26s".
+fn thread_line(kind: Option<&str>, text: &str) -> (String, &'static str) {
+    let (what, when) = match text.rsplit_once(" at ") {
+        Some((what, when)) => (what, Some(when)),
+        None => (text, None),
+    };
+    let (icon, line, mood) = match kind {
+        Some("throughput") => (
+            "📉",
+            what.replace("throughput fell ", "Throughput dropped ")
+                .replace(" to ", " · "),
+            "sweating",
         ),
-        face("sweating"),
-    )
+        Some("latency") => (
+            "📈",
+            what.replace("p99 jumped ", "p99 up ")
+                .replace(" to ", " · "),
+            "sweating",
+        ),
+        Some("errors") => (
+            "🔥",
+            what.replace("errors rose to ", "Errors up to "),
+            "on-fire",
+        ),
+        _ => ("⚠️", what.to_string(), "sweating"),
+    };
+    let line = match when {
+        Some(when) => format!("{icon} {line} · at {when}"),
+        None => format!("{icon} {line}"),
+    };
+    (line, mood)
 }
 
 /// How the run ended, in a word and a colour and a face
@@ -767,8 +798,8 @@ mod tests {
             ids,
             [
                 ("pepe:pause", "41-1"),
-                ("pepe:size", "41-1:30"),
-                ("pepe:size", "41-1:50"),
+                ("pepe:size", "41-1:39"),
+                ("pepe:size", "41-1:41"),
                 ("pepe:stop", "41-1")
             ]
         );
@@ -805,6 +836,25 @@ mod tests {
             ..Run::default()
         };
         assert!(verdict_buttons(&adhoc).is_none());
+    }
+
+    #[test]
+    fn the_thread_says_what_moved_in_a_line() {
+        let say = |kind, text| thread_line(Some(kind), text).0;
+        assert_eq!(
+            say("throughput", "throughput fell 52% to 5.9k req/s at 1m26s"),
+            "📉 Throughput dropped 52% · 5.9k req/s · at 1m26s"
+        );
+        assert_eq!(
+            say("latency", "p99 jumped 4.5× to 45ms at 26s"),
+            "📈 p99 up 4.5× · 45ms · at 26s"
+        );
+        assert_eq!(
+            say("errors", "errors rose to 12% at 2m"),
+            "🔥 Errors up to 12% · at 2m"
+        );
+        assert_eq!(thread_line(Some("errors"), "x").1, "on-fire");
+        assert_eq!(thread_line(None, "something").0, "⚠️ something");
     }
 
     #[test]
