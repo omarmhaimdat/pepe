@@ -6,6 +6,104 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+## [0.47.0](https://github.com/omarmhaimdat/pepe/compare/v0.46.0...v0.47.0) - 2026-10-18
+
+### Added
+
+- *(slack)* stylish, informative messages with Pepe's face, a checklist for pepe slack connect, and webhook cards ([#203](https://github.com/omarmhaimdat/pepe/pull/203))
+
+  A redesign of everything Slack-facing, plus the F3 page.
+
+  ## Slack messages (`src/webhook/layout.rs`)
+
+  Each message has a colour down its side, and Pepe the pepper is its
+  avatar.
+
+  **While a run goes** (edited every 10 s):
+  - what is being sent, how hard, from which machine and by whom;
+  - a progress bar with time left;
+  - throughput and p50 · p99, each with a sparkline of the last minute;
+  - errors by status and cause;
+  - a count of anomalies, each also posted as a reply in the thread.
+
+  **At the end**, the same message becomes the verdict:
+  - a summary sentence: how much was sent, how fast, what failed, and the
+  first thing that changed;
+  - latency p50, p95, p99 and max;
+  - sparklines over the whole run;
+  - where the time went: waiting, connecting, reading;
+  - the answers by status code;
+  - each `--fail-if` with ✓ or ✗ and the measured value;
+  - for a saved test, the significant changes against its last recorded
+  run, with a warning when the two runs weren't set up alike;
+  - findings, worst first, with the first body of each kind of failure.
+
+  **Under the verdict:** a thread reply that's also shown in the channel.
+  It carries the result in one line with Pepe proud, worried or on fire,
+  plus the `mention` when the run failed.
+
+  ## Pepe's faces
+
+  - `site/build-avatars.py` draws 512 px PNGs straight from the mascot's
+  sprite in `src/ui/mascot.rs`. It uses only the Python standard library,
+  and CI checks the images are current.
+  - They're served from the site, which already publishes
+  `site/img/*.png`.
+  - The app manifest now asks for `chat:write.customize`, which Slack
+  requires for custom avatars. Apps made with 0.46 need `pepe slack
+  connect` run again; the docs say so.
+
+  ## `pepe slack connect`
+
+  At a terminal, it's a checklist redrawn in place:
+  - Pepe's sprite beside the title.
+  - The prefilled app page opens in the browser. If no browser opens, the
+  link is copied to the clipboard and shown as a clickable link instead of
+  a wall of encoded text.
+  - The token is shown as dots and checked with a spinner. A rejected
+  token gets a clear error and the field clears for another try.
+  - The channel is picked with the arrow keys from a list filtered as you
+  type, showing member counts, whether it's private, and whether pepe is
+  already in it.
+  - At the end:
+    - the test message's permalink;
+    - Pepe's icon saved for the app;
+    - commands to try.
+
+  Outside a terminal, or with `--token` and `--channel`, it still asks
+  nothing and reports one step per line.
+
+  ## F3 webhook page
+
+  Each webhook is a framed card. Its title shows where it goes (Slack and
+  the channel, Discord, Teams, Google Chat, or JSON and the host). Its
+  corner shows the last delivery: sent and how long ago, or the error.
+
+  ## Checked
+
+  - `cargo test`: 389 pass, including new tests for sparklines, the
+  progress bar, the time split and status codes. Clippy is clean, and the
+  docs and avatar checks pass.
+  - Against a fake Slack API, two saved-test runs with `--slack` (one with
+  `--fail-if` crossed, one passing). Each produced, in order:
+    1. a start post with Pepe's waiting face;
+    2. a live edit with the bar and sparklines;
+    3. the verdict, with thresholds, the comparison and findings;
+  4. the result reply with the proud or worried face, shown in the
+  channel.
+  - The connect wizard and the F3 cards were driven in a pseudo-terminal
+  and the screens replayed: wrong token, then right token, filtered
+  channel pick, summary.
+
+  **Not checked against a real Slack workspace**: whether the avatars, the
+  colour bars and the `<!date>` timestamps look in Slack the way the
+  payload intends.
+
+  Next, in its own PR on top of this once it's merged: buttons to stop,
+  run again and edit and run, through `pepe slack serve` with Socket Mode,
+  for saved tests only and allowed users.
+
+
 ## [0.46.0](https://github.com/omarmhaimdat/pepe/compare/v0.45.0...v0.46.0) - 2026-10-17
 
 ### Added
