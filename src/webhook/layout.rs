@@ -15,6 +15,7 @@ const FACES: &str = "https://pepe.mhaimdat.com/img";
 const RUNNING: &str = "#ff8a3d";
 const PASSED: &str = "#2eb67d";
 const DEGRADED: &str = "#ecb22e";
+const PAUSED: &str = "#8a8578";
 const FAILED: &str = "#e01e5a";
 
 /// Pepe in `mood`, as an image Slack can show: a run's face
@@ -35,7 +36,7 @@ fn span(d: std::time::Duration) -> String {
 }
 
 /// `▁▂▄▆█`: a series in eight heights, its own lowest to its highest
-pub(super) fn spark(values: &[f64]) -> String {
+pub fn spark(values: &[f64]) -> String {
     const TICKS: [char; 8] = ['▁', '▂', '▃', '▄', '▅', '▆', '▇', '█'];
     let values: Vec<f64> = values.iter().copied().filter(|v| v.is_finite()).collect();
     let (Some(low), Some(high)) = (
@@ -155,9 +156,39 @@ fn button(text: &str, action: &str, value: &str, style: Option<&str>) -> Value {
     b
 }
 
-/// Stop, while a run `pepe slack serve` started goes
-fn stop_button(run: &Run) -> Option<Value> {
+/// The run's controls, while a run `pepe slack serve` started goes:
+/// pause or resume, a quarter less or more concurrency, stop
+fn controls(run: &Run, progress: Option<&Progress>) -> Option<Value> {
     let id = run.served.as_ref()?;
+    let paused = progress.is_some_and(|p| p.paused);
+    let mut elements = vec![if paused {
+        button("▶ Resume", "pepe:resume", id, Some("primary"))
+    } else {
+        button("⏸ Pause", "pepe:pause", id, None)
+    }];
+    // A ramp sets its own concurrency
+    if run.mode != "ramp" {
+        let now = progress
+            .and_then(|p| p.concurrency)
+            .unwrap_or(run.concurrency)
+            .max(1);
+        let less = (now * 3 / 4).max(1);
+        let more = (now * 5 / 4).max(now + 1);
+        if less < now {
+            elements.push(button(
+                &format!("− 25%  ({less})"),
+                "pepe:size",
+                &format!("{id}:{less}"),
+                None,
+            ));
+        }
+        elements.push(button(
+            &format!("+ 25%  ({more})"),
+            "pepe:size",
+            &format!("{id}:{more}"),
+            None,
+        ));
+    }
     let mut stop = button("■ Stop", "pepe:stop", id, Some("danger"));
     stop["confirm"] = json!({
         "title": {"type": "plain_text", "text": "Stop this run?"},
@@ -166,7 +197,8 @@ fn stop_button(run: &Run) -> Option<Value> {
         "deny": {"type": "plain_text", "text": "Keep it going"},
         "style": "danger",
     });
-    Some(json!({"type": "actions", "elements": [stop]}))
+    elements.push(stop);
+    Some(json!({"type": "actions", "elements": elements}))
 }
 
 /// Run again, Edit and run, History: a saved test's verdict, when
@@ -214,7 +246,7 @@ pub(super) fn live(m: &Message) -> Value {
         blocks.push(header(format!("🚀 Starting · {}", name(run))));
         blocks.push(context(about(run)));
         blocks.push(section(format!("_{}_", run.load)));
-        blocks.extend(stop_button(run));
+        blocks.extend(controls(run, None));
         blocks.push(context(format!(
             "{} · pepe {}",
             now_token("started"),
@@ -227,8 +259,17 @@ pub(super) fn live(m: &Message) -> Value {
             live_mood(None),
         );
     };
-    blocks.push(header(format!("⏳ Running · {}", name(run))));
-    blocks.push(context(about(run)));
+    // The concurrency as it stands, when it was changed from Slack
+    let now = Run {
+        concurrency: p.concurrency.unwrap_or(run.concurrency),
+        ..run.clone()
+    };
+    blocks.push(header(if p.paused {
+        format!("⏸ Paused · {}", name(run))
+    } else {
+        format!("⏳ Running · {}", name(run))
+    }));
+    blocks.push(context(about(&now)));
     let progress_line = match (p.done, run.planned) {
         (Some(done), Some(planned)) => format!(
             "`{}`  *{:.0}%* · {} of {} · {} left",
@@ -299,15 +340,19 @@ pub(super) fn live(m: &Message) -> Value {
             ),
         ),
     ]));
-    blocks.extend(stop_button(run));
+    blocks.extend(controls(run, progress));
     blocks.push(context(format!(
-        "{} · pepe {}",
+        "{}{} · pepe {}",
+        p.note
+            .as_ref()
+            .map(|n| format!("{n} · "))
+            .unwrap_or_default(),
         now_token("updated"),
         crate::utils::version()
     )));
     message(
         format!("⏳ {} · {}", name(run), m.status.trim_start_matches("⏳ ")),
-        RUNNING,
+        if p.paused { PAUSED } else { RUNNING },
         blocks,
         live_mood(progress),
     )
@@ -691,19 +736,60 @@ mod tests {
     #[test]
     fn buttons_only_where_something_answers_them() {
         let run = Run::default();
-        assert!(stop_button(&run).is_none() && verdict_buttons(&run).is_none());
+        assert!(controls(&run, None).is_none() && verdict_buttons(&run).is_none());
         let served = Run {
             served: Some("41-1".into()),
             test: Some("checkout".into()),
             buttons: true,
             ..Run::default()
         };
-        let stop = stop_button(&served).unwrap();
-        assert_eq!(stop["elements"][0]["action_id"], "pepe:stop");
-        assert_eq!(stop["elements"][0]["value"], "41-1");
+        let going = Progress {
+            concurrency: Some(40),
+            ..Progress::default()
+        };
+        let run = Run {
+            mode: "run".into(),
+            ..served.clone()
+        };
+        let row = controls(&run, Some(&going)).unwrap();
+        let ids: Vec<(&str, &str)> = row["elements"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|b| {
+                (
+                    b["action_id"].as_str().unwrap(),
+                    b["value"].as_str().unwrap(),
+                )
+            })
+            .collect();
+        assert_eq!(
+            ids,
+            [
+                ("pepe:pause", "41-1"),
+                ("pepe:size", "41-1:30"),
+                ("pepe:size", "41-1:50"),
+                ("pepe:stop", "41-1")
+            ]
+        );
         assert!(
-            stop["elements"][0]["confirm"].is_object(),
+            row["elements"][3]["confirm"].is_object(),
             "a stop is confirmed"
+        );
+        let paused = Progress {
+            paused: true,
+            ..going
+        };
+        let ramp = Run {
+            mode: "ramp".into(),
+            ..served.clone()
+        };
+        let row = controls(&ramp, Some(&paused)).unwrap();
+        assert_eq!(row["elements"][0]["action_id"], "pepe:resume");
+        assert_eq!(
+            row["elements"].as_array().unwrap().len(),
+            2,
+            "a ramp sets its own concurrency"
         );
         let after = verdict_buttons(&served).unwrap();
         let ids: Vec<&str> = after["elements"]

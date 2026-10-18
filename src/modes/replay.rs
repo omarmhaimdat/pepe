@@ -166,6 +166,7 @@ pub(crate) async fn run_replay_json(
         load.set_warmup(warmup);
     }
     crate::webhook::begin(hook_run(args), &args.hooks());
+    let mut control = crate::control::listen();
     let mut started = Instant::now();
     let mut warming = load.warming();
     let mut warmup_requests = 0;
@@ -212,6 +213,12 @@ pub(crate) async fn run_replay_json(
             _ = tokio::signal::ctrl_c(), if !interrupted => {
                 interrupted = true;
                 load.stop();
+            }
+            said = crate::control::next(&mut control) => {
+                if crate::control::apply(&said, &load) && !interrupted {
+                    interrupted = true;
+                    load.stop();
+                }
             }
         }
     }

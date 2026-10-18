@@ -16,6 +16,7 @@ pub(crate) async fn climb(
     )?;
     let mut ramp = Ramp::new(plan, Instant::now());
     crate::webhook::begin(hook_run(args), &args.hooks());
+    let mut control = crate::control::listen();
     let mut clock = tokio::time::interval(std::time::Duration::from_millis(50));
     let mut pump = tokio::time::interval(PUMP);
     while ramp.end.is_none() {
@@ -34,6 +35,14 @@ pub(crate) async fn climb(
             }
             _ = tokio::signal::ctrl_c() => {
                 ramp.stop(Instant::now());
+            }
+            // A ramp sets its own concurrency: it can be paused or stopped
+            said = crate::control::next(&mut control) => {
+                if !matches!(said.0, crate::control::Command::Concurrency(_))
+                    && crate::control::apply(&said, &load)
+                {
+                    ramp.stop(Instant::now());
+                }
             }
         }
     }

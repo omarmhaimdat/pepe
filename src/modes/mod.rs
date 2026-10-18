@@ -463,6 +463,7 @@ pub(crate) fn hook_progress(
         series,
         failures,
         anomalies,
+        ..crate::webhook::Progress::default()
     }
 }
 
