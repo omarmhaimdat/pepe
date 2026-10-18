@@ -24,6 +24,11 @@ use crate::flow::Template;
 mod layout;
 pub use layout::face;
 
+/// `cut`, for the Slack listener's messages
+pub fn layout_cut(text: &str, most: usize) -> String {
+    cut(text, most)
+}
+
 /// How often progress goes out when a webhook doesn't say
 pub const PROGRESS_EVERY: Duration = Duration::from_secs(60);
 /// Shortest progress interval: a chat channel is not a dashboard
@@ -460,6 +465,12 @@ pub struct Run {
     pub planned: Option<Duration>,
     /// Concurrency, for the line under the title
     pub concurrency: usize,
+    /// Started by `pepe slack serve`: the run's id, for its Stop button
+    pub served: Option<String>,
+    /// Who asked for it in Slack (a user id)
+    pub by: Option<String>,
+    /// `pepe slack serve` is set up: a saved test's verdict gets its buttons
+    pub buttons: bool,
 }
 
 /// The numbers so far, for progress

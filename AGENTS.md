@@ -157,7 +157,9 @@ says when. `[[webhook]]` in `pepe.toml` takes `on`, `format`, `headers`,
 a `body` with `{{holes}}`, `every` and `mention`; `${NAME}` is read from
 the environment. `--slack` (or `--slack=#channel`) keeps one Slack message
 up to date as the run goes, after `pepe slack connect`, or with
-`PEPE_SLACK_TOKEN` set.
+`PEPE_SLACK_TOKEN` set. `pepe slack serve` answers the message's buttons
+(Stop, Run again, Edit and run) and `/pepe` for the people
+`pepe slack allow` names, running only this directory's saved tests.
 
 ## Live numbers
 

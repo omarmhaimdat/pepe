@@ -404,6 +404,11 @@ pub(crate) fn hook_run(args: &Cli) -> crate::webhook::Run {
             .unwrap_or_default(),
         planned,
         concurrency: args.concurrency as usize,
+        served: std::env::var(crate::slack::RUN_ENV).ok(),
+        by: std::env::var(crate::slack::BY_ENV)
+            .ok()
+            .filter(|b| !b.is_empty()),
+        buttons: crate::slack::app_token().is_some(),
     }
 }
 
