@@ -244,7 +244,7 @@ const SUBCOMMANDS: [(&str, &str, &str); 15] = [
     ("self-update", "pepe-self-update", "pepe self-update"),
     ("completions", "pepe-completions", "pepe completions"),
     ("slack", "pepe-slack", "pepe slack"),
-    ("html", "pepe-html", "pepe html"),
+    ("export", "pepe-export", "pepe export"),
 ];
 
 /// `pepe-<sub>.1` for each subcommand

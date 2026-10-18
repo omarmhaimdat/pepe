@@ -148,11 +148,13 @@ CSV file whose first line names them, a row a request in turn (a row a
 chain in a flow); a hole that isn't a column is refused before anything
 is sent, and `--allow-host` checks every row's host.
 
-## A page for people
+## Exports
 
-`--html report.html` writes the report as one self-contained HTML page
-as well (curves, latency, thresholds, the comparison with the last run);
-`pepe html report.json -o report.html` makes it from a JSON report.
+`--export report.html` (or `.json`, `.md`, `.txt`, `.csv`, repeatable)
+writes the report in that shape as well: a self-contained page, a
+Markdown summary for a PR, the numbers a row a second.
+`pepe export report.json -o summary.md` (or `--to all`) makes them from
+a JSON report.
 
 ## Tell a channel
 

@@ -699,8 +699,11 @@ pub(super) fn key(key: KeyEvent) -> bool {
     if ctrl && key.code == KeyCode::Char('c') {
         return false;
     }
-    // The webhook page (F3) takes keys the same way, while this one is shut
-    if !PAGE.with(|page| page.borrow().is_some()) && super::hooks::key(key) {
+    // The export page (F4, opened by a run screen) and the webhook page
+    // (F3) take keys the same way, while this one is shut
+    if !PAGE.with(|page| page.borrow().is_some())
+        && (super::export::key(key) || super::hooks::key(key))
+    {
         return true;
     }
     PAGE.with(|page| {
@@ -734,13 +737,13 @@ pub(super) fn paste(text: &str) -> bool {
             open.paste(text);
             true
         }
-        None => super::hooks::paste(text),
+        None => super::export::paste(text) || super::hooks::paste(text),
     })
 }
 
 /// Whether the page is up: the mouse is no screen's while it is
 pub(super) fn is_open() -> bool {
-    PAGE.with(|page| page.borrow().is_some()) || super::hooks::is_open()
+    PAGE.with(|page| page.borrow().is_some()) || super::hooks::is_open() || super::export::is_open()
 }
 
 /// Draw the page over the frame, when it's open, and say where it is

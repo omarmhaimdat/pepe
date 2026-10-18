@@ -19,6 +19,8 @@ use serde_json::{json, Value};
 mod serve;
 mod wizard;
 
+pub use wizard::copy;
+
 pub use serve::run as serve;
 
 /// The environment variable that holds a token, over the file

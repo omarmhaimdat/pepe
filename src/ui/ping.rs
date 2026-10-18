@@ -335,6 +335,27 @@ impl PingScreen {
         if settings::key(key) {
             return false;
         }
+        if key.code == KeyCode::F(4) {
+            let (report, text) = {
+                let state = self.shared.lock();
+                (
+                    crate::ping::json_report(&state, &self.settings, false),
+                    crate::ping::report(&state, &self.settings),
+                )
+            };
+            let mut snap = crate::modes::snapshot(report, Vec::new(), Vec::new(), None, None);
+            snap.text = Some(text);
+            let title = format!("{} · ping", crate::export::name_of(&snap.report));
+            super::export::open(
+                snap,
+                title,
+                super::export::Share {
+                    hooks: self.cli.hooks(),
+                    run: crate::modes::hook_run(&self.cli),
+                },
+            );
+            return false;
+        }
         if let Some(naming) = &mut self.naming {
             match naming.key(key) {
                 kit::SaveKey::Quit => return true,
@@ -433,6 +454,7 @@ impl PingScreen {
     }
 
     pub async fn run(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+        let _export = super::export::Here::on();
         let mut terminal = crate::terminal::Screen::new()?;
         terminal.clear()?;
         let mut events = crate::terminal::input();

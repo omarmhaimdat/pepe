@@ -65,6 +65,8 @@ The mouse works too: click a tab to show it, a request or an endpoint to select 
 | `enter` | Inspect the selected request: `↑`/`↓` (or the trackpad), `u`/`d` and `g`/`G` scroll the response, `←`/`→` walk to the newer/older request, `[`/`]` jump to the nearest one kept in full, `v` switches between formatted and raw, `esc` goes back |
 | `?` | Show all keys, here and on the setup (`F1`), ramp, API and ping screens |
 | `F2` | The settings, on every screen: the theme, and the defaults a run starts from ([Install: settings](install.md#settings)) |
+| `F3` | The webhooks: Slack, Discord, Teams or any URL, changed while the run goes ([Webhooks](webhooks.md#from-the-screens)) |
+| `F4` | Export the run as it stands: a page, the report, a summary, text, CSV; copy the summary; send the verdict to the webhooks ([Exports](output.md#exports)) |
 | `q` / `esc` / `Ctrl-C` | Quit; the verdict is left in your shell |
 
 The ramp, plan, logs and ping screens have keys of their own, on their pages: [Ramp](ramp.md#keys), [OpenAPI](api.md#the-plan-screen), [nginx logs](logs.md#keys), [Ping](ping.md#keys). The setup screen's are on [Load testing](load-test.md#the-setup-screen).

@@ -102,6 +102,8 @@ pub(super) fn fitting(
 const ROOM_FOR_SETTINGS: u16 = 56;
 /// And narrower than this has no room for the webhook page's key
 const ROOM_FOR_WEBHOOKS: u16 = 96;
+/// Nor, on a run screen, for the export page's
+const ROOM_FOR_EXPORT: u16 = 120;
 
 /// The footer drawn at `area`: the key chips that fit, each clickable as
 /// its key, and at the right-hand end the key that opens the settings.
@@ -110,11 +112,13 @@ pub(super) fn footer(f: &mut Frame, area: Rect, pairs: &[(&'static str, &'static
     // ` F2 ` and ` settings`, with a space between it and the keys; and
     // before it ` F3 ` and ` webhooks` when there's room
     let mut keys = area;
+    let export = super::export::is_here();
     for (key, action, code, room) in [
         ("F2", "settings", 2, ROOM_FOR_SETTINGS),
         ("F3", "webhooks", 3, ROOM_FOR_WEBHOOKS),
+        ("F4", "export", 4, ROOM_FOR_EXPORT),
     ] {
-        if area.width < room {
+        if area.width < room || (code == 4 && !export) {
             break;
         }
         let width = (key.len() + action.len() + 3) as u16;
@@ -168,6 +172,7 @@ pub(super) fn key_for_chip(label: &str) -> Option<KeyEvent> {
         "tab" => KeyCode::Tab,
         "space" => KeyCode::Char(' '),
         "F1" => KeyCode::F(1),
+        "F4" => KeyCode::F(4),
         _ => {
             if let Some(rest) = label.strip_prefix("ctrl-") {
                 let c = one_char(rest)?;
@@ -345,6 +350,9 @@ pub(super) fn help(f: &mut Frame, area: Rect, rows: &[(&str, &str)], notes: &[St
     let mut rows = rows.to_vec();
     rows.insert(rows.len().saturating_sub(2), super::settings::HELP);
     rows.insert(rows.len().saturating_sub(2), super::hooks::HELP);
+    if super::export::is_here() {
+        rows.insert(rows.len().saturating_sub(2), super::export::HELP);
+    }
     let mut lines: Vec<Line> = rows
         .iter()
         .map(|(key, action)| {

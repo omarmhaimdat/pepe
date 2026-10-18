@@ -133,12 +133,12 @@ pub struct Cli {
     #[arg(long, global = true, value_name = "CHANNEL", num_args = 0..=1, require_equals = true, default_missing_value = "")]
     pub slack: Option<String>,
 
-    /// Write the report as a page too: one self-contained HTML file, with
-    /// the run's curves, the latency spread, where the time went, the
-    /// thresholds and how it compares with the last run, for people who
-    /// weren't at the terminal
+    /// Write the report to FILE as well, in the format its extension says:
+    /// .html a self-contained page (curves, thresholds, the last run),
+    /// .json the report, .md a summary for a PR, .txt what pepe prints,
+    /// .csv the run's numbers a row a second; repeat for more
     #[arg(long, global = true, value_name = "FILE")]
-    pub html: Option<std::path::PathBuf>,
+    pub export: Vec<std::path::PathBuf>,
 
     /// Webhooks from a pepe.toml, the settings or the screens, when no
     /// --webhook was given
@@ -307,19 +307,22 @@ pub enum Command {
     Completions(CompletionsArgs),
     /// Connect pepe to Slack from here, so --slack keeps a message there up to date as a run goes
     Slack(SlackArgs),
-    /// Turn a run's or a ramp's JSON report into a page: one self-contained HTML file
-    Html(HtmlArgs),
+    /// Turn a JSON report into a page, a Markdown summary, text or CSV
+    Export(ExportArgs),
 }
 
 #[derive(clap::Args, Debug, Clone, PartialEq, Default)]
-pub struct HtmlArgs {
-    /// The JSON report: a run's (--json, --snapshot, a recorded run) or a ramp's
+pub struct ExportArgs {
+    /// The JSON report: a run's (--json, --snapshot, a recorded run), a ramp's or a ping's
     #[arg(value_name = "REPORT")]
     pub report: std::path::PathBuf,
-    /// Where the page goes; beside the report, as .html, by default
+    /// Where it goes, its format from its extension; beside the report by default
     #[arg(short, long, value_name = "FILE")]
     pub out: Option<std::path::PathBuf>,
-    /// Open it in the browser once written
+    /// The format when -o doesn't say: html (the default), json, md, txt, csv, or all
+    #[arg(long, value_name = "FORMAT")]
+    pub to: Option<String>,
+    /// Open it once written
     #[arg(long)]
     pub open: bool,
 }
@@ -738,6 +741,14 @@ impl Cli {
                 ));
             }
         }
+        for path in &self.export {
+            crate::export::Format::of_path(path).map_err(|e| {
+                Error::raw(
+                    clap::error::ErrorKind::ValueValidation,
+                    format!("--export {e}"),
+                )
+            })?;
+        }
         if let Some(on) = &self.webhook_on {
             crate::webhook::Event::parse_list(on).map_err(|e| {
                 Error::raw(
@@ -1106,8 +1117,8 @@ impl Cli {
         if let Some(path) = &self.vars {
             flag("--vars", &path.display().to_string());
         }
-        if let Some(path) = &self.html {
-            flag("--html", &path.display().to_string());
+        for path in &self.export {
+            flag("--export", &path.display().to_string());
         }
         // A hook a file says more of than a URL is the file's to say
         let hooks = self.hooks();

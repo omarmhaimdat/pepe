@@ -17,6 +17,7 @@ mod control;
 mod curl;
 mod diagnose;
 mod direct;
+mod export;
 mod exporter;
 mod flow;
 mod guard;
@@ -236,34 +237,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         return Ok(());
     }
-    if let Some(cli::Command::Html(what)) = &args.command {
-        let report = std::fs::read_to_string(&what.report)
-            .map_err(|e| format!("couldn't read {}: {e}", what.report.display()))
-            .and_then(|text| {
-                serde_json::from_str::<serde_json::Value>(&text)
-                    .map_err(|e| format!("{} isn't a JSON report: {e}", what.report.display()))
-            });
-        let report = match report {
-            Ok(report) => report,
-            Err(e) => {
-                eprintln!("error: {e}");
-                std::process::exit(1);
-            }
-        };
-        if report.get("summary").is_none() && report.get("steps").is_none() {
-            eprintln!(
-                "error: {} is neither a run's nor a ramp's report",
-                what.report.display()
-            );
+    if let Some(cli::Command::Export(what)) = &args.command {
+        if let Err(e) = modes::export_report(what) {
+            eprintln!("error: {e}");
             std::process::exit(1);
-        }
-        let out = what
-            .out
-            .clone()
-            .unwrap_or_else(|| what.report.with_extension("html"));
-        modes::write_html(&out, &report, &html::Extras::default());
-        if what.open {
-            slack::open_browser(&out.display().to_string());
         }
         return Ok(());
     }

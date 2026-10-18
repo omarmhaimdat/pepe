@@ -1,5 +1,6 @@
 mod bigtext;
 mod body;
+mod export;
 mod filter;
 pub mod format;
 mod history;
@@ -949,6 +950,7 @@ impl Dashboard {
         &mut self,
         load: &mut LoadHandle,
     ) -> Result<Outcome, Box<dyn std::error::Error>> {
+        let _export = export::Here::on();
         crate::webhook::begin(crate::modes::hook_run(&self.args), &self.args.hooks());
         let mut terminal = crate::terminal::Screen::new()?;
         terminal.clear()?;
@@ -1131,6 +1133,10 @@ impl Dashboard {
         if settings::key(key) {
             return None;
         }
+        if key.code == KeyCode::F(4) {
+            self.open_export(load);
+            return None;
+        }
         if let Some(naming) = &mut self.naming {
             match naming.key(key) {
                 kit::SaveKey::Quit => return Some(Outcome::Quit),
@@ -1287,6 +1293,33 @@ impl Dashboard {
     }
 
     /// Plain-text verdict to leave in the shell after quitting
+    /// F4: the export page, on the run as it stands
+    fn open_export(&self, load: &LoadHandle) {
+        let report = serde_json::to_value(self.report_json(load)).unwrap_or_default();
+        let checks = crate::modes::checks(&self.args, &self.metrics);
+        let compared = crate::modes::last_comparison(&self.args, &report);
+        let mut snap =
+            crate::modes::snapshot(report, checks, Vec::new(), compared, Some(&self.timeline));
+        snap.text = self.report();
+        let title = format!(
+            "{} · {}",
+            crate::export::name_of(&snap.report),
+            if self.finished.is_some() {
+                "ended".to_string()
+            } else {
+                "running: as of now".to_string()
+            }
+        );
+        export::open(
+            snap,
+            title,
+            export::Share {
+                hooks: self.args.hooks(),
+                run: crate::modes::hook_run(&self.args),
+            },
+        );
+    }
+
     pub fn report(&self) -> Option<String> {
         let verdict = self.verdict.as_ref()?;
         let mut out = format!(

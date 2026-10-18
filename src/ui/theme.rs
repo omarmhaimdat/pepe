@@ -584,6 +584,9 @@ pub fn draw(f: &mut Frame, render: impl FnOnce(&mut Frame)) {
     if let Some(page) = super::hooks::render(f) {
         kept = kept.into_iter().flat_map(|k| around(k, page)).collect();
     }
+    if let Some(page) = super::export::render(f) {
+        kept = kept.into_iter().flat_map(|k| around(k, page)).collect();
+    }
     adjust(f.buffer_mut(), current(), &kept);
 }
 

@@ -313,7 +313,7 @@ fn hyperlink(url: &str, text: &str) -> String {
 }
 
 /// Put `text` on the clipboard, when there's a program to do it
-fn copy(text: &str) -> bool {
+pub fn copy(text: &str) -> bool {
     use std::process::{Command, Stdio};
     let programs: &[(&str, &[&str])] = if cfg!(target_os = "macos") {
         &[("pbcopy", &[])]

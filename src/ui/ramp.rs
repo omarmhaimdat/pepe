@@ -184,6 +184,22 @@ impl RampScreen {
         if settings::key(key) {
             return Effect::None;
         }
+        if key.code == KeyCode::F(4) {
+            let report = self.result_json();
+            let checks = crate::modes::checks(&self.cli, &self.ramp.total);
+            let mut snap = crate::modes::snapshot(report, checks, Vec::new(), None, None);
+            snap.text = self.report();
+            let title = format!("{} · ramp", crate::export::name_of(&snap.report));
+            super::export::open(
+                snap,
+                title,
+                super::export::Share {
+                    hooks: self.cli.hooks(),
+                    run: crate::modes::hook_run(&self.cli),
+                },
+            );
+            return Effect::None;
+        }
         if let Some(naming) = &mut self.naming {
             match naming.key(key) {
                 kit::SaveKey::Quit => return Effect::Leave(Outcome::Quit),
@@ -312,6 +328,7 @@ impl RampScreen {
         &mut self,
         load: &mut LoadHandle,
     ) -> Result<Outcome, Box<dyn std::error::Error>> {
+        let _export = super::export::Here::on();
         crate::webhook::begin(crate::modes::hook_run(&self.cli), &self.cli.hooks());
         let mut terminal = crate::terminal::Screen::new()?;
         terminal.clear()?;

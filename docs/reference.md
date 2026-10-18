@@ -26,7 +26,7 @@ Commands:
   self-update  Update pepe to the latest release, or say what's new in it
   completions  Tab completion for your shell: print the script, or --install it
   slack        Connect pepe to Slack from here, so --slack keeps a message there up to date as a run goes
-  html         Turn a run's or a ramp's JSON report into a page: one self-contained HTML file
+  export       Turn a JSON report into a page, a Markdown summary, text or CSV
   help         Print this message or the help of the given subcommand(s)
 
 Arguments:
@@ -121,8 +121,8 @@ Options:
       --slack[=<CHANNEL>]
           Keep a Slack message up to date as the run goes: posted at the start, edited with the numbers, anomalies in its thread, the verdict at the end. --slack alone posts in the channel `pepe slack connect` kept; --slack=#channel elsewhere
 
-      --html <FILE>
-          Write the report as a page too: one self-contained HTML file, with the run's curves, the latency spread, where the time went, the thresholds and how it compares with the last run, for people who weren't at the terminal
+      --export <FILE>
+          Write the report to FILE as well, in the format its extension says: .html a self-contained page (curves, thresholds, the last run), .json the report, .md a summary for a PR, .txt what pepe prints, .csv the run's numbers a row a second; repeat for more
 
       --snapshot <FILE>
           Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run's numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run
@@ -352,8 +352,8 @@ Options:
       --slack[=<CHANNEL>]
           Keep a Slack message up to date as the run goes: posted at the start, edited with the numbers, anomalies in its thread, the verdict at the end. --slack alone posts in the channel `pepe slack connect` kept; --slack=#channel elsewhere
 
-      --html <FILE>
-          Write the report as a page too: one self-contained HTML file, with the run's curves, the latency spread, where the time went, the thresholds and how it compares with the last run, for people who weren't at the terminal
+      --export <FILE>
+          Write the report to FILE as well, in the format its extension says: .html a self-contained page (curves, thresholds, the last run), .json the report, .md a summary for a PR, .txt what pepe prints, .csv the run's numbers a row a second; repeat for more
 
       --snapshot <FILE>
           Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run's numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run
@@ -510,8 +510,8 @@ Options:
       --slack[=<CHANNEL>]
           Keep a Slack message up to date as the run goes: posted at the start, edited with the numbers, anomalies in its thread, the verdict at the end. --slack alone posts in the channel `pepe slack connect` kept; --slack=#channel elsewhere
 
-      --html <FILE>
-          Write the report as a page too: one self-contained HTML file, with the run's curves, the latency spread, where the time went, the thresholds and how it compares with the last run, for people who weren't at the terminal
+      --export <FILE>
+          Write the report to FILE as well, in the format its extension says: .html a self-contained page (curves, thresholds, the last run), .json the report, .md a summary for a PR, .txt what pepe prints, .csv the run's numbers a row a second; repeat for more
 
       --snapshot <FILE>
           Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run's numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run
@@ -654,8 +654,8 @@ Options:
       --slack[=<CHANNEL>]
           Keep a Slack message up to date as the run goes: posted at the start, edited with the numbers, anomalies in its thread, the verdict at the end. --slack alone posts in the channel `pepe slack connect` kept; --slack=#channel elsewhere
 
-      --html <FILE>
-          Write the report as a page too: one self-contained HTML file, with the run's curves, the latency spread, where the time went, the thresholds and how it compares with the last run, for people who weren't at the terminal
+      --export <FILE>
+          Write the report to FILE as well, in the format its extension says: .html a self-contained page (curves, thresholds, the last run), .json the report, .md a summary for a PR, .txt what pepe prints, .csv the run's numbers a row a second; repeat for more
 
       --snapshot <FILE>
           Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run's numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run
@@ -813,8 +813,8 @@ Options:
       --slack[=<CHANNEL>]
           Keep a Slack message up to date as the run goes: posted at the start, edited with the numbers, anomalies in its thread, the verdict at the end. --slack alone posts in the channel `pepe slack connect` kept; --slack=#channel elsewhere
 
-      --html <FILE>
-          Write the report as a page too: one self-contained HTML file, with the run's curves, the latency spread, where the time went, the thresholds and how it compares with the last run, for people who weren't at the terminal
+      --export <FILE>
+          Write the report to FILE as well, in the format its extension says: .html a self-contained page (curves, thresholds, the last run), .json the report, .md a summary for a PR, .txt what pepe prints, .csv the run's numbers a row a second; repeat for more
 
       --snapshot <FILE>
           Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run's numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run
@@ -948,8 +948,8 @@ Options:
       --slack[=<CHANNEL>]
           Keep a Slack message up to date as the run goes: posted at the start, edited with the numbers, anomalies in its thread, the verdict at the end. --slack alone posts in the channel `pepe slack connect` kept; --slack=#channel elsewhere
 
-      --html <FILE>
-          Write the report as a page too: one self-contained HTML file, with the run's curves, the latency spread, where the time went, the thresholds and how it compares with the last run, for people who weren't at the terminal
+      --export <FILE>
+          Write the report to FILE as well, in the format its extension says: .html a self-contained page (curves, thresholds, the last run), .json the report, .md a summary for a PR, .txt what pepe prints, .csv the run's numbers a row a second; repeat for more
 
       --snapshot <FILE>
           Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run's numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run
@@ -1094,8 +1094,8 @@ Options:
       --slack[=<CHANNEL>]
           Keep a Slack message up to date as the run goes: posted at the start, edited with the numbers, anomalies in its thread, the verdict at the end. --slack alone posts in the channel `pepe slack connect` kept; --slack=#channel elsewhere
 
-      --html <FILE>
-          Write the report as a page too: one self-contained HTML file, with the run's curves, the latency spread, where the time went, the thresholds and how it compares with the last run, for people who weren't at the terminal
+      --export <FILE>
+          Write the report to FILE as well, in the format its extension says: .html a self-contained page (curves, thresholds, the last run), .json the report, .md a summary for a PR, .txt what pepe prints, .csv the run's numbers a row a second; repeat for more
 
       --snapshot <FILE>
           Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run's numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run
@@ -1251,8 +1251,8 @@ Options:
       --slack[=<CHANNEL>]
           Keep a Slack message up to date as the run goes: posted at the start, edited with the numbers, anomalies in its thread, the verdict at the end. --slack alone posts in the channel `pepe slack connect` kept; --slack=#channel elsewhere
 
-      --html <FILE>
-          Write the report as a page too: one self-contained HTML file, with the run's curves, the latency spread, where the time went, the thresholds and how it compares with the last run, for people who weren't at the terminal
+      --export <FILE>
+          Write the report to FILE as well, in the format its extension says: .html a self-contained page (curves, thresholds, the last run), .json the report, .md a summary for a PR, .txt what pepe prints, .csv the run's numbers a row a second; repeat for more
 
       --snapshot <FILE>
           Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run's numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run
@@ -1389,8 +1389,8 @@ Options:
       --slack[=<CHANNEL>]
           Keep a Slack message up to date as the run goes: posted at the start, edited with the numbers, anomalies in its thread, the verdict at the end. --slack alone posts in the channel `pepe slack connect` kept; --slack=#channel elsewhere
 
-      --html <FILE>
-          Write the report as a page too: one self-contained HTML file, with the run's curves, the latency spread, where the time went, the thresholds and how it compares with the last run, for people who weren't at the terminal
+      --export <FILE>
+          Write the report to FILE as well, in the format its extension says: .html a self-contained page (curves, thresholds, the last run), .json the report, .md a summary for a PR, .txt what pepe prints, .csv the run's numbers a row a second; repeat for more
 
       --snapshot <FILE>
           Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run's numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run
@@ -1524,8 +1524,8 @@ Options:
       --slack[=<CHANNEL>]
           Keep a Slack message up to date as the run goes: posted at the start, edited with the numbers, anomalies in its thread, the verdict at the end. --slack alone posts in the channel `pepe slack connect` kept; --slack=#channel elsewhere
 
-      --html <FILE>
-          Write the report as a page too: one self-contained HTML file, with the run's curves, the latency spread, where the time went, the thresholds and how it compares with the last run, for people who weren't at the terminal
+      --export <FILE>
+          Write the report to FILE as well, in the format its extension says: .html a self-contained page (curves, thresholds, the last run), .json the report, .md a summary for a PR, .txt what pepe prints, .csv the run's numbers a row a second; repeat for more
 
       --snapshot <FILE>
           Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run's numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run
@@ -1661,8 +1661,8 @@ Options:
       --slack[=<CHANNEL>]
           Keep a Slack message up to date as the run goes: posted at the start, edited with the numbers, anomalies in its thread, the verdict at the end. --slack alone posts in the channel `pepe slack connect` kept; --slack=#channel elsewhere
 
-      --html <FILE>
-          Write the report as a page too: one self-contained HTML file, with the run's curves, the latency spread, where the time went, the thresholds and how it compares with the last run, for people who weren't at the terminal
+      --export <FILE>
+          Write the report to FILE as well, in the format its extension says: .html a self-contained page (curves, thresholds, the last run), .json the report, .md a summary for a PR, .txt what pepe prints, .csv the run's numbers a row a second; repeat for more
 
       --snapshot <FILE>
           Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run's numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run
@@ -1792,8 +1792,8 @@ Options:
       --slack[=<CHANNEL>]
           Keep a Slack message up to date as the run goes: posted at the start, edited with the numbers, anomalies in its thread, the verdict at the end. --slack alone posts in the channel `pepe slack connect` kept; --slack=#channel elsewhere
 
-      --html <FILE>
-          Write the report as a page too: one self-contained HTML file, with the run's curves, the latency spread, where the time went, the thresholds and how it compares with the last run, for people who weren't at the terminal
+      --export <FILE>
+          Write the report to FILE as well, in the format its extension says: .html a self-contained page (curves, thresholds, the last run), .json the report, .md a summary for a PR, .txt what pepe prints, .csv the run's numbers a row a second; repeat for more
 
       --snapshot <FILE>
           Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run's numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run
@@ -1929,8 +1929,8 @@ Options:
       --slack[=<CHANNEL>]
           Keep a Slack message up to date as the run goes: posted at the start, edited with the numbers, anomalies in its thread, the verdict at the end. --slack alone posts in the channel `pepe slack connect` kept; --slack=#channel elsewhere
 
-      --html <FILE>
-          Write the report as a page too: one self-contained HTML file, with the run's curves, the latency spread, where the time went, the thresholds and how it compares with the last run, for people who weren't at the terminal
+      --export <FILE>
+          Write the report to FILE as well, in the format its extension says: .html a self-contained page (curves, thresholds, the last run), .json the report, .md a summary for a PR, .txt what pepe prints, .csv the run's numbers a row a second; repeat for more
 
       --snapshot <FILE>
           Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run's numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run
@@ -2072,8 +2072,8 @@ Options:
       --slack[=<CHANNEL>]
           Keep a Slack message up to date as the run goes: posted at the start, edited with the numbers, anomalies in its thread, the verdict at the end. --slack alone posts in the channel `pepe slack connect` kept; --slack=#channel elsewhere
 
-      --html <FILE>
-          Write the report as a page too: one self-contained HTML file, with the run's curves, the latency spread, where the time went, the thresholds and how it compares with the last run, for people who weren't at the terminal
+      --export <FILE>
+          Write the report to FILE as well, in the format its extension says: .html a self-contained page (curves, thresholds, the last run), .json the report, .md a summary for a PR, .txt what pepe prints, .csv the run's numbers a row a second; repeat for more
 
       --snapshot <FILE>
           Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run's numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run
@@ -2210,8 +2210,8 @@ Options:
       --slack[=<CHANNEL>]
           Keep a Slack message up to date as the run goes: posted at the start, edited with the numbers, anomalies in its thread, the verdict at the end. --slack alone posts in the channel `pepe slack connect` kept; --slack=#channel elsewhere
 
-      --html <FILE>
-          Write the report as a page too: one self-contained HTML file, with the run's curves, the latency spread, where the time went, the thresholds and how it compares with the last run, for people who weren't at the terminal
+      --export <FILE>
+          Write the report to FILE as well, in the format its extension says: .html a self-contained page (curves, thresholds, the last run), .json the report, .md a summary for a PR, .txt what pepe prints, .csv the run's numbers a row a second; repeat for more
 
       --snapshot <FILE>
           Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run's numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run
@@ -2256,23 +2256,26 @@ Options:
           Keep the run's report under its saved test when it ends, as ./.pepe/runs/NAME/<moment>.json; the run has to be a saved test (--load NAME, or --keep NAME)
 ```
 
-## pepe html
+## pepe export
 
 ```text
-Turn a run's or a ramp's JSON report into a page: one self-contained HTML file
+Turn a JSON report into a page, a Markdown summary, text or CSV
 
-Usage: pepe html [OPTIONS] <REPORT>
+Usage: pepe export [OPTIONS] <REPORT>
 
 Arguments:
   <REPORT>
-          The JSON report: a run's (--json, --snapshot, a recorded run) or a ramp's
+          The JSON report: a run's (--json, --snapshot, a recorded run), a ramp's or a ping's
 
 Options:
   -o, --out <FILE>
-          Where the page goes; beside the report, as .html, by default
+          Where it goes, its format from its extension; beside the report by default
+
+      --to <FORMAT>
+          The format when -o doesn't say: html (the default), json, md, txt, csv, or all
 
       --open
-          Open it in the browser once written
+          Open it once written
 
   -h, --help
           Print help
@@ -2351,8 +2354,8 @@ Options:
       --slack[=<CHANNEL>]
           Keep a Slack message up to date as the run goes: posted at the start, edited with the numbers, anomalies in its thread, the verdict at the end. --slack alone posts in the channel `pepe slack connect` kept; --slack=#channel elsewhere
 
-      --html <FILE>
-          Write the report as a page too: one self-contained HTML file, with the run's curves, the latency spread, where the time went, the thresholds and how it compares with the last run, for people who weren't at the terminal
+      --export <FILE>
+          Write the report to FILE as well, in the format its extension says: .html a self-contained page (curves, thresholds, the last run), .json the report, .md a summary for a PR, .txt what pepe prints, .csv the run's numbers a row a second; repeat for more
 
       --snapshot <FILE>
           Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run's numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run

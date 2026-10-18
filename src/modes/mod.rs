@@ -490,7 +490,7 @@ pub(crate) fn hooks_end(
     failed: Vec<String>,
     timeline: Option<&timeline::Timeline>,
 ) {
-    if !crate::webhook::live() && args.html.is_none() {
+    if !crate::webhook::live() && args.export.is_empty() {
         return;
     }
     let Ok(report) = serde_json::to_value(report) else {
@@ -516,30 +516,52 @@ pub(crate) fn hooks_end(
             },
         );
     }
-    if let Some(path) = &args.html {
-        let seconds = timeline
-            .map(|t| {
-                t.whole_run()
-                    .iter()
-                    .map(|s| crate::html::Point {
-                        at: s.at,
-                        rps: s.rps,
-                        p50: s.p50_ms,
-                        p99: s.p99_ms,
-                        errors: s.errors,
-                    })
-                    .collect()
-            })
-            .unwrap_or_default();
-        let extras = crate::html::Extras {
+    if !args.export.is_empty() {
+        let snap = snapshot(report, checks, failed, last, timeline);
+        for path in &args.export {
+            let saved = crate::export::Format::of_path(path)
+                .and_then(|format| crate::export::save(format, &snap, path));
+            match saved {
+                Ok(path) => eprintln!("exported {}", path.display()),
+                Err(e) => eprintln!("couldn't export: {e}"),
+            }
+        }
+    }
+}
+
+/// What an export of a run is made from
+pub(crate) fn snapshot(
+    report: serde_json::Value,
+    checks: Vec<crate::webhook::Check>,
+    failed: Vec<String>,
+    compared: Option<(crate::compare::Comparison, String)>,
+    timeline: Option<&timeline::Timeline>,
+) -> crate::export::Snapshot {
+    let seconds = timeline
+        .map(|t| {
+            t.whole_run()
+                .iter()
+                .map(|s| crate::html::Point {
+                    at: s.at,
+                    rps: s.rps,
+                    p50: s.p50_ms,
+                    p99: s.p99_ms,
+                    errors: s.errors,
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    crate::export::Snapshot {
+        report,
+        extras: crate::html::Extras {
             seconds,
             checks,
             failed,
-            compared: last,
+            compared,
             host: gethostname::gethostname().to_string_lossy().into_owned(),
             when: now_said(),
-        };
-        write_html(path, &report, &extras);
+        },
+        text: None,
     }
 }
 
@@ -553,20 +575,48 @@ pub(crate) fn now_said() -> String {
         .unwrap_or_default()
 }
 
-/// The page into `path`, said on stderr
-pub(crate) fn write_html(
-    path: &std::path::Path,
-    report: &serde_json::Value,
-    extras: &crate::html::Extras,
-) {
-    if report["mode"] == "ping" {
-        eprintln!("--html draws a run's or a ramp's report; a ping's isn't one yet");
-        return;
+/// `pepe export REPORT.json`: the report in another shape, beside it or
+/// where `-o` says, in the format its extension or `--to` says
+pub(crate) fn export_report(what: &cli::ExportArgs) -> Result<(), String> {
+    use crate::export::{Format, Snapshot};
+    let text = std::fs::read_to_string(&what.report)
+        .map_err(|e| format!("couldn't read {}: {e}", what.report.display()))?;
+    let report: serde_json::Value = serde_json::from_str(&text)
+        .map_err(|e| format!("{} isn't a JSON report: {e}", what.report.display()))?;
+    if report.get("summary").is_none()
+        && report.get("steps").is_none()
+        && report.get("targets").is_none()
+    {
+        return Err(format!(
+            "{} is no run's, ramp's or ping's report",
+            what.report.display()
+        ));
     }
-    match std::fs::write(path, crate::html::render(report, extras)) {
-        Ok(()) => eprintln!("report: {}", path.display()),
-        Err(e) => eprintln!("couldn't write {}: {e}", path.display()),
+    let formats: Vec<Format> = match (what.to.as_deref(), &what.out) {
+        (Some("all"), _) => Format::ALL
+            .into_iter()
+            .filter(|f| *f != Format::Json && !(*f == Format::Html && report["mode"] == "ping"))
+            .collect(),
+        (Some(to), _) => vec![Format::parse(to)?],
+        (None, Some(out)) => vec![Format::of_path(out)?],
+        (None, None) => vec![Format::Html],
+    };
+    let snap = Snapshot {
+        report,
+        ..Snapshot::default()
+    };
+    for format in formats {
+        let path = match &what.out {
+            Some(out) => out.with_extension(format.ext()),
+            None => what.report.with_extension(format.ext()),
+        };
+        let path = crate::export::save(format, &snap, &path)?;
+        eprintln!("exported {}", path.display());
+        if what.open {
+            crate::slack::open_browser(&path.display().to_string());
+        }
     }
+    Ok(())
 }
 
 /// Each `--fail-if`, whether the run held it off, and what it measured
@@ -625,7 +675,7 @@ fn moved(comparison: &crate::compare::Comparison) -> String {
 }
 
 /// A saved test's run against its last recorded one, and when that was
-fn last_comparison(
+pub(crate) fn last_comparison(
     args: &Cli,
     report: &serde_json::Value,
 ) -> Option<(crate::compare::Comparison, String)> {

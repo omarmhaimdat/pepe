@@ -1,0 +1,25 @@
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.TH pepe-export 1  pepe "User Commands"
+.SH NAME
+pepe\-export \- Turn a JSON report into a page, a Markdown summary, text or CSV
+.SH SYNOPSIS
+\fBpepe export\fR [\fB\-o\fR|\fB\-\-out\fR] [\fB\-\-to\fR] [\fB\-\-open\fR] [\fB\-h\fR|\fB\-\-help\fR] <\fIREPORT\fR> 
+.SH DESCRIPTION
+Turn a JSON report into a page, a Markdown summary, text or CSV
+.SH OPTIONS
+.TP
+\fB\-o\fR, \fB\-\-out\fR \fI<FILE>\fR
+Where it goes, its format from its extension; beside the report by default
+.TP
+\fB\-\-to\fR \fI<FORMAT>\fR
+The format when \-o doesn\*(Aqt say: html (the default), json, md, txt, csv, or all
+.TP
+\fB\-\-open\fR
+Open it once written
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Print help
+.TP
+<\fIREPORT\fR>
+The JSON report: a run\*(Aqs (\-\-json, \-\-snapshot, a recorded run), a ramp\*(Aqs or a ping\*(Aqs

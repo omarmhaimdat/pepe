@@ -37,7 +37,7 @@ _pepe() {
 '*--webhook=[Send the run'\''s verdict to this URL when it ends\: a Slack, Discord, Teams or Google Chat webhook gets a message laid out for it, anything else the JSON report; repeat for more. \${NAME} is taken from the environment. A \[\[webhook\]\] table in pepe.toml says more]:URL:_default' \
 '--webhook-on=[When the --webhook URLs are sent\: start, progress, anomaly, end, fail (the end when a --fail-if was crossed), comma-separated; end by default]:EVENTS:_default' \
 '--slack=[Keep a Slack message up to date as the run goes\: posted at the start, edited with the numbers, anomalies in its thread, the verdict at the end. --slack alone posts in the channel \`pepe slack connect\` kept; --slack=#channel elsewhere]::CHANNEL:_default' \
-'--html=[Write the report as a page too\: one self-contained HTML file, with the run'\''s curves, the latency spread, where the time went, the thresholds and how it compares with the last run, for people who weren'\''t at the terminal]:FILE:_files' \
+'*--export=[Write the report to FILE as well, in the format its extension says\: .html a self-contained page (curves, thresholds, the last run), .json the report, .md a summary for a PR, .txt what pepe prints, .csv the run'\''s numbers a row a second; repeat for more]:FILE:_files' \
 '--snapshot=[Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run'\''s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run]:FILE:_files' \
 '*--allow-host=[Refuse to send anywhere but these hosts\: api.example.com exactly, or .example.com for it and its subdomains; repeat for more. Every target is checked before anything is sent]:HOST:_default' \
 '--max-requests=[Refuse a run that would send more requests than this\: -n above it, or -z without a --rate that bounds it]:N:_default' \
@@ -117,7 +117,7 @@ fail\:"A failure"))' \
 '*--webhook=[Send the run'\''s verdict to this URL when it ends\: a Slack, Discord, Teams or Google Chat webhook gets a message laid out for it, anything else the JSON report; repeat for more. \${NAME} is taken from the environment. A \[\[webhook\]\] table in pepe.toml says more]:URL:_default' \
 '--webhook-on=[When the --webhook URLs are sent\: start, progress, anomaly, end, fail (the end when a --fail-if was crossed), comma-separated; end by default]:EVENTS:_default' \
 '--slack=[Keep a Slack message up to date as the run goes\: posted at the start, edited with the numbers, anomalies in its thread, the verdict at the end. --slack alone posts in the channel \`pepe slack connect\` kept; --slack=#channel elsewhere]::CHANNEL:_default' \
-'--html=[Write the report as a page too\: one self-contained HTML file, with the run'\''s curves, the latency spread, where the time went, the thresholds and how it compares with the last run, for people who weren'\''t at the terminal]:FILE:_files' \
+'*--export=[Write the report to FILE as well, in the format its extension says\: .html a self-contained page (curves, thresholds, the last run), .json the report, .md a summary for a PR, .txt what pepe prints, .csv the run'\''s numbers a row a second; repeat for more]:FILE:_files' \
 '--snapshot=[Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run'\''s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run]:FILE:_files' \
 '*--allow-host=[Refuse to send anywhere but these hosts\: api.example.com exactly, or .example.com for it and its subdomains; repeat for more. Every target is checked before anything is sent]:HOST:_default' \
 '--max-requests=[Refuse a run that would send more requests than this\: -n above it, or -z without a --rate that bounds it]:N:_default' \
@@ -192,7 +192,7 @@ _arguments "${_arguments_options[@]}" : \
 '*--webhook=[Send the run'\''s verdict to this URL when it ends\: a Slack, Discord, Teams or Google Chat webhook gets a message laid out for it, anything else the JSON report; repeat for more. \${NAME} is taken from the environment. A \[\[webhook\]\] table in pepe.toml says more]:URL:_default' \
 '--webhook-on=[When the --webhook URLs are sent\: start, progress, anomaly, end, fail (the end when a --fail-if was crossed), comma-separated; end by default]:EVENTS:_default' \
 '--slack=[Keep a Slack message up to date as the run goes\: posted at the start, edited with the numbers, anomalies in its thread, the verdict at the end. --slack alone posts in the channel \`pepe slack connect\` kept; --slack=#channel elsewhere]::CHANNEL:_default' \
-'--html=[Write the report as a page too\: one self-contained HTML file, with the run'\''s curves, the latency spread, where the time went, the thresholds and how it compares with the last run, for people who weren'\''t at the terminal]:FILE:_files' \
+'*--export=[Write the report to FILE as well, in the format its extension says\: .html a self-contained page (curves, thresholds, the last run), .json the report, .md a summary for a PR, .txt what pepe prints, .csv the run'\''s numbers a row a second; repeat for more]:FILE:_files' \
 '--snapshot=[Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run'\''s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run]:FILE:_files' \
 '*--allow-host=[Refuse to send anywhere but these hosts\: api.example.com exactly, or .example.com for it and its subdomains; repeat for more. Every target is checked before anything is sent]:HOST:_default' \
 '--max-requests=[Refuse a run that would send more requests than this\: -n above it, or -z without a --rate that bounds it]:N:_default' \
@@ -248,7 +248,7 @@ _arguments "${_arguments_options[@]}" : \
 '*--webhook=[Send the run'\''s verdict to this URL when it ends\: a Slack, Discord, Teams or Google Chat webhook gets a message laid out for it, anything else the JSON report; repeat for more. \${NAME} is taken from the environment. A \[\[webhook\]\] table in pepe.toml says more]:URL:_default' \
 '--webhook-on=[When the --webhook URLs are sent\: start, progress, anomaly, end, fail (the end when a --fail-if was crossed), comma-separated; end by default]:EVENTS:_default' \
 '--slack=[Keep a Slack message up to date as the run goes\: posted at the start, edited with the numbers, anomalies in its thread, the verdict at the end. --slack alone posts in the channel \`pepe slack connect\` kept; --slack=#channel elsewhere]::CHANNEL:_default' \
-'--html=[Write the report as a page too\: one self-contained HTML file, with the run'\''s curves, the latency spread, where the time went, the thresholds and how it compares with the last run, for people who weren'\''t at the terminal]:FILE:_files' \
+'*--export=[Write the report to FILE as well, in the format its extension says\: .html a self-contained page (curves, thresholds, the last run), .json the report, .md a summary for a PR, .txt what pepe prints, .csv the run'\''s numbers a row a second; repeat for more]:FILE:_files' \
 '--snapshot=[Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run'\''s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run]:FILE:_files' \
 '*--allow-host=[Refuse to send anywhere but these hosts\: api.example.com exactly, or .example.com for it and its subdomains; repeat for more. Every target is checked before anything is sent]:HOST:_default' \
 '--max-requests=[Refuse a run that would send more requests than this\: -n above it, or -z without a --rate that bounds it]:N:_default' \
@@ -305,7 +305,7 @@ _arguments "${_arguments_options[@]}" : \
 '*--webhook=[Send the run'\''s verdict to this URL when it ends\: a Slack, Discord, Teams or Google Chat webhook gets a message laid out for it, anything else the JSON report; repeat for more. \${NAME} is taken from the environment. A \[\[webhook\]\] table in pepe.toml says more]:URL:_default' \
 '--webhook-on=[When the --webhook URLs are sent\: start, progress, anomaly, end, fail (the end when a --fail-if was crossed), comma-separated; end by default]:EVENTS:_default' \
 '--slack=[Keep a Slack message up to date as the run goes\: posted at the start, edited with the numbers, anomalies in its thread, the verdict at the end. --slack alone posts in the channel \`pepe slack connect\` kept; --slack=#channel elsewhere]::CHANNEL:_default' \
-'--html=[Write the report as a page too\: one self-contained HTML file, with the run'\''s curves, the latency spread, where the time went, the thresholds and how it compares with the last run, for people who weren'\''t at the terminal]:FILE:_files' \
+'*--export=[Write the report to FILE as well, in the format its extension says\: .html a self-contained page (curves, thresholds, the last run), .json the report, .md a summary for a PR, .txt what pepe prints, .csv the run'\''s numbers a row a second; repeat for more]:FILE:_files' \
 '--snapshot=[Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run'\''s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run]:FILE:_files' \
 '*--allow-host=[Refuse to send anywhere but these hosts\: api.example.com exactly, or .example.com for it and its subdomains; repeat for more. Every target is checked before anything is sent]:HOST:_default' \
 '--max-requests=[Refuse a run that would send more requests than this\: -n above it, or -z without a --rate that bounds it]:N:_default' \
@@ -361,7 +361,7 @@ _arguments "${_arguments_options[@]}" : \
 '*--webhook=[Send the run'\''s verdict to this URL when it ends\: a Slack, Discord, Teams or Google Chat webhook gets a message laid out for it, anything else the JSON report; repeat for more. \${NAME} is taken from the environment. A \[\[webhook\]\] table in pepe.toml says more]:URL:_default' \
 '--webhook-on=[When the --webhook URLs are sent\: start, progress, anomaly, end, fail (the end when a --fail-if was crossed), comma-separated; end by default]:EVENTS:_default' \
 '--slack=[Keep a Slack message up to date as the run goes\: posted at the start, edited with the numbers, anomalies in its thread, the verdict at the end. --slack alone posts in the channel \`pepe slack connect\` kept; --slack=#channel elsewhere]::CHANNEL:_default' \
-'--html=[Write the report as a page too\: one self-contained HTML file, with the run'\''s curves, the latency spread, where the time went, the thresholds and how it compares with the last run, for people who weren'\''t at the terminal]:FILE:_files' \
+'*--export=[Write the report to FILE as well, in the format its extension says\: .html a self-contained page (curves, thresholds, the last run), .json the report, .md a summary for a PR, .txt what pepe prints, .csv the run'\''s numbers a row a second; repeat for more]:FILE:_files' \
 '--snapshot=[Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run'\''s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run]:FILE:_files' \
 '*--allow-host=[Refuse to send anywhere but these hosts\: api.example.com exactly, or .example.com for it and its subdomains; repeat for more. Every target is checked before anything is sent]:HOST:_default' \
 '--max-requests=[Refuse a run that would send more requests than this\: -n above it, or -z without a --rate that bounds it]:N:_default' \
@@ -422,7 +422,7 @@ _arguments "${_arguments_options[@]}" : \
 '*--webhook=[Send the run'\''s verdict to this URL when it ends\: a Slack, Discord, Teams or Google Chat webhook gets a message laid out for it, anything else the JSON report; repeat for more. \${NAME} is taken from the environment. A \[\[webhook\]\] table in pepe.toml says more]:URL:_default' \
 '--webhook-on=[When the --webhook URLs are sent\: start, progress, anomaly, end, fail (the end when a --fail-if was crossed), comma-separated; end by default]:EVENTS:_default' \
 '--slack=[Keep a Slack message up to date as the run goes\: posted at the start, edited with the numbers, anomalies in its thread, the verdict at the end. --slack alone posts in the channel \`pepe slack connect\` kept; --slack=#channel elsewhere]::CHANNEL:_default' \
-'--html=[Write the report as a page too\: one self-contained HTML file, with the run'\''s curves, the latency spread, where the time went, the thresholds and how it compares with the last run, for people who weren'\''t at the terminal]:FILE:_files' \
+'*--export=[Write the report to FILE as well, in the format its extension says\: .html a self-contained page (curves, thresholds, the last run), .json the report, .md a summary for a PR, .txt what pepe prints, .csv the run'\''s numbers a row a second; repeat for more]:FILE:_files' \
 '--snapshot=[Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run'\''s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run]:FILE:_files' \
 '*--allow-host=[Refuse to send anywhere but these hosts\: api.example.com exactly, or .example.com for it and its subdomains; repeat for more. Every target is checked before anything is sent]:HOST:_default' \
 '--max-requests=[Refuse a run that would send more requests than this\: -n above it, or -z without a --rate that bounds it]:N:_default' \
@@ -479,7 +479,7 @@ _arguments "${_arguments_options[@]}" : \
 '*--webhook=[Send the run'\''s verdict to this URL when it ends\: a Slack, Discord, Teams or Google Chat webhook gets a message laid out for it, anything else the JSON report; repeat for more. \${NAME} is taken from the environment. A \[\[webhook\]\] table in pepe.toml says more]:URL:_default' \
 '--webhook-on=[When the --webhook URLs are sent\: start, progress, anomaly, end, fail (the end when a --fail-if was crossed), comma-separated; end by default]:EVENTS:_default' \
 '--slack=[Keep a Slack message up to date as the run goes\: posted at the start, edited with the numbers, anomalies in its thread, the verdict at the end. --slack alone posts in the channel \`pepe slack connect\` kept; --slack=#channel elsewhere]::CHANNEL:_default' \
-'--html=[Write the report as a page too\: one self-contained HTML file, with the run'\''s curves, the latency spread, where the time went, the thresholds and how it compares with the last run, for people who weren'\''t at the terminal]:FILE:_files' \
+'*--export=[Write the report to FILE as well, in the format its extension says\: .html a self-contained page (curves, thresholds, the last run), .json the report, .md a summary for a PR, .txt what pepe prints, .csv the run'\''s numbers a row a second; repeat for more]:FILE:_files' \
 '--snapshot=[Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run'\''s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run]:FILE:_files' \
 '*--allow-host=[Refuse to send anywhere but these hosts\: api.example.com exactly, or .example.com for it and its subdomains; repeat for more. Every target is checked before anything is sent]:HOST:_default' \
 '--max-requests=[Refuse a run that would send more requests than this\: -n above it, or -z without a --rate that bounds it]:N:_default' \
@@ -536,7 +536,7 @@ _arguments "${_arguments_options[@]}" : \
 '*--webhook=[Send the run'\''s verdict to this URL when it ends\: a Slack, Discord, Teams or Google Chat webhook gets a message laid out for it, anything else the JSON report; repeat for more. \${NAME} is taken from the environment. A \[\[webhook\]\] table in pepe.toml says more]:URL:_default' \
 '--webhook-on=[When the --webhook URLs are sent\: start, progress, anomaly, end, fail (the end when a --fail-if was crossed), comma-separated; end by default]:EVENTS:_default' \
 '--slack=[Keep a Slack message up to date as the run goes\: posted at the start, edited with the numbers, anomalies in its thread, the verdict at the end. --slack alone posts in the channel \`pepe slack connect\` kept; --slack=#channel elsewhere]::CHANNEL:_default' \
-'--html=[Write the report as a page too\: one self-contained HTML file, with the run'\''s curves, the latency spread, where the time went, the thresholds and how it compares with the last run, for people who weren'\''t at the terminal]:FILE:_files' \
+'*--export=[Write the report to FILE as well, in the format its extension says\: .html a self-contained page (curves, thresholds, the last run), .json the report, .md a summary for a PR, .txt what pepe prints, .csv the run'\''s numbers a row a second; repeat for more]:FILE:_files' \
 '--snapshot=[Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run'\''s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run]:FILE:_files' \
 '*--allow-host=[Refuse to send anywhere but these hosts\: api.example.com exactly, or .example.com for it and its subdomains; repeat for more. Every target is checked before anything is sent]:HOST:_default' \
 '--max-requests=[Refuse a run that would send more requests than this\: -n above it, or -z without a --rate that bounds it]:N:_default' \
@@ -596,7 +596,7 @@ _arguments "${_arguments_options[@]}" : \
 '*--webhook=[Send the run'\''s verdict to this URL when it ends\: a Slack, Discord, Teams or Google Chat webhook gets a message laid out for it, anything else the JSON report; repeat for more. \${NAME} is taken from the environment. A \[\[webhook\]\] table in pepe.toml says more]:URL:_default' \
 '--webhook-on=[When the --webhook URLs are sent\: start, progress, anomaly, end, fail (the end when a --fail-if was crossed), comma-separated; end by default]:EVENTS:_default' \
 '--slack=[Keep a Slack message up to date as the run goes\: posted at the start, edited with the numbers, anomalies in its thread, the verdict at the end. --slack alone posts in the channel \`pepe slack connect\` kept; --slack=#channel elsewhere]::CHANNEL:_default' \
-'--html=[Write the report as a page too\: one self-contained HTML file, with the run'\''s curves, the latency spread, where the time went, the thresholds and how it compares with the last run, for people who weren'\''t at the terminal]:FILE:_files' \
+'*--export=[Write the report to FILE as well, in the format its extension says\: .html a self-contained page (curves, thresholds, the last run), .json the report, .md a summary for a PR, .txt what pepe prints, .csv the run'\''s numbers a row a second; repeat for more]:FILE:_files' \
 '--snapshot=[Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run'\''s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run]:FILE:_files' \
 '*--allow-host=[Refuse to send anywhere but these hosts\: api.example.com exactly, or .example.com for it and its subdomains; repeat for more. Every target is checked before anything is sent]:HOST:_default' \
 '--max-requests=[Refuse a run that would send more requests than this\: -n above it, or -z without a --rate that bounds it]:N:_default' \
@@ -653,7 +653,7 @@ _arguments "${_arguments_options[@]}" : \
 '*--webhook=[Send the run'\''s verdict to this URL when it ends\: a Slack, Discord, Teams or Google Chat webhook gets a message laid out for it, anything else the JSON report; repeat for more. \${NAME} is taken from the environment. A \[\[webhook\]\] table in pepe.toml says more]:URL:_default' \
 '--webhook-on=[When the --webhook URLs are sent\: start, progress, anomaly, end, fail (the end when a --fail-if was crossed), comma-separated; end by default]:EVENTS:_default' \
 '--slack=[Keep a Slack message up to date as the run goes\: posted at the start, edited with the numbers, anomalies in its thread, the verdict at the end. --slack alone posts in the channel \`pepe slack connect\` kept; --slack=#channel elsewhere]::CHANNEL:_default' \
-'--html=[Write the report as a page too\: one self-contained HTML file, with the run'\''s curves, the latency spread, where the time went, the thresholds and how it compares with the last run, for people who weren'\''t at the terminal]:FILE:_files' \
+'*--export=[Write the report to FILE as well, in the format its extension says\: .html a self-contained page (curves, thresholds, the last run), .json the report, .md a summary for a PR, .txt what pepe prints, .csv the run'\''s numbers a row a second; repeat for more]:FILE:_files' \
 '--snapshot=[Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run'\''s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run]:FILE:_files' \
 '*--allow-host=[Refuse to send anywhere but these hosts\: api.example.com exactly, or .example.com for it and its subdomains; repeat for more. Every target is checked before anything is sent]:HOST:_default' \
 '--max-requests=[Refuse a run that would send more requests than this\: -n above it, or -z without a --rate that bounds it]:N:_default' \
@@ -708,7 +708,7 @@ _arguments "${_arguments_options[@]}" : \
 '*--webhook=[Send the run'\''s verdict to this URL when it ends\: a Slack, Discord, Teams or Google Chat webhook gets a message laid out for it, anything else the JSON report; repeat for more. \${NAME} is taken from the environment. A \[\[webhook\]\] table in pepe.toml says more]:URL:_default' \
 '--webhook-on=[When the --webhook URLs are sent\: start, progress, anomaly, end, fail (the end when a --fail-if was crossed), comma-separated; end by default]:EVENTS:_default' \
 '--slack=[Keep a Slack message up to date as the run goes\: posted at the start, edited with the numbers, anomalies in its thread, the verdict at the end. --slack alone posts in the channel \`pepe slack connect\` kept; --slack=#channel elsewhere]::CHANNEL:_default' \
-'--html=[Write the report as a page too\: one self-contained HTML file, with the run'\''s curves, the latency spread, where the time went, the thresholds and how it compares with the last run, for people who weren'\''t at the terminal]:FILE:_files' \
+'*--export=[Write the report to FILE as well, in the format its extension says\: .html a self-contained page (curves, thresholds, the last run), .json the report, .md a summary for a PR, .txt what pepe prints, .csv the run'\''s numbers a row a second; repeat for more]:FILE:_files' \
 '--snapshot=[Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run'\''s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run]:FILE:_files' \
 '*--allow-host=[Refuse to send anywhere but these hosts\: api.example.com exactly, or .example.com for it and its subdomains; repeat for more. Every target is checked before anything is sent]:HOST:_default' \
 '--max-requests=[Refuse a run that would send more requests than this\: -n above it, or -z without a --rate that bounds it]:N:_default' \
@@ -762,7 +762,7 @@ _arguments "${_arguments_options[@]}" : \
 '*--webhook=[Send the run'\''s verdict to this URL when it ends\: a Slack, Discord, Teams or Google Chat webhook gets a message laid out for it, anything else the JSON report; repeat for more. \${NAME} is taken from the environment. A \[\[webhook\]\] table in pepe.toml says more]:URL:_default' \
 '--webhook-on=[When the --webhook URLs are sent\: start, progress, anomaly, end, fail (the end when a --fail-if was crossed), comma-separated; end by default]:EVENTS:_default' \
 '--slack=[Keep a Slack message up to date as the run goes\: posted at the start, edited with the numbers, anomalies in its thread, the verdict at the end. --slack alone posts in the channel \`pepe slack connect\` kept; --slack=#channel elsewhere]::CHANNEL:_default' \
-'--html=[Write the report as a page too\: one self-contained HTML file, with the run'\''s curves, the latency spread, where the time went, the thresholds and how it compares with the last run, for people who weren'\''t at the terminal]:FILE:_files' \
+'*--export=[Write the report to FILE as well, in the format its extension says\: .html a self-contained page (curves, thresholds, the last run), .json the report, .md a summary for a PR, .txt what pepe prints, .csv the run'\''s numbers a row a second; repeat for more]:FILE:_files' \
 '--snapshot=[Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run'\''s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run]:FILE:_files' \
 '*--allow-host=[Refuse to send anywhere but these hosts\: api.example.com exactly, or .example.com for it and its subdomains; repeat for more. Every target is checked before anything is sent]:HOST:_default' \
 '--max-requests=[Refuse a run that would send more requests than this\: -n above it, or -z without a --rate that bounds it]:N:_default' \
@@ -818,7 +818,7 @@ _arguments "${_arguments_options[@]}" : \
 '*--webhook=[Send the run'\''s verdict to this URL when it ends\: a Slack, Discord, Teams or Google Chat webhook gets a message laid out for it, anything else the JSON report; repeat for more. \${NAME} is taken from the environment. A \[\[webhook\]\] table in pepe.toml says more]:URL:_default' \
 '--webhook-on=[When the --webhook URLs are sent\: start, progress, anomaly, end, fail (the end when a --fail-if was crossed), comma-separated; end by default]:EVENTS:_default' \
 '--slack=[Keep a Slack message up to date as the run goes\: posted at the start, edited with the numbers, anomalies in its thread, the verdict at the end. --slack alone posts in the channel \`pepe slack connect\` kept; --slack=#channel elsewhere]::CHANNEL:_default' \
-'--html=[Write the report as a page too\: one self-contained HTML file, with the run'\''s curves, the latency spread, where the time went, the thresholds and how it compares with the last run, for people who weren'\''t at the terminal]:FILE:_files' \
+'*--export=[Write the report to FILE as well, in the format its extension says\: .html a self-contained page (curves, thresholds, the last run), .json the report, .md a summary for a PR, .txt what pepe prints, .csv the run'\''s numbers a row a second; repeat for more]:FILE:_files' \
 '--snapshot=[Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run'\''s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run]:FILE:_files' \
 '*--allow-host=[Refuse to send anywhere but these hosts\: api.example.com exactly, or .example.com for it and its subdomains; repeat for more. Every target is checked before anything is sent]:HOST:_default' \
 '--max-requests=[Refuse a run that would send more requests than this\: -n above it, or -z without a --rate that bounds it]:N:_default' \
@@ -874,7 +874,7 @@ _arguments "${_arguments_options[@]}" : \
 '*--webhook=[Send the run'\''s verdict to this URL when it ends\: a Slack, Discord, Teams or Google Chat webhook gets a message laid out for it, anything else the JSON report; repeat for more. \${NAME} is taken from the environment. A \[\[webhook\]\] table in pepe.toml says more]:URL:_default' \
 '--webhook-on=[When the --webhook URLs are sent\: start, progress, anomaly, end, fail (the end when a --fail-if was crossed), comma-separated; end by default]:EVENTS:_default' \
 '--slack=[Keep a Slack message up to date as the run goes\: posted at the start, edited with the numbers, anomalies in its thread, the verdict at the end. --slack alone posts in the channel \`pepe slack connect\` kept; --slack=#channel elsewhere]::CHANNEL:_default' \
-'--html=[Write the report as a page too\: one self-contained HTML file, with the run'\''s curves, the latency spread, where the time went, the thresholds and how it compares with the last run, for people who weren'\''t at the terminal]:FILE:_files' \
+'*--export=[Write the report to FILE as well, in the format its extension says\: .html a self-contained page (curves, thresholds, the last run), .json the report, .md a summary for a PR, .txt what pepe prints, .csv the run'\''s numbers a row a second; repeat for more]:FILE:_files' \
 '--snapshot=[Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run'\''s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run]:FILE:_files' \
 '*--allow-host=[Refuse to send anywhere but these hosts\: api.example.com exactly, or .example.com for it and its subdomains; repeat for more. Every target is checked before anything is sent]:HOST:_default' \
 '--max-requests=[Refuse a run that would send more requests than this\: -n above it, or -z without a --rate that bounds it]:N:_default' \
@@ -938,7 +938,7 @@ _arguments "${_arguments_options[@]}" : \
 '*--webhook=[Send the run'\''s verdict to this URL when it ends\: a Slack, Discord, Teams or Google Chat webhook gets a message laid out for it, anything else the JSON report; repeat for more. \${NAME} is taken from the environment. A \[\[webhook\]\] table in pepe.toml says more]:URL:_default' \
 '--webhook-on=[When the --webhook URLs are sent\: start, progress, anomaly, end, fail (the end when a --fail-if was crossed), comma-separated; end by default]:EVENTS:_default' \
 '--slack=[Keep a Slack message up to date as the run goes\: posted at the start, edited with the numbers, anomalies in its thread, the verdict at the end. --slack alone posts in the channel \`pepe slack connect\` kept; --slack=#channel elsewhere]::CHANNEL:_default' \
-'--html=[Write the report as a page too\: one self-contained HTML file, with the run'\''s curves, the latency spread, where the time went, the thresholds and how it compares with the last run, for people who weren'\''t at the terminal]:FILE:_files' \
+'*--export=[Write the report to FILE as well, in the format its extension says\: .html a self-contained page (curves, thresholds, the last run), .json the report, .md a summary for a PR, .txt what pepe prints, .csv the run'\''s numbers a row a second; repeat for more]:FILE:_files' \
 '--snapshot=[Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run'\''s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run]:FILE:_files' \
 '*--allow-host=[Refuse to send anywhere but these hosts\: api.example.com exactly, or .example.com for it and its subdomains; repeat for more. Every target is checked before anything is sent]:HOST:_default' \
 '--max-requests=[Refuse a run that would send more requests than this\: -n above it, or -z without a --rate that bounds it]:N:_default' \
@@ -992,7 +992,7 @@ _arguments "${_arguments_options[@]}" : \
 '*--webhook=[Send the run'\''s verdict to this URL when it ends\: a Slack, Discord, Teams or Google Chat webhook gets a message laid out for it, anything else the JSON report; repeat for more. \${NAME} is taken from the environment. A \[\[webhook\]\] table in pepe.toml says more]:URL:_default' \
 '--webhook-on=[When the --webhook URLs are sent\: start, progress, anomaly, end, fail (the end when a --fail-if was crossed), comma-separated; end by default]:EVENTS:_default' \
 '--slack=[Keep a Slack message up to date as the run goes\: posted at the start, edited with the numbers, anomalies in its thread, the verdict at the end. --slack alone posts in the channel \`pepe slack connect\` kept; --slack=#channel elsewhere]::CHANNEL:_default' \
-'--html=[Write the report as a page too\: one self-contained HTML file, with the run'\''s curves, the latency spread, where the time went, the thresholds and how it compares with the last run, for people who weren'\''t at the terminal]:FILE:_files' \
+'*--export=[Write the report to FILE as well, in the format its extension says\: .html a self-contained page (curves, thresholds, the last run), .json the report, .md a summary for a PR, .txt what pepe prints, .csv the run'\''s numbers a row a second; repeat for more]:FILE:_files' \
 '--snapshot=[Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run'\''s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run]:FILE:_files' \
 '*--allow-host=[Refuse to send anywhere but these hosts\: api.example.com exactly, or .example.com for it and its subdomains; repeat for more. Every target is checked before anything is sent]:HOST:_default' \
 '--max-requests=[Refuse a run that would send more requests than this\: -n above it, or -z without a --rate that bounds it]:N:_default' \
@@ -1046,7 +1046,7 @@ _arguments "${_arguments_options[@]}" : \
 '*--webhook=[Send the run'\''s verdict to this URL when it ends\: a Slack, Discord, Teams or Google Chat webhook gets a message laid out for it, anything else the JSON report; repeat for more. \${NAME} is taken from the environment. A \[\[webhook\]\] table in pepe.toml says more]:URL:_default' \
 '--webhook-on=[When the --webhook URLs are sent\: start, progress, anomaly, end, fail (the end when a --fail-if was crossed), comma-separated; end by default]:EVENTS:_default' \
 '--slack=[Keep a Slack message up to date as the run goes\: posted at the start, edited with the numbers, anomalies in its thread, the verdict at the end. --slack alone posts in the channel \`pepe slack connect\` kept; --slack=#channel elsewhere]::CHANNEL:_default' \
-'--html=[Write the report as a page too\: one self-contained HTML file, with the run'\''s curves, the latency spread, where the time went, the thresholds and how it compares with the last run, for people who weren'\''t at the terminal]:FILE:_files' \
+'*--export=[Write the report to FILE as well, in the format its extension says\: .html a self-contained page (curves, thresholds, the last run), .json the report, .md a summary for a PR, .txt what pepe prints, .csv the run'\''s numbers a row a second; repeat for more]:FILE:_files' \
 '--snapshot=[Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run'\''s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run]:FILE:_files' \
 '*--allow-host=[Refuse to send anywhere but these hosts\: api.example.com exactly, or .example.com for it and its subdomains; repeat for more. Every target is checked before anything is sent]:HOST:_default' \
 '--max-requests=[Refuse a run that would send more requests than this\: -n above it, or -z without a --rate that bounds it]:N:_default' \
@@ -1101,7 +1101,7 @@ _arguments "${_arguments_options[@]}" : \
 '*--webhook=[Send the run'\''s verdict to this URL when it ends\: a Slack, Discord, Teams or Google Chat webhook gets a message laid out for it, anything else the JSON report; repeat for more. \${NAME} is taken from the environment. A \[\[webhook\]\] table in pepe.toml says more]:URL:_default' \
 '--webhook-on=[When the --webhook URLs are sent\: start, progress, anomaly, end, fail (the end when a --fail-if was crossed), comma-separated; end by default]:EVENTS:_default' \
 '--slack=[Keep a Slack message up to date as the run goes\: posted at the start, edited with the numbers, anomalies in its thread, the verdict at the end. --slack alone posts in the channel \`pepe slack connect\` kept; --slack=#channel elsewhere]::CHANNEL:_default' \
-'--html=[Write the report as a page too\: one self-contained HTML file, with the run'\''s curves, the latency spread, where the time went, the thresholds and how it compares with the last run, for people who weren'\''t at the terminal]:FILE:_files' \
+'*--export=[Write the report to FILE as well, in the format its extension says\: .html a self-contained page (curves, thresholds, the last run), .json the report, .md a summary for a PR, .txt what pepe prints, .csv the run'\''s numbers a row a second; repeat for more]:FILE:_files' \
 '--snapshot=[Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run'\''s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run]:FILE:_files' \
 '*--allow-host=[Refuse to send anywhere but these hosts\: api.example.com exactly, or .example.com for it and its subdomains; repeat for more. Every target is checked before anything is sent]:HOST:_default' \
 '--max-requests=[Refuse a run that would send more requests than this\: -n above it, or -z without a --rate that bounds it]:N:_default' \
@@ -1155,7 +1155,7 @@ _arguments "${_arguments_options[@]}" : \
 '*--webhook=[Send the run'\''s verdict to this URL when it ends\: a Slack, Discord, Teams or Google Chat webhook gets a message laid out for it, anything else the JSON report; repeat for more. \${NAME} is taken from the environment. A \[\[webhook\]\] table in pepe.toml says more]:URL:_default' \
 '--webhook-on=[When the --webhook URLs are sent\: start, progress, anomaly, end, fail (the end when a --fail-if was crossed), comma-separated; end by default]:EVENTS:_default' \
 '--slack=[Keep a Slack message up to date as the run goes\: posted at the start, edited with the numbers, anomalies in its thread, the verdict at the end. --slack alone posts in the channel \`pepe slack connect\` kept; --slack=#channel elsewhere]::CHANNEL:_default' \
-'--html=[Write the report as a page too\: one self-contained HTML file, with the run'\''s curves, the latency spread, where the time went, the thresholds and how it compares with the last run, for people who weren'\''t at the terminal]:FILE:_files' \
+'*--export=[Write the report to FILE as well, in the format its extension says\: .html a self-contained page (curves, thresholds, the last run), .json the report, .md a summary for a PR, .txt what pepe prints, .csv the run'\''s numbers a row a second; repeat for more]:FILE:_files' \
 '--snapshot=[Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run'\''s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run]:FILE:_files' \
 '*--allow-host=[Refuse to send anywhere but these hosts\: api.example.com exactly, or .example.com for it and its subdomains; repeat for more. Every target is checked before anything is sent]:HOST:_default' \
 '--max-requests=[Refuse a run that would send more requests than this\: -n above it, or -z without a --rate that bounds it]:N:_default' \
@@ -1210,7 +1210,7 @@ _arguments "${_arguments_options[@]}" : \
 '*--webhook=[Send the run'\''s verdict to this URL when it ends\: a Slack, Discord, Teams or Google Chat webhook gets a message laid out for it, anything else the JSON report; repeat for more. \${NAME} is taken from the environment. A \[\[webhook\]\] table in pepe.toml says more]:URL:_default' \
 '--webhook-on=[When the --webhook URLs are sent\: start, progress, anomaly, end, fail (the end when a --fail-if was crossed), comma-separated; end by default]:EVENTS:_default' \
 '--slack=[Keep a Slack message up to date as the run goes\: posted at the start, edited with the numbers, anomalies in its thread, the verdict at the end. --slack alone posts in the channel \`pepe slack connect\` kept; --slack=#channel elsewhere]::CHANNEL:_default' \
-'--html=[Write the report as a page too\: one self-contained HTML file, with the run'\''s curves, the latency spread, where the time went, the thresholds and how it compares with the last run, for people who weren'\''t at the terminal]:FILE:_files' \
+'*--export=[Write the report to FILE as well, in the format its extension says\: .html a self-contained page (curves, thresholds, the last run), .json the report, .md a summary for a PR, .txt what pepe prints, .csv the run'\''s numbers a row a second; repeat for more]:FILE:_files' \
 '--snapshot=[Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run'\''s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run]:FILE:_files' \
 '*--allow-host=[Refuse to send anywhere but these hosts\: api.example.com exactly, or .example.com for it and its subdomains; repeat for more. Every target is checked before anything is sent]:HOST:_default' \
 '--max-requests=[Refuse a run that would send more requests than this\: -n above it, or -z without a --rate that bounds it]:N:_default' \
@@ -1264,7 +1264,7 @@ _arguments "${_arguments_options[@]}" : \
 '*--webhook=[Send the run'\''s verdict to this URL when it ends\: a Slack, Discord, Teams or Google Chat webhook gets a message laid out for it, anything else the JSON report; repeat for more. \${NAME} is taken from the environment. A \[\[webhook\]\] table in pepe.toml says more]:URL:_default' \
 '--webhook-on=[When the --webhook URLs are sent\: start, progress, anomaly, end, fail (the end when a --fail-if was crossed), comma-separated; end by default]:EVENTS:_default' \
 '--slack=[Keep a Slack message up to date as the run goes\: posted at the start, edited with the numbers, anomalies in its thread, the verdict at the end. --slack alone posts in the channel \`pepe slack connect\` kept; --slack=#channel elsewhere]::CHANNEL:_default' \
-'--html=[Write the report as a page too\: one self-contained HTML file, with the run'\''s curves, the latency spread, where the time went, the thresholds and how it compares with the last run, for people who weren'\''t at the terminal]:FILE:_files' \
+'*--export=[Write the report to FILE as well, in the format its extension says\: .html a self-contained page (curves, thresholds, the last run), .json the report, .md a summary for a PR, .txt what pepe prints, .csv the run'\''s numbers a row a second; repeat for more]:FILE:_files' \
 '--snapshot=[Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run'\''s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run]:FILE:_files' \
 '*--allow-host=[Refuse to send anywhere but these hosts\: api.example.com exactly, or .example.com for it and its subdomains; repeat for more. Every target is checked before anything is sent]:HOST:_default' \
 '--max-requests=[Refuse a run that would send more requests than this\: -n above it, or -z without a --rate that bounds it]:N:_default' \
@@ -1346,10 +1346,11 @@ esac
     ;;
 esac
 ;;
-(html)
+(export)
 _arguments "${_arguments_options[@]}" : \
-'-o+[Where the page goes; beside the report, as .html, by default]:FILE:_files' \
-'--out=[Where the page goes; beside the report, as .html, by default]:FILE:_files' \
+'-o+[Where it goes, its format from its extension; beside the report by default]:FILE:_files' \
+'--out=[Where it goes, its format from its extension; beside the report by default]:FILE:_files' \
+'--to=[The format when -o doesn'\''t say\: html (the default), json, md, txt, csv, or all]:FORMAT:_default' \
 '-n+[Number of requests to perform]:NUMBER:_default' \
 '--number=[Number of requests to perform]:NUMBER:_default' \
 '-z+[Duration of the test, e.g. 10s, 3m, 2h (mutually exclusive with -n)]:DURATION:_default' \
@@ -1372,7 +1373,7 @@ _arguments "${_arguments_options[@]}" : \
 '*--webhook=[Send the run'\''s verdict to this URL when it ends\: a Slack, Discord, Teams or Google Chat webhook gets a message laid out for it, anything else the JSON report; repeat for more. \${NAME} is taken from the environment. A \[\[webhook\]\] table in pepe.toml says more]:URL:_default' \
 '--webhook-on=[When the --webhook URLs are sent\: start, progress, anomaly, end, fail (the end when a --fail-if was crossed), comma-separated; end by default]:EVENTS:_default' \
 '--slack=[Keep a Slack message up to date as the run goes\: posted at the start, edited with the numbers, anomalies in its thread, the verdict at the end. --slack alone posts in the channel \`pepe slack connect\` kept; --slack=#channel elsewhere]::CHANNEL:_default' \
-'--html=[Write the report as a page too\: one self-contained HTML file, with the run'\''s curves, the latency spread, where the time went, the thresholds and how it compares with the last run, for people who weren'\''t at the terminal]:FILE:_files' \
+'*--export=[Write the report to FILE as well, in the format its extension says\: .html a self-contained page (curves, thresholds, the last run), .json the report, .md a summary for a PR, .txt what pepe prints, .csv the run'\''s numbers a row a second; repeat for more]:FILE:_files' \
 '--snapshot=[Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run'\''s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run]:FILE:_files' \
 '*--allow-host=[Refuse to send anywhere but these hosts\: api.example.com exactly, or .example.com for it and its subdomains; repeat for more. Every target is checked before anything is sent]:HOST:_default' \
 '--max-requests=[Refuse a run that would send more requests than this\: -n above it, or -z without a --rate that bounds it]:N:_default' \
@@ -1388,7 +1389,7 @@ _arguments "${_arguments_options[@]}" : \
 '--concurrency=[Number of concurrent requests at a time]:CONCURRENCY:_default' \
 '-u+[User-Agent string, default is pepe/{version}]:USER_AGENT:_default' \
 '--user-agent=[User-Agent string, default is pepe/{version}]:USER_AGENT:_default' \
-'--open[Open it in the browser once written]' \
+'--open[Open it once written]' \
 '-h[Print help]' \
 '--help[Print help]' \
 '-k[Accept invalid TLS certificates (self-signed, expired, wrong host)]' \
@@ -1401,7 +1402,7 @@ _arguments "${_arguments_options[@]}" : \
 '-i[Open the setup screen to review or change the settings before starting (it opens by itself when no URL is given)]' \
 '--setup[Open the setup screen to review or change the settings before starting (it opens by itself when no URL is given)]' \
 '--record[Keep the run'\''s report under its saved test when it ends, as ./.pepe/runs/NAME/<moment>.json; the run has to be a saved test (--load NAME, or --keep NAME)]' \
-':report -- The JSON report\: a run'\''s (--json, --snapshot, a recorded run) or a ramp'\''s:_files' \
+':report -- The JSON report\: a run'\''s (--json, --snapshot, a recorded run), a ramp'\''s or a ping'\''s:_files' \
 && ret=0
 ;;
 (help)
@@ -1512,7 +1513,7 @@ _arguments "${_arguments_options[@]}" : \
     ;;
 esac
 ;;
-(html)
+(export)
 _arguments "${_arguments_options[@]}" : \
 && ret=0
 ;;
@@ -1546,7 +1547,7 @@ _pepe_commands() {
 'self-update:Update pepe to the latest release, or say what'\''s new in it' \
 'completions:Tab completion for your shell\: print the script, or --install it' \
 'slack:Connect pepe to Slack from here, so --slack keeps a message there up to date as a run goes' \
-'html:Turn a run'\''s or a ramp'\''s JSON report into a page\: one self-contained HTML file' \
+'export:Turn a JSON report into a page, a Markdown summary, text or CSV' \
 'help:Print this message or the help of the given subcommand(s)' \
     )
     _describe -t commands 'pepe commands' commands "$@"
@@ -1565,6 +1566,11 @@ _pepe__subcmd__compare_commands() {
 _pepe__subcmd__completions_commands() {
     local commands; commands=()
     _describe -t commands 'pepe completions commands' commands "$@"
+}
+(( $+functions[_pepe__subcmd__export_commands] )) ||
+_pepe__subcmd__export_commands() {
+    local commands; commands=()
+    _describe -t commands 'pepe export commands' commands "$@"
 }
 (( $+functions[_pepe__subcmd__flow_commands] )) ||
 _pepe__subcmd__flow_commands() {
@@ -1588,7 +1594,7 @@ _pepe__subcmd__help_commands() {
 'self-update:Update pepe to the latest release, or say what'\''s new in it' \
 'completions:Tab completion for your shell\: print the script, or --install it' \
 'slack:Connect pepe to Slack from here, so --slack keeps a message there up to date as a run goes' \
-'html:Turn a run'\''s or a ramp'\''s JSON report into a page\: one self-contained HTML file' \
+'export:Turn a JSON report into a page, a Markdown summary, text or CSV' \
 'help:Print this message or the help of the given subcommand(s)' \
     )
     _describe -t commands 'pepe help commands' commands "$@"
@@ -1608,6 +1614,11 @@ _pepe__subcmd__help__subcmd__completions_commands() {
     local commands; commands=()
     _describe -t commands 'pepe help completions commands' commands "$@"
 }
+(( $+functions[_pepe__subcmd__help__subcmd__export_commands] )) ||
+_pepe__subcmd__help__subcmd__export_commands() {
+    local commands; commands=()
+    _describe -t commands 'pepe help export commands' commands "$@"
+}
 (( $+functions[_pepe__subcmd__help__subcmd__flow_commands] )) ||
 _pepe__subcmd__help__subcmd__flow_commands() {
     local commands; commands=()
@@ -1622,11 +1633,6 @@ _pepe__subcmd__help__subcmd__help_commands() {
 _pepe__subcmd__help__subcmd__history_commands() {
     local commands; commands=()
     _describe -t commands 'pepe help history commands' commands "$@"
-}
-(( $+functions[_pepe__subcmd__help__subcmd__html_commands] )) ||
-_pepe__subcmd__help__subcmd__html_commands() {
-    local commands; commands=()
-    _describe -t commands 'pepe help html commands' commands "$@"
 }
 (( $+functions[_pepe__subcmd__help__subcmd__logs_commands] )) ||
 _pepe__subcmd__help__subcmd__logs_commands() {
@@ -1720,11 +1726,6 @@ _pepe__subcmd__help__subcmd__slack__subcmd__test_commands() {
 _pepe__subcmd__history_commands() {
     local commands; commands=()
     _describe -t commands 'pepe history commands' commands "$@"
-}
-(( $+functions[_pepe__subcmd__html_commands] )) ||
-_pepe__subcmd__html_commands() {
-    local commands; commands=()
-    _describe -t commands 'pepe html commands' commands "$@"
 }
 (( $+functions[_pepe__subcmd__logs_commands] )) ||
 _pepe__subcmd__logs_commands() {

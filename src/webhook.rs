@@ -1650,6 +1650,43 @@ pub fn replace(hooks: &[Webhook], run: impl FnOnce() -> Run) -> Result<(), Strin
     Ok(())
 }
 
+/// The verdict of `report` to `hooks` now, whatever their events: the
+/// export page's "send to the webhooks". How many took it, or the first
+/// that didn't.
+pub async fn share(
+    hooks: Vec<Webhook>,
+    run: Run,
+    report: Value,
+    ending: Ending,
+) -> Result<usize, String> {
+    let mut message = run.end(Event::End, &report, &ending);
+    message.detail = Detail {
+        run: run.clone(),
+        report: Some(report.clone()),
+        ending: Some(ending.clone()),
+        ..Detail::default()
+    };
+    let mut sent = 0;
+    for hook in &hooks {
+        let resolved = hook.resolve()?;
+        let done = match &resolved.slack {
+            Some((token, channel)) => {
+                crate::slack::Live::new(token, channel)
+                    .show(&layout::verdict(&message))
+                    .await
+            }
+            None => {
+                let (body, kind) = message.render(&resolved);
+                deliver(&client(), &resolved, body, kind).await
+            }
+        };
+        delivered(&hook.url, done.as_ref().err().cloned());
+        done.map_err(|e| format!("{}: {e}", hook.masked_url()))?;
+        sent += 1;
+    }
+    Ok(sent)
+}
+
 /// A test message to one hook, now, whatever its events; the answer is
 /// what came back
 pub async fn try_hook(hook: &Webhook, run: &Run) -> Result<(), String> {
