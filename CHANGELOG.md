@@ -6,6 +6,96 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+## [0.50.0](https://github.com/omarmhaimdat/pepe/compare/v0.49.1...v0.50.0) - 2026-10-18
+
+### Added
+
+- *(export)* the report as a page, a summary, text or CSV: F4 on any run screen, --export FILE, pepe export ([#211](https://github.com/omarmhaimdat/pepe/pull/211))
+
+  The report in the shape someone needs it, from the screen, the command
+  line, or a saved report. Built to the design bar for user-facing output.
+
+  ```bash
+  pepe -z 5m -c 50 --fail-if 'p99 > 300ms' --export checkout.html --export checkout.md https://api.example.com/checkout
+  pepe export report.json --to all
+  ```
+
+  On any run screen (dashboard, ramp, ping), **F4** opens the export page,
+  during the run or after it.
+
+  ## The five shapes
+
+  The file's extension picks the shape.
+
+  - **`.html`**: one self-contained page, about 15 KB. It loads nothing
+  and runs no script, and it follows the reader's light or dark setting.
+  It contains:
+    - Pepe's face for the verdict;
+    - the run summed up in a sentence, and the key numbers;
+    - the run's curves second by second, with each anomaly marked on them;
+    - the latency spread from p50 to the max;
+    - where the time went;
+    - each `--fail-if` with the measured value;
+    - for a saved test, a before/now table against its last recorded run;
+    - findings with the first body of each kind of failure;
+    - status codes, endpoints or steps, and the slowest requests.
+
+  A ramp's page plots throughput and p99 against concurrency, with a table
+  of steps.
+  - **`.json`**: the report itself.
+  - **`.md`**: a summary for a pull request or an issue: verdict, a table
+  of numbers, thresholds, comparison, findings, command.
+  - **`.txt`**: what pepe prints when you quit.
+  - **`.csv`**: one row per second for a run, per step for a ramp, per
+  target for a ping.
+
+  ## Where you get them
+
+  - **F4 on the dashboard, ramp and ping screens**, during the run or
+  after:
+  - save any one shape, or all of them, to `exports/` (Tab changes the
+  location);
+    - optionally open the page in the browser;
+    - copy the Markdown summary;
+    - send the verdict to the run's webhooks now.
+
+  It exports the run as it stands at that moment. The footer shows "F4
+  export" on those screens.
+  - **`--export FILE`**, repeatable, or `export = [...]` in `pepe.toml`.
+  The file is written when the run ends, at the same point as the Slack
+  verdict, so it has the same thresholds and comparison.
+  - **`pepe export REPORT.json [-o FILE] [--to html|json|md|txt|csv|all]
+  [--open]`** for a report already written. Saved reports only keep
+  per-minute points, and they have no thresholds or comparison.
+
+  `--html` and `pepe html` from the first commit here became `--export`
+  and `pepe export`. Neither was ever released.
+
+  ## Also
+
+  A ramp's findings are named `title`, not `text`, so the Slack verdict
+  for a ramp was dropping them. Fixed and tested.
+
+  ## Checked
+
+  - 403 tests pass; clippy 1.98 is clean. New tests cover the page (run
+  and ramp), the Markdown summary, the text fallback, the CSV,
+  format-from-extension, file names, and the export page's keys (save one,
+  save all, Where, close).
+  - Pages from real runs against the bench server, rendered in headless
+  Chrome in light and dark. Fixed after looking:
+    - an empty request-id column;
+    - the version wrapping mid-number;
+    - "against" said twice in the comparison heading;
+    - no title on the ramp page.
+  - The F4 page driven on the real dashboard in a pseudo-terminal:
+    - opened mid-run;
+    - "Everything" wrote all five files;
+    - after the run ended, the Markdown summary saved correctly.
+  - `--export` with three files, `pepe export --to all`, and unknown
+  extensions, which are refused with the reason.
+
+
 ## [0.49.1](https://github.com/omarmhaimdat/pepe/compare/v0.49.0...v0.49.1) - 2026-10-18
 
 ### Fixed
