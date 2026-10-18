@@ -177,14 +177,14 @@ fn controls(run: &Run, progress: Option<&Progress>) -> Option<Value> {
         if less >= 1 {
             elements.push(button(
                 &format!("− 1  ({less})"),
-                "pepe:size",
+                "pepe:less",
                 &format!("{id}:{less}"),
                 None,
             ));
         }
         elements.push(button(
             &format!("+ 1  ({more})"),
-            "pepe:size",
+            "pepe:more",
             &format!("{id}:{more}"),
             None,
         ));
@@ -798,8 +798,8 @@ mod tests {
             ids,
             [
                 ("pepe:pause", "41-1"),
-                ("pepe:size", "41-1:39"),
-                ("pepe:size", "41-1:41"),
+                ("pepe:less", "41-1:39"),
+                ("pepe:more", "41-1:41"),
                 ("pepe:stop", "41-1")
             ]
         );
