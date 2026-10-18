@@ -6,6 +6,53 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+## [0.49.1](https://github.com/omarmhaimdat/pepe/compare/v0.49.0...v0.49.1) - 2026-10-18
+
+### Fixed
+
+- *(slack)* the live message is posted again: − 1 and + 1 had the same action id, which Slack refuses ([#209](https://github.com/omarmhaimdat/pepe/pull/209))
+
+  Found by running #207 against a real workspace.
+
+  ## The bug
+
+  A run's controls had two buttons with the action id `pepe:size` (− 1 and
+  + 1). Slack refuses a block whose buttons repeat an id
+  (`invalid_blocks`). The consequences:
+  - the run's live message and all of its updates were rejected;
+  - its thread replies are plain text, so they went to the channel on
+  their own.
+
+  Nothing told you about it: the rejection went to the run's stderr, which
+  `serve` only showed when a run failed to start.
+
+  ## Fixes
+
+  - **Distinct ids:** − 1 is `pepe:less` and + 1 is `pepe:more`.
+  `pepe:size` is still accepted. A test checks that each id appears once
+  in the row.
+  - **Warnings in the terminal:** `pepe slack serve` streams a run's
+  warnings as they happen (a message Slack refused, a hook that failed).
+  - **The card follows the run:**
+  - after ▶ Run, the test card turns into the run's controls (Pause,
+  Stop);
+  - Run on a test that's already going answers with those controls instead
+  of "stop it first";
+    - the edit form's run answers with the card too.
+  - **Trend and wording:** the trend shows only with three runs or more,
+  and a single run reads "1 run, just now".
+
+  ## Checked
+
+  - 397 tests pass; clippy 1.98 is clean.
+  - The fake Slack now refuses repeated action ids, as Slack does. With
+  it, the full scenario passes:
+    - the card turned into the controls after Run;
+    - the live message posted with − 1 (3) and + 1 (5);
+    - every edit was accepted: pause, a concurrency change, resume, stop;
+    - the verdict followed.
+
+
 ## [0.49.0](https://github.com/omarmhaimdat/pepe/compare/v0.48.0...v0.49.0) - 2026-10-18
 
 ### Added
