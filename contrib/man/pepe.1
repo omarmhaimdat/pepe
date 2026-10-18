@@ -8,7 +8,7 @@ pepe \- HTTP load generator
 .ie \n(.g .ds Aq \(aq
 .el .ds Aq '
 .SH SYNOPSIS
-\fBpepe\fR [\fB\-h\fR|\fB\-\-help\fR] [\fB\-n\fR|\fB\-\-number\fR] [\fB\-c\fR|\fB\-\-concurrency\fR] [\fB\-z\fR|\fB\-\-duration\fR] [\fB\-\-curl\fR] [\fB\-m\fR|\fB\-\-method\fR] [\fB\-H\fR|\fB\-\-headers\fR] [\fB\-t\fR|\fB\-\-timeout\fR] [\fB\-\-warmup\fR] [\fB\-\-threads\fR] [\fB\-\-rate\fR] [\fB\-d\fR|\fB\-\-body\fR] [\fB\-u\fR|\fB\-\-user\-agent\fR] [\fB\-p\fR|\fB\-\-proxy\fR] [\fB\-k\fR|\fB\-\-insecure\fR] [\fB\-\-disable\-compression\fR] [\fB\-\-disable\-keepalive\fR] [\fB\-\-disable\-redirects\fR] [\fB\-\-json\fR] [\fB\-\-trace\-header\fR] [\fB\-\-vars\fR] [\fB\-\-webhook\fR] [\fB\-\-webhook\-on\fR] [\fB\-\-slack\fR] [\fB\-\-snapshot\fR] [\fB\-\-allow\-host\fR] [\fB\-\-max\-requests\fR] [\fB\-\-max\-rate\fR] [\fB\-\-max\-concurrency\fR] [\fB\-\-dry\-run\fR] [\fB\-\-fail\-if\fR] [\fB\-\-metrics\fR] [\fB\-\-otlp\fR] [\fB\-i\fR|\fB\-\-setup\fR] [\fB\-\-config\fR] [\fB\-\-write\-config\fR] [\fB\-\-load\fR] [\fB\-\-keep\fR] [\fB\-\-record\fR] [\fB\-V\fR|\fB\-\-version\fR] [\fIURL\fR] [\fIARGS\fR] [\fIsubcommands\fR]
+\fBpepe\fR [\fB\-h\fR|\fB\-\-help\fR] [\fB\-n\fR|\fB\-\-number\fR] [\fB\-c\fR|\fB\-\-concurrency\fR] [\fB\-z\fR|\fB\-\-duration\fR] [\fB\-\-curl\fR] [\fB\-m\fR|\fB\-\-method\fR] [\fB\-H\fR|\fB\-\-headers\fR] [\fB\-t\fR|\fB\-\-timeout\fR] [\fB\-\-warmup\fR] [\fB\-\-threads\fR] [\fB\-\-rate\fR] [\fB\-d\fR|\fB\-\-body\fR] [\fB\-u\fR|\fB\-\-user\-agent\fR] [\fB\-p\fR|\fB\-\-proxy\fR] [\fB\-k\fR|\fB\-\-insecure\fR] [\fB\-\-disable\-compression\fR] [\fB\-\-disable\-keepalive\fR] [\fB\-\-disable\-redirects\fR] [\fB\-\-json\fR] [\fB\-\-trace\-header\fR] [\fB\-\-vars\fR] [\fB\-\-webhook\fR] [\fB\-\-webhook\-on\fR] [\fB\-\-slack\fR] [\fB\-\-export\fR] [\fB\-\-snapshot\fR] [\fB\-\-allow\-host\fR] [\fB\-\-max\-requests\fR] [\fB\-\-max\-rate\fR] [\fB\-\-max\-concurrency\fR] [\fB\-\-dry\-run\fR] [\fB\-\-fail\-if\fR] [\fB\-\-metrics\fR] [\fB\-\-otlp\fR] [\fB\-i\fR|\fB\-\-setup\fR] [\fB\-\-config\fR] [\fB\-\-write\-config\fR] [\fB\-\-load\fR] [\fB\-\-keep\fR] [\fB\-\-record\fR] [\fB\-V\fR|\fB\-\-version\fR] [\fIURL\fR] [\fIARGS\fR] [\fIsubcommands\fR]
 .ie \n(.g .ds Aq \(aq
 .el .ds Aq '
 .SH DESCRIPTION
@@ -88,6 +88,9 @@ When the \-\-webhook URLs are sent: start, progress, anomaly, end, fail (the end
 .TP
 \fB\-\-slack\fR[=\fI<CHANNEL>\fR]
 Keep a Slack message up to date as the run goes: posted at the start, edited with the numbers, anomalies in its thread, the verdict at the end. \-\-slack alone posts in the channel `pepe slack connect` kept; \-\-slack=#channel elsewhere
+.TP
+\fB\-\-export\fR \fI<FILE>\fR
+Write the report to FILE as well, in the format its extension says: .html a self\-contained page (curves, thresholds, the last run), .json the report, .md a summary for a PR, .txt what pepe prints, .csv the run\*(Aqs numbers a row a second; repeat for more
 .TP
 \fB\-\-snapshot\fR \fI<FILE>\fR
 Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run\*(Aqs numbers survive a crash or a lost terminal; it has a minute\-by\-minute timeline of the whole run
@@ -187,6 +190,9 @@ Tab completion for your shell: print the script, or \-\-install it
 .TP
 pepe\-slack(1)
 Connect pepe to Slack from here, so \-\-slack keeps a message there up to date as a run goes
+.TP
+pepe\-export(1)
+Turn a JSON report into a page, a Markdown summary, text or CSV
 .TP
 pepe\-help(1)
 Print this message or the help of the given subcommand(s)

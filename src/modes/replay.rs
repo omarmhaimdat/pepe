@@ -284,7 +284,7 @@ pub(crate) async fn run_replay_json(
         "urls": urls,
     });
     println!("{}", serde_json::to_string_pretty(&report)?);
-    hooks_end(args, &report, Some(&total), Vec::new());
+    hooks_end(args, &report, Some(&total), Vec::new(), None);
     exit_if_failed(args, &total).await;
     Ok(())
 }

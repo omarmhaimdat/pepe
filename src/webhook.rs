@@ -866,7 +866,17 @@ impl Outcome {
             v.as_array()
                 .map(|a| {
                     a.iter()
-                        .filter_map(|f| f["text"].as_str().map(str::to_string))
+                        .filter_map(|f| {
+                            // A run's findings have a text; a ramp's a title
+                            // and a detail
+                            f["text"].as_str().map(str::to_string).or_else(|| {
+                                let title = f["title"].as_str()?;
+                                Some(match f["detail"].as_str() {
+                                    Some(detail) => format!("{title} · {detail}"),
+                                    None => title.to_string(),
+                                })
+                            })
+                        })
                         .collect()
                 })
                 .unwrap_or_default()
@@ -1640,6 +1650,43 @@ pub fn replace(hooks: &[Webhook], run: impl FnOnce() -> Run) -> Result<(), Strin
     Ok(())
 }
 
+/// The verdict of `report` to `hooks` now, whatever their events: the
+/// export page's "send to the webhooks". How many took it, or the first
+/// that didn't.
+pub async fn share(
+    hooks: Vec<Webhook>,
+    run: Run,
+    report: Value,
+    ending: Ending,
+) -> Result<usize, String> {
+    let mut message = run.end(Event::End, &report, &ending);
+    message.detail = Detail {
+        run: run.clone(),
+        report: Some(report.clone()),
+        ending: Some(ending.clone()),
+        ..Detail::default()
+    };
+    let mut sent = 0;
+    for hook in &hooks {
+        let resolved = hook.resolve()?;
+        let done = match &resolved.slack {
+            Some((token, channel)) => {
+                crate::slack::Live::new(token, channel)
+                    .show(&layout::verdict(&message))
+                    .await
+            }
+            None => {
+                let (body, kind) = message.render(&resolved);
+                deliver(&client(), &resolved, body, kind).await
+            }
+        };
+        delivered(&hook.url, done.as_ref().err().cloned());
+        done.map_err(|e| format!("{}: {e}", hook.masked_url()))?;
+        sent += 1;
+    }
+    Ok(sent)
+}
+
 /// A test message to one hook, now, whatever its events; the answer is
 /// what came back
 pub async fn try_hook(hook: &Webhook, run: &Run) -> Result<(), String> {
@@ -1841,11 +1888,16 @@ mod tests {
             passed.status
         );
         let ramp = json!({"holds_concurrency": 40, "capacity": {"requests_per_second": 3000.0},
-            "requests": 9000, "failed_requests": 0, "seconds": 60.0, "findings": [{"level": "good", "text": "held to 40"}]});
+            "requests": 9000, "failed_requests": 0, "seconds": 60.0, "findings": [{"level": "healthy", "title": "Held to 40", "detail": "p99 under 100ms"}]});
         let ramp = run().end(Event::End, &ramp, &Ending::default());
         assert_eq!(
             ramp.fields[1],
             ("Capacity".to_string(), "about 3000 req/s".to_string())
+        );
+        assert_eq!(
+            ramp.findings,
+            ["Held to 40 · p99 under 100ms"],
+            "a ramp's findings are titled"
         );
     }
 

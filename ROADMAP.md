@@ -150,7 +150,7 @@ Get the results where they're needed.
       what moved, in the verdict's language, and only when it moved more
       than runs of that size wobble; `--gate` exits 1 on a regression; ping reports
       compare phase by phase — v0.22.0
-- [ ] **CSV and per-request export** (S). One line per request for
+- [ ] **Per-request CSV** (S). A row a second is in `--export .csv`; one line per request for
       spreadsheets and notebooks.
 - [ ] **JUnit XML** (S). So CI systems show thresholds as test results.
 - [x] **Prometheus metrics** (M): `--metrics :9100` serves the live
@@ -167,8 +167,10 @@ Get the results where they're needed.
       History on the messages, and `/pepe`, answered by `pepe slack
       serve` over Socket Mode, saved tests only, allowed users — next
       release
-- [ ] **HTML report** (M). One self-contained file with the charts, for
-      people who weren't at the terminal.
+- [x] **HTML report** (M). One self-contained file with the charts, for
+      people who weren't at the terminal; with it a Markdown summary,
+      text and CSV: `--export FILE`, F4 on a run screen, and `pepe export
+      REPORT.json` for a report already written — next release
 
 ## 6. Speed on Linux
 

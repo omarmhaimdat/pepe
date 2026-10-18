@@ -17,9 +17,11 @@ mod control;
 mod curl;
 mod diagnose;
 mod direct;
+mod export;
 mod exporter;
 mod flow;
 mod guard;
+mod html;
 mod insights;
 mod json_report;
 mod load;
@@ -230,6 +232,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         };
         if let Err(e) = done {
+            eprintln!("error: {e}");
+            std::process::exit(1);
+        }
+        return Ok(());
+    }
+    if let Some(cli::Command::Export(what)) = &args.command {
+        if let Err(e) = modes::export_report(what) {
             eprintln!("error: {e}");
             std::process::exit(1);
         }

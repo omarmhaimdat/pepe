@@ -49,7 +49,7 @@ pub(crate) async fn climb(
     load.stop();
     let mut report = crate::ramp::json(&ramp);
     crate::store::stamp_test(&mut report, args);
-    hooks_end(args, &report, Some(&ramp.total), Vec::new());
+    hooks_end(args, &report, Some(&ramp.total), Vec::new(), None);
     Ok((ramp, load))
 }
 

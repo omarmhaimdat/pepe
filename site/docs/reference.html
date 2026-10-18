@@ -61,6 +61,7 @@ Commands:
   self-update  Update pepe to the latest release, or say what&#x27;s new in it
   completions  Tab completion for your shell: print the script, or --install it
   slack        Connect pepe to Slack from here, so --slack keeps a message there up to date as a run goes
+  export       Turn a JSON report into a page, a Markdown summary, text or CSV
   help         Print this message or the help of the given subcommand(s)
 
 Arguments:
@@ -154,6 +155,9 @@ Options:
 
       --slack[=&lt;CHANNEL&gt;]
           Keep a Slack message up to date as the run goes: posted at the start, edited with the numbers, anomalies in its thread, the verdict at the end. --slack alone posts in the channel `pepe slack connect` kept; --slack=#channel elsewhere
+
+      --export &lt;FILE&gt;
+          Write the report to FILE as well, in the format its extension says: .html a self-contained page (curves, thresholds, the last run), .json the report, .md a summary for a PR, .txt what pepe prints, .csv the run&#x27;s numbers a row a second; repeat for more
 
       --snapshot &lt;FILE&gt;
           Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run&#x27;s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run
@@ -272,18 +276,13 @@ Options:
   -h, --help
           Print help
 
+      --ymin &lt;MS&gt;
+          The graph&#x27;s floor, in milliseconds
+
   -n, --number &lt;NUMBER&gt;
           Number of requests to perform
           
           [default: 100]
-
-      --ymin &lt;MS&gt;
-          The graph&#x27;s floor, in milliseconds
-
-  -c, --concurrency &lt;CONCURRENCY&gt;
-          Number of concurrent requests at a time
-          
-          [default: &quot;one per core&quot;]
 
       --ymax &lt;MS&gt;
           The graph&#x27;s ceiling, in milliseconds; without it the graph fits what it shows
@@ -291,22 +290,27 @@ Options:
   -0
           Start the graph at zero (the same as --ymin 0)
 
-  -z, --duration &lt;DURATION&gt;
-          Duration of the test, e.g. 10s, 3m, 2h (mutually exclusive with -n)
+  -c, --concurrency &lt;CONCURRENCY&gt;
+          Number of concurrent requests at a time
+          
+          [default: &quot;one per core&quot;]
 
   -s, --simple-graphics
           Draw the graph with dots rather than braille, for terminals and fonts that lack it
 
+  -z, --duration &lt;DURATION&gt;
+          Duration of the test, e.g. 10s, 3m, 2h (mutually exclusive with -n)
+
       --jsonl
           No screen: one JSON object per ping on stdout, as it happens
+
+      --csv
+          No screen: one CSV line per ping on stdout, under a header
 
   -m, --method &lt;METHOD&gt;
           HTTP method, e.g. GET, POST, PUT, DELETE
           
           [default: GET]
-
-      --csv
-          No screen: one CSV line per ping on stdout, under a header
 
   -H, --headers &lt;HEADERS&gt;
           HTTP headers, e.g. -H &#x27;Accept: application/json&#x27;
@@ -314,34 +318,34 @@ Options:
       --save &lt;FILE&gt;
           Write the JSON report to this file when the run ends, whatever else is shown
 
+      --show-body
+          Keep the first kilobyte of each body for the inspector
+
   -t, --timeout &lt;TIMEOUT&gt;
           Time in seconds to wait for a response
           
           [default: 20]
 
-      --show-body
-          Keep the first kilobyte of each body for the inspector
+      --save-body &lt;FILE&gt;
+          Write the last body received to this file when the run ends
 
       --warmup &lt;TIME&gt;
           Send for this long before measuring, e.g. 5s: connections open, caches fill and JITs settle without counting against the run
 
-      --save-body &lt;FILE&gt;
-          Write the last body received to this file when the run ends
+      --http1
+          Speak HTTP/1.1 even when the server offers HTTP/2; without it a ping takes h2 when the server offers it through ALPN
 
       --threads &lt;N|auto&gt;
           Threads sending requests (default 1), or &quot;auto&quot; to add one whenever those sending are all busy. One sends 100k requests a second or more; the dashboard says when it is the limit
 
-      --http1
-          Speak HTTP/1.1 even when the server offers HTTP/2; without it a ping takes h2 when the server offers it through ALPN
+      --once
+          One diagnosis and out: three quick pings, then the last one&#x27;s phases, what answered, and what to look at; no screen
 
       --rate &lt;PER_SECOND&gt;
           Start this many requests a second, spread evenly, instead of as many as the concurrency allows; -c is then the most in flight at once, and pepe says when it holds the rate back
 
   -d, --body &lt;BODY&gt;
           HTTP request body
-
-      --once
-          One diagnosis and out: three quick pings, then the last one&#x27;s phases, what answered, and what to look at; no screen
 
   -u, --user-agent &lt;USER_AGENT&gt;
           User-Agent string, default is pepe/{version}
@@ -378,6 +382,9 @@ Options:
 
       --slack[=&lt;CHANNEL&gt;]
           Keep a Slack message up to date as the run goes: posted at the start, edited with the numbers, anomalies in its thread, the verdict at the end. --slack alone posts in the channel `pepe slack connect` kept; --slack=#channel elsewhere
+
+      --export &lt;FILE&gt;
+          Write the report to FILE as well, in the format its extension says: .html a self-contained page (curves, thresholds, the last run), .json the report, .md a summary for a PR, .txt what pepe prints, .csv the run&#x27;s numbers a row a second; repeat for more
 
       --snapshot &lt;FILE&gt;
           Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run&#x27;s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run
@@ -530,6 +537,9 @@ Options:
       --slack[=&lt;CHANNEL&gt;]
           Keep a Slack message up to date as the run goes: posted at the start, edited with the numbers, anomalies in its thread, the verdict at the end. --slack alone posts in the channel `pepe slack connect` kept; --slack=#channel elsewhere
 
+      --export &lt;FILE&gt;
+          Write the report to FILE as well, in the format its extension says: .html a self-contained page (curves, thresholds, the last run), .json the report, .md a summary for a PR, .txt what pepe prints, .csv the run&#x27;s numbers a row a second; repeat for more
+
       --snapshot &lt;FILE&gt;
           Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run&#x27;s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run
 
@@ -666,6 +676,9 @@ Options:
 
       --slack[=&lt;CHANNEL&gt;]
           Keep a Slack message up to date as the run goes: posted at the start, edited with the numbers, anomalies in its thread, the verdict at the end. --slack alone posts in the channel `pepe slack connect` kept; --slack=#channel elsewhere
+
+      --export &lt;FILE&gt;
+          Write the report to FILE as well, in the format its extension says: .html a self-contained page (curves, thresholds, the last run), .json the report, .md a summary for a PR, .txt what pepe prints, .csv the run&#x27;s numbers a row a second; repeat for more
 
       --snapshot &lt;FILE&gt;
           Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run&#x27;s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run
@@ -819,6 +832,9 @@ Options:
       --slack[=&lt;CHANNEL&gt;]
           Keep a Slack message up to date as the run goes: posted at the start, edited with the numbers, anomalies in its thread, the verdict at the end. --slack alone posts in the channel `pepe slack connect` kept; --slack=#channel elsewhere
 
+      --export &lt;FILE&gt;
+          Write the report to FILE as well, in the format its extension says: .html a self-contained page (curves, thresholds, the last run), .json the report, .md a summary for a PR, .txt what pepe prints, .csv the run&#x27;s numbers a row a second; repeat for more
+
       --snapshot &lt;FILE&gt;
           Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run&#x27;s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run
 
@@ -946,6 +962,9 @@ Options:
 
       --slack[=&lt;CHANNEL&gt;]
           Keep a Slack message up to date as the run goes: posted at the start, edited with the numbers, anomalies in its thread, the verdict at the end. --slack alone posts in the channel `pepe slack connect` kept; --slack=#channel elsewhere
+
+      --export &lt;FILE&gt;
+          Write the report to FILE as well, in the format its extension says: .html a self-contained page (curves, thresholds, the last run), .json the report, .md a summary for a PR, .txt what pepe prints, .csv the run&#x27;s numbers a row a second; repeat for more
 
       --snapshot &lt;FILE&gt;
           Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run&#x27;s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run
@@ -1085,6 +1104,9 @@ Options:
 
       --slack[=&lt;CHANNEL&gt;]
           Keep a Slack message up to date as the run goes: posted at the start, edited with the numbers, anomalies in its thread, the verdict at the end. --slack alone posts in the channel `pepe slack connect` kept; --slack=#channel elsewhere
+
+      --export &lt;FILE&gt;
+          Write the report to FILE as well, in the format its extension says: .html a self-contained page (curves, thresholds, the last run), .json the report, .md a summary for a PR, .txt what pepe prints, .csv the run&#x27;s numbers a row a second; repeat for more
 
       --snapshot &lt;FILE&gt;
           Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run&#x27;s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run
@@ -1236,6 +1258,9 @@ Options:
       --slack[=&lt;CHANNEL&gt;]
           Keep a Slack message up to date as the run goes: posted at the start, edited with the numbers, anomalies in its thread, the verdict at the end. --slack alone posts in the channel `pepe slack connect` kept; --slack=#channel elsewhere
 
+      --export &lt;FILE&gt;
+          Write the report to FILE as well, in the format its extension says: .html a self-contained page (curves, thresholds, the last run), .json the report, .md a summary for a PR, .txt what pepe prints, .csv the run&#x27;s numbers a row a second; repeat for more
+
       --snapshot &lt;FILE&gt;
           Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run&#x27;s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run
 
@@ -1367,6 +1392,9 @@ Options:
       --slack[=&lt;CHANNEL&gt;]
           Keep a Slack message up to date as the run goes: posted at the start, edited with the numbers, anomalies in its thread, the verdict at the end. --slack alone posts in the channel `pepe slack connect` kept; --slack=#channel elsewhere
 
+      --export &lt;FILE&gt;
+          Write the report to FILE as well, in the format its extension says: .html a self-contained page (curves, thresholds, the last run), .json the report, .md a summary for a PR, .txt what pepe prints, .csv the run&#x27;s numbers a row a second; repeat for more
+
       --snapshot &lt;FILE&gt;
           Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run&#x27;s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run
 
@@ -1494,6 +1522,9 @@ Options:
 
       --slack[=&lt;CHANNEL&gt;]
           Keep a Slack message up to date as the run goes: posted at the start, edited with the numbers, anomalies in its thread, the verdict at the end. --slack alone posts in the channel `pepe slack connect` kept; --slack=#channel elsewhere
+
+      --export &lt;FILE&gt;
+          Write the report to FILE as well, in the format its extension says: .html a self-contained page (curves, thresholds, the last run), .json the report, .md a summary for a PR, .txt what pepe prints, .csv the run&#x27;s numbers a row a second; repeat for more
 
       --snapshot &lt;FILE&gt;
           Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run&#x27;s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run
@@ -1625,6 +1656,9 @@ Options:
       --slack[=&lt;CHANNEL&gt;]
           Keep a Slack message up to date as the run goes: posted at the start, edited with the numbers, anomalies in its thread, the verdict at the end. --slack alone posts in the channel `pepe slack connect` kept; --slack=#channel elsewhere
 
+      --export &lt;FILE&gt;
+          Write the report to FILE as well, in the format its extension says: .html a self-contained page (curves, thresholds, the last run), .json the report, .md a summary for a PR, .txt what pepe prints, .csv the run&#x27;s numbers a row a second; repeat for more
+
       --snapshot &lt;FILE&gt;
           Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run&#x27;s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run
 
@@ -1748,6 +1782,9 @@ Options:
 
       --slack[=&lt;CHANNEL&gt;]
           Keep a Slack message up to date as the run goes: posted at the start, edited with the numbers, anomalies in its thread, the verdict at the end. --slack alone posts in the channel `pepe slack connect` kept; --slack=#channel elsewhere
+
+      --export &lt;FILE&gt;
+          Write the report to FILE as well, in the format its extension says: .html a self-contained page (curves, thresholds, the last run), .json the report, .md a summary for a PR, .txt what pepe prints, .csv the run&#x27;s numbers a row a second; repeat for more
 
       --snapshot &lt;FILE&gt;
           Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run&#x27;s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run
@@ -1878,6 +1915,9 @@ Options:
 
       --slack[=&lt;CHANNEL&gt;]
           Keep a Slack message up to date as the run goes: posted at the start, edited with the numbers, anomalies in its thread, the verdict at the end. --slack alone posts in the channel `pepe slack connect` kept; --slack=#channel elsewhere
+
+      --export &lt;FILE&gt;
+          Write the report to FILE as well, in the format its extension says: .html a self-contained page (curves, thresholds, the last run), .json the report, .md a summary for a PR, .txt what pepe prints, .csv the run&#x27;s numbers a row a second; repeat for more
 
       --snapshot &lt;FILE&gt;
           Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run&#x27;s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run
@@ -2015,6 +2055,9 @@ Options:
       --slack[=&lt;CHANNEL&gt;]
           Keep a Slack message up to date as the run goes: posted at the start, edited with the numbers, anomalies in its thread, the verdict at the end. --slack alone posts in the channel `pepe slack connect` kept; --slack=#channel elsewhere
 
+      --export &lt;FILE&gt;
+          Write the report to FILE as well, in the format its extension says: .html a self-contained page (curves, thresholds, the last run), .json the report, .md a summary for a PR, .txt what pepe prints, .csv the run&#x27;s numbers a row a second; repeat for more
+
       --snapshot &lt;FILE&gt;
           Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run&#x27;s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run
 
@@ -2146,6 +2189,149 @@ Options:
       --slack[=&lt;CHANNEL&gt;]
           Keep a Slack message up to date as the run goes: posted at the start, edited with the numbers, anomalies in its thread, the verdict at the end. --slack alone posts in the channel `pepe slack connect` kept; --slack=#channel elsewhere
 
+      --export &lt;FILE&gt;
+          Write the report to FILE as well, in the format its extension says: .html a self-contained page (curves, thresholds, the last run), .json the report, .md a summary for a PR, .txt what pepe prints, .csv the run&#x27;s numbers a row a second; repeat for more
+
+      --snapshot &lt;FILE&gt;
+          Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run&#x27;s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run
+
+      --allow-host &lt;HOST&gt;
+          Refuse to send anywhere but these hosts: api.example.com exactly, or .example.com for it and its subdomains; repeat for more. Every target is checked before anything is sent
+
+      --max-requests &lt;N&gt;
+          Refuse a run that would send more requests than this: -n above it, or -z without a --rate that bounds it
+
+      --max-rate &lt;PER_SECOND&gt;
+          Refuse a --rate above this, and a run with no --rate at all, which sends as fast as the target answers
+
+      --max-concurrency &lt;N&gt;
+          Refuse a concurrency above this
+
+      --dry-run
+          Say what would be sent, to where and how much, and send nothing; as JSON with --json
+
+      --fail-if &lt;CONDITION&gt;
+          End with exit code 4 when the run crosses this, for CI and scripts: &#x27;p99 &gt; 300ms&#x27;, &#x27;errors &gt; 1%&#x27;; repeat for more. The report is still printed. (pepe ping has --slo for the same.)
+
+      --metrics &lt;ADDR&gt;
+          Serve the live numbers for Prometheus at http://ADDR/metrics while the run goes, e.g. :9100 or 127.0.0.1:9100, so a soak run or a long ping shows up in Grafana next to the server&#x27;s own
+
+  -i, --setup
+          Open the setup screen to review or change the settings before starting (it opens by itself when no URL is given)
+
+      --config &lt;FILE&gt;
+          Read settings from this file instead of ./pepe.toml; flags on the command line win over it
+
+      --write-config &lt;FILE&gt;
+          Write the settings as they stand to this file, as a pepe.toml, and exit
+
+      --load &lt;NAME&gt;
+          Run a test saved on the setup screen (ctrl-s): ./.pepe/tests/NAME.toml; flags on the command line win over it
+
+      --keep [&lt;NAME&gt;]
+          Keep the settings as they stand as a saved test, ./.pepe/tests/NAME.toml, then run. With --load and no NAME, the loaded test is updated in place; with another NAME, it&#x27;s copied
+
+      --record
+          Keep the run&#x27;s report under its saved test when it ends, as ./.pepe/runs/NAME/&lt;moment&gt;.json; the run has to be a saved test (--load NAME, or --keep NAME)</code></pre></figure>
+<h2 id="pepe-export"><a href="#pepe-export">pepe export</a></h2>
+<figure class="code"><div class="bar"><span>text</span><button type="button" class="copy" aria-label="Copy">copy</button></div><pre><code>Turn a JSON report into a page, a Markdown summary, text or CSV
+
+Usage: pepe export [OPTIONS] &lt;REPORT&gt;
+
+Arguments:
+  &lt;REPORT&gt;
+          The JSON report: a run&#x27;s (--json, --snapshot, a recorded run), a ramp&#x27;s or a ping&#x27;s
+
+Options:
+  -o, --out &lt;FILE&gt;
+          Where it goes, its format from its extension; beside the report by default
+
+      --to &lt;FORMAT&gt;
+          The format when -o doesn&#x27;t say: html (the default), json, md, txt, csv, or all
+
+      --open
+          Open it once written
+
+  -h, --help
+          Print help
+
+  -n, --number &lt;NUMBER&gt;
+          Number of requests to perform
+          
+          [default: 100]
+
+  -c, --concurrency &lt;CONCURRENCY&gt;
+          Number of concurrent requests at a time
+          
+          [default: &quot;one per core&quot;]
+
+  -z, --duration &lt;DURATION&gt;
+          Duration of the test, e.g. 10s, 3m, 2h (mutually exclusive with -n)
+
+  -m, --method &lt;METHOD&gt;
+          HTTP method, e.g. GET, POST, PUT, DELETE
+          
+          [default: GET]
+
+  -H, --headers &lt;HEADERS&gt;
+          HTTP headers, e.g. -H &#x27;Accept: application/json&#x27;
+
+  -t, --timeout &lt;TIMEOUT&gt;
+          Time in seconds to wait for a response
+          
+          [default: 20]
+
+      --warmup &lt;TIME&gt;
+          Send for this long before measuring, e.g. 5s: connections open, caches fill and JITs settle without counting against the run
+
+      --threads &lt;N|auto&gt;
+          Threads sending requests (default 1), or &quot;auto&quot; to add one whenever those sending are all busy. One sends 100k requests a second or more; the dashboard says when it is the limit
+
+      --rate &lt;PER_SECOND&gt;
+          Start this many requests a second, spread evenly, instead of as many as the concurrency allows; -c is then the most in flight at once, and pepe says when it holds the rate back
+
+  -d, --body &lt;BODY&gt;
+          HTTP request body
+
+  -u, --user-agent &lt;USER_AGENT&gt;
+          User-Agent string, default is pepe/{version}
+
+  -p, --proxy &lt;PROXY&gt;
+          Proxy server URL: http://user:pass@host:port or socks5://host:port
+
+  -k, --insecure
+          Accept invalid TLS certificates (self-signed, expired, wrong host)
+
+      --disable-compression
+          Disable HTTP compression, e.g. gzip
+
+      --disable-keepalive
+          Disable HTTP keepalive, e.g. Connection: close
+
+      --disable-redirects
+          Prevent http redirects
+
+      --json
+          Output results in JSON format
+
+      --trace-header &lt;NAME&gt;
+          Response header holding the request id to show for the slowest requests and in the inspector, so they can be found in the server&#x27;s logs; without it, X-Request-Id, traceparent, CF-Ray, X-Amzn-Trace-Id and other common ones are looked for
+
+      --vars &lt;FILE&gt;
+          Fill the {{holes}} in the URL, headers and body from this CSV file, whose first line names them: each request takes the next row, and the rows go round again. In a flow, each chain starts with the next row&#x27;s values
+
+      --webhook &lt;URL&gt;
+          Send the run&#x27;s verdict to this URL when it ends: a Slack, Discord, Teams or Google Chat webhook gets a message laid out for it, anything else the JSON report; repeat for more. ${NAME} is taken from the environment. A [[webhook]] table in pepe.toml says more
+
+      --webhook-on &lt;EVENTS&gt;
+          When the --webhook URLs are sent: start, progress, anomaly, end, fail (the end when a --fail-if was crossed), comma-separated; end by default
+
+      --slack[=&lt;CHANNEL&gt;]
+          Keep a Slack message up to date as the run goes: posted at the start, edited with the numbers, anomalies in its thread, the verdict at the end. --slack alone posts in the channel `pepe slack connect` kept; --slack=#channel elsewhere
+
+      --export &lt;FILE&gt;
+          Write the report to FILE as well, in the format its extension says: .html a self-contained page (curves, thresholds, the last run), .json the report, .md a summary for a PR, .txt what pepe prints, .csv the run&#x27;s numbers a row a second; repeat for more
+
       --snapshot &lt;FILE&gt;
           Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run&#x27;s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run
 
@@ -2191,7 +2377,7 @@ Options:
     <nav class="turn"><a class="prev" href="agents.html"><small>Previous</small>Agents and scripts</a><a class="next" href="benchmarks.html"><small>Next</small>Benchmarks</a></nav>
     <p class="edit"><a href="https://github.com/omarmhaimdat/pepe/edit/master/docs/reference.md">Edit this page on GitHub</a></p>
   </main>
-  <aside class="toc"><div class="label">On this page</div><a href="#pepe" class="h2">pepe</a><a href="#pepe-ping" class="h2">pepe ping</a><a href="#pepe-ramp" class="h2">pepe ramp</a><a href="#pepe-compare" class="h2">pepe compare</a><a href="#pepe-api" class="h2">pepe api</a><a href="#pepe-flow" class="h2">pepe flow</a><a href="#pepe-replay" class="h2">pepe replay</a><a href="#pepe-logs" class="h2">pepe logs</a><a href="#pepe-rerun" class="h2">pepe rerun</a><a href="#pepe-history" class="h2">pepe history</a><a href="#pepe-schema" class="h2">pepe schema</a><a href="#pepe-mcp" class="h2">pepe mcp</a><a href="#pepe-self-update" class="h2">pepe self-update</a><a href="#pepe-completions" class="h2">pepe completions</a><a href="#pepe-slack" class="h2">pepe slack</a></aside>
+  <aside class="toc"><div class="label">On this page</div><a href="#pepe" class="h2">pepe</a><a href="#pepe-ping" class="h2">pepe ping</a><a href="#pepe-ramp" class="h2">pepe ramp</a><a href="#pepe-compare" class="h2">pepe compare</a><a href="#pepe-api" class="h2">pepe api</a><a href="#pepe-flow" class="h2">pepe flow</a><a href="#pepe-replay" class="h2">pepe replay</a><a href="#pepe-logs" class="h2">pepe logs</a><a href="#pepe-rerun" class="h2">pepe rerun</a><a href="#pepe-history" class="h2">pepe history</a><a href="#pepe-schema" class="h2">pepe schema</a><a href="#pepe-mcp" class="h2">pepe mcp</a><a href="#pepe-self-update" class="h2">pepe self-update</a><a href="#pepe-completions" class="h2">pepe completions</a><a href="#pepe-slack" class="h2">pepe slack</a><a href="#pepe-export" class="h2">pepe export</a></aside>
 </div>
 <script src="docs.js" defer></script>
 </body>

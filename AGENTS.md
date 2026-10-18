@@ -148,6 +148,14 @@ CSV file whose first line names them, a row a request in turn (a row a
 chain in a flow); a hole that isn't a column is refused before anything
 is sent, and `--allow-host` checks every row's host.
 
+## Exports
+
+`--export report.html` (or `.json`, `.md`, `.txt`, `.csv`, repeatable)
+writes the report in that shape as well: a self-contained page, a
+Markdown summary for a PR, the numbers a row a second.
+`pepe export report.json -o summary.md` (or `--to all`) makes them from
+a JSON report.
+
 ## Tell a channel
 
 `--webhook "$SLACK_WEBHOOK_URL"` sends the verdict when the run ends

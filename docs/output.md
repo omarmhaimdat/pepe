@@ -15,6 +15,27 @@ pepe -z 30s -c 20 https://example.com > run.txt
 pepe ramp https://example.com --to 200 | tee ramp.txt
 ```
 
+## Exports
+
+```bash
+pepe -z 5m -c 50 --fail-if 'p99 > 300ms' --export checkout.html --export checkout.md https://api.example.com/checkout
+pepe export report.json --to all             # any run's, ramp's or ping's JSON report, recorded runs too
+```
+
+A run's report comes in five shapes, the extension saying which:
+
+| File | What it is |
+| --- | --- |
+| `.html` | A page for people who weren't at the terminal: one self-contained file, nothing fetched and nothing run, light or dark as the reader's system is. Pepe's face for the verdict, the run in a sentence, the numbers that matter, the run's curves second by second with what changed marked on them, the latency from p50 to the max, where the time went, each `--fail-if` with what was measured, for a saved test how it compares with its last recorded run, what pepe found with the first body of each failure, the answers, the endpoints or steps, the slowest requests. A ramp's page draws throughput and p99 as the concurrency rose |
+| `.json` | The report, as `--json` prints it |
+| `.md` | A summary for a pull request or an issue: the verdict, a table of the numbers, the thresholds, the comparison, what pepe found, the command |
+| `.txt` | What pepe prints when you quit |
+| `.csv` | The run's numbers a row at a time: a second for a run, a step for a ramp, a target for a ping |
+
+- **During or after a run on screen**, F4 opens the export page: each shape, or all of them, saved to `exports/` (the place can be changed there), the page opened in the browser if you like; the summary copied, ready to paste; the verdict sent to the run's webhooks now. It takes the run as it stands, so an export mid-run has what the run has so far.
+- **On the command line**, `--export FILE` writes the report there as the run ends, in the format its extension says; repeat it for more, or say `export = ["checkout.html", "checkout.md"]` in a `pepe.toml`.
+- **Afterwards**, `pepe export REPORT.json` makes any of them from a report already written (`--json`, `--snapshot`, a recorded run in `.pepe/runs/`): `-o FILE` says where and, by its extension, what; `--to html|json|md|txt|csv|all` says what when `-o` doesn't; `--open` opens it. A report keeps its minutes rather than its seconds, so a page made from one has a point a minute, and no thresholds or comparison.
+
 ## JSON output
 
 `--json` skips the dashboard, runs to completion and prints a report to stdout. Press Ctrl-C to stop early; the report then has `"interrupted": true`. Notes and errors go to stderr, so stdout stays valid JSON.

@@ -479,31 +479,144 @@ pub(crate) fn ramp_progress(ramp: &Ramp, now: Instant) -> crate::webhook::Progre
     )
 }
 
-/// The run's end to the webhooks: its report, each `--fail-if` held
-/// against `metrics`, `failed` for what else failed it, and for a saved
-/// test, how it compares with the test's last recorded run
+/// The run's end: its report to the webhooks, and with `--html` to a page.
+/// Each `--fail-if` is held against `metrics`, `failed` says what else
+/// failed it, `timeline` gives the page its seconds, and for a saved test
+/// the run is held against the test's last recorded one.
 pub(crate) fn hooks_end(
     args: &Cli,
     report: &impl serde::Serialize,
     metrics: Option<&Metrics>,
     failed: Vec<String>,
+    timeline: Option<&timeline::Timeline>,
 ) {
-    if !crate::webhook::live() {
+    if !crate::webhook::live() && args.export.is_empty() {
         return;
     }
     let Ok(report) = serde_json::to_value(report) else {
         return;
     };
     let checks = metrics.map(|m| checks(args, m)).unwrap_or_default();
-    let compared = compared_with_last(args, &report);
-    crate::webhook::end(
-        &report,
-        &crate::webhook::Ending {
+    let last = last_comparison(args, &report);
+    if crate::webhook::live() {
+        let compared = last
+            .as_ref()
+            .map(|(comparison, when)| crate::webhook::Compared {
+                verdict: comparison.verdict.headline().to_string(),
+                regression: comparison.regression,
+                summary: moved(comparison),
+                when: format!("against the run {when}"),
+            });
+        crate::webhook::end(
+            &report,
+            &crate::webhook::Ending {
+                checks: checks.clone(),
+                failed: failed.clone(),
+                compared,
+            },
+        );
+    }
+    if !args.export.is_empty() {
+        let snap = snapshot(report, checks, failed, last, timeline);
+        for path in &args.export {
+            let saved = crate::export::Format::of_path(path)
+                .and_then(|format| crate::export::save(format, &snap, path));
+            match saved {
+                Ok(path) => eprintln!("exported {}", path.display()),
+                Err(e) => eprintln!("couldn't export: {e}"),
+            }
+        }
+    }
+}
+
+/// What an export of a run is made from
+pub(crate) fn snapshot(
+    report: serde_json::Value,
+    checks: Vec<crate::webhook::Check>,
+    failed: Vec<String>,
+    compared: Option<(crate::compare::Comparison, String)>,
+    timeline: Option<&timeline::Timeline>,
+) -> crate::export::Snapshot {
+    let seconds = timeline
+        .map(|t| {
+            t.whole_run()
+                .iter()
+                .map(|s| crate::html::Point {
+                    at: s.at,
+                    rps: s.rps,
+                    p50: s.p50_ms,
+                    p99: s.p99_ms,
+                    errors: s.errors,
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    crate::export::Snapshot {
+        report,
+        extras: crate::html::Extras {
+            seconds,
             checks,
             failed,
             compared,
+            host: gethostname::gethostname().to_string_lossy().into_owned(),
+            when: now_said(),
         },
-    );
+        text: None,
+    }
+}
+
+/// Now, as a page says when a run was: "Oct 18, 2026 14:00"
+pub(crate) fn now_said() -> String {
+    std::process::Command::new("date")
+        .arg("+%b %d, %Y %H:%M")
+        .output()
+        .ok()
+        .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+        .unwrap_or_default()
+}
+
+/// `pepe export REPORT.json`: the report in another shape, beside it or
+/// where `-o` says, in the format its extension or `--to` says
+pub(crate) fn export_report(what: &cli::ExportArgs) -> Result<(), String> {
+    use crate::export::{Format, Snapshot};
+    let text = std::fs::read_to_string(&what.report)
+        .map_err(|e| format!("couldn't read {}: {e}", what.report.display()))?;
+    let report: serde_json::Value = serde_json::from_str(&text)
+        .map_err(|e| format!("{} isn't a JSON report: {e}", what.report.display()))?;
+    if report.get("summary").is_none()
+        && report.get("steps").is_none()
+        && report.get("targets").is_none()
+    {
+        return Err(format!(
+            "{} is no run's, ramp's or ping's report",
+            what.report.display()
+        ));
+    }
+    let formats: Vec<Format> = match (what.to.as_deref(), &what.out) {
+        (Some("all"), _) => Format::ALL
+            .into_iter()
+            .filter(|f| *f != Format::Json && !(*f == Format::Html && report["mode"] == "ping"))
+            .collect(),
+        (Some(to), _) => vec![Format::parse(to)?],
+        (None, Some(out)) => vec![Format::of_path(out)?],
+        (None, None) => vec![Format::Html],
+    };
+    let snap = Snapshot {
+        report,
+        ..Snapshot::default()
+    };
+    for format in formats {
+        let path = match &what.out {
+            Some(out) => out.with_extension(format.ext()),
+            None => what.report.with_extension(format.ext()),
+        };
+        let path = crate::export::save(format, &snap, &path)?;
+        eprintln!("exported {}", path.display());
+        if what.open {
+            crate::slack::open_browser(&path.display().to_string());
+        }
+    }
+    Ok(())
 }
 
 /// Each `--fail-if`, whether the run held it off, and what it measured
@@ -561,20 +674,18 @@ fn moved(comparison: &crate::compare::Comparison) -> String {
     out
 }
 
-/// A saved test's run against the last one recorded of it
-fn compared_with_last(args: &Cli, report: &serde_json::Value) -> Option<crate::webhook::Compared> {
+/// A saved test's run against its last recorded one, and when that was
+pub(crate) fn last_comparison(
+    args: &Cli,
+    report: &serde_json::Value,
+) -> Option<(crate::compare::Comparison, String)> {
     let name = store::test_of(args)?;
     let last = Store::local().last_run(&name)?;
     let before = crate::compare::Side::read(&last.path).ok()?;
     let after = crate::compare::Side::of_report("this run".into(), report).ok()?;
     let comparison = crate::compare::compare(&before, &after);
     let ago = last.when.elapsed().unwrap_or_default();
-    Some(crate::webhook::Compared {
-        verdict: comparison.verdict.headline().to_string(),
-        regression: comparison.regression,
-        summary: moved(&comparison),
-        when: format!("against the run {} ago", ui::format::span(ago)),
-    })
+    Some((comparison, format!("{} ago", ui::format::span(ago))))
 }
 
 #[cfg(test)]

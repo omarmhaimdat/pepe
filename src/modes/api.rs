@@ -163,7 +163,7 @@ pub(crate) async fn run_api_json(
         .collect();
     report["endpoints"] = serde_json::Value::Array(endpoints);
     println!("{}", serde_json::to_string_pretty(&report)?);
-    hooks_end(args, &report, Some(&total), Vec::new());
+    hooks_end(args, &report, Some(&total), Vec::new(), None);
     exit_if_failed(args, &total).await;
     Ok(())
 }

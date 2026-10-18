@@ -54,6 +54,10 @@ pub struct Config {
     /// `--vars`: the CSV file whose rows fill the request's `{{holes}}`
     #[serde(skip_serializing_if = "Option::is_none")]
     pub vars: Option<PathBuf>,
+    /// `--export`: files the report is written to as well, each in the
+    /// format its extension says
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub export: Option<Vec<PathBuf>>,
     /// Where the run is said: a URL, a `[[webhook]]` table, or a list
     #[serde(
         default,
@@ -352,6 +356,9 @@ impl Config {
         if cli.vars.is_none() {
             cli.vars = self.vars.clone();
         }
+        if let (Some(files), true) = (&self.export, cli.export.is_empty()) {
+            cli.export = files.clone();
+        }
         if let (Some(hooks), true) = (&self.webhook, cli.webhook.is_empty()) {
             cli.webhooks = hooks.clone();
         }
@@ -505,6 +512,7 @@ impl Config {
             warmup: cli.warmup.clone(),
             trace_header: cli.trace_header.clone(),
             vars: cli.vars.clone(),
+            export: (!cli.export.is_empty()).then(|| cli.export.clone()),
             webhook: Some(cli.hooks()).filter(|h| !h.is_empty()),
             user_agent: differs(&cli.user_agent, &default_user_agent()),
             proxy: cli.proxy.clone(),
