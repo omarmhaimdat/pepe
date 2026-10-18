@@ -686,6 +686,43 @@ pub fn big_lines(mood: Mood, frame: u64) -> Vec<Line<'static>> {
     )
 }
 
+/// The small mascot as lines of text with ANSI colours, for output that
+/// isn't a screen (`pepe slack connect`); none when colour is off
+pub fn ansi(mood: Mood) -> Vec<String> {
+    if theme::no_color() {
+        return Vec::new();
+    }
+    let rgb = |p: u8| match color(p, true) {
+        Some(Color::Rgb(r, g, b)) => Some((r, g, b)),
+        _ => None,
+    };
+    let grid = pixels(&SMALL[mood.index(false)], mood, 0);
+    (0..grid.len().div_ceil(2))
+        .map(|row| {
+            let mut line = String::new();
+            for x in 0..SMALL_WIDTH {
+                let at = |y: usize| grid.get(y).and_then(|r| r.get(x)).copied();
+                let top = at(row * 2).and_then(rgb);
+                let bottom = at(row * 2 + 1).and_then(rgb);
+                match (top, bottom) {
+                    (Some(t), Some(b)) => line.push_str(&format!(
+                        "\x1b[38;2;{};{};{}m\x1b[48;2;{};{};{}m▀\x1b[0m",
+                        t.0, t.1, t.2, b.0, b.1, b.2
+                    )),
+                    (Some(t), None) => {
+                        line.push_str(&format!("\x1b[38;2;{};{};{}m▀\x1b[0m", t.0, t.1, t.2))
+                    }
+                    (None, Some(b)) => {
+                        line.push_str(&format!("\x1b[38;2;{};{};{}m▄\x1b[0m", b.0, b.1, b.2))
+                    }
+                    (None, None) => line.push(' '),
+                }
+            }
+            line
+        })
+        .collect()
+}
+
 /// Keep the sprite's colours as drawn when the theme adjusts the frame: they
 /// are the picture, not the palette. `area` is where the lines were drawn.
 pub fn keep(area: Rect) {

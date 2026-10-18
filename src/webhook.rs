@@ -21,6 +21,9 @@ use tokio::sync::mpsc;
 
 use crate::flow::Template;
 
+mod layout;
+pub use layout::face;
+
 /// How often progress goes out when a webhook doesn't say
 pub const PROGRESS_EVERY: Duration = Duration::from_secs(60);
 /// Shortest progress interval: a chat channel is not a dashboard
@@ -450,6 +453,13 @@ pub struct Run {
     pub command: String,
     /// What the run sends: "for 30s, 50 at a time"
     pub load: String,
+    /// The machine it runs on, and who started it
+    pub host: String,
+    pub who: String,
+    /// How long it is planned to go, when a time says so
+    pub planned: Option<Duration>,
+    /// Concurrency, for the line under the title
+    pub concurrency: usize,
 }
 
 /// The numbers so far, for progress
@@ -463,6 +473,53 @@ pub struct Progress {
     pub rps: f64,
     pub p50: Duration,
     pub p99: Duration,
+    /// The last seconds, oldest first: requests a second and p99 in ms
+    pub series: Vec<(f64, f64)>,
+    /// What failed, most first: "503" or "timeout", and how many
+    pub failures: Vec<(String, u64)>,
+    /// Things that changed so far
+    pub anomalies: usize,
+}
+
+/// How a run ended, beyond its report
+#[derive(Debug, Clone, Default)]
+pub struct Ending {
+    /// Each `--fail-if`: whether it held, and what was measured
+    pub checks: Vec<Check>,
+    /// Why it failed besides those: "nothing answered", "the SLO was broken"
+    pub failed: Vec<String>,
+    /// Held against the saved test's last recorded run
+    pub compared: Option<Compared>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Check {
+    pub text: String,
+    pub held: bool,
+    pub measured: String,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Compared {
+    /// Faster, Same, Slower, Better, Worse
+    pub verdict: String,
+    pub regression: bool,
+    /// "p99 +38% · req/s −6%"
+    pub summary: String,
+    /// "2 h ago", "yesterday"
+    pub when: String,
+}
+
+impl Ending {
+    /// What made the run fail, a line each
+    pub fn crossed(&self) -> Vec<String> {
+        self.checks
+            .iter()
+            .filter(|c| !c.held)
+            .map(|c| format!("{}: {}", c.text, c.measured))
+            .chain(self.failed.iter().cloned())
+            .collect()
+    }
 }
 
 /// What happened, said once and laid out per format
@@ -481,6 +538,19 @@ struct Message {
     data: Value,
     /// The template's values
     values: HashMap<String, String>,
+    /// What the richer layouts (Slack's) are drawn from
+    detail: Detail,
+}
+
+/// The run as it stands, for a layout that says more than a few lines
+#[derive(Debug, Clone, Default)]
+struct Detail {
+    run: Run,
+    progress: Option<Progress>,
+    report: Option<Value>,
+    ending: Option<Ending>,
+    /// The last progress's seconds, for a short run's sparklines at its end
+    series: Vec<(f64, f64)>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -591,6 +661,7 @@ impl Run {
             footer: self.footer(),
             data,
             values,
+            detail: Detail::default(),
         }
     }
 
@@ -659,6 +730,7 @@ impl Run {
             footer: self.footer(),
             data,
             values,
+            detail: Detail::default(),
         }
     }
 
@@ -679,12 +751,14 @@ impl Run {
             footer: self.footer(),
             data,
             values,
+            detail: Detail::default(),
         }
     }
 
     /// The end: `report` is the run's JSON report, `crossed` what made it
     /// fail (a `--fail-if`, an SLO), if anything did
-    fn end(&self, event: Event, report: &Value, crossed: &[String]) -> Message {
+    fn end(&self, event: Event, report: &Value, ending: &Ending) -> Message {
+        let crossed = &ending.crossed()[..];
         let outcome = Outcome::of(report);
         let failed = !crossed.is_empty();
         let tone = match (failed, outcome.level.as_str()) {
@@ -753,6 +827,7 @@ impl Run {
             footer: self.footer(),
             data,
             values,
+            detail: Detail::default(),
         }
     }
 }
@@ -807,8 +882,8 @@ impl Outcome {
                     ("Errors".into(), format!("{errors:.2}%")),
                     (
                         "Duration".into(),
-                        crate::ui::format::span(Duration::from_millis(
-                            summary["duration_ms"].as_u64().unwrap_or(0),
+                        crate::ui::format::span(Duration::from_secs_f64(
+                            summary["duration_ms"].as_f64().unwrap_or(0.0).max(0.0) / 1e3,
                         )),
                     ),
                 ],
@@ -1089,6 +1164,7 @@ impl Line {
                             deliver(&client, &hook, body, kind).await
                         }
                     };
+                    delivered(&hook.webhook.url, sent.as_ref().err().cloned());
                     match sent {
                         Err(e) if hook.slack.is_some() => {
                             problem(format!("{}: {e}", hook.webhook.masked_url()))
@@ -1124,20 +1200,14 @@ async fn to_slack(
     message: &Message,
 ) -> Result<(), String> {
     match message.event {
-        Event::Start | Event::Progress => live.show(&message.slack_payload("", false)).await,
+        Event::Start | Event::Progress => live.show(&layout::live(message)).await,
         Event::Anomaly => {
-            live.reply(
-                &format!("{} {}", message.tone.icon(), message.values["findings"]),
-                false,
-            )
-            .await
+            let (text, icon) = layout::anomaly(message);
+            live.reply(&text, false, Some(&icon)).await
         }
         Event::End | Event::Fail => {
-            let mention = hook
-                .mention
-                .as_deref()
-                .filter(|_| message.tone == Tone::Bad);
-            live.end(&message.slack_payload("", false), mention).await
+            let (line, icon) = layout::result_line(message, hook.mention.as_deref());
+            live.end(&layout::verdict(message), &line, &icon).await
         }
     }
 }
@@ -1194,6 +1264,8 @@ async fn deliver(
 /// What the webhooks of the run going now are, and where they stand
 struct State {
     run: Run,
+    /// The seconds the last progress had
+    series: Vec<(f64, f64)>,
     client: reqwest::Client,
     lines: Vec<Line>,
     /// Queues closed by a change of hooks, still sending what they had
@@ -1201,6 +1273,24 @@ struct State {
 }
 
 static STATE: Mutex<Option<State>> = Mutex::new(None);
+/// Each hook's last delivery, by URL: when, and what went wrong if it did
+static DELIVERED: Mutex<Vec<(String, Instant, Option<String>)>> = Mutex::new(Vec::new());
+
+fn delivered(url: &str, error: Option<String>) {
+    if let Ok(mut all) = DELIVERED.lock() {
+        all.retain(|(u, _, _)| u != url);
+        all.push((url.to_string(), Instant::now(), error));
+    }
+}
+
+/// How the hook at `url` last went: how long ago, and its error if any
+pub fn last_delivery(url: &str) -> Option<(Duration, Option<String>)> {
+    DELIVERED.lock().ok().and_then(|all| {
+        all.iter()
+            .find(|(u, _, _)| u == url)
+            .map(|(_, at, error)| (at.elapsed(), error.clone()))
+    })
+}
 /// The hooks as the screens' webhook page left them: they win over flags
 /// and files for the rest of this pepe
 static EDITED: Mutex<Option<Vec<Webhook>>> = Mutex::new(None);
@@ -1310,7 +1400,8 @@ pub fn begin(run: Run, hooks: &[Webhook]) {
     if lines.is_empty() {
         return;
     }
-    let message = run.start();
+    let mut message = run.start();
+    message.detail.run = run.clone();
     for line in lines
         .iter()
         .filter(|l| l.hook.events.contains(&Event::Start))
@@ -1318,6 +1409,7 @@ pub fn begin(run: Run, hooks: &[Webhook]) {
         line.send(&message);
     }
     *state = Some(State {
+        series: Vec::new(),
         run,
         client,
         lines,
@@ -1351,7 +1443,12 @@ pub fn progress(numbers: impl FnOnce() -> Progress) {
     let numbers = numbers();
     let Ok(mut state) = STATE.lock() else { return };
     let Some(state) = state.as_mut() else { return };
-    let message = state.run.progress(&numbers);
+    let mut message = state.run.progress(&numbers);
+    if !numbers.series.is_empty() {
+        state.series = numbers.series.clone();
+    }
+    message.detail.run = state.run.clone();
+    message.detail.progress = Some(numbers);
     for line in state.lines.iter_mut() {
         if line.hook.events.contains(&Event::Progress) && line.last.elapsed() >= line.hook.every {
             line.last = Instant::now();
@@ -1364,7 +1461,8 @@ pub fn progress(numbers: impl FnOnce() -> Progress) {
 pub fn anomaly(text: &str) {
     let Ok(state) = STATE.lock() else { return };
     let Some(state) = state.as_ref() else { return };
-    let message = state.run.anomaly(text);
+    let mut message = state.run.anomaly(text);
+    message.detail.run = state.run.clone();
     for line in state
         .lines
         .iter()
@@ -1377,17 +1475,25 @@ pub fn anomaly(text: &str) {
 /// The run ended: the verdict to the hooks on `end`, and to those on
 /// `fail` when `crossed` says why it failed. The messages go out in the
 /// background; `flush` waits for them.
-pub fn end(report: &Value, crossed: &[String]) {
+pub fn end(report: &Value, ending: &Ending) {
     GOING.store(false, std::sync::atomic::Ordering::Relaxed);
     let Ok(mut state) = STATE.lock() else { return };
     let Some(mut state) = state.take() else {
         return;
     };
+    let failed = !ending.crossed().is_empty();
     for event in [Event::End, Event::Fail] {
-        if event == Event::Fail && crossed.is_empty() {
+        if event == Event::Fail && !failed {
             continue;
         }
-        let message = state.run.end(event, report, crossed);
+        let mut message = state.run.end(event, report, ending);
+        message.detail = Detail {
+            run: state.run.clone(),
+            report: Some(report.clone()),
+            ending: Some(ending.clone()),
+            series: state.series.clone(),
+            ..Detail::default()
+        };
         for line in state
             .lines
             .iter()
@@ -1475,6 +1581,7 @@ pub fn replace(hooks: &[Webhook], run: impl FnOnce() -> Run) -> Result<(), Strin
         None if !resolved.is_empty() => {
             let client = client();
             *state = Some(State {
+                series: Vec::new(),
                 run: run(),
                 lines: resolved
                     .into_iter()
@@ -1492,6 +1599,12 @@ pub fn replace(hooks: &[Webhook], run: impl FnOnce() -> Run) -> Result<(), Strin
 /// A test message to one hook, now, whatever its events; the answer is
 /// what came back
 pub async fn try_hook(hook: &Webhook, run: &Run) -> Result<(), String> {
+    let sent = send_test(hook, run).await;
+    delivered(&hook.url, sent.as_ref().err().cloned());
+    sent
+}
+
+async fn send_test(hook: &Webhook, run: &Run) -> Result<(), String> {
     let resolved = hook.resolve()?;
     let mut message = run.start();
     message.status = format!("🔔 A test from pepe: this webhook works · {}", run.load);
@@ -1522,6 +1635,7 @@ mod tests {
             test: Some("health".into()),
             command: "pepe -z 30s https://api.example.com/health".into(),
             load: "for 30s, 50 at a time".into(),
+            ..Run::default()
         }
     }
 
@@ -1628,8 +1742,11 @@ mod tests {
 
     #[test]
     fn the_end_is_laid_out_for_each_place() {
-        let crossed = vec!["p99 > 50ms (p99 was 80ms)".to_string()];
-        let msg = run().end(Event::End, &report(), &crossed);
+        let failed = Ending {
+            failed: vec!["p99 > 50ms (p99 was 80ms)".to_string()],
+            ..Ending::default()
+        };
+        let msg = run().end(Event::End, &report(), &failed);
         let hook = |format, mention: Option<&str>| Resolved {
             format,
             mention: mention.map(str::to_string),
@@ -1673,7 +1790,7 @@ mod tests {
             (r#"{"s": "failed 80.00ms 1000 health"}"#, "application/json")
         );
         // Passed, and a ramp's report
-        let passed = run().end(Event::End, &report(), &[]);
+        let passed = run().end(Event::End, &report(), &Ending::default());
         assert!(
             passed.status.contains("Passed · degraded"),
             "{}",
@@ -1681,7 +1798,7 @@ mod tests {
         );
         let ramp = json!({"holds_concurrency": 40, "capacity": {"requests_per_second": 3000.0},
             "requests": 9000, "failed_requests": 0, "seconds": 60.0, "findings": [{"level": "good", "text": "held to 40"}]});
-        let ramp = run().end(Event::End, &ramp, &[]);
+        let ramp = run().end(Event::End, &ramp, &Ending::default());
         assert_eq!(
             ramp.fields[1],
             ("Capacity".to_string(), "about 3000 req/s".to_string())
@@ -1698,6 +1815,7 @@ mod tests {
             rps: 1000.0,
             p50: Duration::from_millis(10),
             p99: Duration::from_millis(45),
+            ..Progress::default()
         };
         let msg = run().progress(&p);
         assert!(
@@ -1765,7 +1883,13 @@ mod tests {
         };
         begin(run(), &[hook]);
         anomaly("p99 jumped 4.5× to 45ms at 26s");
-        end(&report(), &["errors > 0.5% (errors were 1.0%)".into()]);
+        end(
+            &report(),
+            &Ending {
+                failed: vec!["errors > 0.5% (errors were 1.0%)".into()],
+                ..Ending::default()
+            },
+        );
         flush().await;
         let got = got.lock().unwrap().clone();
         assert_eq!(got.len(), 4, "{got:?}");

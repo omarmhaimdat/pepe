@@ -328,8 +328,12 @@ impl RampScreen {
         loop {
             if self.ramp.end.is_some() && !said_end {
                 said_end = true;
-                let crossed = crate::modes::crossed(&self.cli, &self.ramp.total);
-                crate::modes::hooks_end(&self.result_json(), &crossed);
+                crate::modes::hooks_end(
+                    &self.cli,
+                    &self.result_json(),
+                    Some(&self.ramp.total),
+                    Vec::new(),
+                );
             }
             if dirty {
                 let now = Instant::now();
