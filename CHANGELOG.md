@@ -6,6 +6,33 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+## [0.46.0](https://github.com/omarmhaimdat/pepe/compare/v0.45.0...v0.46.0) - 2026-10-17
+
+### Added
+
+- *(slack)* --slack keeps one Slack message up to date as a run goes, and pepe slack connect sets it up from the terminal ([#201](https://github.com/omarmhaimdat/pepe/pull/201))
+
+  Part 2 of the webhooks work: Slack, live, set up from the terminal.
+  Nothing is hosted; the app belongs to the user's own workspace.
+
+  ```bash
+  pepe slack connect                                   # once per machine
+  pepe -z 10m -c 50 --slack https://api.example.com/health
+  ```
+
+  ## `pepe slack connect`
+
+  1. Opens Slack's "create an app" page with the manifest in the link:
+  name, permissions (`chat:write`, `chat:write.public`, `channels:read`,
+  `channels:join`, `groups:read`). The user picks a workspace, then clicks
+  **Create**, **Install** and **Allow**.
+  2. Takes the pasted bot token, shown as dots, and checks it right away
+  with `auth.test`.
+  3. Picks the channel by name or part of one, joins it, posts a test
+  message, and saves the token and channel to `slack.toml` beside the
+  settings. The file is `0600`, readable only by the user.
+
+
 ## [0.45.0](https://github.com/omarmhaimdat/pepe/compare/v0.44.0...v0.45.0) - 2026-10-17
 
 ### Added
