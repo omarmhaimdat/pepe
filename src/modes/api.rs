@@ -119,7 +119,10 @@ pub(crate) async fn run_api_json(
                 load.stop();
             }
             said = crate::control::next(&mut control) => {
-                if crate::control::apply(&said, &load) && !interrupted {
+                let asked = answer_ask(args, &said, || {
+                    serde_json::to_value(json_report::JsonReport::generate(&total, started.elapsed(), interrupted)).unwrap_or_default()
+                });
+                if !asked && crate::control::apply(&said, &load) && !interrupted {
                     interrupted = true;
                     load.stop();
                 }

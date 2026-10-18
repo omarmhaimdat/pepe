@@ -458,6 +458,8 @@ pub struct Run {
     pub command: String,
     /// What the run sends: "for 30s, 50 at a time"
     pub load: String,
+    /// `--rate`, when it caps the run
+    pub rate: Option<f64>,
     /// The machine it runs on, and who started it
     pub host: String,
     pub who: String,
@@ -494,6 +496,16 @@ pub struct Progress {
     pub paused: bool,
     pub concurrency: Option<usize>,
     pub note: Option<String>,
+    pub p95: Duration,
+    /// Response body bytes in
+    pub bytes: u64,
+    /// The medians of waiting for the first byte and of reading the body
+    pub wait_ms: f64,
+    pub read_ms: f64,
+    /// The first body of the most frequent failure
+    pub first_body: Option<String>,
+    /// What changed so far, a line each, oldest first
+    pub changes: Vec<String>,
 }
 
 /// How a run ended, beyond its report
@@ -1227,11 +1239,17 @@ async fn to_slack(
     message: &Message,
 ) -> Result<(), String> {
     match message.event {
-        Event::Start | Event::Progress => live.show(&layout::live(message)).await,
-        Event::Anomaly => {
-            let (text, icon) = layout::anomaly(message);
-            live.reply(&text, false, Some(&icon)).await
+        Event::Start | Event::Progress => {
+            let shown = live.show(&layout::live(message)).await;
+            if shown.is_ok() {
+                if let (Some(ts), Some((token, _))) = (live.ts(), &hook.slack) {
+                    thread_known(token, live.channel(), ts);
+                }
+            }
+            shown
         }
+        // Folded into the message's list of what changed, not a reply
+        Event::Anomaly => Ok(()),
         Event::End | Event::Fail => {
             let (line, icon) = layout::result_line(message, hook.mention.as_deref());
             live.end(&layout::verdict(message), &line, &icon).await
@@ -1293,6 +1311,8 @@ struct State {
     run: Run,
     /// The seconds the last progress had
     series: Vec<(f64, f64)>,
+    /// What changed so far, for the live message's list
+    changes: Vec<String>,
     client: reqwest::Client,
     lines: Vec<Line>,
     /// Queues closed by a change of hooks, still sending what they had
@@ -1437,6 +1457,7 @@ pub fn begin(run: Run, hooks: &[Webhook]) {
     }
     *state = Some(State {
         series: Vec::new(),
+        changes: Vec::new(),
         run,
         client,
         lines,
@@ -1493,6 +1514,7 @@ pub fn progress(numbers: impl FnOnce() -> Progress) {
     let nudged = NUDGE.swap(false, std::sync::atomic::Ordering::Relaxed);
     let Ok(mut state) = STATE.lock() else { return };
     let Some(state) = state.as_mut() else { return };
+    numbers.changes = state.changes.clone();
     let mut message = state.run.progress(&numbers);
     if !numbers.series.is_empty() {
         state.series = numbers.series.clone();
@@ -1510,17 +1532,21 @@ pub fn progress(numbers: impl FnOnce() -> Progress) {
 }
 
 /// Something changed during the run
-/// `kind` is what moved: latency, throughput or errors
+/// `kind` is what moved: latency, throughput or errors. A Slack message
+/// takes it into its list of what changed, at once, rather than as a
+/// reply of its own; the other hooks on `anomaly` get a message.
 pub fn anomaly(kind: &str, text: &str) {
-    let Ok(state) = STATE.lock() else { return };
-    let Some(state) = state.as_ref() else { return };
+    let Ok(mut state) = STATE.lock() else { return };
+    let Some(state) = state.as_mut() else { return };
+    state.changes.push(layout::change_line(Some(kind), text));
+    NUDGE.store(true, std::sync::atomic::Ordering::Relaxed);
     let mut message = state.run.anomaly(text);
     message.detail.run = state.run.clone();
     message.detail.kind = Some(kind.to_string());
     for line in state
         .lines
         .iter()
-        .filter(|l| l.hook.events.contains(&Event::Anomaly))
+        .filter(|l| l.hook.events.contains(&Event::Anomaly) && l.hook.slack.is_none())
     {
         line.send(&message);
     }
@@ -1636,6 +1662,7 @@ pub fn replace(hooks: &[Webhook], run: impl FnOnce() -> Run) -> Result<(), Strin
             let client = client();
             *state = Some(State {
                 series: Vec::new(),
+                changes: Vec::new(),
                 run: run(),
                 lines: resolved
                     .into_iter()
@@ -1648,6 +1675,46 @@ pub fn replace(hooks: &[Webhook], run: impl FnOnce() -> Run) -> Result<(), Strin
         None => {}
     }
     Ok(())
+}
+
+/// The run's Slack message, once posted: where an answer goes
+static THREAD: Mutex<Option<(String, String, String)>> = Mutex::new(None);
+
+/// The run's message is there: kept for answers, and said on stderr to
+/// `pepe slack serve` when it started the run, so a question asked in the
+/// thread reaches this run
+fn thread_known(token: &str, channel: &str, ts: &str) {
+    let Ok(mut thread) = THREAD.lock() else {
+        return;
+    };
+    if thread.is_some() {
+        return;
+    }
+    *thread = Some((token.to_string(), channel.to_string(), ts.to_string()));
+    if std::env::var(crate::slack::RUN_ENV).is_ok() {
+        eprintln!("pepe-slack: message {channel} {ts}");
+    }
+}
+
+/// An answer in the run's thread, when the run has a Slack message
+pub fn reply_in_thread(text: String) {
+    let Some((token, channel, ts)) = THREAD.lock().ok().and_then(|t| t.clone()) else {
+        return;
+    };
+    tokio::spawn(async move {
+        let _ = crate::slack::Api::new(&token)
+            .call(
+                "chat.postMessage",
+                &[
+                    ("channel", channel),
+                    ("thread_ts", ts),
+                    ("text", text),
+                    ("username", "pepe".into()),
+                    ("icon_url", face("happy")),
+                ],
+            )
+            .await;
+    });
 }
 
 /// The verdict of `report` to `hooks` now, whatever their events: the

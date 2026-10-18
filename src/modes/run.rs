@@ -105,7 +105,10 @@ pub(crate) async fn run_json(args: &Cli) -> Result<(), Box<dyn std::error::Error
                 load.stop();
             }
             said = crate::control::next(&mut control) => {
-                if crate::control::apply(&said, &load) && !interrupted {
+                let asked = answer_ask(args, &said, || {
+                    serde_json::to_value(report(&metrics, &timeline, &slowest, &anomalies, &load, started.elapsed(), warmup_requests, interrupted)).unwrap_or_default()
+                });
+                if !asked && crate::control::apply(&said, &load) && !interrupted {
                     interrupted = true;
                     load.stop();
                 }

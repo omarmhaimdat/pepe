@@ -13,6 +13,8 @@ pub enum Command {
     Resume,
     Concurrency(usize),
     Stop,
+    /// A question asked in the run's thread: the run answers there
+    Ask(String),
 }
 
 /// A command and who sent it (a Slack user id, or nothing)
@@ -26,6 +28,12 @@ pub fn parse(line: &str) -> Option<Said> {
         "resume" => Command::Resume,
         "stop" => Command::Stop,
         "concurrency" => Command::Concurrency(words.next()?.parse().ok().filter(|n| *n > 0)?),
+        // `ask U1 why are errors up`: who asks first, the question after
+        "ask" => {
+            let by = words.next()?.to_string();
+            let question = words.collect::<Vec<_>>().join(" ");
+            return Some((Command::Ask(question), Some(by)));
+        }
         _ => return None,
     };
     Some((command, words.next().map(str::to_string)))
@@ -86,6 +94,8 @@ pub fn apply(said: &Said, load: &LoadHandle) -> bool {
             }
         }
         Command::Stop => "stopped it".to_string(),
+        // Answered by the run's loop, which has the numbers
+        Command::Ask(_) => return false,
     };
     crate::webhook::steered(load.is_paused(), load.concurrency(), by.as_deref(), &what);
     *command == Command::Stop
@@ -109,5 +119,9 @@ mod tests {
         assert_eq!(parse("concurrency 0"), None);
         assert_eq!(parse("concurrency many"), None);
         assert_eq!(parse("dance"), None);
+        assert_eq!(
+            parse("ask U3 why are errors up?\n"),
+            Some((Command::Ask("why are errors up?".into()), Some("U3".into())))
+        );
     }
 }

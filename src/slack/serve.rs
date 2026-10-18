@@ -26,6 +26,9 @@ struct Running {
     lines: mpsc::UnboundedSender<String>,
     started: Instant,
     paused: bool,
+    /// The run's live message, once it's posted: questions in its thread
+    /// come to this run
+    message: Option<String>,
 }
 
 /// What a click, a form or a command asks for
@@ -410,6 +413,8 @@ struct Listener {
     client: reqwest::Client,
     store: Store,
     runs: Arc<Mutex<HashMap<String, Running>>>,
+    /// The messages of runs that ended, by their ts: the test they were of
+    ended: Arc<Mutex<HashMap<String, String>>>,
     count: u64,
 }
 
@@ -671,10 +676,12 @@ impl Listener {
                     lines,
                     started: Instant::now(),
                     paused: false,
+                    message: None,
                 },
             );
         }
         let runs = self.runs.clone();
+        let ended = self.ended.clone();
         let bot = self.bot.clone();
         let channel = from.channel.clone();
         let test = test.to_string();
@@ -689,10 +696,23 @@ impl Listener {
             if let Some(err) = child.stderr.take() {
                 let said = said.clone();
                 let test = test.clone();
+                let runs = runs.clone();
+                let id = id.clone();
                 tokio::spawn(async move {
                     use tokio::io::AsyncBufReadExt;
                     let mut lines = tokio::io::BufReader::new(err).lines();
                     while let Ok(Some(line)) = lines.next_line().await {
+                        // Where its message is: questions in that thread are its
+                        if let Some(at) = line.strip_prefix("pepe-slack: message ") {
+                            if let (Some(ts), Ok(mut runs)) =
+                                (at.split_whitespace().nth(1), runs.lock())
+                            {
+                                if let Some(r) = runs.get_mut(&id) {
+                                    r.message = Some(ts.to_string());
+                                }
+                            }
+                            continue;
+                        }
                         if let Some(warning) = line.strip_prefix("warning: ") {
                             log(&test, &bad("⚠ warning"), "", warning);
                         }
@@ -725,7 +745,12 @@ impl Listener {
             tokio::time::sleep(Duration::from_millis(100)).await;
             let said = said.lock().map(|s| s.clone()).unwrap_or_default();
             if let Ok(mut runs) = runs.lock() {
-                runs.remove(&id);
+                // Its thread can still be asked: from the recorded report
+                if let Some(ts) = runs.remove(&id).and_then(|r| r.message) {
+                    if let Ok(mut ended) = ended.lock() {
+                        ended.insert(ts, test.clone());
+                    }
+                }
             }
             let took = faint(&span(started.elapsed()));
             match status.ok().and_then(|s| s.code()) {
@@ -918,6 +943,78 @@ impl Listener {
         }
     }
 
+    /// `@pepe …` in a thread: the run going there answers it from its live
+    /// numbers; a run that ended, from its recorded report; anything else
+    /// is told what can be asked where
+    async fn mention(&mut self, event: &Value) {
+        let user = event["user"].as_str().unwrap_or_default().to_string();
+        let channel = event["channel"].as_str().unwrap_or_default().to_string();
+        let thread = event["thread_ts"]
+            .as_str()
+            .or(event["ts"].as_str())
+            .unwrap_or_default()
+            .to_string();
+        // The question without the mentions in it
+        let question = event["text"]
+            .as_str()
+            .unwrap_or_default()
+            .split_whitespace()
+            .filter(|w| !(w.starts_with("<@") && w.ends_with('>')))
+            .collect::<Vec<_>>()
+            .join(" ");
+        let going = self.runs.lock().ok().and_then(|runs| {
+            runs.iter()
+                .find(|(_, r)| r.message.as_deref() == Some(thread.as_str()))
+                .map(|(id, r)| (id.clone(), r.test.clone()))
+        });
+        if let Some((id, test)) = going {
+            log(&format!("@{user}"), "asked", &test, &faint(&question));
+            self.tell(Some(&id), None, &format!("ask {user} {question}"));
+            return;
+        }
+        let ended = self.ended.lock().ok().and_then(|e| e.get(&thread).cloned());
+        let text = match ended {
+            Some(test) => {
+                log(&format!("@{user}"), "asked", &test, &faint(&question));
+                let runs = self.store.runs(&test);
+                let report = runs
+                    .last()
+                    .and_then(|r| std::fs::read_to_string(&r.path).ok())
+                    .and_then(|t| serde_json::from_str::<Value>(&t).ok());
+                match report {
+                    Some(report) => {
+                        // Against the run before it, when there's one
+                        let compared = runs.len().checked_sub(2).and_then(|i| {
+                            let before = crate::compare::Side::read(&runs[i].path).ok()?;
+                            let after = crate::compare::Side::of_report("this run".into(), &report).ok()?;
+                            let ago = runs[i].when.elapsed().unwrap_or_default();
+                            Some((
+                                crate::compare::compare(&before, &after),
+                                format!("{} ago", crate::ui::format::span(ago)),
+                            ))
+                        });
+                        super::answer::answer(&question, &report, compared.as_ref())
+                    }
+                    None => "That run's report isn't here any more.".into(),
+                }
+            }
+            None => "I answer in the threads of runs started from Slack here (`/pepe run NAME`, or ↻ Run again): ask in one of those.".into(),
+        };
+        let _ = self
+            .bot
+            .call(
+                "chat.postMessage",
+                &[
+                    ("channel", channel),
+                    ("thread_ts", thread),
+                    ("text", format!("<@{user}> {text}")),
+                    ("username", "pepe".into()),
+                    ("icon_url", crate::webhook::face("happy")),
+                ],
+            )
+            .await;
+    }
+
     /// One envelope from Slack: what to acknowledge it with, at once
     async fn envelope(&mut self, envelope: &Value) -> Option<Value> {
         let payload = &envelope["payload"];
@@ -981,6 +1078,10 @@ impl Listener {
                 }
                 _ => None,
             },
+            "events_api" if payload["event"]["type"] == "app_mention" => {
+                self.mention(&payload["event"]).await;
+                None
+            }
             "slash_commands" => {
                 let from = From {
                     user: payload["user_id"].as_str().unwrap_or_default().into(),
@@ -1039,6 +1140,7 @@ pub async fn run() -> Result<(), String> {
         client: reqwest::Client::new(),
         store: store.clone(),
         runs: Arc::default(),
+        ended: Arc::default(),
         count: 0,
     };
     let face = crate::ui::mascot::ansi(crate::ui::mascot::Mood::Happy);

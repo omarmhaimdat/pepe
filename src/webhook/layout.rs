@@ -301,54 +301,128 @@ pub(super) fn live(m: &Message) -> Value {
         .take(3)
         .map(|(cause, n)| format!("{cause} ×{}", count(*n)))
         .collect();
+    // Throughput: now, the run's best second, and which way the last
+    // seconds lean against the ones before
+    let peak = rps.iter().copied().fold(0.0f64, f64::max);
+    let lean = {
+        let n = rps.len();
+        if n >= 20 {
+            let recent = rps[n - 10..].iter().sum::<f64>() / 10.0;
+            let before = rps[..n - 10].iter().sum::<f64>() / (n - 10) as f64;
+            (before > 0.0).then(|| (recent / before - 1.0) * 100.0)
+        } else {
+            None
+        }
+    }
+    .filter(|pct| pct.abs() >= 5.0)
+    .map(|pct| {
+        format!(
+            " · {}{:.0}% lately",
+            if pct >= 0.0 { "+" } else { "−" },
+            pct.abs()
+        )
+    })
+    .unwrap_or_default();
+    let throughput = format!(
+        "{} req/s  `{}`\n_peak {}{lean}_",
+        count(p.rps.round() as u64),
+        spark(&squeeze(&rps, 16)),
+        count(peak.round() as u64)
+    );
+    let latency = format!(
+        "{} · {} · {}  `{}`",
+        ms(p.p50.as_secs_f64() * 1e3),
+        ms(p.p95.as_secs_f64() * 1e3),
+        ms(p.p99.as_secs_f64() * 1e3),
+        spark(&squeeze(&p99, 16))
+    );
+    let errors_text = if p.failed == 0 {
+        "none".to_string()
+    } else {
+        let body = p
+            .first_body
+            .as_ref()
+            .map(|b| format!("\n`{}`", super::cut(&b.replace('`', "'"), 90)))
+            .unwrap_or_default();
+        format!(
+            "{errors:.2}% · {}\n_{}_{body}",
+            count(p.failed),
+            causes.join(" · ")
+        )
+    };
+    let split = {
+        let total = p.wait_ms + p.read_ms;
+        if total > 0.0 {
+            let share = p.wait_ms / total;
+            let filled = (share * 10.0).round() as usize;
+            format!(
+                "`wait {}{} {:.0}%`\n_read {:.0}% · {} to the first byte_",
+                "█".repeat(filled),
+                "░".repeat(10 - filled),
+                share * 100.0,
+                (1.0 - share) * 100.0,
+                ms(p.wait_ms)
+            )
+        } else {
+            "_nothing answered yet_".to_string()
+        }
+    };
+    let in_flight = p.concurrency.unwrap_or(run.concurrency);
+    let load = format!(
+        "{} in flight · {}{}",
+        in_flight,
+        match run.rate {
+            Some(rate) => format!("{} a second", count(rate.round() as u64)),
+            None => "no rate cap".into(),
+        },
+        p.note
+            .as_ref()
+            .map(|n| format!("\n_{n}_"))
+            .unwrap_or_default()
+    );
     blocks.push(fields(&[
-        (
-            "Throughput".into(),
-            format!(
-                "{} req/s  `{}`",
-                count(p.rps.round() as u64),
-                spark(&squeeze(&rps, 16))
-            ),
-        ),
-        (
-            "Latency p50 · p99".into(),
-            format!(
-                "{} · {}  `{}`",
-                ms(p.p50.as_secs_f64() * 1e3),
-                ms(p.p99.as_secs_f64() * 1e3),
-                spark(&squeeze(&p99, 16))
-            ),
-        ),
-        (
-            "Errors".into(),
-            if p.failed == 0 {
-                "none".into()
-            } else {
-                format!("{errors:.2}% · {}\n{}", count(p.failed), causes.join(" · "))
-            },
-        ),
+        ("Throughput".into(), throughput),
+        ("Latency p50 · p95 · p99".into(), latency),
+        ("Errors".into(), errors_text),
+        ("Where the time goes".into(), split),
         (
             "Sent".into(),
             format!(
-                "{} requests{}",
+                "{} requests · {} in",
                 count(p.requests),
-                match p.anomalies {
-                    0 => String::new(),
-                    1 => "\n1 change · in the thread".into(),
-                    n => format!("\n{n} changes · in the thread"),
-                }
+                crate::ui::format::bytes(p.bytes as f64)
             ),
         ),
+        ("Load".into(), load),
     ]));
+    // What changed, the latest few, in the message rather than its thread
+    if !p.changes.is_empty() {
+        let shown: Vec<&String> = p.changes.iter().rev().take(5).rev().collect();
+        let more = p.changes.len().saturating_sub(shown.len());
+        blocks.push(section(format!(
+            "*What changed*{}\n{}",
+            if more > 0 {
+                format!(" · {more} earlier")
+            } else {
+                String::new()
+            },
+            shown
+                .iter()
+                .map(|l| l.as_str())
+                .collect::<Vec<_>>()
+                .join("\n")
+        )));
+    }
     blocks.extend(controls(run, progress));
     blocks.push(context(format!(
-        "{}{} · pepe {}",
-        p.note
-            .as_ref()
-            .map(|n| format!("{n} · "))
-            .unwrap_or_default(),
+        "{} · pepe {}{}",
         now_token("updated"),
-        crate::utils::version()
+        crate::utils::version(),
+        if run.buttons {
+            " · ask in the thread: @pepe p99, errors, slowest, compare"
+        } else {
+            ""
+        }
     )));
     message(
         format!("⏳ {} · {}", name(run), m.status.trim_start_matches("⏳ ")),
@@ -358,11 +432,20 @@ pub(super) fn live(m: &Message) -> Value {
     )
 }
 
-/// A line in the thread: something changed
-pub(super) fn anomaly(m: &Message) -> (String, String) {
-    let text = m.values.get("findings").cloned().unwrap_or_default();
-    let (line, mood) = thread_line(m.detail.kind.as_deref(), &text);
-    (line, face(mood))
+/// A thing that changed, for the message's list: when, then what moved
+/// and which way, to what. "`26s` 📈 p99 up 4.5× · 45ms"
+pub(super) fn change_line(kind: Option<&str>, text: &str) -> String {
+    let when = text.rsplit_once(" at ").map(|(_, w)| w).unwrap_or("");
+    let (line, _) = thread_line(kind, text);
+    let line = line
+        .rsplit_once(" · at ")
+        .map_or(line.as_str(), |(l, _)| l)
+        .to_string();
+    if when.is_empty() {
+        line
+    } else {
+        format!("`{when}` {line}")
+    }
 }
 
 /// A thing that changed, as a short line for the thread: what moved and
@@ -504,6 +587,27 @@ pub(super) fn verdict(m: &Message) -> Value {
             ));
         }
         blocks.push(fields(&pairs));
+        let changes: Vec<String> = summary["anomalies"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|a| Some(change_line(a["kind"].as_str(), a["text"].as_str()?)))
+            .collect();
+        if !changes.is_empty() {
+            let shown: Vec<&String> = changes.iter().take(6).collect();
+            blocks.push(section(format!(
+                "*What changed*{}\n{}",
+                match changes.len().saturating_sub(shown.len()) {
+                    0 => String::new(),
+                    n => format!(" · and {n} more"),
+                },
+                shown
+                    .iter()
+                    .map(|l| l.as_str())
+                    .collect::<Vec<_>>()
+                    .join("\n")
+            )));
+        }
         let notes = notes(&report);
         if !notes.is_empty() {
             blocks.push(section(notes.join("\n")));
@@ -836,6 +940,79 @@ mod tests {
             ..Run::default()
         };
         assert!(verdict_buttons(&adhoc).is_none());
+    }
+
+    #[test]
+    fn what_changed_is_a_line_with_its_time_first() {
+        assert_eq!(
+            change_line(
+                Some("throughput"),
+                "throughput fell 52% to 5.9k req/s at 1m26s"
+            ),
+            "`1m26s` 📉 Throughput dropped 52% · 5.9k req/s"
+        );
+        assert_eq!(
+            change_line(Some("errors"), "errors rose to 12% at 2m"),
+            "`2m` 🔥 Errors up to 12%"
+        );
+    }
+
+    #[test]
+    fn the_live_message_holds_it_all() {
+        let run = Run {
+            mode: "run".into(),
+            target: "GET https://a.io/x".into(),
+            concurrency: 8,
+            rate: Some(200.0),
+            ..Run::default()
+        };
+        let p = Progress {
+            elapsed: std::time::Duration::from_secs(30),
+            requests: 6000,
+            failed: 60,
+            rps: 200.0,
+            series: (0..30).map(|i| (200.0 + i as f64, 10.0)).collect(),
+            failures: vec![("HTTP 503".into(), 60)],
+            first_body: Some("upstream `down`".into()),
+            wait_ms: 9.0,
+            read_ms: 1.0,
+            bytes: 2048,
+            changes: vec!["`12s` 📈 p99 up 4.5× · 45ms".into()],
+            note: Some("<@U1> raised it to 8 at once".into()),
+            ..Progress::default()
+        };
+        let mut message = run.progress(&p);
+        message.detail.run = run.clone();
+        message.detail.progress = Some(p);
+        let payload = live(&message);
+        let blocks = payload["attachments"][0]["blocks"].as_array().unwrap();
+        let fields: Vec<String> = blocks
+            .iter()
+            .flat_map(|b| b["fields"].as_array().cloned().unwrap_or_default())
+            .map(|f| f["text"].as_str().unwrap().to_string())
+            .collect();
+        assert_eq!(fields.len(), 6, "{fields:#?}");
+        assert!(
+            fields[2].contains("HTTP 503 ×60") && fields[2].contains("`upstream 'down'`"),
+            "{}",
+            fields[2]
+        );
+        assert!(fields[3].contains("`wait █████████░ 90%`"), "{}", fields[3]);
+        assert!(
+            fields[5].contains("8 in flight · 200 a second")
+                && fields[5].contains("raised it to 8"),
+            "{}",
+            fields[5]
+        );
+        let text: Vec<&str> = blocks
+            .iter()
+            .filter_map(|b| b["text"]["text"].as_str())
+            .collect();
+        assert!(
+            text.iter()
+                .any(|t| t.starts_with("*What changed*") && t.contains("p99 up 4.5×")),
+            "{text:?}"
+        );
     }
 
     #[test]
