@@ -137,7 +137,7 @@ pub(crate) async fn run_json(args: &Cli) -> Result<(), Box<dyn std::error::Error
         report.clone().with_snapshot(false).write_to(path)?;
     }
     let json = report.to_json()?;
-    hooks_end(args, &report, Some(&metrics), Vec::new());
+    hooks_end(args, &report, Some(&metrics), Vec::new(), Some(&timeline));
     let comparison = if args.record {
         record_result(args, &json)?
     } else {

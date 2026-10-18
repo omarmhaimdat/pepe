@@ -15,6 +15,17 @@ pepe -z 30s -c 20 https://example.com > run.txt
 pepe ramp https://example.com --to 200 | tee ramp.txt
 ```
 
+## An HTML page
+
+```bash
+pepe -z 5m -c 50 --fail-if 'p99 > 300ms' --html checkout.html https://api.example.com/checkout
+pepe html report.json --open          # any run's or ramp's JSON report, recorded runs too
+```
+
+`--html FILE` writes the report as a page as well, for people who weren't at the terminal: one self-contained HTML file, with nothing fetched and nothing run, that opens anywhere, light or dark as the reader's system is. It has Pepe's face for the verdict, the run in a sentence, the numbers that matter, the run's curves second by second with what changed marked on them, the latency from p50 to the max, where the time went, each `--fail-if` with what was measured, for a saved test how it compares with its last recorded run, what pepe found with the first body of each failure, the answers, the endpoints or the steps, and the slowest requests. A ramp's page draws throughput and p99 as the concurrency rose, with each step and the capacity. `html = "report.html"` in a `pepe.toml` does it for every run there.
+
+`pepe html REPORT.json` makes the same page from a report already written (`--json`, `--snapshot`, a recorded run in `.pepe/runs/`); a report keeps its minutes rather than its seconds, so the curves are a point a minute, and the thresholds and the comparison aren't in it. `-o FILE` says where it goes (beside the report by default) and `--open` opens it.
+
 ## JSON output
 
 `--json` skips the dashboard, runs to completion and prints a report to stdout. Press Ctrl-C to stop early; the report then has `"interrupted": true`. Notes and errors go to stderr, so stdout stays valid JSON.

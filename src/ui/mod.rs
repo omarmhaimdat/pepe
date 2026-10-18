@@ -643,6 +643,7 @@ impl Dashboard {
                             &self.report_json(load),
                             Some(&self.metrics),
                             Vec::new(),
+                            Some(&self.timeline),
                         );
                     }
                     break;

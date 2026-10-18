@@ -341,6 +341,7 @@ pub(crate) async fn run_ping(
             &crate::ping::json_report(&state, &settings, interrupted),
             None,
             crossed,
+            None,
         );
         (comparison, code)
     };

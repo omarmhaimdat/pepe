@@ -333,6 +333,7 @@ impl RampScreen {
                     &self.result_json(),
                     Some(&self.ramp.total),
                     Vec::new(),
+                    None,
                 );
             }
             if dirty {

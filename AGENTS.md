@@ -148,6 +148,12 @@ CSV file whose first line names them, a row a request in turn (a row a
 chain in a flow); a hole that isn't a column is refused before anything
 is sent, and `--allow-host` checks every row's host.
 
+## A page for people
+
+`--html report.html` writes the report as one self-contained HTML page
+as well (curves, latency, thresholds, the comparison with the last run);
+`pepe html report.json -o report.html` makes it from a JSON report.
+
 ## Tell a channel
 
 `--webhook "$SLACK_WEBHOOK_URL"` sends the verdict when the run ends

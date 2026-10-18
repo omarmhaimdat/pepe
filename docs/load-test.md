@@ -62,6 +62,7 @@ In the dashboard, `space` pauses, `+` and `-` change concurrency, `tab` switches
 | `--vars <FILE>` | | Fill the `{{holes}}` in the URL, headers and body from a CSV file, a row a request |
 | `--webhook <URL>` | | Send the verdict to Slack, Discord, Teams, Google Chat or any URL when the run ends ([Webhooks](webhooks.md)) |
 | `--webhook-on <EVENTS>` | `end` | When: `start`, `progress`, `anomaly`, `end`, `fail` |
+| `--html <FILE>` | | Write the report as a self-contained HTML page too ([An HTML page](output.md#an-html-page)) |
 | `--slack[=CHANNEL]` | | One Slack message kept up to date as the run goes; `pepe slack connect` first ([Slack](webhooks.md#slack-live)) |
 
 The full list, including every subcommand's own flags, is in the [command reference](reference.md).
@@ -216,6 +217,7 @@ rate = 500             # requests started per second
 warmup = "5s"
 trace-header = "X-Request-Id"
 vars = "users.csv"     # values for the {{holes}}, a row a request
+html = "report.html"   # the report as a page too
 webhook = "${SLACK_WEBHOOK_URL}"   # or [[webhook]] tables: see Webhooks
 user-agent = "pepe-ci"
 proxy = "http://proxy:3128"

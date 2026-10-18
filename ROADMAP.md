@@ -167,8 +167,9 @@ Get the results where they're needed.
       History on the messages, and `/pepe`, answered by `pepe slack
       serve` over Socket Mode, saved tests only, allowed users — next
       release
-- [ ] **HTML report** (M). One self-contained file with the charts, for
-      people who weren't at the terminal.
+- [x] **HTML report** (M). One self-contained file with the charts, for
+      people who weren't at the terminal: `--html FILE`, and `pepe html
+      REPORT.json` for a report already written — next release
 
 ## 6. Speed on Linux
 

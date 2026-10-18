@@ -866,7 +866,17 @@ impl Outcome {
             v.as_array()
                 .map(|a| {
                     a.iter()
-                        .filter_map(|f| f["text"].as_str().map(str::to_string))
+                        .filter_map(|f| {
+                            // A run's findings have a text; a ramp's a title
+                            // and a detail
+                            f["text"].as_str().map(str::to_string).or_else(|| {
+                                let title = f["title"].as_str()?;
+                                Some(match f["detail"].as_str() {
+                                    Some(detail) => format!("{title} · {detail}"),
+                                    None => title.to_string(),
+                                })
+                            })
+                        })
                         .collect()
                 })
                 .unwrap_or_default()
@@ -1841,11 +1851,16 @@ mod tests {
             passed.status
         );
         let ramp = json!({"holds_concurrency": 40, "capacity": {"requests_per_second": 3000.0},
-            "requests": 9000, "failed_requests": 0, "seconds": 60.0, "findings": [{"level": "good", "text": "held to 40"}]});
+            "requests": 9000, "failed_requests": 0, "seconds": 60.0, "findings": [{"level": "healthy", "title": "Held to 40", "detail": "p99 under 100ms"}]});
         let ramp = run().end(Event::End, &ramp, &Ending::default());
         assert_eq!(
             ramp.fields[1],
             ("Capacity".to_string(), "about 3000 req/s".to_string())
+        );
+        assert_eq!(
+            ramp.findings,
+            ["Held to 40 · p99 under 100ms"],
+            "a ramp's findings are titled"
         );
     }
 
