@@ -139,7 +139,8 @@ pub fn ask_of_action(action: &Value, trigger: &str) -> Option<Ask> {
         }),
         "pepe:pause" => Some(Ask::Pause { run: value }),
         "pepe:resume" => Some(Ask::Resume { run: value }),
-        "pepe:size" => {
+        // − 1 and + 1: two ids, since Slack wants each once in a block
+        "pepe:less" | "pepe:more" | "pepe:size" => {
             let (run, n) = value.rsplit_once(':')?;
             Some(Ask::Size {
                 run: run.to_string(),
@@ -509,6 +510,11 @@ impl Listener {
 
     /// A test's card: what it sends, how its last runs went, and its buttons
     fn card(&self, test: &str) -> Reply {
+        self.card_with(test, None)
+    }
+
+    /// The card, with `note` above it: what just happened
+    fn card_with(&self, test: &str, note: Option<String>) -> Reply {
         let tests = self.described();
         let Ok((_, saved)) = self.store.load(test) else {
             return Reply::text(format!(
@@ -543,17 +549,30 @@ impl Listener {
             json!({"type": "section", "text": {"type": "mrkdwn", "text": format!("*{test}*")}, "accessory": picker(&tests, Some(test))}),
             json!({"type": "context", "elements": [{"type": "mrkdwn", "text": format!("`{load}`")}]}),
         ];
+        if let Some(note) = note {
+            blocks.insert(
+                0,
+                json!({"type": "context", "elements": [{"type": "mrkdwn", "text": note}]}),
+            );
+        }
         match runs.last() {
             Some(last) => {
                 let tail: Vec<&Recorded> = runs.iter().rev().take(8).rev().collect();
                 let p99: Vec<f64> = tail.iter().map(|r| r.p99).collect();
                 let rps: Vec<f64> = tail.iter().map(|r| r.rps).collect();
-                blocks.push(json!({"type": "section", "fields": [
-                    {"type": "mrkdwn", "text": format!("*Last run · {}*\n{} {} req/s · p99 {}", ago(last.when), last.icon, crate::ui::format::count(last.rps.round() as u64), ms(last.p99))},
-                    {"type": "mrkdwn", "text": format!("*Errors*\n{:.2}%", last.errors)},
-                    {"type": "mrkdwn", "text": format!("*Trend, last {}*\np99 `{}` · req/s `{}`", tail.len(), crate::webhook::spark(&p99), crate::webhook::spark(&rps))},
-                    {"type": "mrkdwn", "text": format!("*Recorded*\n{} run{} since {}", runs.len(), if runs.len() == 1 { "" } else { "s" }, ago(runs[0].when))},
-                ]}));
+                let mut fields = vec![
+                    json!({"type": "mrkdwn", "text": format!("*Last run · {}*\n{} {} req/s · p99 {}", ago(last.when), last.icon, crate::ui::format::count(last.rps.round() as u64), ms(last.p99))}),
+                    json!({"type": "mrkdwn", "text": format!("*Errors*\n{:.2}%", last.errors)}),
+                ];
+                // A trend needs a few runs to be one
+                if tail.len() >= 3 {
+                    fields.push(json!({"type": "mrkdwn", "text": format!("*Trend, last {}*\np99 `{}` · req/s `{}`", tail.len(), crate::webhook::spark(&p99), crate::webhook::spark(&rps))}));
+                }
+                fields.push(json!({"type": "mrkdwn", "text": match runs.len() {
+                    1 => format!("*Recorded*\n1 run, {}", ago(runs[0].when)),
+                    n => format!("*Recorded*\n{n} runs since {}", ago(runs[0].when)),
+                }}));
+                blocks.push(json!({"type": "section", "fields": fields}));
             }
             None => blocks.push(json!({"type": "section", "text": {"type": "mrkdwn", "text":
                 "_No recorded runs yet: runs from Slack, or with `--record`, are kept._"}})),
@@ -661,9 +680,29 @@ impl Listener {
         let test = test.to_string();
         let started = Instant::now();
         tokio::spawn(async move {
-            use tokio::io::{AsyncReadExt, AsyncWriteExt};
+            use tokio::io::AsyncWriteExt;
             let mut stdin = child.stdin.take();
-            let mut stderr = child.stderr.take();
+            // What the run says on stderr: its warnings shown as they come
+            // (a message Slack refused, a hook that failed), all of it kept
+            // for when it stops at once
+            let said = Arc::new(Mutex::new(String::new()));
+            if let Some(err) = child.stderr.take() {
+                let said = said.clone();
+                let test = test.clone();
+                tokio::spawn(async move {
+                    use tokio::io::AsyncBufReadExt;
+                    let mut lines = tokio::io::BufReader::new(err).lines();
+                    while let Ok(Some(line)) = lines.next_line().await {
+                        if let Some(warning) = line.strip_prefix("warning: ") {
+                            log(&test, &bad("⚠ warning"), "", warning);
+                        }
+                        if let Ok(mut said) = said.lock() {
+                            said.push_str(&line);
+                            said.push('\n');
+                        }
+                    }
+                });
+            }
             let mut stopped = false;
             let status = loop {
                 tokio::select! {
@@ -682,10 +721,9 @@ impl Listener {
                     }
                 }
             };
-            let mut said = String::new();
-            if let Some(err) = stderr.as_mut() {
-                let _ = err.read_to_string(&mut said).await;
-            }
+            // The last lines a moment to arrive
+            tokio::time::sleep(Duration::from_millis(100)).await;
+            let said = said.lock().map(|s| s.clone()).unwrap_or_default();
             if let Ok(mut runs) = runs.lock() {
                 runs.remove(&id);
             }
@@ -780,6 +818,13 @@ impl Listener {
         let gone = || Some(Reply::text("That run has ended."));
         match ask {
             Ask::Run { test, args, keep } => {
+                // Already going: its controls, rather than a no
+                if self.going().iter().any(|r| r.1 == test) {
+                    return Some(self.card_with(
+                        &test,
+                        Some(format!("⏳ `{test}` is running: pause or stop it here")),
+                    ));
+                }
                 let shown = args.join(" ");
                 match self.start(&test, args, keep, from) {
                     Ok(()) => {
@@ -789,7 +834,11 @@ impl Listener {
                             &test,
                             &format!("{} {}", ember("running"), faint(&shown)),
                         );
-                        None
+                        // The card it was pressed on turns into the run's
+                        Some(self.card_with(
+                            &test,
+                            Some("▶ Started: its message is in the channel, its controls are here".into()),
+                        ))
                     }
                     Err(e) => Some(Reply::text(format!("❌ {e}"))),
                 }
@@ -917,17 +966,16 @@ impl Listener {
                     };
                     let test = meta["test"].as_str().unwrap_or_default().to_string();
                     if let Some(reply) = self.answer(Ask::Run { test, args, keep }, &from).await {
-                        let _ = self
-                            .bot
-                            .call(
-                                "chat.postEphemeral",
-                                &[
-                                    ("channel", from.channel.clone()),
-                                    ("user", from.user.clone()),
-                                    ("text", reply.text),
-                                ],
-                            )
-                            .await;
+                        // The card with the run's controls, or why it didn't start
+                        let mut args = vec![
+                            ("channel", from.channel.clone()),
+                            ("user", from.user.clone()),
+                            ("text", reply.text.clone()),
+                        ];
+                        if let Some(blocks) = &reply.blocks {
+                            args.push(("blocks", blocks.to_string()));
+                        }
+                        let _ = self.bot.call("chat.postEphemeral", &args).await;
                     }
                     None
                 }
