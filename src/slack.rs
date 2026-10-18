@@ -16,6 +16,7 @@ use std::time::Duration;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 
+pub mod answer;
 mod serve;
 mod wizard;
 
@@ -144,10 +145,11 @@ pub fn manifest() -> Value {
         },
         "oauth_config": {
             "scopes": {
-                "bot": ["chat:write", "chat:write.public", "chat:write.customize", "channels:read", "channels:join", "groups:read", "commands", "users:read"]
+                "bot": ["chat:write", "chat:write.public", "chat:write.customize", "channels:read", "channels:join", "groups:read", "commands", "users:read", "app_mentions:read"]
             }
         },
         "settings": {
+            "event_subscriptions": {"bot_events": ["app_mention"]},
             "interactivity": {"is_enabled": true},
             "org_deploy_enabled": false,
             "socket_mode_enabled": true,

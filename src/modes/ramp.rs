@@ -38,6 +38,9 @@ pub(crate) async fn climb(
             }
             // A ramp sets its own concurrency: it can be paused or stopped
             said = crate::control::next(&mut control) => {
+                if answer_ask(args, &said, || crate::ramp::json(&ramp)) {
+                    continue;
+                }
                 if !matches!(said.0, crate::control::Command::Concurrency(_))
                     && crate::control::apply(&said, &load)
                 {

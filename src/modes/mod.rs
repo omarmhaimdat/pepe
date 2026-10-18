@@ -403,6 +403,7 @@ pub(crate) fn hook_run(args: &Cli) -> crate::webhook::Run {
             .or_else(|_| std::env::var("USERNAME"))
             .unwrap_or_default(),
         planned,
+        rate: args.rate,
         concurrency: args.concurrency as usize,
         served: std::env::var(crate::slack::RUN_ENV).ok(),
         by: std::env::var(crate::slack::BY_ENV)
@@ -437,21 +438,24 @@ pub(crate) fn hook_progress(
                 .collect()
         })
         .unwrap_or_default();
-    // What failed: each status other than a 2xx, then timeouts and the rest
-    let mut failures: Vec<(String, u64)> = metrics
-        .status_codes
+    // What failed, by cause, most first, with the first body of the first
+    let top = metrics.failures().top();
+    let failures: Vec<(String, u64)> = top
         .iter()
-        .filter(|(code, _)| !(200..300).contains(*code))
-        .map(|(code, n)| (code.to_string(), *n))
+        .map(|(cause, c)| (cause.to_string(), c.count))
         .collect();
-    if metrics.timeouts > 0 {
-        failures.push(("timeout".into(), metrics.timeouts));
-    }
-    let other = metrics.errors.saturating_sub(metrics.timeouts);
-    if other > 0 {
-        failures.push(("no answer".into(), other));
-    }
-    failures.sort_by_key(|a| std::cmp::Reverse(a.1));
+    let first_body = top
+        .first()
+        .and_then(|(_, c)| c.example.as_deref())
+        .map(|b| b.split_whitespace().collect::<Vec<_>>().join(" "))
+        .filter(|b| !b.is_empty());
+    let median_ms = |h: &metrics::Histogram| {
+        if h.count() == 0 {
+            0.0
+        } else {
+            h.percentile(50.0) as f64 / 1e3
+        }
+    };
     crate::webhook::Progress {
         elapsed,
         done: done.map(|d| d.clamp(0.0, 1.0)),
@@ -463,6 +467,11 @@ pub(crate) fn hook_progress(
         series,
         failures,
         anomalies,
+        p95: metrics.percentile(95.0),
+        bytes: metrics.bytes,
+        wait_ms: median_ms(metrics.phase(metrics::Phase::FirstByte)),
+        read_ms: median_ms(metrics.phase(metrics::Phase::Download)),
+        first_body,
         ..crate::webhook::Progress::default()
     }
 }
@@ -672,6 +681,26 @@ fn moved(comparison: &crate::compare::Comparison) -> String {
         out.push_str(&format!("\n⚠️ {}", unlike.text));
     }
     out
+}
+
+/// A question asked in the run's Slack thread, answered there from the
+/// run's report as it stands; true when it was one
+pub(crate) fn answer_ask(
+    args: &Cli,
+    said: &crate::control::Said,
+    report: impl FnOnce() -> serde_json::Value,
+) -> bool {
+    let (crate::control::Command::Ask(question), by) = said else {
+        return false;
+    };
+    let report = report();
+    let compared = last_comparison(args, &report);
+    let text = crate::slack::answer::answer(question, &report, compared.as_ref());
+    crate::webhook::reply_in_thread(match by {
+        Some(by) => format!("<@{by}> {text}"),
+        None => text,
+    });
+    true
 }
 
 /// A saved test's run against its last recorded one, and when that was

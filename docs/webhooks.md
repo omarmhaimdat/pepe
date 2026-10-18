@@ -18,9 +18,10 @@ pepe -z 10m -c 50 --slack https://api.example.com/health
 
 With `--slack` a run is one message in the channel, kept up to date, with Pepe the pepper as its face:
 
-- **While it runs** (edited every 10 seconds): what is sent, how hard, from which machine and by whom; a progress bar with the time left; throughput and p50 · p99 with sparklines of the last minute; errors by status and cause; how many things changed, each one a short reply in the message's thread as it happens, saying what moved and which way: `📉 Throughput dropped 52% · 5.9k req/s · at 1m26s`, `📈 p99 up 4.5× · 45ms · at 26s`, `🔥 Errors up to 12% · at 2m`.
+- **While it runs** (edited every 10 seconds, and at once when something changes or someone steers it): what is sent, how hard, from which machine and by whom; a progress bar with the time left; throughput with its peak and which way it leans lately; p50 · p95 · p99 with a sparkline; errors by cause with the first body the server sent; where the time goes, waiting for the first byte against reading the body; requests and bytes in; what's in flight and at what rate, and who changed it. Under them, **What changed**: each jump in latency, fall in throughput or rise in errors, a line each with its time (`` `1m26s` 📉 Throughput dropped 52% · 5.9k req/s ``), in the message itself: the thread stays quiet.
 - **When it ends** the message becomes the verdict: a sentence that says how much was sent, how fast, what failed and the first thing that changed; latency from p50 to the max; sparklines over the whole run; where the time went (waiting, connecting, reading); the answers by status; each `--fail-if` with ✓ or ✗ and what was measured; for a saved test, how it compares with its last recorded run; and what pepe found, worst first, with the first body of each kind of failure. A colour down its side says passed, warned or failed.
-- **Under it**, a line in the thread shown in the channel too: the result at a glance where the channel is now, with Pepe proud, worried or on fire, and the `mention` when the run failed (an edited message notifies no one).
+- **Under it**, one line in the thread, shown in the channel too: the result at a glance where the channel is now, with Pepe proud, worried or on fire, and the `mention` when the run failed (an edited message notifies no one). The verdict has the run's **What changed** too.
+- **Ask it in the thread.** With `pepe slack serve` running, `@pepe` in the thread of a run it started answers there: *p99*, *errors* (what failed, what the server said, when it began), *slowest*, *where does the time go*, *codes*, *compare* (against the test's last run), *status*, *help*. While the run goes, the run answers from its live numbers; after, the recorded report does. Nothing else is posted in the thread.
 
 `--slack=#another` posts somewhere else; in a file it's `webhook = "slack:"` or a `[[webhook]]` table with `url = "slack:#load-tests"`, which takes `on`, `every` and `mention` like any other.
 
@@ -35,7 +36,7 @@ The token and the channel are kept in `slack.toml` beside the settings, readable
 
 The same steps are on the [webhook page](#from-the-screens): `S` there connects Slack without leaving the run, and adds the hook. `pepe slack status` checks the connection, `pepe slack test` posts a test message, `pepe slack forget` removes the file, and `pepe slack manifest` prints the app's manifest, for Slack's "From a manifest" if the link doesn't fill the page in. In CI, `PEPE_SLACK_TOKEN` stands in for the file: `PEPE_SLACK_TOKEN=xoxb-… pepe --slack=#load-tests …`.
 
-An app made by pepe 0.46 can't show Pepe's faces (it lacks the `chat:write.customize` permission): run `pepe slack connect` again for one that can.
+An app made by an earlier pepe lacks something: Pepe's faces need `chat:write.customize` (0.47), the buttons Socket Mode (0.48), and questions in the thread the `app_mention` event (0.51). `pepe slack connect` again makes an app that has them all.
 
 ## Buttons and /pepe
 
