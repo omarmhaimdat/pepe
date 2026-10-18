@@ -638,8 +638,12 @@ impl Dashboard {
                         }
                         self.verdict = Some(verdict);
                         self.write_snapshot(load, false);
-                        let crossed = crate::modes::crossed(&self.args, &self.metrics);
-                        crate::modes::hooks_end(&self.report_json(load), &crossed);
+                        crate::modes::hooks_end(
+                            &self.args,
+                            &self.report_json(load),
+                            Some(&self.metrics),
+                            Vec::new(),
+                        );
                     }
                     break;
                 }
@@ -653,7 +657,10 @@ impl Dashboard {
                 self.anomalies.push(anomaly);
             }
             let (metrics, plan, active) = (&self.metrics, self.plan, self.active());
-            crate::webhook::progress(|| crate::modes::hook_progress(metrics, active, plan));
+            let (timeline, anomalies) = (&self.timeline, self.anomalies.len());
+            crate::webhook::progress(|| {
+                crate::modes::hook_progress(metrics, active, plan, Some(timeline), anomalies)
+            });
         }
         self.refresh_slow_threshold();
         if self.scroll > 0 {

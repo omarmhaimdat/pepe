@@ -382,20 +382,39 @@ pub(crate) fn hook_run(args: &Cli) -> crate::webhook::Run {
         _ if flow => args.url.clone(),
         _ => args.target_label(),
     };
+    let planned = match &args.command {
+        Some(cli::Command::Ramp(_)) => RampPlan::from_args(match &args.command {
+            Some(cli::Command::Ramp(r)) => r,
+            _ => unreachable!(),
+        })
+        .ok()
+        .map(|plan| plan.every * plan.levels.len() as u32),
+        Some(cli::Command::Ping(_)) => args.run_duration(),
+        _ => args.run_duration(),
+    };
     crate::webhook::Run {
         mode: mode.into(),
         target,
         test: store::test_of(args),
         command: shown.command_line_masked(),
         load,
+        host: gethostname::gethostname().to_string_lossy().into_owned(),
+        who: std::env::var("USER")
+            .or_else(|_| std::env::var("USERNAME"))
+            .unwrap_or_default(),
+        planned,
+        concurrency: args.concurrency as usize,
     }
 }
 
-/// The run's numbers so far, for a webhook's progress
+/// The run's numbers so far, for a webhook's progress: with the seconds
+/// of `timeline` for its sparklines, when the mode keeps one
 pub(crate) fn hook_progress(
     metrics: &Metrics,
     elapsed: std::time::Duration,
     plan: Plan,
+    timeline: Option<&timeline::Timeline>,
+    anomalies: usize,
 ) -> crate::webhook::Progress {
     let done = match plan {
         Plan::Count(0) => None,
@@ -403,6 +422,31 @@ pub(crate) fn hook_progress(
         Plan::Duration(d) if d.is_zero() || d >= UNTIL_STOPPED => None,
         Plan::Duration(d) => Some(elapsed.as_secs_f64() / d.as_secs_f64()),
     };
+    let series = timeline
+        .map(|t| {
+            let samples = t.samples();
+            samples
+                .iter()
+                .skip(samples.len().saturating_sub(60))
+                .map(|s| (s.rps, s.p99_ms))
+                .collect()
+        })
+        .unwrap_or_default();
+    // What failed: each status other than a 2xx, then timeouts and the rest
+    let mut failures: Vec<(String, u64)> = metrics
+        .status_codes
+        .iter()
+        .filter(|(code, _)| !(200..300).contains(*code))
+        .map(|(code, n)| (code.to_string(), *n))
+        .collect();
+    if metrics.timeouts > 0 {
+        failures.push(("timeout".into(), metrics.timeouts));
+    }
+    let other = metrics.errors.saturating_sub(metrics.timeouts);
+    if other > 0 {
+        failures.push(("no answer".into(), other));
+    }
+    failures.sort_by_key(|a| std::cmp::Reverse(a.1));
     crate::webhook::Progress {
         elapsed,
         done: done.map(|d| d.clamp(0.0, 1.0)),
@@ -411,20 +455,120 @@ pub(crate) fn hook_progress(
         rps: metrics.total as f64 / elapsed.as_secs_f64().max(0.001),
         p50: metrics.percentile(50.0),
         p99: metrics.percentile(99.0),
+        series,
+        failures,
+        anomalies,
     }
 }
 
 /// A ramp's numbers so far: all its steps' requests, through its length
 pub(crate) fn ramp_progress(ramp: &Ramp, now: Instant) -> crate::webhook::Progress {
     let length = ramp.plan.every * ramp.plan.levels.len() as u32;
-    hook_progress(&ramp.total, ramp.elapsed(now), Plan::Duration(length))
+    hook_progress(
+        &ramp.total,
+        ramp.elapsed(now),
+        Plan::Duration(length),
+        None,
+        0,
+    )
 }
 
-/// The run's end to the webhooks: its report, and what made it fail
-pub(crate) fn hooks_end(report: &impl serde::Serialize, crossed: &[String]) {
-    if let Ok(report) = serde_json::to_value(report) {
-        crate::webhook::end(&report, crossed);
+/// The run's end to the webhooks: its report, each `--fail-if` held
+/// against `metrics`, `failed` for what else failed it, and for a saved
+/// test, how it compares with the test's last recorded run
+pub(crate) fn hooks_end(
+    args: &Cli,
+    report: &impl serde::Serialize,
+    metrics: Option<&Metrics>,
+    failed: Vec<String>,
+) {
+    if !crate::webhook::live() {
+        return;
     }
+    let Ok(report) = serde_json::to_value(report) else {
+        return;
+    };
+    let checks = metrics.map(|m| checks(args, m)).unwrap_or_default();
+    let compared = compared_with_last(args, &report);
+    crate::webhook::end(
+        &report,
+        &crate::webhook::Ending {
+            checks,
+            failed,
+            compared,
+        },
+    );
+}
+
+/// Each `--fail-if`, whether the run held it off, and what it measured
+pub(crate) fn checks(args: &Cli, metrics: &Metrics) -> Vec<crate::webhook::Check> {
+    args.fail_if
+        .iter()
+        .filter_map(|text| crate::ramp::Condition::parse(text).ok())
+        .map(|condition| {
+            let measured = match condition.measure {
+                crate::ramp::Measure::Latency(p) => {
+                    format!("p{p} was {}", ui::format::latency(metrics.percentile(p)))
+                }
+                crate::ramp::Measure::Errors => {
+                    format!("errors were {:.1}%", metrics.error_rate())
+                }
+            };
+            crate::webhook::Check {
+                held: !condition.crossed(metrics),
+                text: condition.text.clone(),
+                measured,
+            }
+        })
+        .collect()
+}
+
+/// What moved, the significant changes a few at a time: "p99 +38% · req/s
+/// −6%", and a warning when the two runs weren't alike
+fn moved(comparison: &crate::compare::Comparison) -> String {
+    let mut parts: Vec<String> = comparison
+        .changes
+        .iter()
+        .filter(|c| c.significant)
+        .filter_map(|c| {
+            let pct = c.change_percent?;
+            let sign = if pct >= 0.0 { "+" } else { "−" };
+            Some(format!(
+                "{} {sign}{:.0}%",
+                crate::compare::short_name(c.metric),
+                pct.abs()
+            ))
+        })
+        .take(3)
+        .collect();
+    if parts.is_empty() {
+        parts.push("nothing moved past the noise".into());
+    }
+    let mut out = parts.join(" · ");
+    if let Some(unlike) = comparison
+        .findings
+        .iter()
+        .find(|f| f.text.starts_with("Different"))
+    {
+        out.push_str(&format!("\n⚠️ {}", unlike.text));
+    }
+    out
+}
+
+/// A saved test's run against the last one recorded of it
+fn compared_with_last(args: &Cli, report: &serde_json::Value) -> Option<crate::webhook::Compared> {
+    let name = store::test_of(args)?;
+    let last = Store::local().last_run(&name)?;
+    let before = crate::compare::Side::read(&last.path).ok()?;
+    let after = crate::compare::Side::of_report("this run".into(), report).ok()?;
+    let comparison = crate::compare::compare(&before, &after);
+    let ago = last.when.elapsed().unwrap_or_default();
+    Some(crate::webhook::Compared {
+        verdict: comparison.verdict.headline().to_string(),
+        regression: comparison.regression,
+        summary: moved(&comparison),
+        when: format!("against the run {} ago", ui::format::span(ago)),
+    })
 }
 
 #[cfg(test)]

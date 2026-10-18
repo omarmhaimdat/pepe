@@ -551,7 +551,7 @@ impl Page {
             }
             _ => match row {
                 Row::Add => spans.push(Span::styled(
-                    "+ add a webhook: type or paste its URL",
+                    "+ add a webhook: type or paste its URL · S for Slack",
                     Style::new().fg(if selected { ACCENT } else { FAINT }),
                 )),
                 Row::Url(i) => {
@@ -563,6 +563,12 @@ impl Page {
                             .bold()
                             .fg(if wrong.is_some() { BAD } else { Color::Reset }),
                     ));
+                    if hook.url.trim() == "slack:" {
+                        spans.push(Span::styled(
+                            "  the connected channel",
+                            Style::new().fg(FAINT),
+                        ));
+                    }
                 }
                 Row::Events(i) => {
                     let on = self.hooks[i].events();
@@ -610,10 +616,10 @@ impl Page {
                     match &hook.every {
                         Some(every) => spans.push(Span::styled(every.clone(), Style::new().bold())),
                         None => spans.push(Span::styled(
-                            if progress {
-                                "1m"
-                            } else {
-                                "1m, once progress is ticked"
+                            match (hook.is_slack(), progress) {
+                                (true, _) => "10s: the message is edited, not added to",
+                                (false, true) => "1m",
+                                (false, false) => "1m, once progress is ticked",
                             },
                             Style::new().fg(FAINT),
                         )),
@@ -635,18 +641,81 @@ impl Page {
         line
     }
 
+    /// Where a hook goes, for its card's title: "Slack · #load-tests",
+    /// "Discord", "JSON · hooks.example.com"
+    fn destination(hook: &Webhook) -> String {
+        if hook.is_slack() {
+            let channel = hook
+                .url
+                .trim_start()
+                .trim_start_matches("slack:")
+                .trim()
+                .to_string();
+            let channel = if channel.is_empty() {
+                crate::slack::load()
+                    .and_then(|c| c.channel)
+                    .unwrap_or_else(|| "not connected: S connects it".into())
+            } else {
+                channel
+            };
+            return format!("Slack · {channel}");
+        }
+        let url = hook.resolve().map(|_| hook.url.clone()).unwrap_or_default();
+        let host = reqwest::Url::parse(&url)
+            .ok()
+            .and_then(|u| u.host_str().map(str::to_string))
+            .unwrap_or_else(|| hook.masked_url());
+        match hook.format.of(&url) {
+            Format::Slack => "Slack webhook".into(),
+            Format::Discord => "Discord".into(),
+            Format::Teams => "Teams".into(),
+            Format::GoogleChat => "Google Chat".into(),
+            Format::Text => format!("Text · {host}"),
+            _ => format!("JSON · {host}"),
+        }
+    }
+
+    /// How a hook's last message went, for its card's corner
+    fn status(hook: &Webhook) -> (String, Color) {
+        if let Err(e) = hook.resolve() {
+            let e = e.rsplit(": ").next().unwrap_or(&e).to_string();
+            return (format!("✗ {}", truncate(&e, 34)), BAD);
+        }
+        match webhook::last_delivery(&hook.url) {
+            Some((ago, None)) => (
+                format!(
+                    "✓ sent {} ago",
+                    crate::ui::format::span(ago.max(std::time::Duration::from_secs(1)))
+                ),
+                GOOD,
+            ),
+            Some((_, Some(e))) => (format!("✗ {}", truncate(&e, 34)), BAD),
+            None => ("○ nothing sent yet".into(), FAINT),
+        }
+    }
+
+    /// Each hook a card: its destination and how it last went along the
+    /// top, its settings inside
     fn lines(&self, width: usize) -> (Vec<Line<'static>>, usize) {
         let mut lines = Vec::new();
         let mut selected = 0;
+        let inner = width.saturating_sub(4);
+        let frame = |s: &str| Span::styled(s.to_string(), Style::new().fg(FAINT));
         for (index, row) in self.rows().into_iter().enumerate() {
             if let Row::Url(i) = row {
-                if i > 0 {
-                    lines.push(Line::raw(""));
-                }
-                lines.push(Line::from(Span::styled(
-                    format!("  WEBHOOK {}", i + 1),
-                    Style::new().fg(LABEL).bold(),
-                )));
+                let hook = &self.hooks[i];
+                let title = format!(" {} ", Self::destination(hook));
+                let (status, color) = Self::status(hook);
+                let status = format!(" {status} ");
+                let fill =
+                    width.saturating_sub(4 + title.chars().count() + status.chars().count() + 2);
+                lines.push(Line::from(vec![
+                    frame(" ╭─"),
+                    Span::styled(title, Style::new().fg(ACCENT).bold()),
+                    frame(&"─".repeat(fill)),
+                    Span::styled(status, Style::new().fg(color)),
+                    frame("─╮"),
+                ]));
             }
             if row == Row::Add && !self.hooks.is_empty() {
                 lines.push(Line::raw(""));
@@ -654,7 +723,33 @@ impl Page {
             if index == self.at {
                 selected = lines.len();
             }
-            lines.push(self.line(row, index == self.at, width));
+            if row == Row::Add {
+                lines.push(self.line(row, index == self.at, width));
+                continue;
+            }
+            let mut line = self.line(row, index == self.at, inner);
+            let used = line.width();
+            if used < inner {
+                line.spans.push(Span::raw(" ".repeat(inner - used)));
+            }
+            let style = line.style;
+            line.spans.insert(0, frame(" │"));
+            line.spans
+                .push(Span::styled("│", Style::new().fg(FAINT).bg(Color::Reset)));
+            line = line.style(Style::default());
+            // The selection's bar stays inside the frame
+            for span in line.spans.iter_mut().skip(1) {
+                if span.content != "│" {
+                    span.style = style.patch(span.style);
+                }
+            }
+            lines.push(line);
+            if let Row::Mention(_) = row {
+                lines.push(Line::from(frame(&format!(
+                    " ╰{}╯",
+                    "─".repeat(width.saturating_sub(4))
+                ))));
+            }
         }
         (lines, selected)
     }

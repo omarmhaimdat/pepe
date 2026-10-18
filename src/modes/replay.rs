@@ -203,7 +203,7 @@ pub(crate) async fn run_replay_json(
                     )
                 });
                 if !warming {
-                    crate::webhook::progress(|| hook_progress(&total, started.elapsed(), plan(args)));
+                    crate::webhook::progress(|| hook_progress(&total, started.elapsed(), plan(args), None, 0));
                 }
                 if over {
                     break;
@@ -277,7 +277,7 @@ pub(crate) async fn run_replay_json(
         "urls": urls,
     });
     println!("{}", serde_json::to_string_pretty(&report)?);
-    hooks_end(&report, &crossed(args, &total));
+    hooks_end(args, &report, Some(&total), Vec::new());
     exit_if_failed(args, &total).await;
     Ok(())
 }

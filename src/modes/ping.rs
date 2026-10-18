@@ -337,8 +337,10 @@ pub(crate) async fn run_ping(
             _ => Vec::new(),
         };
         hooks_end(
+            args,
             &crate::ping::json_report(&state, &settings, interrupted),
-            &crossed,
+            None,
+            crossed,
         );
         (comparison, code)
     };

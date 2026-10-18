@@ -76,7 +76,7 @@ pub(crate) async fn run_json(args: &Cli) -> Result<(), Box<dyn std::error::Error
                         crate::webhook::anomaly(&anomaly.text);
                         anomalies.push(anomaly);
                     }
-                    crate::webhook::progress(|| hook_progress(&metrics, started.elapsed(), plan(args)));
+                    crate::webhook::progress(|| hook_progress(&metrics, started.elapsed(), plan(args), Some(&timeline), anomalies.len()));
                 }
                 exporter::publish(|| {
                     exporter::run_page(
@@ -129,7 +129,7 @@ pub(crate) async fn run_json(args: &Cli) -> Result<(), Box<dyn std::error::Error
         report.clone().with_snapshot(false).write_to(path)?;
     }
     let json = report.to_json()?;
-    hooks_end(&report, &crossed(args, &metrics));
+    hooks_end(args, &report, Some(&metrics), Vec::new());
     let comparison = if args.record {
         record_result(args, &json)?
     } else {

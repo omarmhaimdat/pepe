@@ -62,6 +62,23 @@ impl Outcome {
     }
 }
 
+/// A metric as a badge or a message says it: "p99", "req/s"
+pub fn short_name(metric: &str) -> &str {
+    match metric {
+        "p99_ms" => "p99",
+        "median_ms" => "median",
+        "requests_per_second" => "req/s",
+        "capacity_per_second" => "capacity",
+        "dns_ms" => "dns",
+        "connect_ms" => "connect",
+        "tls_ms" => "tls",
+        "tls_resumed_ms" => "tls resumed",
+        "ttfb_ms" => "first byte",
+        "download_ms" => "download",
+        other => other,
+    }
+}
+
 /// One number held against its earlier self
 #[derive(Debug, Clone, Serialize, PartialEq)]
 pub struct Change {
@@ -221,7 +238,12 @@ impl Side {
             .map_err(|e| format!("can't read {}: {e}", path.display()))?;
         let doc: Value = serde_json::from_str(&text)
             .map_err(|e| format!("{} is not a JSON report: {e}", path.display()))?;
-        let file = path.display().to_string();
+        Self::of_report(path.display().to_string(), &doc)
+    }
+
+    /// A report already read, called `file`
+    pub fn of_report(file: String, doc: &Value) -> Result<Self, String> {
+        let doc = doc.clone();
         if doc.get("mode").and_then(Value::as_str) == Some("ping") {
             return Self::of_ping(file, &doc);
         }
@@ -780,19 +802,7 @@ fn badge(outcome: Outcome, changes: &[Change], before: &Side, after: &Side) -> B
             })
             .and_then(|c| {
                 let change = c.change_percent?;
-                let name = match c.metric {
-                    "p99_ms" => "p99",
-                    "median_ms" => "median",
-                    "requests_per_second" => "req/s",
-                    "capacity_per_second" => "capacity",
-                    "dns_ms" => "dns",
-                    "connect_ms" => "connect",
-                    "tls_ms" => "tls",
-                    "tls_resumed_ms" => "tls resumed",
-                    "ttfb_ms" => "first byte",
-                    "download_ms" => "download",
-                    other => other,
-                };
+                let name = short_name(c.metric);
                 Some(format!(
                     "{name} {}{}%",
                     if change > 0.0 { "+" } else { "−" },
