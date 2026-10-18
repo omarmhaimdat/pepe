@@ -4,14 +4,15 @@
 //! listener answers them all: left running on a machine, it runs the saved
 //! tests of the directory it was started in, as `pepe --load NAME` with the
 //! channel's `--slack`, under that directory's guardrails, for the people
-//! allowed, and stops those it started.
+//! allowed. It steers the runs it started (pause, resume, concurrency,
+//! stop) through their stdin (see `crate::control`).
 
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime};
 
 use serde_json::{json, Value};
-use tokio::sync::oneshot;
+use tokio::sync::mpsc;
 
 use super::wizard::{bad, bold, ember, faint, good};
 use super::{Api, Connection};
@@ -21,7 +22,10 @@ use crate::store::Store;
 struct Running {
     test: String,
     by: String,
-    stop: Option<oneshot::Sender<()>>,
+    /// Lines for the run's stdin: `pause U1`, `concurrency 63 U1`, `stop U1`
+    lines: mpsc::UnboundedSender<String>,
+    started: Instant,
+    paused: bool,
 }
 
 /// What a click, a form or a command asks for
@@ -40,10 +44,26 @@ pub enum Ask {
         run: Option<String>,
         test: Option<String>,
     },
+    Pause {
+        run: String,
+    },
+    Resume {
+        run: String,
+    },
+    Size {
+        run: String,
+        concurrency: usize,
+    },
     History {
         test: String,
     },
-    List,
+    /// A test picked in the dropdown: its card, in the same place
+    Pick {
+        test: String,
+    },
+    /// `/pepe`: the tests to pick from, and what runs
+    Home,
+    Status,
     Help,
 }
 
@@ -56,12 +76,51 @@ pub struct From {
     pub response_url: Option<String>,
 }
 
+/// An answer for the one who asked: text, and blocks when it's a card;
+/// `replace` puts it in place of the card it came from
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct Reply {
+    pub text: String,
+    pub blocks: Option<Value>,
+    pub replace: bool,
+}
+
+impl Reply {
+    fn text(text: impl Into<String>) -> Reply {
+        Reply {
+            text: text.into(),
+            ..Reply::default()
+        }
+    }
+
+    fn card(text: impl Into<String>, blocks: Value) -> Reply {
+        Reply {
+            text: text.into(),
+            blocks: Some(blocks),
+            replace: false,
+        }
+    }
+
+    fn payload(&self) -> Value {
+        let mut out = json!({"response_type": "ephemeral", "text": self.text});
+        if let Some(blocks) = &self.blocks {
+            out["blocks"] = blocks.clone();
+        }
+        if self.replace {
+            out["replace_original"] = json!(true);
+        } else {
+            out["replace_original"] = json!(false);
+        }
+        out
+    }
+}
+
 /// May `user` press the buttons? `*` lets anyone in the channel
 pub fn allowed(allow: &[String], user: &str) -> bool {
     allow.iter().any(|a| a == "*" || a == user)
 }
 
-/// A button's click: its action and value
+/// A button's click, or a pick in a dropdown
 pub fn ask_of_action(action: &Value, trigger: &str) -> Option<Ask> {
     let value = action["value"].as_str().unwrap_or_default().to_string();
     match action["action_id"].as_str()? {
@@ -78,12 +137,24 @@ pub fn ask_of_action(action: &Value, trigger: &str) -> Option<Ask> {
             run: Some(value),
             test: None,
         }),
+        "pepe:pause" => Some(Ask::Pause { run: value }),
+        "pepe:resume" => Some(Ask::Resume { run: value }),
+        "pepe:size" => {
+            let (run, n) = value.rsplit_once(':')?;
+            Some(Ask::Size {
+                run: run.to_string(),
+                concurrency: n.parse().ok().filter(|n| *n > 0)?,
+            })
+        }
         "pepe:history" => Some(Ask::History { test: value }),
+        "pepe:pick" => Some(Ask::Pick {
+            test: action["selected_option"]["value"].as_str()?.to_string(),
+        }),
         _ => None,
     }
 }
 
-/// `/pepe run checkout`, `/pepe stop`, `/pepe history checkout`, `/pepe list`
+/// `/pepe`, `/pepe run checkout`, `/pepe stop`, `/pepe status`, …
 pub fn ask_of_command(text: &str) -> Ask {
     let mut words = text.split_whitespace();
     let verb = words.next().unwrap_or("").to_lowercase();
@@ -96,9 +167,141 @@ pub fn ask_of_command(text: &str) -> Ask {
         },
         ("stop", test) => Ask::Stop { run: None, test },
         ("history", Some(test)) => Ask::History { test },
-        ("list" | "tests", _) => Ask::List,
-        _ => Ask::Help,
+        ("status" | "running", _) => Ask::Status,
+        ("help", _) => Ask::Help,
+        // Nothing, a run with no name, a list, a test's name alone: the home
+        ("" | "run" | "list" | "tests" | "history", None) => Ask::Home,
+        (_, _) => Ask::Pick { test: verb },
     }
+}
+
+fn ago(when: SystemTime) -> String {
+    let secs = when.elapsed().unwrap_or_default().as_secs();
+    match secs {
+        0..=59 => "just now".into(),
+        60..=86_399 => format!(
+            "{} ago",
+            crate::ui::format::span(Duration::from_secs(secs / 60 * 60))
+        ),
+        86_400..=172_799 => "yesterday".into(),
+        _ => format!("{} days ago", secs / 86_400),
+    }
+}
+
+fn span(d: Duration) -> String {
+    crate::ui::format::span(Duration::from_secs(d.as_secs()))
+}
+
+/// A recorded run in a few numbers: its face, req/s, p99, errors
+struct Recorded {
+    when: SystemTime,
+    icon: &'static str,
+    rps: f64,
+    p99: f64,
+    errors: f64,
+}
+
+fn recorded(run: &crate::store::Run) -> Option<Recorded> {
+    let text = std::fs::read_to_string(&run.path).ok()?;
+    let doc: Value = serde_json::from_str(&text).ok()?;
+    let side = crate::compare::Side::of_report(String::new(), &doc).ok()?;
+    let level = doc["verdict"]["level"].as_str().unwrap_or("healthy");
+    Some(Recorded {
+        when: run.when,
+        icon: match level {
+            "failing" => "❌",
+            "degraded" => "⚠️",
+            _ => "✅",
+        },
+        rps: side.requests_per_second.unwrap_or(0.0),
+        p99: side.p99_ms.unwrap_or(0.0),
+        errors: side.failed_percent,
+    })
+}
+
+fn ms(value: f64) -> String {
+    crate::ui::format::latency(Duration::from_secs_f64(value.max(0.0) / 1e3))
+}
+
+fn button(text: &str, action: &str, value: &str, style: Option<&str>) -> Value {
+    let mut b = json!({"type": "button", "text": {"type": "plain_text", "text": text, "emoji": true}, "action_id": action, "value": value});
+    if let Some(style) = style {
+        b["style"] = json!(style);
+    }
+    b
+}
+
+/// The dropdown of saved tests, with `chosen` shown as picked
+fn picker(tests: &[(String, String)], chosen: Option<&str>) -> Value {
+    let option = |(name, about): &(String, String)| {
+        json!({
+            "text": {"type": "plain_text", "text": crate::webhook::layout_cut(&format!("{name} · {about}"), 75)},
+            "value": name,
+        })
+    };
+    let options: Vec<Value> = tests.iter().take(100).map(option).collect();
+    let mut select = json!({
+        "type": "static_select",
+        "action_id": "pepe:pick",
+        "placeholder": {"type": "plain_text", "text": "Pick a test"},
+        "options": options,
+    });
+    if let Some(chosen) = chosen.and_then(|c| tests.iter().find(|(n, _)| n == c)) {
+        select["initial_option"] = option(chosen);
+    }
+    select
+}
+
+fn controls(id: &str, paused: bool) -> Vec<Value> {
+    vec![
+        if paused {
+            button("▶ Resume", "pepe:resume", id, Some("primary"))
+        } else {
+            button("⏸ Pause", "pepe:pause", id, None)
+        },
+        button("■ Stop", "pepe:stop", id, Some("danger")),
+    ]
+}
+
+/// The help `/pepe help` gives
+fn help(tests: &[String]) -> String {
+    format!(
+        "*pepe* runs the saved tests here: {}\n`/pepe` picks one · `/pepe run NAME` · `/pepe status` · `/pepe stop` · `/pepe history NAME`",
+        if tests.is_empty() {
+            "none yet (`pepe --keep NAME` saves one)".to_string()
+        } else {
+            tests.iter().map(|t| format!("`{t}`")).collect::<Vec<_>>().join(" ")
+        }
+    )
+}
+
+/// Say `reply` to the one who asked, and no one else
+async fn whisper(client: &reqwest::Client, from: &From, reply: &Reply) {
+    if let Some(url) = &from.response_url {
+        let _ = client.post(url).json(&reply.payload()).send().await;
+    }
+}
+
+fn log(who: &str, what: &str, test: &str, how: &str) {
+    let now = clock();
+    eprintln!(
+        "  {}  {:<12} {:<16} {:<18} {how}",
+        faint(&now),
+        who,
+        what,
+        bold(test)
+    );
+}
+
+/// HH:MM:SS, local, from the system's `date`
+fn clock() -> String {
+    std::process::Command::new("date")
+        .arg("+%H:%M:%S")
+        .output()
+        .ok()
+        .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+        .filter(|s| !s.is_empty())
+        .unwrap_or_default()
 }
 
 /// The edit form for a saved test, filled with what it holds
@@ -200,51 +403,6 @@ pub fn args_of_form(values: &Value) -> Result<(Vec<String>, bool), Value> {
     }
 }
 
-/// The help `/pepe` gives
-fn help(tests: &[String]) -> String {
-    format!(
-        "*pepe* runs the saved tests here: {}\n`/pepe run NAME` · `/pepe stop` · `/pepe history NAME` · `/pepe list`",
-        if tests.is_empty() {
-            "none yet (`pepe --keep NAME` saves one)".to_string()
-        } else {
-            tests.iter().map(|t| format!("`{t}`")).collect::<Vec<_>>().join(" ")
-        }
-    )
-}
-
-/// Say `text` to the one who asked, and no one else
-async fn whisper(client: &reqwest::Client, from: &From, text: &str) {
-    if let Some(url) = &from.response_url {
-        let _ = client
-            .post(url)
-            .json(&json!({"response_type": "ephemeral", "replace_original": false, "text": text}))
-            .send()
-            .await;
-    }
-}
-
-fn log(who: &str, what: &str, test: &str, how: &str) {
-    let now = chrono_like();
-    eprintln!(
-        "  {}  {:<12} {:<16} {:<18} {how}",
-        faint(&now),
-        who,
-        what,
-        bold(test)
-    );
-}
-
-/// HH:MM:SS, local time without a time crate: from the system's `date`
-fn chrono_like() -> String {
-    std::process::Command::new("date")
-        .arg("+%H:%M:%S")
-        .output()
-        .ok()
-        .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
-        .filter(|s| !s.is_empty())
-        .unwrap_or_default()
-}
-
 struct Listener {
     connection: Connection,
     bot: Api,
@@ -257,6 +415,191 @@ struct Listener {
 impl Listener {
     fn tests(&self) -> Vec<String> {
         self.store.names()
+    }
+
+    /// Each saved test and what it sends: "POST /checkout"
+    fn described(&self) -> Vec<(String, String)> {
+        self.tests()
+            .into_iter()
+            .map(|name| {
+                let about = self
+                    .store
+                    .load(&name)
+                    .ok()
+                    .map(|(_, c)| {
+                        let url = c.url.unwrap_or_default();
+                        let path = reqwest::Url::parse(&url)
+                            .map(|u| format!("{}{}", u.host_str().unwrap_or(""), u.path()))
+                            .unwrap_or(url);
+                        format!("{} {}", c.method.unwrap_or_else(|| "GET".into()), path)
+                    })
+                    .unwrap_or_default();
+                (name, about)
+            })
+            .collect()
+    }
+
+    /// The runs going now: id, test, who, how long, paused
+    fn going(&self) -> Vec<(String, String, String, Duration, bool)> {
+        let Ok(runs) = self.runs.lock() else {
+            return Vec::new();
+        };
+        let mut out: Vec<_> = runs
+            .iter()
+            .map(|(id, r)| {
+                (
+                    id.clone(),
+                    r.test.clone(),
+                    r.by.clone(),
+                    r.started.elapsed(),
+                    r.paused,
+                )
+            })
+            .collect();
+        out.sort_by_key(|r| std::cmp::Reverse(r.3));
+        out
+    }
+
+    fn host() -> String {
+        gethostname::gethostname().to_string_lossy().into_owned()
+    }
+
+    /// `/pepe`: the tests in a dropdown, and what's running with its controls
+    fn home(&self) -> Reply {
+        let tests = self.described();
+        let going = self.going();
+        let mut blocks = Vec::new();
+        let summary = format!(
+            "*pepe* · {} saved test{} on {}{}",
+            tests.len(),
+            if tests.len() == 1 { "" } else { "s" },
+            Self::host(),
+            match going.len() {
+                0 => String::new(),
+                n => format!(" · {n} running"),
+            }
+        );
+        if tests.is_empty() {
+            blocks.push(
+                json!({"type": "section", "text": {"type": "mrkdwn", "text": format!(
+                    "{summary}\nNo saved tests in `{}` yet: `pepe --keep NAME …` saves one.",
+                    self.store.tests_dir().display()
+                )}}),
+            );
+        } else {
+            blocks.push(json!({"type": "section", "text": {"type": "mrkdwn", "text": summary}, "accessory": picker(&tests, None)}));
+        }
+        for (id, test, by, took, paused) in &going {
+            blocks.push(json!({"type": "divider"}));
+            blocks.push(
+                json!({"type": "section", "text": {"type": "mrkdwn", "text": format!(
+                    "{} *{test}* · {} · started by <@{by}>",
+                    if *paused { "⏸" } else { "⏳" },
+                    if *paused { "paused".to_string() } else { format!("{} in", span(*took)) },
+                )}}),
+            );
+            blocks.push(json!({"type": "actions", "elements": controls(id, *paused)}));
+        }
+        blocks.push(
+            json!({"type": "context", "elements": [{"type": "mrkdwn", "text":
+            "`/pepe run NAME` · `/pepe status` · `/pepe stop` · `/pepe history NAME`"}]}),
+        );
+        Reply::card(summary, json!(blocks))
+    }
+
+    /// A test's card: what it sends, how its last runs went, and its buttons
+    fn card(&self, test: &str) -> Reply {
+        let tests = self.described();
+        let Ok((_, saved)) = self.store.load(test) else {
+            return Reply::text(format!(
+                "❌ no saved test `{test}` here: {}",
+                help(&self.tests())
+            ));
+        };
+        let load = {
+            let mut parts = vec![format!(
+                "{} {}",
+                saved.method.clone().unwrap_or_else(|| "GET".into()),
+                saved.url.clone().unwrap_or_default()
+            )];
+            if let Some(c) = saved.concurrency {
+                parts.push(format!("{c} at a time"));
+            }
+            match (&saved.duration, saved.requests) {
+                (Some(d), _) => parts.push(d.clone()),
+                (None, Some(n)) => parts.push(format!(
+                    "{} requests",
+                    crate::ui::format::count(u64::from(n))
+                )),
+                _ => {}
+            }
+            if let Some(rate) = saved.rate {
+                parts.push(format!("{rate} a second"));
+            }
+            parts.join(" · ")
+        };
+        let runs: Vec<Recorded> = self.store.runs(test).iter().filter_map(recorded).collect();
+        let mut blocks = vec![
+            json!({"type": "section", "text": {"type": "mrkdwn", "text": format!("*{test}*")}, "accessory": picker(&tests, Some(test))}),
+            json!({"type": "context", "elements": [{"type": "mrkdwn", "text": format!("`{load}`")}]}),
+        ];
+        match runs.last() {
+            Some(last) => {
+                let tail: Vec<&Recorded> = runs.iter().rev().take(8).rev().collect();
+                let p99: Vec<f64> = tail.iter().map(|r| r.p99).collect();
+                let rps: Vec<f64> = tail.iter().map(|r| r.rps).collect();
+                blocks.push(json!({"type": "section", "fields": [
+                    {"type": "mrkdwn", "text": format!("*Last run · {}*\n{} {} req/s · p99 {}", ago(last.when), last.icon, crate::ui::format::count(last.rps.round() as u64), ms(last.p99))},
+                    {"type": "mrkdwn", "text": format!("*Errors*\n{:.2}%", last.errors)},
+                    {"type": "mrkdwn", "text": format!("*Trend, last {}*\np99 `{}` · req/s `{}`", tail.len(), crate::webhook::spark(&p99), crate::webhook::spark(&rps))},
+                    {"type": "mrkdwn", "text": format!("*Recorded*\n{} run{} since {}", runs.len(), if runs.len() == 1 { "" } else { "s" }, ago(runs[0].when))},
+                ]}));
+            }
+            None => blocks.push(json!({"type": "section", "text": {"type": "mrkdwn", "text":
+                "_No recorded runs yet: runs from Slack, or with `--record`, are kept._"}})),
+        }
+        let running = self.going().into_iter().find(|r| r.1 == test);
+        let mut elements = match &running {
+            Some((id, _, _, _, paused)) => controls(id, *paused),
+            None => vec![button("▶ Run", "pepe:run", test, Some("primary"))],
+        };
+        elements.push(button("✎ Edit and run", "pepe:edit", test, None));
+        elements.push(button("History", "pepe:history", test, None));
+        blocks.push(json!({"type": "actions", "elements": elements}));
+        Reply {
+            text: format!("{test} · {load}"),
+            blocks: Some(json!(blocks)),
+            replace: true,
+        }
+    }
+
+    /// A test's recorded runs, a line each
+    fn history(&self, test: &str) -> Reply {
+        let runs: Vec<Recorded> = self.store.runs(test).iter().filter_map(recorded).collect();
+        if runs.is_empty() {
+            return Reply::text(format!("`{test}` has no recorded runs yet."));
+        }
+        let lines: Vec<String> = runs
+            .iter()
+            .rev()
+            .take(12)
+            .map(|r| {
+                format!(
+                    "{} {:<11} {:>9} req/s  p99 {:>8}  {:>6.2}%",
+                    r.icon,
+                    ago(r.when),
+                    crate::ui::format::count(r.rps.round() as u64),
+                    ms(r.p99),
+                    r.errors
+                )
+            })
+            .collect();
+        let blocks = json!([
+            {"type": "section", "text": {"type": "mrkdwn", "text": format!("*{test}* · the last {} of {} runs", lines.len(), runs.len())}},
+            {"type": "section", "text": {"type": "mrkdwn", "text": format!("```{}```", lines.join("\n"))}},
+            {"type": "actions", "elements": [button("▶ Run", "pepe:run", test, Some("primary")), button("✎ Edit and run", "pepe:edit", test, None)]},
+        ]);
+        Reply::card(format!("{test}: {} runs", runs.len()), blocks)
     }
 
     /// Start `pepe --load test` in this directory, its message in `channel`
@@ -274,23 +617,22 @@ impl Listener {
                 help(&self.tests())
             ));
         }
-        if let Ok(runs) = self.runs.lock() {
-            if runs.values().any(|r| r.test == test) {
-                return Err(format!("`{test}` is running already: stop it first"));
-            }
+        if self.going().iter().any(|r| r.1 == test) {
+            return Err(format!("`{test}` is running already: stop it first"));
         }
         self.count += 1;
         let id = format!("{}-{}", std::process::id(), self.count);
         let exe = std::env::current_exe().map_err(|e| e.to_string())?;
         let mut command = tokio::process::Command::new(exe);
         command
-            .args(["--load", test, "--json"])
+            // Recorded, so the test's card and History have it
+            .args(["--load", test, "--json", "--record"])
             .arg(format!("--slack={}", from.channel))
             .args(&args)
             .env(super::RUN_ENV, &id)
             .env(super::BY_ENV, &from.user)
             .env("PEPE_NO_UPDATE_CHECK", "1")
-            .stdin(std::process::Stdio::null())
+            .stdin(std::process::Stdio::piped())
             .stdout(std::process::Stdio::null())
             .stderr(std::process::Stdio::piped())
             .kill_on_drop(true);
@@ -300,14 +642,16 @@ impl Listener {
         let mut child = command
             .spawn()
             .map_err(|e| format!("couldn't start pepe: {e}"))?;
-        let (stop_tx, stop_rx) = oneshot::channel::<()>();
+        let (lines, mut to_run) = mpsc::unbounded_channel::<String>();
         if let Ok(mut runs) = self.runs.lock() {
             runs.insert(
                 id.clone(),
                 Running {
                     test: test.to_string(),
-                    by: from.name.clone(),
-                    stop: Some(stop_tx),
+                    by: from.user.clone(),
+                    lines,
+                    started: Instant::now(),
+                    paused: false,
                 },
             );
         }
@@ -317,39 +661,38 @@ impl Listener {
         let test = test.to_string();
         let started = Instant::now();
         tokio::spawn(async move {
+            use tokio::io::{AsyncReadExt, AsyncWriteExt};
+            let mut stdin = child.stdin.take();
             let mut stderr = child.stderr.take();
             let mut stopped = false;
-            let status = tokio::select! {
-                status = child.wait() => status,
-                _ = stop_rx => {
-                    // As ctrl-c would: the run ends, says what it measured
-                    stopped = true;
-                    interrupt(&mut child);
-                    child.wait().await
+            let status = loop {
+                tokio::select! {
+                    status = child.wait() => break status,
+                    line = to_run.recv() => {
+                        let Some(line) = line else { continue };
+                        stopped |= line.starts_with("stop");
+                        let sent = match stdin.as_mut() {
+                            Some(stdin) => stdin.write_all(format!("{line}\n").as_bytes()).await.is_ok(),
+                            None => false,
+                        };
+                        // A run that can't hear it still stops as ctrl-c stops it
+                        if !sent && line.starts_with("stop") {
+                            interrupt(&mut child);
+                        }
+                    }
                 }
             };
             let mut said = String::new();
             if let Some(err) = stderr.as_mut() {
-                use tokio::io::AsyncReadExt;
                 let _ = err.read_to_string(&mut said).await;
             }
             if let Ok(mut runs) = runs.lock() {
                 runs.remove(&id);
             }
-            let code = status.ok().and_then(|s| s.code());
-            match code {
-                _ if stopped => log(
-                    &test,
-                    &faint("■ stopped"),
-                    "",
-                    &faint(&crate::ui::format::span(started.elapsed())),
-                ),
-                Some(0) => log(
-                    &test,
-                    &good("✓ passed"),
-                    "",
-                    &faint(&crate::ui::format::span(started.elapsed())),
-                ),
+            let took = faint(&span(started.elapsed()));
+            match status.ok().and_then(|s| s.code()) {
+                _ if stopped => log(&test, &faint("■ stopped"), "", &took),
+                Some(0) => log(&test, &good("✓ passed"), "", &took),
                 Some(4) => log(&test, &bad("✗ failed"), "", "a threshold was crossed"),
                 // It couldn't start, or was refused: the channel hears why
                 Some(1 | 2) => {
@@ -373,111 +716,88 @@ impl Listener {
                         )
                         .await;
                 }
-                _ => log(&test, &faint("■ ended"), "", ""),
+                _ => log(&test, &faint("■ ended"), "", &took),
             }
         });
         Ok(())
     }
 
-    /// Stop the runs this listener started: one by id, those of a test, or
-    /// all of them
-    fn stop(&self, run: Option<&str>, test: Option<&str>) -> Vec<String> {
+    /// A line to the runs it's meant for: one by id, those of a test, or
+    /// all; the tests it reached
+    fn tell(&self, run: Option<&str>, test: Option<&str>, line: &str) -> Vec<String> {
         let Ok(mut runs) = self.runs.lock() else {
             return Vec::new();
         };
-        let mut stopped = Vec::new();
+        let mut told = Vec::new();
         for (id, r) in runs.iter_mut() {
             let this = match (run, test) {
                 (Some(run), _) => id == run,
                 (None, Some(test)) => r.test == test,
                 (None, None) => true,
             };
-            if this {
-                if let Some(stop) = r.stop.take() {
-                    let _ = stop.send(());
-                    stopped.push(if r.by.is_empty() {
-                        r.test.clone()
-                    } else {
-                        format!("{} (started by @{})", r.test, r.by)
-                    });
+            if this && r.lines.send(line.to_string()).is_ok() {
+                if line.starts_with("pause") {
+                    r.paused = true;
+                } else if line.starts_with("resume") {
+                    r.paused = false;
                 }
+                told.push(r.test.clone());
             }
         }
-        stopped
+        told
     }
 
-    /// The test's recorded runs, as `pepe history` says them
-    async fn history(&self, test: &str) -> String {
-        let Ok(exe) = std::env::current_exe() else {
-            return "couldn't find pepe".into();
-        };
-        let out = tokio::process::Command::new(exe)
-            .args(["history", test])
-            .env("NO_COLOR", "1")
-            .env("PEPE_NO_UPDATE_CHECK", "1")
-            .output()
-            .await;
-        match out {
-            Ok(o) => {
-                let text = String::from_utf8_lossy(&o.stdout).to_string()
-                    + &String::from_utf8_lossy(&o.stderr);
-                format!(
-                    "```{}```",
-                    super::super::webhook::layout_cut(text.trim(), 2900)
-                )
-            }
-            Err(e) => format!("couldn't read the history: {e}"),
-        }
+    /// Stop the runs this listener started, as ctrl-c would
+    fn stop(&self, run: Option<&str>, test: Option<&str>) -> Vec<String> {
+        self.tell(run, test, "stop")
     }
 
     /// One thing asked; the answer for the one who asked, if any
-    async fn answer(&mut self, ask: Ask, from: &From) -> Option<String> {
-        let who = if from.name.is_empty() {
-            &from.user
-        } else {
-            &from.name
-        };
-        let gate = |ask: &Ask| !matches!(ask, Ask::Help | Ask::List);
-        if gate(&ask) && !allowed(&self.connection.allow, &from.user) {
-            log(
-                &format!("@{who}"),
-                "asked",
-                "",
-                &bad("✗ refused: not allowed"),
-            );
+    async fn answer(&mut self, ask: Ask, from: &From) -> Option<Reply> {
+        let who = format!(
+            "@{}",
+            if from.name.is_empty() {
+                &from.user
+            } else {
+                &from.name
+            }
+        );
+        let looks = matches!(
+            ask,
+            Ask::Help | Ask::Home | Ask::Status | Ask::Pick { .. } | Ask::History { .. }
+        );
+        if !looks && !allowed(&self.connection.allow, &from.user) {
+            log(&who, "asked", "", &bad("✗ refused: not allowed"));
             let names = if self.connection.allow_names.is_empty() {
                 "no one yet".to_string()
             } else {
                 self.connection.allow_names.join(", ")
             };
-            return Some(format!(
+            return Some(Reply::text(format!(
                 "🔒 Only {names} can run tests from Slack here. Ask one of them, or `pepe slack allow @you` on the machine that runs `pepe slack serve`."
-            ));
+            )));
         }
+        let gone = || Some(Reply::text("That run has ended."));
         match ask {
             Ask::Run { test, args, keep } => {
-                let shown = if args.is_empty() {
-                    String::new()
-                } else {
-                    args.join(" ")
-                };
+                let shown = args.join(" ");
                 match self.start(&test, args, keep, from) {
                     Ok(()) => {
                         log(
-                            &format!("@{who}"),
+                            &who,
                             "run",
                             &test,
                             &format!("{} {}", ember("running"), faint(&shown)),
                         );
                         None
                     }
-                    Err(e) => Some(format!("❌ {e}")),
+                    Err(e) => Some(Reply::text(format!("❌ {e}"))),
                 }
             }
             Ask::Edit { test, trigger } => {
                 let saved = match self.store.load(&test) {
                     Ok((_, saved)) => saved,
-                    Err(e) => return Some(format!("❌ {e}")),
+                    Err(e) => return Some(Reply::text(format!("❌ {e}"))),
                 };
                 let form = edit_form(&test, &from.channel, &saved);
                 match self
@@ -489,26 +809,67 @@ impl Listener {
                     .await
                 {
                     Ok(_) => None,
-                    Err(e) => Some(format!("❌ couldn't open the form: {e}")),
+                    Err(e) => Some(Reply::text(format!("❌ couldn't open the form: {e}"))),
                 }
             }
             Ask::Stop { run, test } => {
-                let stopped = self.stop(run.as_deref(), test.as_deref());
-                log(&format!("@{who}"), "stop", &stopped.join(" "), "");
-                Some(if stopped.is_empty() {
-                    "Nothing of mine is running.".into()
+                let line = format!("stop {}", from.user);
+                let told = self.tell(run.as_deref(), test.as_deref(), &line);
+                log(&who, "stop", &told.join(" "), "");
+                Some(Reply::text(if told.is_empty() {
+                    "Nothing of mine is running.".to_string()
                 } else {
-                    format!("■ Stopping {}: the verdict follows.", stopped.join(", "))
-                })
+                    format!("■ Stopping {}: the verdict follows.", told.join(", "))
+                }))
             }
-            Ask::History { test } => Some(self.history(&test).await),
-            Ask::List => Some(help(&self.tests())),
-            Ask::Help => Some(help(&self.tests())),
+            Ask::Pause { run } => {
+                let told = self.tell(Some(&run), None, &format!("pause {}", from.user));
+                log(&who, "pause", &told.join(" "), "");
+                if told.is_empty() {
+                    gone()
+                } else {
+                    None
+                }
+            }
+            Ask::Resume { run } => {
+                let told = self.tell(Some(&run), None, &format!("resume {}", from.user));
+                log(&who, "resume", &told.join(" "), "");
+                if told.is_empty() {
+                    gone()
+                } else {
+                    None
+                }
+            }
+            Ask::Size { run, concurrency } => {
+                let told = self.tell(
+                    Some(&run),
+                    None,
+                    &format!("concurrency {concurrency} {}", from.user),
+                );
+                log(&who, &format!("-c {concurrency}"), &told.join(" "), "");
+                if told.is_empty() {
+                    gone()
+                } else {
+                    None
+                }
+            }
+            Ask::History { test } => Some(self.history(&test)),
+            Ask::Pick { test } => Some(self.card(&test)),
+            Ask::Home => Some(self.home()),
+            Ask::Status => {
+                let going = self.going();
+                if going.is_empty() {
+                    return Some(Reply::text(
+                        "Nothing of mine is running. `/pepe` picks a test.",
+                    ));
+                }
+                Some(self.home())
+            }
+            Ask::Help => Some(Reply::text(help(&self.tests()))),
         }
     }
 
-    /// One envelope from Slack: what to acknowledge it with, at once, and
-    /// what to do after
+    /// One envelope from Slack: what to acknowledge it with, at once
     async fn envelope(&mut self, envelope: &Value) -> Option<Value> {
         let payload = &envelope["payload"];
         match envelope["type"].as_str()? {
@@ -527,8 +888,8 @@ impl Listener {
                     let trigger = payload["trigger_id"].as_str().unwrap_or_default();
                     for action in payload["actions"].as_array().into_iter().flatten() {
                         if let Some(ask) = ask_of_action(action, trigger) {
-                            if let Some(said) = self.answer(ask, &from).await {
-                                whisper(&self.client, &from, &said).await;
+                            if let Some(reply) = self.answer(ask, &from).await {
+                                whisper(&self.client, &from, &reply).await;
                             }
                         }
                     }
@@ -555,7 +916,7 @@ impl Listener {
                         response_url: None,
                     };
                     let test = meta["test"].as_str().unwrap_or_default().to_string();
-                    if let Some(said) = self.answer(Ask::Run { test, args, keep }, &from).await {
+                    if let Some(reply) = self.answer(Ask::Run { test, args, keep }, &from).await {
                         let _ = self
                             .bot
                             .call(
@@ -563,7 +924,7 @@ impl Listener {
                                 &[
                                     ("channel", from.channel.clone()),
                                     ("user", from.user.clone()),
-                                    ("text", said),
+                                    ("text", reply.text),
                                 ],
                             )
                             .await;
@@ -580,14 +941,22 @@ impl Listener {
                     response_url: payload["response_url"].as_str().map(str::to_string),
                 };
                 let ask = ask_of_command(payload["text"].as_str().unwrap_or_default());
-                let said = self.answer(ask.clone(), &from).await;
-                Some(json!({
-                    "response_type": "ephemeral",
-                    "text": said.unwrap_or_else(|| match ask {
-                        Ask::Run { test, .. } => format!("▶ Starting `{test}`: its message follows here."),
+                let reply = self.answer(ask.clone(), &from).await;
+                let mut reply = reply.unwrap_or_else(|| {
+                    Reply::text(match ask {
+                        Ask::Run { test, .. } => {
+                            format!("▶ Starting `{test}`: its message follows here.")
+                        }
                         _ => "Done.".into(),
                     })
-                }))
+                });
+                // A command's answer is new, not in place of anything
+                reply.replace = false;
+                let mut payload = reply.payload();
+                if let Some(o) = payload.as_object_mut() {
+                    o.remove("replace_original");
+                }
+                Some(payload)
             }
             _ => None,
         }
@@ -650,6 +1019,12 @@ pub async fn run() -> Result<(), String> {
     eprintln!();
     for (i, row) in face.iter().enumerate() {
         eprintln!("  {row}   {}", title.get(i).cloned().unwrap_or_default());
+    }
+    // No colour, no Pepe: the title alone
+    if face.is_empty() {
+        for line in title.iter().filter(|l| !l.is_empty()) {
+            eprintln!("  {line}");
+        }
     }
     eprintln!();
     let mut wait = Duration::from_secs(1);
@@ -767,7 +1142,40 @@ mod tests {
                 test: "login".into()
             }
         );
-        assert_eq!(ask_of_command(""), Ask::Help);
+        assert_eq!(ask_of_command(""), Ask::Home);
+        assert_eq!(ask_of_command("list"), Ask::Home);
+        assert_eq!(ask_of_command("run"), Ask::Home, "no name: pick one");
+        assert_eq!(ask_of_command("status"), Ask::Status);
+        assert_eq!(ask_of_command("help"), Ask::Help);
+        assert_eq!(
+            ask_of_command("checkout"),
+            Ask::Pick {
+                test: "checkout".into()
+            }
+        );
+        let size = json!({"action_id": "pepe:size", "value": "41-2:63"});
+        assert_eq!(
+            ask_of_action(&size, ""),
+            Some(Ask::Size {
+                run: "41-2".into(),
+                concurrency: 63
+            })
+        );
+        assert_eq!(
+            ask_of_action(&json!({"action_id": "pepe:size", "value": "41-2:0"}), ""),
+            None
+        );
+        let pick = json!({"action_id": "pepe:pick", "selected_option": {"value": "login"}});
+        assert_eq!(
+            ask_of_action(&pick, ""),
+            Some(Ask::Pick {
+                test: "login".into()
+            })
+        );
+        assert_eq!(
+            ask_of_action(&json!({"action_id": "pepe:pause", "value": "41-2"}), ""),
+            Some(Ask::Pause { run: "41-2".into() })
+        );
         assert!(allowed(&["U1".into()], "U1") && !allowed(&["U1".into()], "U2"));
         assert!(allowed(&["*".into()], "anyone"));
         assert!(!allowed(&[], "U1"), "no one until someone is allowed");

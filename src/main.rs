@@ -13,6 +13,7 @@ mod compare;
 mod completions;
 mod config;
 mod contrib;
+mod control;
 mod curl;
 mod diagnose;
 mod direct;

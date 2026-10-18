@@ -18,7 +18,7 @@ pepe -z 10m -c 50 --slack https://api.example.com/health
 
 With `--slack` a run is one message in the channel, kept up to date, with Pepe the pepper as its face:
 
-- **While it runs** (edited every 10 seconds): what is sent, how hard, from which machine and by whom; a progress bar with the time left; throughput and p50 · p99 with sparklines of the last minute; errors by status and cause; how many things changed, each one a reply in the message's thread as it happens.
+- **While it runs** (edited every 10 seconds): what is sent, how hard, from which machine and by whom; a progress bar with the time left; throughput and p50 · p99 with sparklines of the last minute; errors by status and cause; how many things changed, each one a short reply in the message's thread as it happens, saying what moved and which way: `📉 Throughput dropped 52% · 5.9k req/s · at 1m26s`, `📈 p99 up 4.5× · 45ms · at 26s`, `🔥 Errors up to 12% · at 2m`.
 - **When it ends** the message becomes the verdict: a sentence that says how much was sent, how fast, what failed and the first thing that changed; latency from p50 to the max; sparklines over the whole run; where the time went (waiting, connecting, reading); the answers by status; each `--fail-if` with ✓ or ✗ and what was measured; for a saved test, how it compares with its last recorded run; and what pepe found, worst first, with the first body of each kind of failure. A colour down its side says passed, warned or failed.
 - **Under it**, a line in the thread shown in the channel too: the result at a glance where the channel is now, with Pepe proud, worried or on fire, and the `mention` when the run failed (an edited message notifies no one).
 
@@ -43,12 +43,23 @@ An app made by pepe 0.46 can't show Pepe's faces (it lacks the `chat:write.custo
 pepe slack serve          # in the project, left running: the buttons and /pepe answer here
 ```
 
-With the buttons set up (step 5 of `pepe slack connect`: an app-level token), a saved test's verdict has **↻ Run again**, **✎ Edit and run** and **History**, and a run started from Slack has **■ Stop** while it goes (asked twice, since it ends the run). `/pepe run checkout`, `/pepe stop`, `/pepe history checkout` and `/pepe list` work in any channel the app is in.
+With the buttons set up (step 5 of `pepe slack connect`: an app-level token), a run started from Slack can be steered from its message while it goes, and a saved test's verdict has **↻ Run again**, **✎ Edit and run** and **History**.
 
-- **Run again** runs the test as it is saved, its message in the channel the button was pressed in, saying who started it.
+- **While it runs**: **⏸ Pause** (the message turns grey and says who paused it; **▶ Resume** picks it up), **− 1** and **+ 1** to change the concurrency by one at once (each button says what it changes it to; a ramp sets its own, so it has only pause), and **■ Stop**, asked twice since it ends the run as ctrl-c would: the message becomes the verdict of what it measured. Each change is in the message straight away, with who made it.
+- **Run again** runs the test as it is saved, its message in the channel the button was pressed in, saying who started it. Runs from Slack are recorded, so the test's history and trend keep up.
 - **Edit and run** opens a form filled with the test: concurrency, the duration or a number of requests, the rate, `--fail-if` conditions, and whether to keep the settings in the test. A value that won't do is said beside its field.
-- **Stop** ends the run as ctrl-c would: the message becomes the verdict of what it measured.
-- **History** shows the test's recorded runs, to the one who asked.
+- **History** lists the test's recorded runs, a line each: how it went, when, requests a second, p99 and errors.
+
+`/pepe` answers only the one who asked:
+
+| Command | Answer |
+| --- | --- |
+| `/pepe` or `/pepe list` | The saved tests in a dropdown, and what's running with its Pause and Stop. Picking a test shows its card in place: what it sends, its last run, its trend over the last runs, and Run, Edit and run, History |
+| `/pepe NAME` | That test's card |
+| `/pepe run NAME` | Runs it; `/pepe run` alone gives the dropdown |
+| `/pepe status` | What's running, with its controls |
+| `/pepe stop` · `/pepe stop NAME` | Stops what this listener runs, or that test |
+| `/pepe history NAME` | Its recorded runs |
 
 Slack sends every click of an app to one of its open connections, not to the run that posted the message, so one listener answers them all: `pepe slack serve`, left running on a machine (a server, a CI runner, your laptop). It runs the saved tests of the directory it was started in, each as `pepe --load NAME --slack=#channel`, so that directory's `pepe.toml` guardrails hold for them, and it says each click, run and result in its terminal. Run one per app.
 

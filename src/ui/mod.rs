@@ -652,7 +652,7 @@ impl Dashboard {
         if self.finished.is_none() && !self.warming {
             self.timeline.advance(self.active());
             for anomaly in self.watch.observe(self.timeline.samples(), self.paused) {
-                crate::webhook::anomaly(&anomaly.text);
+                crate::webhook::anomaly(anomaly.kind.name(), &anomaly.text);
                 self.notify_for(anomaly.text.clone(), ANOMALY_TTL);
                 self.anomalies.push(anomaly);
             }

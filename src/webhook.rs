@@ -22,7 +22,7 @@ use tokio::sync::mpsc;
 use crate::flow::Template;
 
 mod layout;
-pub use layout::face;
+pub use layout::{face, spark};
 
 /// `cut`, for the Slack listener's messages
 pub fn layout_cut(text: &str, most: usize) -> String {
@@ -490,6 +490,10 @@ pub struct Progress {
     pub failures: Vec<(String, u64)>,
     /// Things that changed so far
     pub anomalies: usize,
+    /// Steered from Slack: paused, the concurrency now, and who did what
+    pub paused: bool,
+    pub concurrency: Option<usize>,
+    pub note: Option<String>,
 }
 
 /// How a run ended, beyond its report
@@ -562,6 +566,8 @@ struct Detail {
     ending: Option<Ending>,
     /// The last progress's seconds, for a short run's sparklines at its end
     series: Vec<(f64, f64)>,
+    /// What an anomaly is about: latency, throughput or errors
+    kind: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -1436,14 +1442,31 @@ fn close(mut state: State) {
 
 /// Whether any hook wants progress now; cheap, so it can be asked often
 pub fn progress_due() -> bool {
+    let nudged = NUDGE.load(std::sync::atomic::Ordering::Relaxed);
     let Ok(state) = STATE.lock() else {
         return false;
     };
     state.as_ref().is_some_and(|s| {
-        s.lines
-            .iter()
-            .any(|l| l.hook.events.contains(&Event::Progress) && l.last.elapsed() >= l.hook.every)
+        s.lines.iter().any(|l| {
+            l.hook.events.contains(&Event::Progress) && (nudged || l.last.elapsed() >= l.hook.every)
+        })
     })
+}
+
+/// The run was steered (from Slack, through `pepe slack serve`): how it
+/// stands now and who did what, and the live message says so at once
+static STEERED: Mutex<Option<(bool, usize, Option<String>)>> = Mutex::new(None);
+static NUDGE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+pub fn steered(paused: bool, concurrency: usize, by: Option<&str>, what: &str) {
+    let note = match by {
+        Some(by) => format!("<@{by}> {what}"),
+        None => what.to_string(),
+    };
+    if let Ok(mut s) = STEERED.lock() {
+        *s = Some((paused, concurrency, Some(note)));
+    }
+    NUDGE.store(true, std::sync::atomic::Ordering::Relaxed);
 }
 
 /// The numbers so far, to the hooks whose interval has passed
@@ -1451,7 +1474,13 @@ pub fn progress(numbers: impl FnOnce() -> Progress) {
     if !progress_due() {
         return;
     }
-    let numbers = numbers();
+    let mut numbers = numbers();
+    if let Some((paused, concurrency, note)) = STEERED.lock().ok().and_then(|s| s.clone()) {
+        numbers.paused = paused;
+        numbers.concurrency = Some(concurrency);
+        numbers.note = note;
+    }
+    let nudged = NUDGE.swap(false, std::sync::atomic::Ordering::Relaxed);
     let Ok(mut state) = STATE.lock() else { return };
     let Some(state) = state.as_mut() else { return };
     let mut message = state.run.progress(&numbers);
@@ -1461,7 +1490,9 @@ pub fn progress(numbers: impl FnOnce() -> Progress) {
     message.detail.run = state.run.clone();
     message.detail.progress = Some(numbers);
     for line in state.lines.iter_mut() {
-        if line.hook.events.contains(&Event::Progress) && line.last.elapsed() >= line.hook.every {
+        if line.hook.events.contains(&Event::Progress)
+            && (nudged || line.last.elapsed() >= line.hook.every)
+        {
             line.last = Instant::now();
             line.send(&message);
         }
@@ -1469,11 +1500,13 @@ pub fn progress(numbers: impl FnOnce() -> Progress) {
 }
 
 /// Something changed during the run
-pub fn anomaly(text: &str) {
+/// `kind` is what moved: latency, throughput or errors
+pub fn anomaly(kind: &str, text: &str) {
     let Ok(state) = STATE.lock() else { return };
     let Some(state) = state.as_ref() else { return };
     let mut message = state.run.anomaly(text);
     message.detail.run = state.run.clone();
+    message.detail.kind = Some(kind.to_string());
     for line in state
         .lines
         .iter()
@@ -1893,7 +1926,7 @@ mod tests {
             ..Webhook::to(&url)
         };
         begin(run(), &[hook]);
-        anomaly("p99 jumped 4.5× to 45ms at 26s");
+        anomaly("latency", "p99 jumped 4.5× to 45ms at 26s");
         end(
             &report(),
             &Ending {

@@ -19,6 +19,8 @@ pub(crate) async fn run_json(args: &Cli) -> Result<(), Box<dyn std::error::Error
     let mut anomalies: Vec<insights::Anomaly> = Vec::new();
     let mut interrupted = false;
     let mut pump = tokio::time::interval(PUMP);
+    // Steered from Slack, when `pepe slack serve` started this run
+    let mut control = crate::control::listen();
     let mut snapshots = tokio::time::interval(SNAPSHOT_EVERY);
     snapshots.tick().await; // the first tick is now; the first snapshot is in a minute
     let report = |metrics: &Metrics,
@@ -73,7 +75,7 @@ pub(crate) async fn run_json(args: &Cli) -> Result<(), Box<dyn std::error::Error
                 if !warming {
                     timeline.advance(started.elapsed());
                     for anomaly in watch.observe(timeline.samples(), false) {
-                        crate::webhook::anomaly(&anomaly.text);
+                        crate::webhook::anomaly(anomaly.kind.name(), &anomaly.text);
                         anomalies.push(anomaly);
                     }
                     crate::webhook::progress(|| hook_progress(&metrics, started.elapsed(), plan(args), Some(&timeline), anomalies.len()));
@@ -101,6 +103,12 @@ pub(crate) async fn run_json(args: &Cli) -> Result<(), Box<dyn std::error::Error
             _ = tokio::signal::ctrl_c(), if !interrupted => {
                 interrupted = true;
                 load.stop();
+            }
+            said = crate::control::next(&mut control) => {
+                if crate::control::apply(&said, &load) && !interrupted {
+                    interrupted = true;
+                    load.stop();
+                }
             }
         }
     }
