@@ -2,10 +2,9 @@
 //! Pepe gives when there is one, and `pepe self-update`.
 
 use std::io::{stderr, IsTerminal, Write};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use axoupdater::AxoUpdater;
 use ratatui::style::Color;
 use ratatui::text::Line;
 use semver::Version;
@@ -309,7 +308,7 @@ impl InstallMethod {
         if let Some(method) = Self::from_package_path(&exe) {
             return method;
         }
-        if installer_updater().is_some() {
+        if installer_receipt().is_some() {
             return Self::Installer;
         }
         if exe.contains("/.cargo/bin/") || exe.contains("\\.cargo\\bin\\") {
@@ -359,14 +358,180 @@ impl InstallMethod {
     }
 }
 
-/// An updater for installer-managed copies, if this executable is the one the
-/// install receipt points at (a stale receipt must not update the wrong binary)
-fn installer_updater() -> Option<AxoUpdater> {
-    let mut updater = AxoUpdater::new_for(APP_NAME);
-    updater.load_receipt().ok()?;
-    match updater.check_receipt_is_for_this_executable() {
-        Ok(true) => Some(updater),
-        _ => None,
+/// What the shell or PowerShell installer left behind when it installed
+/// pepe (`pepe-receipt.json`): where to, and whether it added that to PATH.
+/// pepe runs the next release's installer itself rather than through
+/// axoupdater, whose own HTTP client links macOS's Security framework into
+/// every run: 4.5 MB of resident memory for a load test that never updates.
+#[derive(Debug, Deserialize)]
+struct Receipt {
+    install_prefix: PathBuf,
+    // Missing from receipts written before cargo-dist 0.23
+    #[serde(default = "yes")]
+    modify_path: bool,
+    provider: ReceiptProvider,
+}
+
+#[derive(Debug, Deserialize)]
+struct ReceiptProvider {
+    source: String,
+    version: String,
+}
+
+fn yes() -> bool {
+    true
+}
+
+impl Receipt {
+    /// The first receipt found where the installers write it:
+    /// `$XDG_CONFIG_HOME/pepe`, then `~/.config/pepe` (`%LOCALAPPDATA%\pepe`)
+    fn load() -> Option<Self> {
+        let xdg = std::env::var_os("XDG_CONFIG_HOME").map(|h| PathBuf::from(h).join(APP_NAME));
+        let home = if cfg!(windows) {
+            std::env::var_os("LOCALAPPDATA").map(|h| PathBuf::from(h).join(APP_NAME))
+        } else {
+            std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".config").join(APP_NAME))
+        };
+        [xdg, home].into_iter().flatten().find_map(|dir| {
+            let text =
+                std::fs::read_to_string(dir.join(format!("{APP_NAME}-receipt.json"))).ok()?;
+            serde_json::from_str(&text).ok()
+        })
+    }
+
+    /// Where the installer was told to install: cargo-dist 0.10 to 0.14
+    /// wrote the `bin` directory itself for prefixes such as `~/.cargo`
+    fn root(&self) -> PathBuf {
+        let buggy = self.provider.source == "cargo-dist"
+            && Version::parse(&self.provider.version).is_ok_and(|v| {
+                v >= Version::parse("0.10.0-prerelease.1").expect("a version")
+                    && v < Version::parse("0.15.0-prerelease.8").expect("a version")
+            });
+        match (buggy, self.install_prefix.file_name()) {
+            (true, Some(name)) if name == "bin" => self
+                .install_prefix
+                .parent()
+                .map_or_else(|| self.install_prefix.clone(), Path::to_path_buf),
+            _ => self.install_prefix.clone(),
+        }
+    }
+
+    /// Whether `exe` is the copy this receipt installed: a stale receipt
+    /// must not update the wrong binary
+    fn is_for(&self, exe: &Path) -> bool {
+        let root = self.root();
+        let root = root.canonicalize().unwrap_or(root);
+        let Some(mut dir) = exe.parent() else {
+            return false;
+        };
+        if dir.file_name().is_some_and(|n| n == "bin")
+            && root.file_name().is_none_or(|n| n != "bin")
+        {
+            dir = dir.parent().unwrap_or(dir);
+        }
+        dir == root
+    }
+}
+
+/// The install receipt, if this executable is the one it points at
+fn installer_receipt() -> Option<Receipt> {
+    let receipt = Receipt::load()?;
+    let exe = std::env::current_exe().ok()?.canonicalize().ok()?;
+    receipt.is_for(&exe).then_some(receipt)
+}
+
+/// The release's own installer, downloaded beside nothing else
+async fn download_installer(version: &Version) -> Result<PathBuf, String> {
+    let name = if cfg!(windows) {
+        format!("{APP_NAME}-installer.ps1")
+    } else {
+        format!("{APP_NAME}-installer.sh")
+    };
+    let url = format!("https://github.com/{REPO}/releases/download/v{version}/{name}");
+    let script = reqwest::Client::new()
+        .get(&url)
+        .header("User-Agent", default_user_agent())
+        .timeout(Duration::from_secs(60))
+        .send()
+        .await
+        .and_then(|r| r.error_for_status())
+        .map_err(|e| format!("couldn't download {url}: {e}"))?
+        .bytes()
+        .await
+        .map_err(|e| format!("couldn't download {url}: {e}"))?;
+    let path = std::env::temp_dir().join(format!("{}-{name}", std::process::id()));
+    std::fs::write(&path, &script)
+        .map_err(|e| format!("couldn't write {}: {e}", path.display()))?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o744))
+            .map_err(|e| format!("couldn't make {} runnable: {e}", path.display()))?;
+    }
+    Ok(path)
+}
+
+/// Runs the installer into the receipt's directory, as the receipt left
+/// PATH; the installer's output is shown with `verbose` and kept for the
+/// error otherwise
+fn run_installer(script: &Path, receipt: &Receipt, verbose: bool) -> Result<(), String> {
+    use std::process::{Command, Stdio};
+    // Windows won't overwrite a running executable, so this one steps aside
+    // first, and comes back if the install fails
+    let aside = if cfg!(windows) {
+        let exe = std::env::current_exe().map_err(|e| e.to_string())?;
+        let mut old = exe.clone().into_os_string();
+        old.push(".previous.exe");
+        let old = PathBuf::from(old);
+        // Left by the update before this one, which couldn't delete itself
+        let _ = std::fs::remove_file(&old);
+        std::fs::rename(&exe, &old).map_err(|e| e.to_string())?;
+        Some((old, exe))
+    } else {
+        None
+    };
+    let mut command = if cfg!(windows) {
+        let mut c = Command::new("powershell");
+        c.args(["-ExecutionPolicy", "ByPass"]).arg(script);
+        // A PowerShell Core parent breaks Windows PowerShell's module path
+        c.env_remove("PSModulePath");
+        c
+    } else {
+        Command::new(script)
+    };
+    let root = receipt.root();
+    // The first for older installers, the second for newer ones
+    command.env("CARGO_DIST_FORCE_INSTALL_DIR", &root);
+    command.env("PEPE_INSTALL_DIR", &root);
+    if !receipt.modify_path {
+        command.env("PEPE_NO_MODIFY_PATH", "1");
+    }
+    if verbose {
+        command.stdout(Stdio::inherit()).stderr(Stdio::inherit());
+    }
+    let outcome = command.output();
+    let _ = std::fs::remove_file(script);
+    let failed = !outcome.as_ref().is_ok_and(|o| o.status.success());
+    if let Some((old, exe)) = aside {
+        if failed {
+            let _ = std::fs::rename(old, exe);
+        }
+    }
+    match outcome {
+        Err(e) => Err(format!("couldn't start the installer: {e}")),
+        Ok(o) if o.status.success() => Ok(()),
+        Ok(o) => {
+            let said = String::from_utf8_lossy(&o.stderr);
+            let last = said
+                .lines()
+                .rev()
+                .find(|l| !l.trim().is_empty())
+                .unwrap_or("");
+            Err(match o.status.code() {
+                Some(code) => format!("the installer exited with {code}: {}", plain(last).trim()),
+                None => "the installer was stopped".to_string(),
+            })
+        }
     }
 }
 
@@ -641,8 +806,8 @@ pub async fn self_update(
         return Ok(());
     };
 
-    let updater = (method == InstallMethod::Installer)
-        .then(installer_updater)
+    let receipt = (method == InstallMethod::Installer)
+        .then(installer_receipt)
         .flatten();
     let mut beside = vec![
         format!(
@@ -651,8 +816,8 @@ pub async fn self_update(
         ),
         String::new(),
     ];
-    if check_only || updater.is_none() {
-        if updater.is_none() {
+    if check_only || receipt.is_none() {
+        if receipt.is_none() {
             beside.push(format!("{DIM}this copy was {}{NC}", method.described()));
         }
         beside.extend(how_to_update(method));
@@ -671,58 +836,44 @@ pub async fn self_update(
     if check_only {
         std::process::exit(1);
     }
-    if updater.is_none() {
+    let Some(receipt) = receipt else {
         return Ok(());
-    }
-    let mut updater = updater.expect("checked above");
+    };
 
-    // Lets private forks / rate-limited CI pass a token, as axoupdater expects
-    if let Ok(token) = std::env::var("PEPE_GITHUB_TOKEN") {
-        updater.set_github_token(&token);
-    }
-    if !verbose {
-        updater.disable_installer_output();
-    }
     say("\n");
-    // The installer runs as a child process, which would stall a spinner
-    // on this thread, so the update runs on another, with a runtime of its
-    // own for the updater's downloads
-    let run = tokio::task::spawn_blocking(move || {
-        tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build()
-            .expect("build a tokio runtime")
-            .block_on(updater.run())
-            // The updater's error is a large enum; boxed, the result stays small
-            .map_err(Box::new)
-    });
+    let label = format!("downloading and installing pepe {}", latest.version);
+    let version = latest.version.clone();
+    let install = async move {
+        let script = download_installer(&version).await?;
+        // The installer runs as a child process, which would stall a
+        // spinner on this thread, so it waits on another
+        let receipt = tokio::task::spawn_blocking(move || {
+            run_installer(&script, &receipt, verbose).map(|()| receipt)
+        })
+        .await
+        .map_err(|e| e.to_string())??;
+        Ok::<_, String>(receipt)
+    };
     let outcome = if verbose {
-        run.await?
+        install.await
     } else {
-        with_spinner(
-            &format!("downloading and installing pepe {}", latest.version),
-            run,
-        )
-        .await?
+        with_spinner(&label, install).await
     };
 
     match outcome {
-        Ok(Some(result)) => {
-            let old = result
-                .old_version
-                .map(|v| v.to_string())
-                .unwrap_or_else(|| current.to_string());
+        Ok(receipt) => {
+            let prefix = receipt.root();
             say(&pepe_block(
                 Mood::Proud,
                 "fresh out of the oven",
                 &[
                     format!(
-                        "{GREEN}✔ pepe {} is in{NC} {DIM}· was {old}{NC}",
-                        result.new_version
+                        "{GREEN}✔ pepe {} is in{NC} {DIM}· was {current}{NC}",
+                        latest.version
                     ),
                     format!(
                         "{DIM}installed to{NC} {}",
-                        fit_path(result.install_prefix.as_str(), BESIDE_WIDTH - 13)
+                        fit_path(&prefix.to_string_lossy(), BESIDE_WIDTH - 13)
                     ),
                     format!("{DIM}run{NC} pepe {DIM}to try it{NC}"),
                 ],
@@ -730,12 +881,11 @@ pub async fn self_update(
             ));
             // A fresh pepe shouldn't be told about itself
             if let Some(mut cache) = Cache::read() {
-                cache.current = result.new_version.to_string();
+                cache.current = latest.version.to_string();
                 cache.write();
             }
-            refresh_completions(std::path::Path::new(result.install_prefix.as_str()));
+            refresh_completions(&prefix);
         }
-        Ok(None) => sayln!("{GREEN}pepe {current} is already the latest release.{NC}"),
         Err(e) => {
             sayln!("{RED}✖ the update didn't finish:{NC} {e}");
             sayln!(
@@ -903,6 +1053,75 @@ mod tests {
             text.contains("4× less CPU for the same requests"),
             "entries are not cut short"
         );
+    }
+
+    fn receipt(prefix: &str, provider_version: &str) -> Receipt {
+        serde_json::from_str(&format!(
+            r#"{{"binaries":["pepe"],"binary_aliases":{{}},"cdylibs":[],"cstaticlibs":[],
+                "install_layout":"flat","install_prefix":"{prefix}",
+                "provider":{{"source":"cargo-dist","version":"{provider_version}"}},
+                "source":{{"app_name":"pepe","name":"pepe","owner":"omarmhaimdat","release_type":"github"}},
+                "version":"0.51.0"}}"#
+        ))
+        .expect("a receipt as cargo-dist writes it")
+    }
+
+    #[test]
+    fn a_receipt_is_for_the_copy_it_installed_and_no_other() {
+        let flat = receipt("/home/a/.local/bin", "0.33.0");
+        // Written before cargo-dist 0.23, which had no modify_path
+        assert!(flat.modify_path);
+        assert!(flat.is_for(Path::new("/home/a/.local/bin/pepe")));
+        assert!(!flat.is_for(Path::new("/opt/homebrew/bin/pepe")));
+
+        // A prefix layout installs into its bin directory
+        let prefix = receipt("/home/a/.pepe", "0.33.0");
+        assert!(prefix.is_for(Path::new("/home/a/.pepe/bin/pepe")));
+        assert_eq!(prefix.root(), PathBuf::from("/home/a/.pepe"));
+
+        // cargo-dist 0.10 to 0.14 put the bin directory in the prefix
+        let buggy = receipt("/home/a/.cargo/bin", "0.12.0");
+        assert_eq!(buggy.root(), PathBuf::from("/home/a/.cargo"));
+        assert!(buggy.is_for(Path::new("/home/a/.cargo/bin/pepe")));
+        assert_eq!(
+            receipt("/home/a/.cargo/bin", "0.15.0").root(),
+            PathBuf::from("/home/a/.cargo/bin")
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn the_installer_is_told_where_and_whether_to_touch_path() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = std::env::temp_dir().join(format!("pepe-installer-test-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let said = dir.join("env");
+        let script = dir.join("installer.sh");
+        let write = |body: &str| {
+            std::fs::write(&script, format!("#!/bin/sh\n{body}\n")).unwrap();
+            std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o744)).unwrap();
+        };
+
+        write(&format!(
+            "echo \"$PEPE_INSTALL_DIR $CARGO_DIST_FORCE_INSTALL_DIR ${{PEPE_NO_MODIFY_PATH:-}}\" > {}",
+            said.display()
+        ));
+        let mut r = receipt("/home/a/.pepe", "0.33.0");
+        r.modify_path = false;
+        run_installer(&script, &r, false).expect("the installer ran");
+        assert_eq!(
+            std::fs::read_to_string(&said).unwrap().trim(),
+            "/home/a/.pepe /home/a/.pepe 1"
+        );
+        assert!(!script.exists(), "the installer is removed once it ran");
+
+        write("echo 'downloading'; echo 'no release for this platform' >&2; exit 3");
+        let err = run_installer(&script, &r, false).unwrap_err();
+        assert_eq!(
+            err,
+            "the installer exited with 3: no release for this platform"
+        );
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 
     #[test]

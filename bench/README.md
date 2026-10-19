@@ -691,6 +691,98 @@ the same two calls. What is still there to take:
   (io_uring) is the only thing left that is larger than a few percent,
   and it is Linux only.
 
+## What the binary links
+
+v0.51.0, macOS. The first time wrk and k6 were in the macOS suite
+(wrk 4.2 with kqueue, k6 2.3, oha 1.8, vegeta 12.11; Rust 1.85; the M4
+Pro as above), pepe's CPU was level with wrk's and a quarter of oha's,
+but its memory was not first: 10.7 to 15.0 MB where wrk held 3.1 to
+13.8. And `pepe --version`, which sends nothing, held 8.4 MB.
+
+**Where it went.** `vmmap` during a run had pepe's own data at 1.6 MB
+(dirty) and 348 mapped images. `otool -L` said why: the binary linked
+`Security.framework` and `CoreFoundation.framework`, which dyld loads at
+launch with everything they depend on, whether or not a run touches
+them. pepe's own HTTP goes through rustls with webpki roots and needs
+neither. They came from `pepe self-update`: axoupdater carries a second
+reqwest (0.13, with its default TLS), whose platform certificate
+verifier is Security.framework on macOS. A C program that prints one
+line holds 1.4 MB; the same program linked against those two
+frameworks, 5.9 MB.
+
+**The change.** `pepe self-update` does what axoupdater did for it
+itself: read the installer's receipt, check it is for this executable,
+download the release's `pepe-installer.sh` (`.ps1` on Windows) with
+pepe's own reqwest, and run it into the receipt's directory with
+`PEPE_INSTALL_DIR` and `PEPE_NO_MODIFY_PATH` as the receipt says. The
+binary now links `libSystem` and `libiconv` only, 62 crates leave the
+build, and it is 10.2 → 8.0 MB on disk.
+
+macOS, the suite twice for each binary, CPU ms per 1,000 requests and
+peak RSS MB (the range of the two runs):
+
+| Workload | before | after | memory |
+| --- | --- | --- | --- |
+| tiny-c64 | 6.20–6.25 / 10.8–11.6 | 6.20–6.30 / 6.9 | −40% |
+| tiny-c256 | 6.05–6.20 / 11.8–12.3 | 5.95–6.10 / 7.6 | −37% |
+| tiny-c1000 | 6.25–6.50 / 13.8–14.6 | 6.00–6.15 / 9.5–10.1 | −31% |
+| json-c64 | 6.15–6.35 / 11.6 | 6.10–6.30 / 6.9–7.0 | −40% |
+| body16k-c64 | 6.60–6.80 / 11.4–11.6 | 6.40–6.60 / 6.3–6.9 | −42% |
+| body256k-c16 | 18.0 / 10.9–11.3 | 16.0–18.0 / 6.2–6.3 | −43% |
+| slow20ms-c1000 | 7.20–8.00 / 14.0–14.1 | 7.40–7.60 / 10.0 | −29% |
+| status503-c64 | 6.30 / 11.1–11.6 | 6.10–6.30 / 6.4–6.5 | −42% |
+| tls-c64 | 6.60–7.10 / 15.0 | 6.60–6.90 / 10.0–10.5 | −32% |
+| tls16k-c64 | 10.33–10.67 / 14.7–15.1 | 10.00–10.67 / 10.2–10.8 | −30% |
+| post-c64 | 6.15–6.30 / 11.4–11.6 | 6.15 / 6.9–7.0 | −40% |
+| million-c64 | 6.10–6.15 / 10.7–12.0 | 6.07–6.14 / 6.2 | −45% |
+
+CPU doesn't move: a million plain GETs, five rounds taking turns, had
+medians of 6.10 before and 6.08 after; 400,000 over TLS, 6.55 and 6.53.
+The regression gate, best of three: CPU +0.8 to +4.9% (inside the
+rounds' own spread), memory −30 to −44%. Dashboard mode, 200,000
+requests at 64: 1.24–1.28 s of CPU either way, 15.4–15.9 → 11.3–11.5 MB.
+`pepe --version`: 8.4 → 3.8 MB.
+
+Linux was not measured for this: the frameworks are macOS's, and on
+Linux the second reqwest's verifier reads certificate files in Rust,
+so the published Linux numbers (4.0 MB on musl) are not expected to
+move. The Benchmarks workflow measures it on the next release PR.
+
+The whole macOS table after the change, every tool (CPU ms per 1,000 /
+peak MB / requests per second; one run, in [`results/`](results/) as
+`2026-10-19-macos-*.csv`):
+
+| Workload | pepe | wrk -t1 | oha | vegeta | k6 |
+| --- | --- | --- | --- | --- | --- |
+| tiny-c64 | **6.30 / 6.9 / 157k** | 6.35 / 3.1 / 156k | 22.3 / 75.9 / 157k | 92.0 / 26.6 / 80k | 46.2 / 206 / 156k |
+| tiny-c256 | **5.95 / 7.6 / 167k** | 6.41 / 4.7 / 155k | 23.4 / 80.2 / 160k | 50.8 / 39.4 / 133k | 47.8 / 267 / 150k |
+| tiny-c1000 | **6.00 / 10.1 / 163k** | 6.75 / 11.0 / 147k | 21.5 / 108 / 151k | 47.8 / 94.0 / 139k | 59.6 / 398 / 117k |
+| json-c64 | **6.30 / 6.9 / 157k** | 6.46 / 3.1 / 153k | 22.4 / 77.6 / 155k | 97.0 / 26.0 / 73k | 48.1 / 197 / 156k |
+| body16k-c64 | **6.60 / 6.9 / 142k** | 7.81 / 3.2 / 127k | 24.0 / 48.3 / 134k | 400 / 28.7 / 17k | 57.6 / 148 / 133k |
+| body256k-c16 | **18.0 / 6.2 / 49k** | 28.6 / 2.6 / 35k | 80.0 / 59.5 / 39k | 642 / 36.4 / 8k | 248 / 54.0 / 35k |
+| slow20ms-c1000 | **7.40 / 10.0 / 43k** | 6.71 / 10.7 / 45k | 27.2 / 79.1 / 40k | 70.2 / 86.0 / 44k | 66.0 / 308 / 40k |
+| status503-c64 | **6.30 / 6.4 / 153k** | 6.46 / 3.1 / 154k | 23.2 / 58.2 / 159k | 97.8 / 26.7 / 74k | 48.8 / 183 / 151k |
+| tls-c64 | **6.90 / 10.5 / 138k** | 7.39 / 13.8 / 134k | 24.8 / 56.8 / 153k | 73.8 / 31.3 / 98k | 49.6 / 176 / 148k |
+| tls16k-c64 | **10.0 / 10.8 / 92k** | 10.8 / 14.2 / 92k | 45.3 / 44.7 / 131k | 263 / 36.8 / 28k | 58.7 / 145 / 126k |
+| post-c64 | **6.15 / 7.0 / 160k** | — | 22.2 / 77.2 / 160k | — | — |
+| million-c64 | **6.14 / 6.2 / 163k** | 6.32 / 3.2 / 157k | 22.6 / 230 / 160k | 86.6 / 25.5 / 81k | 43.0 / 380 / 162k |
+
+Where pepe is not first on macOS, plainly:
+
+- **Memory against wrk, up to 256 connections**: 6.2 to 7.6 MB
+  against 3.1 to 4.7, and 6.2 against 2.6 with 256 KB bodies. What is
+  left is pepe's own code: its physical footprint during a run is 3.3 MB
+  (wrk's 2.3), and the rest of the RSS is clean pages of an 8 MB binary
+  that the kernel maps around every page touched. Laying out what a run
+  uses together is the profile-guided link already named under "What is
+  left". From 1,000 connections, and over TLS, pepe holds less than wrk.
+- **CPU against a slow target at 1,000 connections**: wrk 6.4 to 6.7,
+  pepe 7.2 to 8.0 over four runs. Four fifths of it is kernel time.
+- **Requests per second over TLS**: oha's and k6's fourteen threads
+  send more than pepe's one (153k and 148k against 138k; 131k and 126k
+  against 92k with 16 KB records). wrk on one thread is level with pepe.
+  On plain HTTP every tool is at the loopback's ceiling, 150k to 167k.
+
 ## Reading logs
 
 What a file has when `pepe logs` opens it is read by every core; what is
