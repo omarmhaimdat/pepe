@@ -8,8 +8,8 @@
 <link rel="canonical" href="https://pepe.mhaimdat.com/docs/webhooks.html">
 <link rel="icon" href="../assets/logo.svg" type="image/svg+xml">
 <meta name="color-scheme" content="light dark">
-<meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
-<meta name="theme-color" content="#121010" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#fff1e0" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#141010" media="(prefers-color-scheme: dark)">
 <meta property="og:type" content="article">
 <meta property="og:site_name" content="pepe">
 <meta property="og:url" content="https://pepe.mhaimdat.com/docs/webhooks.html">
@@ -24,28 +24,32 @@
 <meta name="twitter:description" content="Say what a run found where your team will see it: a Slack, Discord, Teams or Google Chat channel, or any URL that takes JSON.">
 <meta name="twitter:image" content="https://pepe.mhaimdat.com/img/og.png">
 <script type="application/ld+json">[{"@context":"https://schema.org","@type":"TechArticle","headline":"Webhooks","description":"Say what a run found where your team will see it: a Slack, Discord, Teams or Google Chat channel, or any URL that takes JSON.","url":"https://pepe.mhaimdat.com/docs/webhooks.html","image":"https://pepe.mhaimdat.com/img/og.png","inLanguage":"en","author":{"@type":"Person","name":"Omar Mhaimdat","url":"https://github.com/omarmhaimdat"},"publisher":{"@type":"Person","name":"Omar Mhaimdat","url":"https://github.com/omarmhaimdat"},"isPartOf":{"@type":"WebSite","name":"pepe","url":"https://pepe.mhaimdat.com/"},"about":{"@type":"SoftwareApplication","name":"pepe","url":"https://pepe.mhaimdat.com/"}},{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"pepe","item":"https://pepe.mhaimdat.com/"},{"@type":"ListItem","position":2,"name":"Docs","item":"https://pepe.mhaimdat.com/docs/"},{"@type":"ListItem","position":3,"name":"Webhooks","item":"https://pepe.mhaimdat.com/docs/webhooks.html"}]}]</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&amp;family=Geist+Mono:wght@400;500;600&amp;display=swap">
 <link rel="stylesheet" href="docs.css">
 <script>try{var t=localStorage.getItem('pepe-theme');if(t)document.documentElement.dataset.theme=t;}catch(e){}</script>
 </head>
 <body>
 <header class="top">
   <button type="button" class="menu" aria-label="Pages" aria-expanded="false">☰</button>
-  <a class="brand" href="index.html"><img src="../assets/logo.svg" alt="" width="22" height="24">pepe<span>docs</span></a>
+  <a class="brand" href="index.html"><img src="../assets/logo.svg" alt="" width="22" height="20">pepe<span>docs</span></a>
   <div class="search"><input type="search" placeholder="Search the docs…" aria-label="Search the docs" autocomplete="off"><div class="results" hidden></div></div>
   <nav class="links"><a href="../">Install</a><a href="https://github.com/omarmhaimdat/pepe">GitHub</a><button type="button" class="theme" aria-label="Switch between light and dark">◐</button></nav>
 </header>
 <div class="shell">
-  <aside class="side" id="side"><div class="group">Start here</div><a href="index.html">Overview</a><a href="install.html">Install</a><div class="group">Modes</div><a href="load-test.html">Load testing</a><a href="dashboard.html">The dashboard</a><a href="ping.html">Ping</a><a href="ramp.html">Ramp</a><a href="api.html">OpenAPI</a><a href="flow.html">Flows</a><a href="replay.html">Replay</a><a href="logs.html">nginx logs</a><a href="compare.html">Compare</a><div class="group">Integrate</div><a href="output.html">Output and exit codes</a><a href="ci.html">CI and Docker</a><a href="webhooks.html" aria-current="page">Webhooks</a><a href="agents.html">Agents and scripts</a><div class="group">Reference</div><a href="reference.html">Command reference</a><a href="benchmarks.html">Benchmarks</a></aside>
+  <aside class="side" id="side"><div class="group">Start here</div><a href="index.html">Overview</a><a href="install.html">Install</a><div class="group">Modes</div><a href="load-test.html">Load testing</a><a href="dashboard.html">The dashboard</a><a href="ping.html">Ping</a><a href="ramp.html">Ramp</a><a href="api.html">OpenAPI</a><a href="flow.html">Flows</a><a href="replay.html">Replay</a><a href="logs.html">nginx logs</a><a href="compare.html">Compare</a><div class="group">Integrate</div><a href="output.html">Output and exit codes</a><a href="ci.html">CI and Docker</a><a href="webhooks.html" aria-current="page">Webhooks</a><a href="agents.html">Agents and scripts</a><div class="group">Reference</div><a href="config.html">Config files</a><a href="reference.html">Command reference</a><a href="benchmarks.html">Benchmarks</a></aside>
   <main class="main">
     <article class="prose">
-<h1>Webhooks</h1>
+<div class="kicker"><span>Integrate</span></div>
+<h1><span class="sel">Webhooks</span></h1>
 <p>Say what a run found where your team will see it: a Slack, Discord, Teams or Google Chat channel, or any URL that takes JSON. One flag is enough; a <code>[[webhook]]</code> table says more.</p>
-<figure class="code"><div class="bar"><span>bash</span><button type="button" class="copy" aria-label="Copy">copy</button></div><pre><code>pepe -z 30s -c 50 --fail-if &#x27;p99 &gt; 300ms&#x27; https://api.example.com/health \
+<figure class="code"><div class="bar"><span>bash</span><button type="button" class="copy" aria-label="Copy">copy</button></div><pre><code><span class="k">pepe</span> -z 30s -c 50 --fail-if &#x27;p99 &gt; 300ms&#x27; https://api.example.com/health \
   --webhook &quot;$SLACK_WEBHOOK_URL&quot;</code></pre></figure>
 <p>When the run ends, the channel gets the verdict: passed or failed (and which <code>--fail-if</code> was crossed), the requests, requests a second, p50, p95 and p99, the error rate, how long it ran, what pepe found, and the command that runs it again. <code>pepe ramp</code> sends its capacity and the concurrency it held; <code>pepe ping</code> each target's latency and loss.</p>
 <h2 id="slack-live"><a href="#slack-live">Slack, live</a></h2>
-<figure class="code"><div class="bar"><span>bash</span><button type="button" class="copy" aria-label="Copy">copy</button></div><pre><code>pepe slack connect                       # once per machine, all from the terminal
-pepe -z 10m -c 50 --slack https://api.example.com/health</code></pre></figure>
+<figure class="code"><div class="bar"><span>bash</span><button type="button" class="copy" aria-label="Copy">copy</button></div><pre><code><span class="k">pepe</span> slack connect                       <span class="c"># once per machine, all from the terminal</span>
+<span class="k">pepe</span> -z 10m -c 50 --slack https://api.example.com/health</code></pre></figure>
 <p>With <code>--slack</code> a run is one message in the channel, kept up to date, with Pepe the pepper as its face:</p>
 <ul><li><strong>While it runs</strong> (edited every 10 seconds, and at once when something changes or someone steers it): what is sent, how hard, from which machine and by whom; a progress bar with the time left; throughput with its peak and which way it leans lately; p50 · p95 · p99 with a sparkline; errors by cause with the first body the server sent; where the time goes, waiting for the first byte against reading the body; requests and bytes in; what's in flight and at what rate, and who changed it. Under them, <strong>What changed</strong>: each jump in latency, fall in throughput or rise in errors, a line each with its time (`<code> </code>1m26s<code> 📉 Throughput dropped 52% · 5.9k req/s </code>`), in the message itself: the thread stays quiet.</li><li><strong>When it ends</strong> the message becomes the verdict: a sentence that says how much was sent, how fast, what failed and the first thing that changed; latency from p50 to the max; sparklines over the whole run; where the time went (waiting, connecting, reading); the answers by status; each <code>--fail-if</code> with ✓ or ✗ and what was measured; for a saved test, how it compares with its last recorded run; and what pepe found, worst first, with the first body of each kind of failure. A colour down its side says passed, warned or failed.</li><li><strong>Under it</strong>, one line in the thread, shown in the channel too: the result at a glance where the channel is now, with Pepe proud, worried or on fire, and the <code>mention</code> when the run failed (an edited message notifies no one). The verdict has the run's <strong>What changed</strong> too.</li><li><strong>Ask it in the thread.</strong> With <code>pepe slack serve</code> running, <code>@pepe</code> in the thread of a run it started answers there: <em>p99</em>, <em>errors</em> (what failed, what the server said, when it began), <em>slowest</em>, <em>where does the time go</em>, <em>codes</em>, <em>compare</em> (against the test's last run), <em>status</em>, <em>help</em>. While the run goes, the run answers from its live numbers; after, the recorded report does. Nothing else is posted in the thread.</li></ul>
 <p><code>--slack=#another</code> posts somewhere else; in a file it's <code>webhook = &quot;slack:&quot;</code> or a <code>[[webhook]]</code> table with <code>url = &quot;slack:#load-tests&quot;</code>, which takes <code>on</code>, <code>every</code> and <code>mention</code> like any other.</p>
@@ -55,7 +59,7 @@ pepe -z 10m -c 50 --slack https://api.example.com/health</code></pre></figure>
 <p>The same steps are on the <a href="#from-the-screens">webhook page</a>: <code>S</code> there connects Slack without leaving the run, and adds the hook. <code>pepe slack status</code> checks the connection, <code>pepe slack test</code> posts a test message, <code>pepe slack forget</code> removes the file, and <code>pepe slack manifest</code> prints the app's manifest, for Slack's "From a manifest" if the link doesn't fill the page in. In CI, <code>PEPE_SLACK_TOKEN</code> stands in for the file: <code>PEPE_SLACK_TOKEN=xoxb-… pepe --slack=#load-tests …</code>.</p>
 <p>An app made by an earlier pepe lacks something: Pepe's faces need <code>chat:write.customize</code> (0.47), the buttons Socket Mode (0.48), and questions in the thread the <code>app_mention</code> event (0.51). <code>pepe slack connect</code> again makes an app that has them all.</p>
 <h2 id="buttons-and-pepe"><a href="#buttons-and-pepe">Buttons and /pepe</a></h2>
-<figure class="code"><div class="bar"><span>bash</span><button type="button" class="copy" aria-label="Copy">copy</button></div><pre><code>pepe slack serve          # in the project, left running: the buttons and /pepe answer here</code></pre></figure>
+<figure class="code"><div class="bar"><span>bash</span><button type="button" class="copy" aria-label="Copy">copy</button></div><pre><code><span class="k">pepe</span> slack serve          <span class="c"># in the project, left running: the buttons and /pepe answer here</span></code></pre></figure>
 <p>With the buttons set up (step 5 of <code>pepe slack connect</code>: an app-level token), a run started from Slack can be steered from its message while it goes, and a saved test's verdict has <strong>↻ Run again</strong>, <strong>✎ Edit and run</strong> and <strong>History</strong>.</p>
 <ul><li><strong>While it runs</strong>: <strong>⏸ Pause</strong> (the message turns grey and says who paused it; <strong>▶ Resume</strong> picks it up), <strong>− 1</strong> and <strong>+ 1</strong> to change the concurrency by one at once (each button says what it changes it to; a ramp sets its own, so it has only pause), and <strong>■ Stop</strong>, asked twice since it ends the run as ctrl-c would: the message becomes the verdict of what it measured. Each change is in the message straight away, with who made it.</li><li><strong>Run again</strong> runs the test as it is saved, its message in the channel the button was pressed in, saying who started it. Runs from Slack are recorded, so the test's history and trend keep up.</li><li><strong>Edit and run</strong> opens a form filled with the test: concurrency, the duration or a number of requests, the rate, <code>--fail-if</code> conditions, and whether to keep the settings in the test. A value that won't do is said beside its field.</li><li><strong>History</strong> lists the test's recorded runs, a line each: how it went, when, requests a second, p99 and errors.</li></ul>
 <p><code>/pepe</code> answers only the one who asked:</p>
@@ -70,21 +74,21 @@ pepe -z 10m -c 50 --slack https://api.example.com/health</code></pre></figure>
 <div class="table"><table><thead><tr><th>Event</th><th>Sent</th></tr></thead><tbody><tr><td><code>start</code></td><td>When the run starts: what it sends, to where</td></tr><tr><td><code>progress</code></td><td>Every <code>every</code> (a minute unless said): a bar, the requests so far, requests a second, p50, p99, errors</td></tr><tr><td><code>anomaly</code></td><td>When something changes during the run: "p99 jumped 4.5× to 45ms at 26s"</td></tr><tr><td><code>end</code></td><td>When the run ends: the verdict. What a webhook is sent on when nothing is said</td></tr><tr><td><code>fail</code></td><td>When the run ends and a <code>--fail-if</code> was crossed (a ping: its <code>--slo</code> broken, or nothing answered)</td></tr></tbody></table></div>
 <p><code>--webhook-on start,fail</code> says it for the <code>--webhook</code> URLs; <code>on = [...]</code> for a table. A hook on <code>fail</code> alone stays quiet until something is wrong: the one to page someone with.</p>
 <h2 id="in-pepe-toml"><a href="#in-pepe-toml">In pepe.toml</a></h2>
-<figure class="code"><div class="bar"><span>toml</span><button type="button" class="copy" aria-label="Copy">copy</button></div><pre><code># one URL: the verdict at the end
+<figure class="code"><div class="bar"><span>toml</span><button type="button" class="copy" aria-label="Copy">copy</button></div><pre><code><span class="c"># one URL: the verdict at the end</span>
 webhook = &quot;${SLACK_WEBHOOK_URL}&quot;
 
-# or as many as you need, each said in full
-[[webhook]]
+<span class="c"># or as many as you need, each said in full</span>
+<span class="t">[[webhook]]</span>
 url = &quot;${SLACK_WEBHOOK_URL}&quot;
 on = [&quot;start&quot;, &quot;progress&quot;, &quot;end&quot;]
-every = &quot;30s&quot;                  # progress every 30 seconds (5s at least)
+every = &quot;30s&quot;                  <span class="c"># progress every 30 seconds (5s at least)</span>
 
-[[webhook]]
+<span class="t">[[webhook]]</span>
 url = &quot;${PAGER_WEBHOOK_URL}&quot;
 on = [&quot;fail&quot;]
-mention = &quot;&lt;!here&gt;&quot;            # before a failed run&#x27;s message
+mention = &quot;&lt;!here&gt;&quot;            <span class="c"># before a failed run&#x27;s message</span>
 
-[[webhook]]
+<span class="t">[[webhook]]</span>
 url = &quot;https://ci.example.com/hooks/pepe&quot;
 headers = [&quot;Authorization: Bearer ${CI_TOKEN}&quot;]
 body = &#x27;{&quot;status&quot;: &quot;{{status}}&quot;, &quot;p99&quot;: &quot;{{p99}}&quot;, &quot;rps&quot;: &quot;{{rps}}&quot;, &quot;test&quot;: &quot;{{test}}&quot;}&#x27;</code></pre></figure>

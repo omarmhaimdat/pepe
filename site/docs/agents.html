@@ -8,8 +8,8 @@
 <link rel="canonical" href="https://pepe.mhaimdat.com/docs/agents.html">
 <link rel="icon" href="../assets/logo.svg" type="image/svg+xml">
 <meta name="color-scheme" content="light dark">
-<meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
-<meta name="theme-color" content="#121010" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#fff1e0" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#141010" media="(prefers-color-scheme: dark)">
 <meta property="og:type" content="article">
 <meta property="og:site_name" content="pepe">
 <meta property="og:url" content="https://pepe.mhaimdat.com/docs/agents.html">
@@ -24,21 +24,25 @@
 <meta name="twitter:description" content="pepe is built to be called by a program as readily as by a person: every mode runs without a screen, prints a versioned JSON report with a published schema…">
 <meta name="twitter:image" content="https://pepe.mhaimdat.com/img/og.png">
 <script type="application/ld+json">[{"@context":"https://schema.org","@type":"TechArticle","headline":"Agents and scripts","description":"pepe is built to be called by a program as readily as by a person: every mode runs without a screen, prints a versioned JSON report with a published schema…","url":"https://pepe.mhaimdat.com/docs/agents.html","image":"https://pepe.mhaimdat.com/img/og.png","inLanguage":"en","author":{"@type":"Person","name":"Omar Mhaimdat","url":"https://github.com/omarmhaimdat"},"publisher":{"@type":"Person","name":"Omar Mhaimdat","url":"https://github.com/omarmhaimdat"},"isPartOf":{"@type":"WebSite","name":"pepe","url":"https://pepe.mhaimdat.com/"},"about":{"@type":"SoftwareApplication","name":"pepe","url":"https://pepe.mhaimdat.com/"}},{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"pepe","item":"https://pepe.mhaimdat.com/"},{"@type":"ListItem","position":2,"name":"Docs","item":"https://pepe.mhaimdat.com/docs/"},{"@type":"ListItem","position":3,"name":"Agents and scripts","item":"https://pepe.mhaimdat.com/docs/agents.html"}]}]</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&amp;family=Geist+Mono:wght@400;500;600&amp;display=swap">
 <link rel="stylesheet" href="docs.css">
 <script>try{var t=localStorage.getItem('pepe-theme');if(t)document.documentElement.dataset.theme=t;}catch(e){}</script>
 </head>
 <body>
 <header class="top">
   <button type="button" class="menu" aria-label="Pages" aria-expanded="false">☰</button>
-  <a class="brand" href="index.html"><img src="../assets/logo.svg" alt="" width="22" height="24">pepe<span>docs</span></a>
+  <a class="brand" href="index.html"><img src="../assets/logo.svg" alt="" width="22" height="20">pepe<span>docs</span></a>
   <div class="search"><input type="search" placeholder="Search the docs…" aria-label="Search the docs" autocomplete="off"><div class="results" hidden></div></div>
   <nav class="links"><a href="../">Install</a><a href="https://github.com/omarmhaimdat/pepe">GitHub</a><button type="button" class="theme" aria-label="Switch between light and dark">◐</button></nav>
 </header>
 <div class="shell">
-  <aside class="side" id="side"><div class="group">Start here</div><a href="index.html">Overview</a><a href="install.html">Install</a><div class="group">Modes</div><a href="load-test.html">Load testing</a><a href="dashboard.html">The dashboard</a><a href="ping.html">Ping</a><a href="ramp.html">Ramp</a><a href="api.html">OpenAPI</a><a href="flow.html">Flows</a><a href="replay.html">Replay</a><a href="logs.html">nginx logs</a><a href="compare.html">Compare</a><div class="group">Integrate</div><a href="output.html">Output and exit codes</a><a href="ci.html">CI and Docker</a><a href="webhooks.html">Webhooks</a><a href="agents.html" aria-current="page">Agents and scripts</a><div class="group">Reference</div><a href="reference.html">Command reference</a><a href="benchmarks.html">Benchmarks</a></aside>
+  <aside class="side" id="side"><div class="group">Start here</div><a href="index.html">Overview</a><a href="install.html">Install</a><div class="group">Modes</div><a href="load-test.html">Load testing</a><a href="dashboard.html">The dashboard</a><a href="ping.html">Ping</a><a href="ramp.html">Ramp</a><a href="api.html">OpenAPI</a><a href="flow.html">Flows</a><a href="replay.html">Replay</a><a href="logs.html">nginx logs</a><a href="compare.html">Compare</a><div class="group">Integrate</div><a href="output.html">Output and exit codes</a><a href="ci.html">CI and Docker</a><a href="webhooks.html">Webhooks</a><a href="agents.html" aria-current="page">Agents and scripts</a><div class="group">Reference</div><a href="config.html">Config files</a><a href="reference.html">Command reference</a><a href="benchmarks.html">Benchmarks</a></aside>
   <main class="main">
     <article class="prose">
-<h1>Agents and scripts</h1>
+<div class="kicker"><span>Integrate</span><span>pepe mcp</span></div>
+<h1><span class="sel">Agents and scripts</span></h1>
 <p>pepe is built to be called by a program as readily as by a person: every mode runs without a screen, prints a versioned JSON report with a published schema, and says what went wrong in an exit code. This page is what a coding agent or a script needs to know; a skill file for agents is in the repository under <code>skills/pepe/</code>.</p>
 <h2 id="the-rules"><a href="#the-rules">The rules</a></h2>
 <ul><li>Pass <code>--json</code> for a report, or let the output be piped for the text verdict; never expect a screen.</li><li>End the run: <code>-n</code> for a count or <code>-z</code> for a duration. A ping without either runs until stopped.</li><li>Read <code>schema_version</code> first; the field names it covers never change. <code>pepe schema run|ramp|ping|compare</code> prints the schema.</li><li>Use the exit code: 0 as asked, 1 couldn't start or nothing answered, 2 a usage error or a guardrail refusing the run, 4 a limit crossed (<a href="output.html#exit-codes">Output: exit codes</a>).</li><li>Only point pepe at what you are allowed to load. A load test is traffic. The guardrails below make that a setting rather than a hope.</li></ul>
@@ -46,10 +50,10 @@
 <h2 id="guardrails"><a href="#guardrails">Guardrails</a></h2>
 <p>Where a run may be pointed and how much it may send, checked in every mode before anything is sent. A refusal is exit code 2 with the reason on stderr. Set them on every call, or once in a <code>pepe.toml</code> next to the code (<code>allow-host</code>, <code>max-requests</code>, <code>max-rate</code>, <code>max-concurrency</code>), where the command line can't loosen them by leaving them out.</p>
 <div class="table"><table><thead><tr><th>Flag</th><th>Holds</th></tr></thead><tbody><tr><td><code>--allow-host .example.com</code></td><td>Every target's host must be <code>example.com</code> or under it; <code>api.example.com</code> is that host exactly; repeat for more. A flow step whose host comes from a capture, and a ping of a command (<code>--cmd</code>), are refused under it</td></tr><tr><td><code>--max-requests 5000</code></td><td><code>-n</code> must be under it; <code>-z</code> needs a <code>--rate</code> that bounds it; a ping needs <code>-n</code> or <code>-z</code>; a ramp is refused, having no bound</td></tr><tr><td><code>--max-rate 500</code></td><td><code>--rate</code> must be under it, and must be given: without it a run sends as fast as the target answers. A ping's targets over its interval count</td></tr><tr><td><code>--max-concurrency 64</code></td><td><code>-c</code>, and a ramp's top step, must be under it</td></tr><tr><td><code>--dry-run</code></td><td>Says what would be sent, to where and how much, with secrets in headers masked, and sends nothing; <code>--json</code> gives it as JSON with <code>&quot;sent&quot;: 0</code>. Use it before the real call when the URL came from input</td></tr></tbody></table></div>
-<figure class="code"><div class="bar"><span>bash</span><button type="button" class="copy" aria-label="Copy">copy</button></div><pre><code>pepe --allow-host .staging.example.com --max-requests 5000 --max-rate 500 --max-concurrency 64 \
+<figure class="code"><div class="bar"><span>bash</span><button type="button" class="copy" aria-label="Copy">copy</button></div><pre><code><span class="k">pepe</span> --allow-host .staging.example.com --max-requests 5000 --max-rate 500 --max-concurrency 64 \
      --json -z 10s --rate 200 -c 32 https://api.staging.example.com/health
-pepe --allow-host .staging.example.com --dry-run -n 100 https://api.staging.example.com/health</code></pre></figure>
-<figure class="code"><div class="bar"><span></span><button type="button" class="copy" aria-label="Copy">copy</button></div><pre><code>pepe · dry run · nothing sent
+<span class="k">pepe</span> --allow-host .staging.example.com --dry-run -n 100 https://api.staging.example.com/health</code></pre></figure>
+<figure class="code"><div class="bar"><span></span><button type="button" class="copy" aria-label="Copy">copy</button></div><pre><code><span class="k">pepe</span> · dry run · nothing sent
   mode      run
   target    https://api.staging.example.com/health
   method    GET
@@ -58,7 +62,7 @@ pepe --allow-host .staging.example.com --dry-run -n 100 https://api.staging.exam
   guard     hosts .staging.example.com</code></pre></figure>
 <h2 id="as-an-mcp-server"><a href="#as-an-mcp-server">As an MCP server</a></h2>
 <p><code>pepe mcp</code> serves the modes as tools over stdio, in the Model Context Protocol: <code>run</code>, <code>ping</code>, <code>ramp</code>, <code>api</code>, <code>flow</code>, <code>replay</code> and <code>compare</code>, each returning pepe's JSON report as text and as structured content. The guardrail flags <code>pepe mcp</code> is started with hold for every call, so whoever starts the server decides where it may send and how much, and a tool call can't loosen them.</p>
-<figure class="code"><div class="bar"><span>bash</span><button type="button" class="copy" aria-label="Copy">copy</button></div><pre><code>pepe mcp --allow-host .staging.example.com --max-requests 10000 --max-rate 500 --max-concurrency 64</code></pre></figure>
+<figure class="code"><div class="bar"><span>bash</span><button type="button" class="copy" aria-label="Copy">copy</button></div><pre><code><span class="k">pepe</span> mcp --allow-host .staging.example.com --max-requests 10000 --max-rate 500 --max-concurrency 64</code></pre></figure>
 <p>pepe is listed in the <a href="https://registry.modelcontextprotocol.io">MCP registry</a> as <code>io.github.omarmhaimdat/pepe</code>, as the PyPI package and the Docker image, so a client that reads the registry can start it without an install: <code>uvx pepe-http mcp</code>, or <code>docker run -i --rm --network host ghcr.io/omarmhaimdat/pepe mcp</code>, each with the guardrail flags after <code>mcp</code>.</p>
 <p>For Claude Code:</p>
 <figure class="code"><div class="bar"><span>bash</span><button type="button" class="copy" aria-label="Copy">copy</button></div><pre><code>claude mcp add pepe -- pepe mcp --allow-host .staging.example.com --max-requests 10000 --max-rate 500</code></pre></figure>
@@ -78,7 +82,7 @@ pepe --allow-host .staging.example.com --dry-run -n 100 https://api.staging.exam
 <p>Codex reads <code>AGENTS.md</code>, and takes MCP servers the same way:</p>
 <figure class="code"><div class="bar"><span>bash</span><button type="button" class="copy" aria-label="Copy">copy</button></div><pre><code>codex mcp add pepe -- pepe mcp --max-requests 10000 --max-rate 500 --max-concurrency 64</code></pre></figure>
 <p>or in <code>~/.codex/config.toml</code>:</p>
-<figure class="code"><div class="bar"><span>toml</span><button type="button" class="copy" aria-label="Copy">copy</button></div><pre><code>[mcp_servers.pepe]
+<figure class="code"><div class="bar"><span>toml</span><button type="button" class="copy" aria-label="Copy">copy</button></div><pre><code><span class="t">[mcp_servers.pepe]</span>
 command = &quot;pepe&quot;
 args = [&quot;mcp&quot;, &quot;--max-requests&quot;, &quot;10000&quot;, &quot;--max-rate&quot;, &quot;500&quot;, &quot;--max-concurrency&quot;, &quot;64&quot;]</code></pre></figure>
 <p>The repository is laid out as a Codex plugin too (a <code>plugin.json</code> and an <code>mcp.json</code> at its root, and <code>.agents/plugins/marketplace.json</code>), with the same skill and server: <code>codex plugin marketplace add omarmhaimdat/pepe</code>, then <code>/plugins</code> in Codex to install it.</p>
@@ -90,39 +94,39 @@ args = [&quot;mcp&quot;, &quot;--max-requests&quot;, &quot;10000&quot;, &quot;--
 claude plugin install pepe@pepe</code></pre></figure>
 <p>The server ships with no <code>--allow-host</code>, since a host it is allowed to load is yours to name. Put one in a <code>pepe.toml</code> next to the code (see <a href="#guardrails">Guardrails</a>); pepe reads it in every mode, the MCP server included.</p>
 <h2 id="diagnose-one-endpoint"><a href="#diagnose-one-endpoint">Diagnose one endpoint</a></h2>
-<figure class="code"><div class="bar"><span>bash</span><button type="button" class="copy" aria-label="Copy">copy</button></div><pre><code>pepe ping https://api.example.com/health -n 5 --json</code></pre></figure>
+<figure class="code"><div class="bar"><span>bash</span><button type="button" class="copy" aria-label="Copy">copy</button></div><pre><code><span class="k">pepe</span> ping https://api.example.com/health -n 5 --json</code></pre></figure>
 <p>Read <code>targets[0]</code>: <code>latency_ms</code> (<code>min</code>, <code>avg</code>, <code>max</code>, <code>jitter</code>, <code>p50</code>, <code>p95</code>, <code>p99</code>); <code>phases_ms</code> (<code>dns</code>, <code>connect</code>, <code>tls_full</code>, <code>tls_resumed</code>, <code>ttfb</code>, <code>download</code>, each with <code>median_ms</code>, <code>p99_ms</code> and <code>max_ms</code>: the largest median is the bottleneck); <code>loss</code>, <code>timeouts</code> and <code>failures</code> by cause; <code>tls.cert.days_left</code> and <code>tls.cert.valid</code>; <code>status_codes</code>; and <code>findings</code>, what to look at, most serious first, each with a <code>level</code> (<code>bad</code>, <code>warn</code>, <code>note</code>, <code>good</code>) and a <code>text</code>. <code>--once</code> prints the same as a few lines of text.</p>
 <p><code>--slo total=500,ttfb=200</code> adds <code>slo.pass</code> and makes the exit code 4 when a limit was broken.</p>
 <h2 id="watch-it-over-time"><a href="#watch-it-over-time">Watch it over time</a></h2>
-<figure class="code"><div class="bar"><span>bash</span><button type="button" class="copy" aria-label="Copy">copy</button></div><pre><code>pepe ping https://api.example.com/health --jsonl -z 5m &gt; pings.jsonl</code></pre></figure>
+<figure class="code"><div class="bar"><span>bash</span><button type="button" class="copy" aria-label="Copy">copy</button></div><pre><code><span class="k">pepe</span> ping https://api.example.com/health --jsonl -z 5m &gt; pings.jsonl</code></pre></figure>
 <p>One JSON object per ping (<code>timings_ms</code>, <code>status</code>, <code>error</code>, <code>tls</code>) as it happens; <code>--csv</code> does the same as CSV. <code>--metrics :9100</code> serves the live numbers for Prometheus.</p>
 <h2 id="load-test"><a href="#load-test">Load-test</a></h2>
-<figure class="code"><div class="bar"><span>bash</span><button type="button" class="copy" aria-label="Copy">copy</button></div><pre><code>pepe --json -z 30s -c 50 --fail-if &#x27;p99 &gt; 500ms&#x27; --fail-if &#x27;errors &gt; 1%&#x27; https://api.example.com/health</code></pre></figure>
+<figure class="code"><div class="bar"><span>bash</span><button type="button" class="copy" aria-label="Copy">copy</button></div><pre><code><span class="k">pepe</span> --json -z 30s -c 50 --fail-if &#x27;p99 &gt; 500ms&#x27; --fail-if &#x27;errors &gt; 1%&#x27; https://api.example.com/health</code></pre></figure>
 <p>Read <code>verdict</code>: its <code>level</code> and <code>findings</code>, what the dashboard would have said, including where the time went. Then <code>summary</code>: <code>total_requests</code>, <code>failed_requests</code>, <code>requests_per_second</code>, <code>latency.median_ms</code>, <code>latency.p99_ms</code>, <code>latency.phases</code>, <code>status_codes</code>, <code>failures</code> with the first body of each cause, <code>anomalies</code>. Read <code>generator.peak_busy_percent</code>: near 100, pepe rather than the target was the limit, so add <code>--threads auto</code> and run again. <code>--fail-if</code> names what the run must not cross; the exit code says whether it did.</p>
 <h2 id="find-the-capacity"><a href="#find-the-capacity">Find the capacity</a></h2>
-<figure class="code"><div class="bar"><span>bash</span><button type="button" class="copy" aria-label="Copy">copy</button></div><pre><code>pepe ramp --json https://api.example.com/health --to 200 --until &#x27;p99 &gt; 500ms&#x27;</code></pre></figure>
+<figure class="code"><div class="bar"><span>bash</span><button type="button" class="copy" aria-label="Copy">copy</button></div><pre><code><span class="k">pepe</span> ramp --json https://api.example.com/health --to 200 --until &#x27;p99 &gt; 500ms&#x27;</code></pre></figure>
 <p>Read <code>holds_concurrency</code> (the level that held), <code>capacity.requests_per_second</code> (the estimate, <code>null</code> when the curve hadn't bent; <code>extrapolated</code> when it was read past the ramp), each <code>steps[]</code> entry, and <code>findings</code>.</p>
 <h2 id="speed-up-an-endpoint"><a href="#speed-up-an-endpoint">Speed up an endpoint</a></h2>
 <p>The loop an agent can close on its own: measure, see which part of the service the time goes to, change the code, measure again, and let the comparison say whether it worked. <code>--otlp</code> (a run's <code>otlp</code> in the MCP server) takes the service's OpenTelemetry spans, and the report's <code>spans</code> name the operation behind the time (<a href="load-test.html#inside-the-service">Inside the service</a>).</p>
 <figure class="code"><div class="bar"><span>bash</span><button type="button" class="copy" aria-label="Copy">copy</button></div><pre><code>OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318 ./my-service &amp;
-pepe --json --otlp :4318 -n 2000 -c 16 http://localhost:8080/checkout &gt; before.json
-# change the code behind spans.operations[0], restart the service
-pepe --json --otlp :4318 -n 2000 -c 16 http://localhost:8080/checkout &gt; after.json
-pepe compare before.json after.json --json --gate</code></pre></figure>
+<span class="k">pepe</span> --json --otlp :4318 -n 2000 -c 16 http://localhost:8080/checkout &gt; before.json
+<span class="c"># change the code behind spans.operations[0], restart the service</span>
+<span class="k">pepe</span> --json --otlp :4318 -n 2000 -c 16 http://localhost:8080/checkout &gt; after.json
+<span class="k">pepe</span> compare before.json after.json --json --gate</code></pre></figure>
 <p>Read <code>spans.operations[]</code>, the operation with the most of the slowest requests' time first: <code>name</code>, <code>service</code>, <code>kind</code>, <code>calls_per_request</code>, <code>median_ms</code>, <code>share_percent</code> (its own time over all requests) and <code>slowest_share_percent</code> (over the slowest); <code>spans.coverage_percent</code>, how many requests the service sent spans for; and <code>summary.slowest_requests[].spent</code>, one slow request's time by operation, with its <code>trace_id</code>. The comparison's <code>operations[]</code> holds each operation before and after, and its <code>findings</code> say what moved inside the service. No spans, or few, and the <code>verdict</code> findings say what to set on the service.</p>
 <p>The MCP server has the loop as a prompt, <code>speed-up</code>, with a <code>url</code> and an optional <code>goal</code>: in Claude Code it is the <code>/pepe:speed-up</code> command (or <code>/mcp__pepe__speed-up</code>). The <code>run</code>, <code>ping</code>, <code>ramp</code>, <code>api</code>, <code>flow</code> and <code>replay</code> tools take a <code>save</code> path, so their reports can be handed to <code>compare</code>.</p>
 <h2 id="compare-before-and-after"><a href="#compare-before-and-after">Compare before and after</a></h2>
-<figure class="code"><div class="bar"><span>bash</span><button type="button" class="copy" aria-label="Copy">copy</button></div><pre><code>pepe --json -n 5000 -c 20 &quot;$URL&quot; &gt; before.json
-# change something
-pepe --json -n 5000 -c 20 &quot;$URL&quot; &gt; after.json
-pepe compare before.json after.json --json --gate</code></pre></figure>
+<figure class="code"><div class="bar"><span>bash</span><button type="button" class="copy" aria-label="Copy">copy</button></div><pre><code><span class="k">pepe</span> --json -n 5000 -c 20 &quot;$URL&quot; &gt; before.json
+<span class="c"># change something</span>
+<span class="k">pepe</span> --json -n 5000 -c 20 &quot;$URL&quot; &gt; after.json
+<span class="k">pepe</span> compare before.json after.json --json --gate</code></pre></figure>
 <p>Read <code>verdict</code> (<code>faster</code>, <code>same</code>, <code>slower</code>, <code>better</code>, <code>worse</code>), <code>regression</code>, each <code>changes[]</code> entry with <code>significant</code> (moved more than two such runs wobble) and <code>noise_percent</code>, and <code>findings</code>. Ping reports compare too, phase by phase.</p>
 <h2 id="test-a-whole-api-or-a-journey"><a href="#test-a-whole-api-or-a-journey">Test a whole API or a journey</a></h2>
 <p><code>pepe api openapi.yaml --all --json</code> runs every endpoint that has the values it needs (<code>--set id=1,2,3</code> gives values; writes need <code>--include-writes</code>), with <code>endpoints[]</code> in the report. <code>pepe flow checkout.toml --json</code> runs a sequence where each step feeds the next, with <code>flow.steps[]</code>. <code>pepe replay access.log --base-url &quot;$STAGING&quot; --json</code> sends a log's URLs in their real proportions, with <code>replay.urls[]</code>.</p>
 <h2 id="the-same-request-every-mode"><a href="#the-same-request-every-mode">The same request every mode</a></h2>
 <p><code>-H &#x27;Name: value&#x27;</code>, <code>-m</code>, <code>-d</code>, <code>-u</code>, <code>-p</code>, <code>-k</code>, <code>-t</code>, <code>--disable-compression</code>, <code>--disable-keepalive</code> and <code>--disable-redirects</code> apply to every mode. <code>--curl -- curl ...</code> takes a request as a curl command. <code>--vars users.csv</code> fills <code>{{holes}}</code> in the URL, headers and body from a CSV file, a row a request in turn (<a href="load-test.html#values-from-a-file">Values from a file</a>). A <code>pepe.toml</code> next to the code holds a test's settings so that <code>pepe</code> alone runs it (<a href="load-test.html#config-file">Config file</a>).</p>
     </article>
-    <nav class="turn"><a class="prev" href="webhooks.html"><small>Previous</small>Webhooks</a><a class="next" href="reference.html"><small>Next</small>Command reference</a></nav>
+    <nav class="turn"><a class="prev" href="webhooks.html"><small>Previous</small>Webhooks</a><a class="next" href="config.html"><small>Next</small>Config files</a></nav>
     <p class="edit"><a href="https://github.com/omarmhaimdat/pepe/edit/master/docs/agents.md">Edit this page on GitHub</a></p>
   </main>
   <aside class="toc"><div class="label">On this page</div><a href="#the-rules" class="h2">The rules</a><a href="#guardrails" class="h2">Guardrails</a><a href="#as-an-mcp-server" class="h2">As an MCP server</a><a href="#in-codex" class="h3">In Codex</a><a href="#the-skill-alone" class="h3">The skill alone</a><a href="#as-a-claude-code-plugin" class="h3">As a Claude Code plugin</a><a href="#diagnose-one-endpoint" class="h2">Diagnose one endpoint</a><a href="#watch-it-over-time" class="h2">Watch it over time</a><a href="#load-test" class="h2">Load-test</a><a href="#find-the-capacity" class="h2">Find the capacity</a><a href="#speed-up-an-endpoint" class="h2">Speed up an endpoint</a><a href="#compare-before-and-after" class="h2">Compare before and after</a><a href="#test-a-whole-api-or-a-journey" class="h2">Test a whole API or a journey</a><a href="#the-same-request-every-mode" class="h2">The same request every mode</a></aside>

@@ -8,8 +8,8 @@
 <link rel="canonical" href="https://pepe.mhaimdat.com/docs/logs.html">
 <link rel="icon" href="../assets/logo.svg" type="image/svg+xml">
 <meta name="color-scheme" content="light dark">
-<meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
-<meta name="theme-color" content="#121010" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#fff1e0" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#141010" media="(prefers-color-scheme: dark)">
 <meta property="og:type" content="article">
 <meta property="og:site_name" content="pepe">
 <meta property="og:url" content="https://pepe.mhaimdat.com/docs/logs.html">
@@ -24,28 +24,32 @@
 <meta name="twitter:description" content="What the server already knows about its traffic: pepe logs reads nginx&#x27;s access and error logs and says how busy the server is now against how busy it has been.">
 <meta name="twitter:image" content="https://pepe.mhaimdat.com/img/og.png">
 <script type="application/ld+json">[{"@context":"https://schema.org","@type":"TechArticle","headline":"nginx logs","description":"What the server already knows about its traffic: pepe logs reads nginx's access and error logs and says how busy the server is now against how busy it has been.","url":"https://pepe.mhaimdat.com/docs/logs.html","image":"https://pepe.mhaimdat.com/img/og.png","inLanguage":"en","author":{"@type":"Person","name":"Omar Mhaimdat","url":"https://github.com/omarmhaimdat"},"publisher":{"@type":"Person","name":"Omar Mhaimdat","url":"https://github.com/omarmhaimdat"},"isPartOf":{"@type":"WebSite","name":"pepe","url":"https://pepe.mhaimdat.com/"},"about":{"@type":"SoftwareApplication","name":"pepe","url":"https://pepe.mhaimdat.com/"}},{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"pepe","item":"https://pepe.mhaimdat.com/"},{"@type":"ListItem","position":2,"name":"Docs","item":"https://pepe.mhaimdat.com/docs/"},{"@type":"ListItem","position":3,"name":"nginx logs","item":"https://pepe.mhaimdat.com/docs/logs.html"}]}]</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&amp;family=Geist+Mono:wght@400;500;600&amp;display=swap">
 <link rel="stylesheet" href="docs.css">
 <script>try{var t=localStorage.getItem('pepe-theme');if(t)document.documentElement.dataset.theme=t;}catch(e){}</script>
 </head>
 <body>
 <header class="top">
   <button type="button" class="menu" aria-label="Pages" aria-expanded="false">☰</button>
-  <a class="brand" href="index.html"><img src="../assets/logo.svg" alt="" width="22" height="24">pepe<span>docs</span></a>
+  <a class="brand" href="index.html"><img src="../assets/logo.svg" alt="" width="22" height="20">pepe<span>docs</span></a>
   <div class="search"><input type="search" placeholder="Search the docs…" aria-label="Search the docs" autocomplete="off"><div class="results" hidden></div></div>
   <nav class="links"><a href="../">Install</a><a href="https://github.com/omarmhaimdat/pepe">GitHub</a><button type="button" class="theme" aria-label="Switch between light and dark">◐</button></nav>
 </header>
 <div class="shell">
-  <aside class="side" id="side"><div class="group">Start here</div><a href="index.html">Overview</a><a href="install.html">Install</a><div class="group">Modes</div><a href="load-test.html">Load testing</a><a href="dashboard.html">The dashboard</a><a href="ping.html">Ping</a><a href="ramp.html">Ramp</a><a href="api.html">OpenAPI</a><a href="flow.html">Flows</a><a href="replay.html">Replay</a><a href="logs.html" aria-current="page">nginx logs</a><a href="compare.html">Compare</a><div class="group">Integrate</div><a href="output.html">Output and exit codes</a><a href="ci.html">CI and Docker</a><a href="webhooks.html">Webhooks</a><a href="agents.html">Agents and scripts</a><div class="group">Reference</div><a href="reference.html">Command reference</a><a href="benchmarks.html">Benchmarks</a></aside>
+  <aside class="side" id="side"><div class="group">Start here</div><a href="index.html">Overview</a><a href="install.html">Install</a><div class="group">Modes</div><a href="load-test.html">Load testing</a><a href="dashboard.html">The dashboard</a><a href="ping.html">Ping</a><a href="ramp.html">Ramp</a><a href="api.html">OpenAPI</a><a href="flow.html">Flows</a><a href="replay.html">Replay</a><a href="logs.html" aria-current="page">nginx logs</a><a href="compare.html">Compare</a><div class="group">Integrate</div><a href="output.html">Output and exit codes</a><a href="ci.html">CI and Docker</a><a href="webhooks.html">Webhooks</a><a href="agents.html">Agents and scripts</a><div class="group">Reference</div><a href="config.html">Config files</a><a href="reference.html">Command reference</a><a href="benchmarks.html">Benchmarks</a></aside>
   <main class="main">
     <article class="prose">
-<h1>Reading nginx logs</h1>
+<div class="kicker"><span>Modes</span><span>pepe logs</span></div>
+<h1><span class="sel">Reading nginx logs</span></h1>
 <p><img src="../assets/logs.gif" alt="Reading nginx logs: the dashboard with the rate now and a verdict, then traffic by the hour, paths, errors and the log" loading="lazy"></p>
 <p>What the server already knows about its traffic: <code>pepe logs</code> reads nginx's access and error logs and says how busy the server is now against how busy it has been.</p>
-<figure class="code"><div class="bar"><span>bash</span><button type="button" class="copy" aria-label="Copy">copy</button></div><pre><code>pepe logs /var/log/nginx/access.log /var/log/nginx/error.log
-pepe logs                                      # nginx&#x27;s own, in /var/log/nginx
+<figure class="code"><div class="bar"><span>bash</span><button type="button" class="copy" aria-label="Copy">copy</button></div><pre><code><span class="k">pepe</span> logs /var/log/nginx/access.log /var/log/nginx/error.log
+<span class="k">pepe</span> logs                                      <span class="c"># nginx&#x27;s own, in /var/log/nginx</span>
 zcat access.log.*.gz | pepe logs -
 docker compose logs -f -n 1000 nginx | pepe logs
-pepe logs access.log --since 24h --json &gt; traffic.json</code></pre></figure>
+<span class="k">pepe</span> logs access.log --since 24h --json &gt; traffic.json</code></pre></figure>
 <h2 id="how-it-reads"><a href="#how-it-reads">How it reads</a></h2>
 <p>At a terminal a log that is being written is shown live: the screen starts five minutes back, so that now is right at once, and follows the files as they are written, through rotation. <code>--since 24h</code> starts further back and <code>--all</code> reads everything first; either way the place to start is found in the file without reading what is before it. A log whose last line is older than five minutes has no now, and is read whole. Piped out, or with <code>--json</code>, the files are read to the end and a report is printed.</p>
 <p>Lines are counted as a stream, so memory doesn't grow with the log: every second of the last hour, a day of minutes, ninety days of hours and ten years of days are kept, with capped tables of paths, clients and user agents. What a file already has is read by every core at once, some gigabytes a second, and what is appended after that by one. Rotated files can be given in any order. What is piped in is followed too, until its writer ends, and the <code>nginx-1  | </code> that <code>docker compose logs</code> puts in front of each line is left out, with the colour it writes into a pipe.</p>
@@ -57,7 +61,7 @@ pepe logs access.log --since 24h --json &gt; traffic.json</code></pre></figure>
 <div class="table"><table><thead><tr><th>Key</th><th>Action</th></tr></thead><tbody><tr><td><code>tab</code> / <code>←</code> <code>→</code> / <code>1</code>-<code>5</code></td><td>Next or previous view, or one by number</td></tr><tr><td><code>m</code> <code>h</code> <code>d</code></td><td>Traffic per minute, hour or day; <code>g</code> goes round</td></tr><tr><td><code>↑</code> <code>↓</code> / <code>j</code> <code>k</code></td><td>Pick a slot, a message or a line; <code>PgUp</code> <code>PgDn</code> ten at a time, <code>home</code> <code>end</code> the ends</td></tr><tr><td><code>s</code></td><td>Paths: most requested, most 5xx, most 4xx, slowest</td></tr><tr><td><code>x</code></td><td>Log: only failed requests and error log lines</td></tr><tr><td><code>/</code></td><td>Log: search the lines; <code>c</code> clears the filters</td></tr><tr><td><code>enter</code></td><td>Log: everything read from the picked line</td></tr><tr><td><code>esc</code></td><td>Let go of the pick, then quit</td></tr><tr><td><code>?</code></td><td>Show all keys</td></tr><tr><td><code>q</code> / <code>Ctrl-C</code></td><td>Quit; the report is left in your shell</td></tr></tbody></table></div>
 <h2 id="formats"><a href="#formats">Formats</a></h2>
 <p>Access logs are read as nginx's <code>combined</code> format (Apache's too), with <code>rt=</code> and <code>urt=</code> timings after it if they are there, or as JSON lines under nginx's variable names or Caddy's. A log with a <code>log_format</code> of its own needs it said, as nginx.conf has it, on one line:</p>
-<figure class="code"><div class="bar"><span>bash</span><button type="button" class="copy" aria-label="Copy">copy</button></div><pre><code>pepe logs access.log --format &#x27;$remote_addr [$time_local] &quot;$request&quot; $status $body_bytes_sent $request_time $upstream_response_time&#x27;</code></pre></figure>
+<figure class="code"><div class="bar"><span>bash</span><button type="button" class="copy" aria-label="Copy">copy</button></div><pre><code><span class="k">pepe</span> logs access.log --format &#x27;$remote_addr [$time_local] &quot;$request&quot; $status $body_bytes_sent $request_time $upstream_response_time&#x27;</code></pre></figure>
 <p><code>$time_local</code>, <code>$time_iso8601</code>, <code>$msec</code>, <code>$request</code> (or <code>$request_method</code> and <code>$request_uri</code>), <code>$status</code>, <code>$body_bytes_sent</code>, <code>$remote_addr</code>, <code>$host</code>, <code>$http_user_agent</code>, <code>$request_time</code> and <code>$upstream_response_time</code> are used; the rest are shown when a line is opened. Lines that couldn't be read are counted and the first is shown. Numbers and ids in a path count as one (<code>/items/*</code>) unless <code>--exact-paths</code> is given. The error log names no time zone, so its times are taken to be this machine's.</p>
 <h2 id="flags"><a href="#flags">Flags</a></h2>
 <div class="table"><table><thead><tr><th>Flag</th><th>Default</th><th>What it does</th></tr></thead><tbody><tr><td><code>FILES...</code></td><td>nginx's own</td><td>Access and error logs, rotated ones too; <code>-</code> reads what is piped in</td></tr><tr><td><code>--format &lt;LOG_FORMAT&gt;</code></td><td>combined</td><td>The access log's <code>log_format</code>, on one line</td></tr><tr><td><code>--window &lt;TIME&gt;</code></td><td>60s</td><td>What "now" is measured over</td></tr><tr><td><code>--since &lt;TIME&gt;</code></td><td></td><td>Leave out what is older than this: <code>90m</code>, <code>24h</code>, <code>7d</code></td></tr><tr><td><code>--all</code></td><td></td><td>Read everything before following, rather than starting five minutes back</td></tr><tr><td><code>--exact-paths</code></td><td></td><td>Count <code>/items/1</code> and <code>/items/2</code> apart</td></tr><tr><td><code>--rows &lt;N&gt;</code></td><td>10</td><td>Rows in each table of the report</td></tr></tbody></table></div>

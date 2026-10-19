@@ -8,8 +8,8 @@
 <link rel="canonical" href="https://pepe.mhaimdat.com/docs/ci.html">
 <link rel="icon" href="../assets/logo.svg" type="image/svg+xml">
 <meta name="color-scheme" content="light dark">
-<meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
-<meta name="theme-color" content="#121010" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#fff1e0" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#141010" media="(prefers-color-scheme: dark)">
 <meta property="og:type" content="article">
 <meta property="og:site_name" content="pepe">
 <meta property="og:url" content="https://pepe.mhaimdat.com/docs/ci.html">
@@ -24,21 +24,25 @@
 <meta name="twitter:description" content="pepe in a pipeline: the GitHub Action, a pull request held against its base branch, thresholds, Docker, and what to read afterwards.">
 <meta name="twitter:image" content="https://pepe.mhaimdat.com/img/og.png">
 <script type="application/ld+json">[{"@context":"https://schema.org","@type":"TechArticle","headline":"CI and Docker","description":"pepe in a pipeline: the GitHub Action, a pull request held against its base branch, thresholds, Docker, and what to read afterwards.","url":"https://pepe.mhaimdat.com/docs/ci.html","image":"https://pepe.mhaimdat.com/img/og.png","inLanguage":"en","author":{"@type":"Person","name":"Omar Mhaimdat","url":"https://github.com/omarmhaimdat"},"publisher":{"@type":"Person","name":"Omar Mhaimdat","url":"https://github.com/omarmhaimdat"},"isPartOf":{"@type":"WebSite","name":"pepe","url":"https://pepe.mhaimdat.com/"},"about":{"@type":"SoftwareApplication","name":"pepe","url":"https://pepe.mhaimdat.com/"}},{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"pepe","item":"https://pepe.mhaimdat.com/"},{"@type":"ListItem","position":2,"name":"Docs","item":"https://pepe.mhaimdat.com/docs/"},{"@type":"ListItem","position":3,"name":"CI and Docker","item":"https://pepe.mhaimdat.com/docs/ci.html"}]}]</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&amp;family=Geist+Mono:wght@400;500;600&amp;display=swap">
 <link rel="stylesheet" href="docs.css">
 <script>try{var t=localStorage.getItem('pepe-theme');if(t)document.documentElement.dataset.theme=t;}catch(e){}</script>
 </head>
 <body>
 <header class="top">
   <button type="button" class="menu" aria-label="Pages" aria-expanded="false">☰</button>
-  <a class="brand" href="index.html"><img src="../assets/logo.svg" alt="" width="22" height="24">pepe<span>docs</span></a>
+  <a class="brand" href="index.html"><img src="../assets/logo.svg" alt="" width="22" height="20">pepe<span>docs</span></a>
   <div class="search"><input type="search" placeholder="Search the docs…" aria-label="Search the docs" autocomplete="off"><div class="results" hidden></div></div>
   <nav class="links"><a href="../">Install</a><a href="https://github.com/omarmhaimdat/pepe">GitHub</a><button type="button" class="theme" aria-label="Switch between light and dark">◐</button></nav>
 </header>
 <div class="shell">
-  <aside class="side" id="side"><div class="group">Start here</div><a href="index.html">Overview</a><a href="install.html">Install</a><div class="group">Modes</div><a href="load-test.html">Load testing</a><a href="dashboard.html">The dashboard</a><a href="ping.html">Ping</a><a href="ramp.html">Ramp</a><a href="api.html">OpenAPI</a><a href="flow.html">Flows</a><a href="replay.html">Replay</a><a href="logs.html">nginx logs</a><a href="compare.html">Compare</a><div class="group">Integrate</div><a href="output.html">Output and exit codes</a><a href="ci.html" aria-current="page">CI and Docker</a><a href="webhooks.html">Webhooks</a><a href="agents.html">Agents and scripts</a><div class="group">Reference</div><a href="reference.html">Command reference</a><a href="benchmarks.html">Benchmarks</a></aside>
+  <aside class="side" id="side"><div class="group">Start here</div><a href="index.html">Overview</a><a href="install.html">Install</a><div class="group">Modes</div><a href="load-test.html">Load testing</a><a href="dashboard.html">The dashboard</a><a href="ping.html">Ping</a><a href="ramp.html">Ramp</a><a href="api.html">OpenAPI</a><a href="flow.html">Flows</a><a href="replay.html">Replay</a><a href="logs.html">nginx logs</a><a href="compare.html">Compare</a><div class="group">Integrate</div><a href="output.html">Output and exit codes</a><a href="ci.html" aria-current="page">CI and Docker</a><a href="webhooks.html">Webhooks</a><a href="agents.html">Agents and scripts</a><div class="group">Reference</div><a href="config.html">Config files</a><a href="reference.html">Command reference</a><a href="benchmarks.html">Benchmarks</a></aside>
   <main class="main">
     <article class="prose">
-<h1>CI and Docker</h1>
+<div class="kicker"><span>Integrate</span></div>
+<h1><span class="sel">CI and Docker</span></h1>
 <p>pepe in a pipeline: the GitHub Action, a pull request held against its base branch, thresholds, Docker, and what to read afterwards.</p>
 <h2 id="the-github-action"><a href="#the-github-action">The GitHub Action</a></h2>
 <p>The repository is also an action: it installs a pinned release, runs <code>pepe --json</code>, puts the numbers in the job summary and in outputs, and can fail the job on a condition over the report.</p>
@@ -73,12 +77,12 @@ steps:
 <h2 id="any-ci"><a href="#any-ci">Any CI</a></h2>
 <p>Without the action, pepe is one binary and a few lines. Run it with <code>--json</code> for the report, or piped for the text verdict; <code>--fail-if</code> sets the exit code; <code>pepe compare --gate</code> holds a report against a kept one.</p>
 <figure class="code"><div class="bar"><span>bash</span><button type="button" class="copy" aria-label="Copy">copy</button></div><pre><code>curl -LsSf https://pepe.mhaimdat.com/install.sh | sh
-pepe --json -n 2000 -c 20 --fail-if &#x27;p99 &gt; 300ms&#x27; --fail-if &#x27;errors &gt; 1%&#x27; &quot;$URL&quot; &gt; report.json
-pepe compare baseline.json report.json --gate --svg card.svg</code></pre></figure>
+<span class="k">pepe</span> --json -n 2000 -c 20 --fail-if &#x27;p99 &gt; 300ms&#x27; --fail-if &#x27;errors &gt; 1%&#x27; &quot;$URL&quot; &gt; report.json
+<span class="k">pepe</span> compare baseline.json report.json --gate --svg card.svg</code></pre></figure>
 <p><code>PEPE_NO_UPDATE_CHECK</code> is set by the action and worth setting elsewhere in CI, so no run ends with an update notice.</p>
 <h2 id="docker"><a href="#docker">Docker</a></h2>
-<figure class="code"><div class="bar"><span>bash</span><button type="button" class="copy" aria-label="Copy">copy</button></div><pre><code>docker run --rm -it ghcr.io/omarmhaimdat/pepe -z 30s -c 50 https://example.com   # the dashboard needs -it
-docker run --rm ghcr.io/omarmhaimdat/pepe --json -n 1000 https://example.com     # for scripts
+<figure class="code"><div class="bar"><span>bash</span><button type="button" class="copy" aria-label="Copy">copy</button></div><pre><code>docker run --rm -it ghcr.io/omarmhaimdat/pepe -z 30s -c 50 https://example.com   <span class="c"># the dashboard needs -it</span>
+docker run --rm ghcr.io/omarmhaimdat/pepe --json -n 1000 https://example.com     <span class="c"># for scripts</span>
 docker run --rm -p 9100:9100 ghcr.io/omarmhaimdat/pepe --metrics :9100 -z 10m https://example.com</code></pre></figure>
 <p>An empty image with the static binary in it, a few megabytes, for <code>linux/amd64</code> and <code>linux/arm64</code>; <code>:latest</code> and <code>:&lt;version&gt;</code> tags. Inside Docker Compose or Kubernetes, point it at the service's name; <code>--metrics</code> needs the port published.</p>
 <h2 id="soak-runs-in-the-background"><a href="#soak-runs-in-the-background">Soak runs in the background</a></h2>

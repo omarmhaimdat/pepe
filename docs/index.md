@@ -27,6 +27,7 @@ pepe https://example.com
 - [CI and Docker](ci.md) — The GitHub Action, a pull request held against its base branch, Docker, soak runs.
 - [Webhooks](webhooks.md) — The verdict, progress and anomalies in Slack, Discord, Teams, Google Chat or any URL.
 - [Agents and scripts](agents.md) — What a program needs to know to call pepe and read the answer.
+- [Config files](config.md) — `pepe.toml`, saved tests, the settings and flow files: every key, what wins, and recipes.
 - [Command reference](reference.md) — Every command and flag, as `--help` prints them.
 :::
 

@@ -8,8 +8,8 @@
 <link rel="canonical" href="https://pepe.mhaimdat.com/docs/flow.html">
 <link rel="icon" href="../assets/logo.svg" type="image/svg+xml">
 <meta name="color-scheme" content="light dark">
-<meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
-<meta name="theme-color" content="#121010" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#fff1e0" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#141010" media="(prefers-color-scheme: dark)">
 <meta property="og:type" content="article">
 <meta property="og:site_name" content="pepe">
 <meta property="og:url" content="https://pepe.mhaimdat.com/docs/flow.html">
@@ -24,33 +24,37 @@
 <meta name="twitter:description" content="pepe flow runs a chain of requests where a value from one response feeds the next: log in, take the token, use it.">
 <meta name="twitter:image" content="https://pepe.mhaimdat.com/img/og.png">
 <script type="application/ld+json">[{"@context":"https://schema.org","@type":"TechArticle","headline":"Flows","description":"pepe flow runs a chain of requests where a value from one response feeds the next: log in, take the token, use it.","url":"https://pepe.mhaimdat.com/docs/flow.html","image":"https://pepe.mhaimdat.com/img/og.png","inLanguage":"en","author":{"@type":"Person","name":"Omar Mhaimdat","url":"https://github.com/omarmhaimdat"},"publisher":{"@type":"Person","name":"Omar Mhaimdat","url":"https://github.com/omarmhaimdat"},"isPartOf":{"@type":"WebSite","name":"pepe","url":"https://pepe.mhaimdat.com/"},"about":{"@type":"SoftwareApplication","name":"pepe","url":"https://pepe.mhaimdat.com/"}},{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"pepe","item":"https://pepe.mhaimdat.com/"},{"@type":"ListItem","position":2,"name":"Docs","item":"https://pepe.mhaimdat.com/docs/"},{"@type":"ListItem","position":3,"name":"Flows","item":"https://pepe.mhaimdat.com/docs/flow.html"}]}]</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&amp;family=Geist+Mono:wght@400;500;600&amp;display=swap">
 <link rel="stylesheet" href="docs.css">
 <script>try{var t=localStorage.getItem('pepe-theme');if(t)document.documentElement.dataset.theme=t;}catch(e){}</script>
 </head>
 <body>
 <header class="top">
   <button type="button" class="menu" aria-label="Pages" aria-expanded="false">☰</button>
-  <a class="brand" href="index.html"><img src="../assets/logo.svg" alt="" width="22" height="24">pepe<span>docs</span></a>
+  <a class="brand" href="index.html"><img src="../assets/logo.svg" alt="" width="22" height="20">pepe<span>docs</span></a>
   <div class="search"><input type="search" placeholder="Search the docs…" aria-label="Search the docs" autocomplete="off"><div class="results" hidden></div></div>
   <nav class="links"><a href="../">Install</a><a href="https://github.com/omarmhaimdat/pepe">GitHub</a><button type="button" class="theme" aria-label="Switch between light and dark">◐</button></nav>
 </header>
 <div class="shell">
-  <aside class="side" id="side"><div class="group">Start here</div><a href="index.html">Overview</a><a href="install.html">Install</a><div class="group">Modes</div><a href="load-test.html">Load testing</a><a href="dashboard.html">The dashboard</a><a href="ping.html">Ping</a><a href="ramp.html">Ramp</a><a href="api.html">OpenAPI</a><a href="flow.html" aria-current="page">Flows</a><a href="replay.html">Replay</a><a href="logs.html">nginx logs</a><a href="compare.html">Compare</a><div class="group">Integrate</div><a href="output.html">Output and exit codes</a><a href="ci.html">CI and Docker</a><a href="webhooks.html">Webhooks</a><a href="agents.html">Agents and scripts</a><div class="group">Reference</div><a href="reference.html">Command reference</a><a href="benchmarks.html">Benchmarks</a></aside>
+  <aside class="side" id="side"><div class="group">Start here</div><a href="index.html">Overview</a><a href="install.html">Install</a><div class="group">Modes</div><a href="load-test.html">Load testing</a><a href="dashboard.html">The dashboard</a><a href="ping.html">Ping</a><a href="ramp.html">Ramp</a><a href="api.html">OpenAPI</a><a href="flow.html" aria-current="page">Flows</a><a href="replay.html">Replay</a><a href="logs.html">nginx logs</a><a href="compare.html">Compare</a><div class="group">Integrate</div><a href="output.html">Output and exit codes</a><a href="ci.html">CI and Docker</a><a href="webhooks.html">Webhooks</a><a href="agents.html">Agents and scripts</a><div class="group">Reference</div><a href="config.html">Config files</a><a href="reference.html">Command reference</a><a href="benchmarks.html">Benchmarks</a></aside>
   <main class="main">
     <article class="prose">
-<h1>Flows: a sequence of requests</h1>
+<div class="kicker"><span>Modes</span><span>pepe flow</span></div>
+<h1><span class="sel">Flows</span>: a sequence of requests</h1>
 <p><img src="../assets/flow.gif" alt="pepe flow: a chain of three steps, each a row on the dashboard" loading="lazy"></p>
 <p><code>pepe flow</code> runs a chain of requests where a value from one response feeds the next: log in, take the token, use it. Each unit of concurrency is one user walking the steps in order with its own values, over and over; each step is a row on the dashboard, as endpoints are in API mode, with its own throughput, latency and statuses.</p>
-<figure class="code"><div class="bar"><span>bash</span><button type="button" class="copy" aria-label="Copy">copy</button></div><pre><code>pepe flow checkout.toml -c 20 -z 1m
-pepe flow checkout.toml -n 500 --json &gt; checkout.json</code></pre></figure>
+<figure class="code"><div class="bar"><span>bash</span><button type="button" class="copy" aria-label="Copy">copy</button></div><pre><code><span class="k">pepe</span> flow checkout.toml -c 20 -z 1m
+<span class="k">pepe</span> flow checkout.toml -n 500 --json &gt; checkout.json</code></pre></figure>
 <h2 id="the-flow-file"><a href="#the-flow-file">The flow file</a></h2>
-<figure class="code"><div class="bar"><span>toml</span><button type="button" class="copy" aria-label="Copy">copy</button></div><pre><code># checkout.toml
+<figure class="code"><div class="bar"><span>toml</span><button type="button" class="copy" aria-label="Copy">copy</button></div><pre><code><span class="c"># checkout.toml</span>
 name = &quot;checkout&quot;
 
-[vars]
+<span class="t">[vars]</span>
 host = &quot;https://shop.example.com&quot;
 
-[[step]]
+<span class="t">[[step]]</span>
 name = &quot;login&quot;
 method = &quot;POST&quot;
 url = &quot;{{host}}/login&quot;
@@ -58,13 +62,13 @@ headers = [&quot;Content-Type: application/json&quot;]
 body = &#x27;{&quot;user&quot;: &quot;demo&quot;, &quot;password&quot;: &quot;demo&quot;}&#x27;
 capture = { token = &quot;json:$.token&quot;, session = &quot;header:Set-Cookie&quot; }
 
-[[step]]
+<span class="t">[[step]]</span>
 name = &quot;cart&quot;
 url = &quot;{{host}}/cart&quot;
 headers = [&quot;Authorization: Bearer {{token}}&quot;]
 capture = { cart = &quot;json:$.items[0].id&quot; }
 
-[[step]]
+<span class="t">[[step]]</span>
 name = &quot;checkout&quot;
 method = &quot;POST&quot;
 url = &quot;{{host}}/cart/{{cart}}/checkout&quot;
@@ -77,7 +81,7 @@ expect = 201</code></pre></figure>
 <p>A step passes when it gets a 2xx, or the status <code>expect</code> names; a step that fails, or whose capture finds nothing, ends the chain with that said in the failure causes, and the user starts over. Up to a megabyte of each response is kept for its captures.</p>
 <h2 id="values-from-a-file"><a href="#values-from-a-file">Values from a file</a></h2>
 <p><code>--vars users.csv</code> gives each chain the next row of a CSV file whose first line names the values, as in <a href="load-test.html#values-from-a-file">a run</a>: a flow that logs in with <code>{{email}}</code> and <code>{{password}}</code> logs in as a different user each time. A row's values are over <code>[vars]</code>'s, and a capture's over both. The columns count as filled when the file is read, so a hole only a column fills is no error.</p>
-<figure class="code"><div class="bar"><span>bash</span><button type="button" class="copy" aria-label="Copy">copy</button></div><pre><code>pepe flow checkout.toml -z 1m -c 20 --vars users.csv</code></pre></figure>
+<figure class="code"><div class="bar"><span>bash</span><button type="button" class="copy" aria-label="Copy">copy</button></div><pre><code><span class="k">pepe</span> flow checkout.toml -z 1m -c 20 --vars users.csv</code></pre></figure>
 <h2 id="running-it"><a href="#running-it">Running it</a></h2>
 <p><code>-n</code> counts chains, not requests; <code>-c</code>, <code>-z</code>, <code>-H</code> (sent with every step), <code>-t</code>, <code>--rate</code> (which paces every request, steps included), <code>--warmup</code> and the other options work as usual. There is no setup screen for a flow: edit the file and <code>r</code> runs it again. <code>--json</code> prints the usual report plus <code>flow</code>: its name, how many chains started and completed, and <code>steps</code>, one entry per step with requests, failures, throughput, median, p99 and status codes. Piped, the dashboard's verdict is printed. <code>--metrics</code> serves a row per step.</p>
     </article>
