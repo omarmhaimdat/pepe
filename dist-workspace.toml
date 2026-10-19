@@ -32,7 +32,7 @@ npm-package = "pepe-http"
 publish-jobs = ["npm", "./publish-homebrew", "./publish-r2", "./publish-docker", "./publish-action"]
 # Signed build provenance (`gh attestation verify`)
 github-attestations = true
-# `pepe self-update` is built in via axoupdater, no separate updater binary
+# `pepe self-update` is built in (src/update.rs runs the release's installer), no separate updater binary
 install-updater = false
 # Let Dependabot bump action versions in the generated release.yml
 # (`dist generate` still rewrites it whenever this config changes)
