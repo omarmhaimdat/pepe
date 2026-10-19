@@ -6,6 +6,168 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+## [0.51.1](https://github.com/omarmhaimdat/pepe/compare/v0.51.0...v0.51.1) - 2026-10-19
+
+### Performance
+
+- drop axoupdater, so macOS no longer links Security.framework ([#217](https://github.com/omarmhaimdat/pepe/pull/217))
+
+  Measured first: the bench/ suite on macOS (M4 Pro), with wrk and k6 in
+  it for the first time beside oha and vegeta. pepe's CPU was level with
+  wrk's and a quarter of oha's. Its memory was not first: 10.7 to 15.0 MB
+  where wrk held 3.1, and `pepe --version` alone held 8.4 MB.
+
+  **Cause.** `otool -L` showed the binary linking `Security.framework` and
+  `CoreFoundation.framework`, which dyld loads at every launch. They came
+  from axoupdater's second reqwest (0.13), whose platform certificate
+  verifier is Security.framework on macOS. pepe's own HTTP uses rustls
+  with webpki roots. A C hello-world goes from 1.4 to 5.9 MB RSS just by
+  linking those two frameworks.
+
+  **Change.** `pepe self-update` now does axoupdater's job itself:
+  - reads `pepe-receipt.json` (`$XDG_CONFIG_HOME/pepe`, `~/.config/pepe`,
+  `%LOCALAPPDATA%\pepe`) and checks it is for this executable, keeping the
+  cargo-dist 0.10–0.14 `bin` workaround;
+  - downloads the release's `pepe-installer.sh` / `.ps1` with pepe's own
+  reqwest;
+  - runs it with `PEPE_INSTALL_DIR`, `CARGO_DIST_FORCE_INSTALL_DIR` and
+  `PEPE_NO_MODIFY_PATH` as the receipt says.
+
+  On Windows the running exe is renamed aside before the install and
+  restored if the install fails, as axoupdater did. One difference: the
+  `.previous.exe` is removed at the next self-update rather than
+  self-deleted. New tests cover the receipt and run a stand-in installer
+  to check its environment and the error message.
+
+  The binary now links only `libSystem` and `libiconv`. It is 10.2 → 8.0
+  MB on disk, and 62 of 286 crates leave the lockfile.
+
+  **Numbers (macOS; full tables in bench/README.md under "What the binary
+  links", CSVs in bench/results/)**
+
+  | | before | after |
+  | --- | --- | --- |
+  | tiny-c64, peak MB | 10.8–11.6 | 6.9 |
+  | tiny-c1000, peak MB | 13.8–14.6 | 9.5–10.1 |
+  | tls-c64, peak MB | 15.0 | 10.0–10.5 |
+  | million-c64, peak MB | 10.7–12.0 | 6.2 |
+  | every workload, memory | | −29 to −45% |
+  | 1M GETs, CPU ms/1k (median of 5 alternating) | 6.10 | 6.08 |
+  | 400k TLS, CPU ms/1k (median of 5 alternating) | 6.55 | 6.53 |
+  | dashboard, 200k at 64 | 1.24–1.28 s · 15.4–15.9 MB | 1.26–1.28 s ·
+  11.3–11.5 MB |
+
+  `bench/compare.sh`, best of 3: CPU +0.8 to +4.9% (inside the rounds'
+  spread; the 5-round medians above show no change), memory −30 to −44%.
+
+  **Where pepe still isn't first (macOS):**
+  - Memory against wrk at ≤256 connections: 6.2–7.6 MB vs 3.1–4.7. What is
+  left is clean code pages; the physical footprint is 3.3 MB vs wrk's 2.3.
+  From 1,000 connections, and over TLS, pepe now holds less than wrk.
+  - CPU at 1,000 slow connections: wrk 6.4–6.7 vs pepe 7.2–8.0 ms/1k,
+  mostly kernel time.
+  - TLS requests a second: oha and k6 on 14 threads beat pepe's one. wrk
+  on one thread is level with it.
+
+  **Not measured:** Linux. Docker wasn't running here. On Linux the
+  frameworks don't exist, and the second reqwest's verifier is pure Rust,
+  so the published 4.0 MB musl number isn't expected to move. The
+  Benchmarks workflow checks it on the next release PR. docs/benchmarks.md
+  quotes Linux numbers only, so it is unchanged.
+
+
+
+### Other
+
+- the site in the pepper's colours, and a page for every config file ([#216](https://github.com/omarmhaimdat/pepe/pull/216))
+
+  ## What
+
+  **The site, restyled.** The front page and every docs page take the
+  mascot's own palette: its cream (`#FFF1E0`) and ink, pepper red, lime,
+  gold and ember, with Geist for prose and Geist Mono for code, square
+  edges and hard shadows.
+
+  - **The front page** (`site/index.html`) is bands of colour, one a mode:
+  ping split into its five phases, a ramp bending at its capacity,
+  compare's before and after, the guardrails for agents, every mode, and
+  the benchmarks. Requests cross the hero behind a live ping card. The
+  install is one line to copy, with `via curl · brew · powershell · docker
+  · nix · cargo` to swap it.
+  - **The docs** stay calm, with no bands. A tag sits above each title
+  with its group and command (`MODES` · `pepe ping`), and the subject is
+  selected. Code blocks mark `pepe` and dim the comments, and TOML tables
+  are coloured. The sidebar's current page is an ink block, and the
+  columns have no scroll bar until the pointer is over them.
+
+  **A new page: [Config files](docs/config.md).** It covers everything a
+  TOML file can say, in one place:
+
+  - **`pepe.toml`:** every key with what it does and its flag; the rules
+  (flags win, length is said once, on/off keys only switch on, unknown
+  keys are errors, this directory only); and recipes (guardrails, a soak,
+  a CSV-driven run, a ramp, a ping watch).
+  - **The other files:**
+    - `[[webhook]]` tables, with every key and hole;
+    - where `${NAME}` is read, and where it isn't;
+  - saved tests: how they're made and named, and how `--load` picks the
+  mode;
+    - `settings.toml`;
+    - which file wins, including the caps;
+    - flow files;
+    - `slack.toml`.
+  - **Refusals:** what pepe says when a file is refused.
+
+  It's linked from the overview, `llms.txt` and the load-testing page's
+  config section, and it sits in the sidebar under Reference.
+
+  ## Why
+
+  The site looked like a generic docs theme rather than pepe. What a
+  config file can hold was spread over five pages (load testing, install,
+  flows, webhooks, agents), and some of it was on none of them:
+
+  - `vars` refuses `pepe api` and `pepe ping`.
+  - `max-requests` and `max-rate` refuse a ramp.
+  - `${NAME}` is filled only in webhooks.
+  - A saved test keeps its headers, tokens included.
+  - `vars` and `export` from `[defaults]` don't reach under a `pepe.toml`.
+  - A cap typed on the command line replaces the file's.
+
+  ## Checked
+
+  - `python3 site/build-docs.py --check`: current.
+  - Every TOML example on the new page passes `--dry-run` in its own mode
+  (run, ramp, ping, flow, settings), with each error message the page
+  quotes produced by pepe itself.
+  - Looked at the front page and the docs in light and dark, at desktop
+  and phone widths, with no sideways scroll.
+  - No Rust changed.
+
+
+- *(nix)* update flake.lock ([#215](https://github.com/omarmhaimdat/pepe/pull/215))
+
+  Automated changes by the
+  [update-flake-lock](https://github.com/DeterminateSystems/update-flake-lock)
+  GitHub Action.
+
+  ```
+  Flake lock file updates:
+
+  • Updated input 'nixpkgs':
+      'github:NixOS/nixpkgs/6510408d147d8c5e6d76043e899e9251756f6a75?narHash=sha256-XK4KceonkwD8LuMAt/vNrz982mXJM5jeHAxMwsUXXAQ%3D' (2026-10-10)
+    → 'github:NixOS/nixpkgs/fe13242281a67641c0102cdb1087f0ebe586c7df?narHash=sha256-zp8ToDMnqZcu4o4IH9pdwXFXGp7yLm/M0dEnNWnyd7I%3D' (2026-10-15)
+  ```
+
+  ### Running GitHub Actions on this PR
+
+  GitHub Actions will not run workflows on pull requests which are opened
+  by a GitHub Action.
+
+  **To run GitHub Actions workflows on this PR, close and re-open this
+  pull request.**
+
+
 ## [0.51.0](https://github.com/omarmhaimdat/pepe/compare/v0.50.0...v0.51.0) - 2026-10-18
 
 ### Added
