@@ -8,8 +8,8 @@
 <link rel="canonical" href="https://pepe.mhaimdat.com/docs/ping.html">
 <link rel="icon" href="../assets/logo.svg" type="image/svg+xml">
 <meta name="color-scheme" content="light dark">
-<meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
-<meta name="theme-color" content="#121010" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#fff1e0" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#141010" media="(prefers-color-scheme: dark)">
 <meta property="og:type" content="article">
 <meta property="og:site_name" content="pepe">
 <meta property="og:url" content="https://pepe.mhaimdat.com/docs/ping.html">
@@ -24,36 +24,40 @@
 <meta name="twitter:description" content="Ping, with HTTP instead of ICMP, and a graph. pepe ping sends one request every second to each target and draws its latency over time, with each ping split…">
 <meta name="twitter:image" content="https://pepe.mhaimdat.com/img/og.png">
 <script type="application/ld+json">[{"@context":"https://schema.org","@type":"TechArticle","headline":"Ping","description":"Ping, with HTTP instead of ICMP, and a graph. pepe ping sends one request every second to each target and draws its latency over time, with each ping split…","url":"https://pepe.mhaimdat.com/docs/ping.html","image":"https://pepe.mhaimdat.com/img/og.png","inLanguage":"en","author":{"@type":"Person","name":"Omar Mhaimdat","url":"https://github.com/omarmhaimdat"},"publisher":{"@type":"Person","name":"Omar Mhaimdat","url":"https://github.com/omarmhaimdat"},"isPartOf":{"@type":"WebSite","name":"pepe","url":"https://pepe.mhaimdat.com/"},"about":{"@type":"SoftwareApplication","name":"pepe","url":"https://pepe.mhaimdat.com/"}},{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"pepe","item":"https://pepe.mhaimdat.com/"},{"@type":"ListItem","position":2,"name":"Docs","item":"https://pepe.mhaimdat.com/docs/"},{"@type":"ListItem","position":3,"name":"Ping","item":"https://pepe.mhaimdat.com/docs/ping.html"}]}]</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&amp;family=Geist+Mono:wght@400;500;600&amp;display=swap">
 <link rel="stylesheet" href="docs.css">
 <script>try{var t=localStorage.getItem('pepe-theme');if(t)document.documentElement.dataset.theme=t;}catch(e){}</script>
 </head>
 <body>
 <header class="top">
   <button type="button" class="menu" aria-label="Pages" aria-expanded="false">☰</button>
-  <a class="brand" href="index.html"><img src="../assets/logo.svg" alt="" width="22" height="24">pepe<span>docs</span></a>
+  <a class="brand" href="index.html"><img src="../assets/logo.svg" alt="" width="22" height="20">pepe<span>docs</span></a>
   <div class="search"><input type="search" placeholder="Search the docs…" aria-label="Search the docs" autocomplete="off"><div class="results" hidden></div></div>
   <nav class="links"><a href="../">Install</a><a href="https://github.com/omarmhaimdat/pepe">GitHub</a><button type="button" class="theme" aria-label="Switch between light and dark">◐</button></nav>
 </header>
 <div class="shell">
-  <aside class="side" id="side"><div class="group">Start here</div><a href="index.html">Overview</a><a href="install.html">Install</a><div class="group">Modes</div><a href="load-test.html">Load testing</a><a href="dashboard.html">The dashboard</a><a href="ping.html" aria-current="page">Ping</a><a href="ramp.html">Ramp</a><a href="api.html">OpenAPI</a><a href="flow.html">Flows</a><a href="replay.html">Replay</a><a href="logs.html">nginx logs</a><a href="compare.html">Compare</a><div class="group">Integrate</div><a href="output.html">Output and exit codes</a><a href="ci.html">CI and Docker</a><a href="webhooks.html">Webhooks</a><a href="agents.html">Agents and scripts</a><div class="group">Reference</div><a href="reference.html">Command reference</a><a href="benchmarks.html">Benchmarks</a></aside>
+  <aside class="side" id="side"><div class="group">Start here</div><a href="index.html">Overview</a><a href="install.html">Install</a><div class="group">Modes</div><a href="load-test.html">Load testing</a><a href="dashboard.html">The dashboard</a><a href="ping.html" aria-current="page">Ping</a><a href="ramp.html">Ramp</a><a href="api.html">OpenAPI</a><a href="flow.html">Flows</a><a href="replay.html">Replay</a><a href="logs.html">nginx logs</a><a href="compare.html">Compare</a><div class="group">Integrate</div><a href="output.html">Output and exit codes</a><a href="ci.html">CI and Docker</a><a href="webhooks.html">Webhooks</a><a href="agents.html">Agents and scripts</a><div class="group">Reference</div><a href="config.html">Config files</a><a href="reference.html">Command reference</a><a href="benchmarks.html">Benchmarks</a></aside>
   <main class="main">
     <article class="prose">
-<h1>Ping</h1>
+<div class="kicker"><span>Modes</span><span>pepe ping</span></div>
+<h1><span class="sel">Ping</span></h1>
 <p><img src="../assets/ping.gif" alt="pepe ping: two targets on the graph, then the phases of one, then the pings themselves with one opened" loading="lazy"></p>
 <p>Ping, with HTTP instead of ICMP, and a graph. <code>pepe ping</code> sends one request every second to each target and draws its latency over time, with each ping split into where its time went: the DNS lookup, the TCP connect, the TLS handshake, the wait for the first byte and the download. It is what to leave open in a corner of the screen while something is deployed, and the on-ramp to a load test: the same <code>-H</code>, <code>-m</code>, <code>-d</code>, <code>-k</code>, <code>-p</code> and <code>-t</code> apply.</p>
-<figure class="code"><div class="bar"><span>bash</span><button type="button" class="copy" aria-label="Copy">copy</button></div><pre><code>pepe ping https://example.com                       # a request a second, forever; q leaves the summary
-pepe ping api.example.com cdn.example.com --name api,cdn   # several, each a line on the graph
-pepe ping https://example.com --every 200ms --window 5m    # faster, with five minutes on screen
-pepe ping https://api.example.com/health --slo total=300,ttfb=100 --bell   # limits; exit 4 if broken
-pepe ping example.com --all-ips -4                  # every IPv4 address it resolves to, each its own line
-pepe ping db.internal --tcp --port 5432             # only connect: a TCP ping of the port
-pepe ping 10.0.0.0/29:8080                          # every host of a range
-pepe ping --cmd &#x27;dig example.com&#x27; &#x27;curl -s https://example.com&#x27;   # commands, timed
-pepe ping aws:eu-west-1 aws:us-east-1               # cloud regions, by shorthand
-pepe ping https://example.com --jsonl &gt; pings.jsonl # no screen: one JSON object per ping
-pepe ping https://example.com --csv -n 100          # one CSV line per ping, a hundred of them
-pepe ping https://example.com --json -n 10          # the summary as JSON
-pepe ping https://example.com --once                # three quick pings, then why it is slow, and out</code></pre></figure>
+<figure class="code"><div class="bar"><span>bash</span><button type="button" class="copy" aria-label="Copy">copy</button></div><pre><code><span class="k">pepe</span> ping https://example.com                       <span class="c"># a request a second, forever; q leaves the summary</span>
+<span class="k">pepe</span> ping api.example.com cdn.example.com --name api,cdn   <span class="c"># several, each a line on the graph</span>
+<span class="k">pepe</span> ping https://example.com --every 200ms --window 5m    <span class="c"># faster, with five minutes on screen</span>
+<span class="k">pepe</span> ping https://api.example.com/health --slo total=300,ttfb=100 --bell   <span class="c"># limits; exit 4 if broken</span>
+<span class="k">pepe</span> ping example.com --all-ips -4                  <span class="c"># every IPv4 address it resolves to, each its own line</span>
+<span class="k">pepe</span> ping db.internal --tcp --port 5432             <span class="c"># only connect: a TCP ping of the port</span>
+<span class="k">pepe</span> ping 10.0.0.0/29:8080                          <span class="c"># every host of a range</span>
+<span class="k">pepe</span> ping --cmd &#x27;dig example.com&#x27; &#x27;curl -s https://example.com&#x27;   <span class="c"># commands, timed</span>
+<span class="k">pepe</span> ping aws:eu-west-1 aws:us-east-1               <span class="c"># cloud regions, by shorthand</span>
+<span class="k">pepe</span> ping https://example.com --jsonl &gt; pings.jsonl <span class="c"># no screen: one JSON object per ping</span>
+<span class="k">pepe</span> ping https://example.com --csv -n 100          <span class="c"># one CSV line per ping, a hundred of them</span>
+<span class="k">pepe</span> ping https://example.com --json -n 10          <span class="c"># the summary as JSON</span>
+<span class="k">pepe</span> ping https://example.com --once                <span class="c"># three quick pings, then why it is slow, and out</span></code></pre></figure>
 <h2 id="targets"><a href="#targets">Targets</a></h2>
 <p>A host without a scheme is <code>https://</code>, unless it has a port or is this machine (<code>localhost</code>, <code>127.0.0.1</code>, <code>::1</code>), where it is <code>http://</code>. A target can be:</p>
 <ul><li>a URL, or a host, or <code>host:port</code>;</li><li><code>aws:REGION</code>, a cloud region by shorthand (<code>ec2.REGION.amazonaws.com</code>);</li><li>an IPv4 range, <code>10.0.0.0/29</code> or <code>10.0.0.0/29:8080</code>, every host of it a target (up to a /24);</li><li>with <code>--all-ips</code>, every address a name resolves to, each a target of its own, named <code>host IP</code>;</li><li>with <code>--tcp</code>, a port: the ping is the connection, nothing is sent; <code>--port</code> is the port for a target that names none (80), and <code>--tcp-rst fail</code> makes a refused connection a failure rather than the answer it is by default (something is there to refuse);</li><li>with <code>--cmd</code>, a command: run in the shell every interval and timed, its exit code the status.</li></ul>
@@ -71,7 +75,7 @@ pepe ping https://example.com --once                # three quick pings, then wh
 <h2 id="what-to-look-at"><a href="#what-to-look-at">What to look at</a></h2>
 <p>The numbers come with what they mean, in the summary, in the phases view and under <code>findings</code> in the JSON, most serious first: nothing answered, and why; pings lost and timed out; 5xx; 401, 403, 404 or 429 on every ping; every request redirected, with the final URL to point at and what the chain costs; a slow DNS lookup; connecting as a share of the request, read as a round trip; the TLS session never resumed, so every connection pays the full handshake, or resumed and how much it saves; the server closing every connection; the server's own share of the time, with its <code>Server-Timing</code> when it sends one; a large or slow download; a text body that isn't compressed though gzip and br were offered; a cache answering, so the server itself wasn't measured; HTTP/1.0; a certificate expired or expiring within 30 days; and a long tail.</p>
 <p><code>pepe ping URL --once</code> is the quick version: three pings 200 ms apart, the last one's phases, what answered, the findings, and out.</p>
-<figure class="code"><div class="bar"><span></span><button type="button" class="copy" aria-label="Copy">copy</button></div><pre><code>pepe ping · https://example.com/ · 3 pings
+<figure class="code"><div class="bar"><span></span><button type="button" class="copy" aria-label="Copy">copy</button></div><pre><code><span class="k">pepe</span> ping · https://example.com/ · 3 pings
   dns 1.84ms → connect 49.88ms → tls 66.57ms → first byte 63.72ms → download 33µs · 182.5ms in all
   HTTP/1.1 200 · text/html · 334 B · 104.20.23.154:443 from 192.168.0.164 · TLS 1.3 TLS13_AES_256_GCM_SHA384
   certificate for example.com by SSL Corporation, expires in 76 days
@@ -85,8 +89,8 @@ pepe ping https://example.com --once                # three quick pings, then wh
 <p><code>-n</code> and <code>-z</code> end the run; without them it runs until <code>q</code>. <code>-t</code> is the timeout, <code>-H</code>, <code>-m</code>, <code>-d</code>, <code>-u</code>, <code>-p</code>, <code>-k</code>, <code>--disable-compression</code> and <code>--disable-redirects</code> shape the request, and <code>--metrics</code> serves the live numbers (<a href="output.html#prometheus-metrics">Output</a>).</p>
 <h2 id="without-a-screen"><a href="#without-a-screen">Without a screen</a></h2>
 <p>Piped, or with <code>--jsonl</code>, <code>--csv</code> or <code>--json</code>, there is no screen: a line per ping as it happens, as text, JSON or CSV, then the summary on stderr, or the JSON report on stdout. <code>pepe schema ping</code> prints the report's schema, and the shape of a <code>--jsonl</code> line is under its <code>sample</code> definition. Two ping reports can be held against each other with <code>pepe compare</code>, phase by phase (<a href="compare.html">Compare</a>).</p>
-<figure class="code"><div class="bar"><span>bash</span><button type="button" class="copy" aria-label="Copy">copy</button></div><pre><code>pepe ping https://example.com --jsonl -z 5m &gt; pings.jsonl
-pepe ping https://example.com --json -n 10 --save before.json</code></pre></figure>
+<figure class="code"><div class="bar"><span>bash</span><button type="button" class="copy" aria-label="Copy">copy</button></div><pre><code><span class="k">pepe</span> ping https://example.com --jsonl -z 5m &gt; pings.jsonl
+<span class="k">pepe</span> ping https://example.com --json -n 10 --save before.json</code></pre></figure>
     </article>
     <nav class="turn"><a class="prev" href="dashboard.html"><small>Previous</small>The dashboard</a><a class="next" href="ramp.html"><small>Next</small>Ramp</a></nav>
     <p class="edit"><a href="https://github.com/omarmhaimdat/pepe/edit/master/docs/ping.md">Edit this page on GitHub</a></p>

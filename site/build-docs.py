@@ -47,7 +47,7 @@ GROUPS = [
         ("webhooks", "Webhooks"),
         ("agents", "Agents and scripts"),
     ]),
-    ("Reference", [("reference", "Command reference"), ("benchmarks", "Benchmarks")]),
+    ("Reference", [("config", "Config files"), ("reference", "Command reference"), ("benchmarks", "Benchmarks")]),
 ]
 PAGES = [page for _, pages in GROUPS for page in pages]
 
@@ -69,8 +69,15 @@ TITLES = {
     "ci": "pepe in CI · GitHub Action, Docker and --fail-if thresholds",
     "webhooks": "pepe webhooks · load-test results in Slack, Discord and Teams",
     "agents": "pepe for agents and scripts · MCP server and guardrails",
+    "config": "pepe.toml and pepe's config files · every key, with examples",
     "reference": "pepe command reference · every flag and subcommand",
     "benchmarks": "Benchmarks · pepe against wrk, oha, vegeta and k6",
+}
+# The command a page is about, in the tag above its title
+COMMANDS = {
+    "load-test": "pepe URL", "dashboard": "pepe URL", "ping": "pepe ping", "ramp": "pepe ramp",
+    "api": "pepe api", "flow": "pepe flow", "replay": "pepe replay", "logs": "pepe logs",
+    "compare": "pepe compare", "agents": "pepe mcp", "config": "pepe.toml", "reference": "pepe --help",
 }
 HOME = "https://pepe.mhaimdat.com/"
 OG_IMAGE = HOME + "img/og.png"
@@ -170,7 +177,7 @@ def hero(lines):
             continue
         m = re.match(r"^#\s+(.*)$", line)
         if m:
-            out.append("<h1>%s</h1>" % inline(m.group(1)))
+            out.append('<h1><span class="sel">%s</span></h1>' % inline(m.group(1)))
             continue
         if LINK.sub("", line).strip() == "":
             out.append('<p class="buttons">%s</p>' % inline(line))
@@ -178,6 +185,41 @@ def hero(lines):
         out.append("<p>%s</p>" % inline(line))
     out.append("</div>")
     return "".join(out)
+
+
+SHELLS = {"bash", "sh", "shell", "console", "powershell", ""}
+
+
+def colour(lang, lines):
+    """A code block's lines, escaped, with the comments dimmed: in a shell
+    block also the command at the start of a line, in TOML the tables."""
+    out = []
+    for line in lines:
+        text = html.escape(line)
+        if lang in SHELLS or lang == "toml":
+            # A comment starts a line or follows a space, never inside a word or a colour
+            text = re.sub(r"(^|\s)(#.*)$", r'\1<span class="c">\2</span>', text)
+        if lang in SHELLS:
+            text = re.sub(r"^(\s*)(pepe)(?=\s|$)", r'\1<span class="k">\2</span>', text)
+        elif lang == "toml":
+            text = re.sub(r"^(\s*)(\[\[?[^\]]+\]\]?)", r'\1<span class="t">\2</span>', text)
+        out.append(text)
+    return "\n".join(out)
+
+
+def titled(stem, body):
+    """The page's title with its tag above it (its group, and the command it
+    is about) and its subject selected: the part before a colon, or all of it."""
+    m = re.search(r"<h1>(.*?)</h1>", body)
+    if not m or stem == "index":
+        return body
+    head, sep, rest = m.group(1).partition(": ")
+    title = '<span class="sel">%s</span>%s%s' % (head, ":" if sep else "", " " + rest if sep else "")
+    group = next(g for g, pages in GROUPS if any(s == stem for s, _ in pages))
+    tags = "<span>%s</span>" % html.escape(group)
+    if stem in COMMANDS:
+        tags += "<span>%s</span>" % html.escape(COMMANDS[stem])
+    return body[:m.start()] + '<div class="kicker">%s</div>\n<h1>%s</h1>' % (tags, title) + body[m.end():]
 
 
 def convert(text):
@@ -231,7 +273,7 @@ def convert(text):
             i += 1
             label = html.escape(lang) if lang else ""
             out.append('<figure class="code"><div class="bar"><span>%s</span><button type="button" class="copy" aria-label="Copy">copy</button></div>'
-                       '<pre><code>%s</code></pre></figure>' % (label, html.escape("\n".join(code))))
+                       '<pre><code>%s</code></pre></figure>' % (label, colour(lang, code)))
             current["text"].append(" ".join(code)[:200])
             continue
         heading = re.match(r"^(#{1,4})\s+(.*)$", stripped)
@@ -388,8 +430,8 @@ def page(stem, title, body, headings, description):
 <link rel="canonical" href="{canonical}">
 <link rel="icon" href="../assets/logo.svg" type="image/svg+xml">
 <meta name="color-scheme" content="light dark">
-<meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
-<meta name="theme-color" content="#121010" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#fff1e0" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#141010" media="(prefers-color-scheme: dark)">
 <meta property="og:type" content="article">
 <meta property="og:site_name" content="pepe">
 <meta property="og:url" content="{canonical}">
@@ -404,13 +446,16 @@ def page(stem, title, body, headings, description):
 <meta name="twitter:description" content="{html.escape(description, quote=True)}">
 <meta name="twitter:image" content="{OG_IMAGE}">
 <script type="application/ld+json">{ld}</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&amp;family=Geist+Mono:wght@400;500;600&amp;display=swap">
 <link rel="stylesheet" href="docs.css">
 <script>try{{var t=localStorage.getItem('pepe-theme');if(t)document.documentElement.dataset.theme=t;}}catch(e){{}}</script>
 </head>
 <body>
 <header class="top">
   <button type="button" class="menu" aria-label="Pages" aria-expanded="false">☰</button>
-  <a class="brand" href="index.html"><img src="../assets/logo.svg" alt="" width="22" height="24">pepe<span>docs</span></a>
+  <a class="brand" href="index.html"><img src="../assets/logo.svg" alt="" width="22" height="20">pepe<span>docs</span></a>
   <div class="search"><input type="search" placeholder="Search the docs…" aria-label="Search the docs" autocomplete="off"><div class="results" hidden></div></div>
   <nav class="links"><a href="../">Install</a><a href="{REPO}">GitHub</a><button type="button" class="theme" aria-label="Switch between light and dark">◐</button></nav>
 </header>
@@ -418,7 +463,7 @@ def page(stem, title, body, headings, description):
   <aside class="side" id="side">{sidebar(stem)}</aside>
   <main class="main">
     <article class="prose">
-{body}
+{titled(stem, body)}
     </article>
     {turn}
     <p class="edit"><a href="{REPO}/edit/master/docs/{stem}.md">Edit this page on GitHub</a></p>

@@ -246,7 +246,7 @@ set = ["id=1,2,3"]
 include-writes = false
 ```
 
-Keys are the long flags' names; the on/off ones are said the positive way. A key pepe doesn't know is an error that names it. `--config FILE` reads another file; `--write-config FILE` writes the settings as given on the command line and exits.
+Keys are the long flags' names; the on/off ones are said the positive way. A key pepe doesn't know is an error that names it. Every key, which file wins, and recipes: [Config files](config.md). `--config FILE` reads another file; `--write-config FILE` writes the settings as given on the command line and exits.
 
 ### Saved tests
 

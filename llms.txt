@@ -24,6 +24,7 @@ As an MCP server: `pepe mcp` serves the modes as tools over stdio (`run`, `ping`
 - [Compare](https://pepe.mhaimdat.com/docs/compare.html): `pepe compare`, the verdict, the badge, the card
 - [Output and exit codes](https://pepe.mhaimdat.com/docs/output.html): the JSON report, `pepe schema`, `--fail-if`, Prometheus metrics, exit codes
 - [CI and Docker](https://pepe.mhaimdat.com/docs/ci.html): the GitHub Action and its inputs and outputs
+- [Config files](https://pepe.mhaimdat.com/docs/config.html): every key of `pepe.toml`, saved tests, `settings.toml` and flow files, what wins, and recipes
 - [Command reference](https://pepe.mhaimdat.com/docs/reference.html): every command and flag as `--help` prints them
 
 ## Schemas

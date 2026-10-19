@@ -8,8 +8,8 @@
 <link rel="canonical" href="https://pepe.mhaimdat.com/docs/reference.html">
 <link rel="icon" href="../assets/logo.svg" type="image/svg+xml">
 <meta name="color-scheme" content="light dark">
-<meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
-<meta name="theme-color" content="#121010" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#fff1e0" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#141010" media="(prefers-color-scheme: dark)">
 <meta property="og:type" content="article">
 <meta property="og:site_name" content="pepe">
 <meta property="og:url" content="https://pepe.mhaimdat.com/docs/reference.html">
@@ -24,21 +24,25 @@
 <meta name="twitter:description" content="Every command and flag, as --help prints them. Generated from the command definition by cargo test, so it can&#x27;t drift from the binary; the pages before this…">
 <meta name="twitter:image" content="https://pepe.mhaimdat.com/img/og.png">
 <script type="application/ld+json">[{"@context":"https://schema.org","@type":"TechArticle","headline":"Command reference","description":"Every command and flag, as --help prints them. Generated from the command definition by cargo test, so it can't drift from the binary; the pages before this…","url":"https://pepe.mhaimdat.com/docs/reference.html","image":"https://pepe.mhaimdat.com/img/og.png","inLanguage":"en","author":{"@type":"Person","name":"Omar Mhaimdat","url":"https://github.com/omarmhaimdat"},"publisher":{"@type":"Person","name":"Omar Mhaimdat","url":"https://github.com/omarmhaimdat"},"isPartOf":{"@type":"WebSite","name":"pepe","url":"https://pepe.mhaimdat.com/"},"about":{"@type":"SoftwareApplication","name":"pepe","url":"https://pepe.mhaimdat.com/"}},{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"pepe","item":"https://pepe.mhaimdat.com/"},{"@type":"ListItem","position":2,"name":"Docs","item":"https://pepe.mhaimdat.com/docs/"},{"@type":"ListItem","position":3,"name":"Command reference","item":"https://pepe.mhaimdat.com/docs/reference.html"}]}]</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&amp;family=Geist+Mono:wght@400;500;600&amp;display=swap">
 <link rel="stylesheet" href="docs.css">
 <script>try{var t=localStorage.getItem('pepe-theme');if(t)document.documentElement.dataset.theme=t;}catch(e){}</script>
 </head>
 <body>
 <header class="top">
   <button type="button" class="menu" aria-label="Pages" aria-expanded="false">☰</button>
-  <a class="brand" href="index.html"><img src="../assets/logo.svg" alt="" width="22" height="24">pepe<span>docs</span></a>
+  <a class="brand" href="index.html"><img src="../assets/logo.svg" alt="" width="22" height="20">pepe<span>docs</span></a>
   <div class="search"><input type="search" placeholder="Search the docs…" aria-label="Search the docs" autocomplete="off"><div class="results" hidden></div></div>
   <nav class="links"><a href="../">Install</a><a href="https://github.com/omarmhaimdat/pepe">GitHub</a><button type="button" class="theme" aria-label="Switch between light and dark">◐</button></nav>
 </header>
 <div class="shell">
-  <aside class="side" id="side"><div class="group">Start here</div><a href="index.html">Overview</a><a href="install.html">Install</a><div class="group">Modes</div><a href="load-test.html">Load testing</a><a href="dashboard.html">The dashboard</a><a href="ping.html">Ping</a><a href="ramp.html">Ramp</a><a href="api.html">OpenAPI</a><a href="flow.html">Flows</a><a href="replay.html">Replay</a><a href="logs.html">nginx logs</a><a href="compare.html">Compare</a><div class="group">Integrate</div><a href="output.html">Output and exit codes</a><a href="ci.html">CI and Docker</a><a href="webhooks.html">Webhooks</a><a href="agents.html">Agents and scripts</a><div class="group">Reference</div><a href="reference.html" aria-current="page">Command reference</a><a href="benchmarks.html">Benchmarks</a></aside>
+  <aside class="side" id="side"><div class="group">Start here</div><a href="index.html">Overview</a><a href="install.html">Install</a><div class="group">Modes</div><a href="load-test.html">Load testing</a><a href="dashboard.html">The dashboard</a><a href="ping.html">Ping</a><a href="ramp.html">Ramp</a><a href="api.html">OpenAPI</a><a href="flow.html">Flows</a><a href="replay.html">Replay</a><a href="logs.html">nginx logs</a><a href="compare.html">Compare</a><div class="group">Integrate</div><a href="output.html">Output and exit codes</a><a href="ci.html">CI and Docker</a><a href="webhooks.html">Webhooks</a><a href="agents.html">Agents and scripts</a><div class="group">Reference</div><a href="config.html">Config files</a><a href="reference.html" aria-current="page">Command reference</a><a href="benchmarks.html">Benchmarks</a></aside>
   <main class="main">
     <article class="prose">
-<h1>Command reference</h1>
+<div class="kicker"><span>Reference</span><span>pepe --help</span></div>
+<h1><span class="sel">Command reference</span></h1>
 <p>Every command and flag, as <code>--help</code> prints them. Generated from the command definition by <code>cargo test</code>, so it can't drift from the binary; the pages before this one say what the flags are for.</p>
 <p>The options under <code>pepe</code> are global: they work after any subcommand too (<code>pepe ping -H &#x27;Accept: text/html&#x27; …</code>), where they make sense.</p>
 <h2 id="pepe"><a href="#pepe">pepe</a></h2>
@@ -2374,7 +2378,7 @@ Options:
       --record
           Keep the run&#x27;s report under its saved test when it ends, as ./.pepe/runs/NAME/&lt;moment&gt;.json; the run has to be a saved test (--load NAME, or --keep NAME)</code></pre></figure>
     </article>
-    <nav class="turn"><a class="prev" href="agents.html"><small>Previous</small>Agents and scripts</a><a class="next" href="benchmarks.html"><small>Next</small>Benchmarks</a></nav>
+    <nav class="turn"><a class="prev" href="config.html"><small>Previous</small>Config files</a><a class="next" href="benchmarks.html"><small>Next</small>Benchmarks</a></nav>
     <p class="edit"><a href="https://github.com/omarmhaimdat/pepe/edit/master/docs/reference.md">Edit this page on GitHub</a></p>
   </main>
   <aside class="toc"><div class="label">On this page</div><a href="#pepe" class="h2">pepe</a><a href="#pepe-ping" class="h2">pepe ping</a><a href="#pepe-ramp" class="h2">pepe ramp</a><a href="#pepe-compare" class="h2">pepe compare</a><a href="#pepe-api" class="h2">pepe api</a><a href="#pepe-flow" class="h2">pepe flow</a><a href="#pepe-replay" class="h2">pepe replay</a><a href="#pepe-logs" class="h2">pepe logs</a><a href="#pepe-rerun" class="h2">pepe rerun</a><a href="#pepe-history" class="h2">pepe history</a><a href="#pepe-schema" class="h2">pepe schema</a><a href="#pepe-mcp" class="h2">pepe mcp</a><a href="#pepe-self-update" class="h2">pepe self-update</a><a href="#pepe-completions" class="h2">pepe completions</a><a href="#pepe-slack" class="h2">pepe slack</a><a href="#pepe-export" class="h2">pepe export</a></aside>
