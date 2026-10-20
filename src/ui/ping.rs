@@ -1831,7 +1831,7 @@ mod tests {
             "{shown}"
         );
         assert!(
-            shown.contains("1 Graph") && shown.contains("2 Phases") && shown.contains("3 Pings")
+            shown.contains("1 GRAPH") && shown.contains("2 PHASES") && shown.contains("3 PINGS")
         );
         assert!(
             shown.contains("■ api") && shown.contains("■ cdn"),

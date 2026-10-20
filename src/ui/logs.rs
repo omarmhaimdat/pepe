@@ -2279,7 +2279,7 @@ mod tests {
         assert!(text.contains("5xx 5.0%"), "{text}");
         assert!(text.contains("REQUEST TIME"), "{text}");
         assert!(text.contains("1 of 921 lines couldn't be read"), "{text}");
-        assert!(text.contains("4 Errors 10"), "{text}");
+        assert!(text.contains("4 ERRORS 10"), "{text}");
         assert!(text.contains("per minute"), "{text}");
         assert!(text.contains("now ┄┄┄"), "{text}");
         // The newest slot first; the first whole minute at half today's rate
@@ -2475,7 +2475,7 @@ mod tests {
         assert_eq!(s.tab, Tab::Dashboard);
         let text = draw(&mut s, 150, 48);
         assert!(
-            text.contains(" 1 Dashboard   2 Traffic   3 Paths   4 Errors 10   5 Log"),
+            text.contains(" 1 DASHBOARD   2 TRAFFIC   3 PATHS   4 ERRORS 10   5 LOG"),
             "{text}"
         );
         // The verdict: 5% of the last minute answered 5xx, and why

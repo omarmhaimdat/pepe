@@ -1,11 +1,13 @@
-//! What the setup, plan and ramp screens are drawn with: cards, key chips,
-//! the bar on the selected line
+//! What the screens are drawn with: the mode's band, cards with a tag for a
+//! title and a hard shadow, tags, key chips, the bar on the selected line.
+//! The look is the site's: square edges, ink and cream, the pepper's red.
 
 use std::cell::RefCell;
 use std::time::{Duration, Instant};
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers, MouseButton, MouseEvent, MouseEventKind};
 use ratatui::{
+    buffer::Buffer,
     layout::{Constraint, Flex, Layout, Position, Rect},
     style::{Color, Modifier, Style, Stylize},
     text::{Line, Span},
@@ -24,7 +26,172 @@ pub(super) const FIELD: Color = Color::Indexed(236);
 /// What's off, or not sent: quieter than a label, still 4.8:1 on a dark
 /// background
 pub(super) const FAINT: Color = Color::Indexed(245);
-/// A rounded card with its title in the top border, and `right` at the
+/// What's written on a band or a badge: the pepper's ink, in every theme
+pub(super) const INK: Color = Color::Indexed(16);
+/// A card's hard shadow: the accent on a dark ground, the ink on a light one
+pub(super) const SHADOW: Color = Color::Indexed(88);
+
+/// A mode's band, the same colour in every theme, as on the site. The
+/// palette has one for each mode (a ping's lime, a ramp's gold, the setup's
+/// red: `theme::pepe::BANDS`); the screens take theirs one by one.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum Band {
+    /// A load test: ember
+    Run,
+}
+
+impl Band {
+    pub(super) fn color(self) -> Color {
+        Color::Indexed(match self {
+            Band::Run => 208,
+        })
+    }
+}
+
+/// A tag: a word in a block of the text's colour, the site's labels and
+/// selections. Reverse video, so it reads in every theme, and with no
+/// colour at all.
+pub(super) fn tag_style() -> Style {
+    Style::new()
+        .fg(Color::Reset)
+        .bg(Color::Reset)
+        .add_modifier(Modifier::REVERSED | Modifier::BOLD)
+}
+
+/// ` WORD `, as a tag
+pub(super) fn tag(text: &str) -> Span<'static> {
+    Span::styled(format!(" {} ", text.to_uppercase()), tag_style())
+}
+
+/// A badge: ` WORD ` in ink on `color`, a verdict's level
+pub(super) fn badge(text: &str, color: Color) -> Span<'static> {
+    Span::styled(
+        format!(" {} ", text.to_uppercase()),
+        Style::new().fg(INK).bg(color).bold(),
+    )
+}
+
+/// The red square at a selected tag's corner: a quarter cell just under its
+/// right-hand end, drawn only where nothing else is
+pub(super) fn corner(buf: &mut Buffer, x: u16, y: u16) {
+    if let Some(cell) = buf.cell_mut((x, y)) {
+        if cell.symbol() == " " {
+            cell.set_char('▘').set_fg(ACCENT);
+        }
+    }
+}
+
+/// The mode's band across the top of `area`, and the checker under it, on
+/// the mascot's grid: two rows. `left` and `right` are written in ink; the
+/// band gives the screen its mode at a glance, as on the site.
+pub(super) fn band(
+    f: &mut Frame,
+    area: Rect,
+    band: Band,
+    left: Vec<Span<'static>>,
+    right: Vec<Span<'static>>,
+) {
+    let color = band.color();
+    let [top, checker] =
+        Layout::vertical([Constraint::Length(1), Constraint::Length(1)]).areas(area);
+    let ink = |spans: Vec<Span<'static>>| -> Line<'static> {
+        Line::from(
+            spans
+                .into_iter()
+                .map(|s| {
+                    let bold = s.style.add_modifier.contains(Modifier::BOLD);
+                    let style = Style::new().fg(INK).bg(color);
+                    Span::styled(s.content, if bold { style.bold() } else { style })
+                })
+                .collect::<Vec<_>>(),
+        )
+    };
+    let mut lead = vec![
+        Span::styled(" ", Style::new().bg(color)),
+        Span::styled(" pepe ", Style::new().fg(color).bg(INK).bold()),
+        Span::styled(" ", Style::new().bg(color)),
+    ];
+    lead.extend(ink(left).spans);
+    f.render_widget(
+        Paragraph::new(Line::from(lead)).style(Style::new().bg(color)),
+        top,
+    );
+    let mut right = ink(right);
+    right.spans.push(Span::styled(" ", Style::new().bg(color)));
+    f.render_widget(
+        Paragraph::new(right).alignment(ratatui::layout::Alignment::Right),
+        top,
+    );
+    // Two cells a square, the band's colour and the ground's in turn: the
+    // site's strip between sections
+    let buf = f.buffer_mut();
+    for x in checker.left()..checker.right() {
+        if let Some(cell) = buf.cell_mut((x, checker.y)) {
+            let on = ((x - checker.x) / 2) % 2 == 0;
+            cell.set_char('▀');
+            if on {
+                cell.set_fg(color).set_bg(Color::Reset);
+            } else {
+                cell.set_fg(Color::Reset).set_bg(color);
+            }
+        }
+    }
+}
+
+/// A card: the panel surface in a square frame, its title a tag set into
+/// the top border, and with `shadow` the site's hard shadow, half a cell
+/// right and below, drawn just outside `area` where it fits. The frame sits
+/// in the panel's padding, so what's drawn inside at `view::inset(area, 2,
+/// 1)` doesn't move.
+pub(super) fn card(f: &mut Frame, area: Rect, title: Option<&str>, focused: bool, shadow: bool) {
+    super::view::panel(f, area);
+    if area.width < 4 || area.height < 2 {
+        return;
+    }
+    f.render_widget(
+        Block::bordered()
+            .border_type(BorderType::Plain)
+            .border_style(Style::new().fg(if focused { ACCENT } else { RULE })),
+        area,
+    );
+    if let Some(title) = title {
+        let room = area.width.saturating_sub(4);
+        let text = format!(" {} ", title.to_uppercase());
+        let text: String = text.chars().take(room as usize).collect();
+        f.render_widget(
+            Paragraph::new(Span::styled(text, tag_style())),
+            Rect {
+                x: area.x + 2,
+                y: area.y,
+                width: room,
+                height: 1,
+            },
+        );
+    }
+    if shadow {
+        let buf = f.buffer_mut();
+        let bounds = buf.area;
+        let mut put = |x: u16, y: u16, c: char| {
+            if bounds.contains(Position::new(x, y)) {
+                if let Some(cell) = buf.cell_mut((x, y)) {
+                    cell.set_char(c).set_fg(SHADOW).set_bg(Color::Reset);
+                }
+            }
+        };
+        let (right, bottom) = (area.right(), area.bottom());
+        put(right, area.y, '▗');
+        for y in area.y + 1..bottom {
+            put(right, y, '▐');
+        }
+        put(area.x, bottom, '▝');
+        for x in area.x + 1..right {
+            put(x, bottom, '▀');
+        }
+        put(right, bottom, '▘');
+    }
+}
+
+/// A square card with its title in the top border, and `right` at the
 /// other end of it
 pub(super) fn panel(
     title: Line<'static>,
@@ -32,7 +199,7 @@ pub(super) fn panel(
     border: Color,
 ) -> Block<'static> {
     let mut block = Block::bordered()
-        .border_type(BorderType::Rounded)
+        .border_type(BorderType::Plain)
         .border_style(Style::new().fg(border))
         .title_top(title);
     if let Some(right) = right {
@@ -41,11 +208,15 @@ pub(super) fn panel(
     block
 }
 
-/// A card's title, lit when the card has the keys
+/// A card's title, a tag: in the text's colour when the card has the
+/// keys, quieter when it hasn't
 pub(super) fn caption(text: &str, focused: bool) -> Line<'static> {
+    if focused {
+        return Line::from(tag(text));
+    }
     Line::from(Span::styled(
         format!(" {} ", text.to_uppercase()),
-        Style::new().fg(if focused { ACCENT } else { LABEL }).bold(),
+        tag_style().fg(LABEL),
     ))
 }
 
@@ -62,10 +233,7 @@ pub(super) fn marker(active: bool, focused: bool) -> Span<'static> {
 pub(super) fn chips(pairs: &[(&'static str, &'static str)]) -> Line<'static> {
     let mut spans = Vec::with_capacity(pairs.len() * 2);
     for (key, action) in pairs {
-        spans.push(Span::styled(
-            format!(" {key} "),
-            Style::new().bg(SELECTED).fg(ACCENT).bold(),
-        ));
+        spans.push(Span::styled(format!(" {key} "), tag_style()));
         spans.push(label(format!(" {action}  ")));
     }
     Line::from(spans)
@@ -130,10 +298,7 @@ pub(super) fn footer(f: &mut Frame, area: Rect, pairs: &[(&'static str, &'static
         hit(at, Hit::Key(KeyEvent::from(KeyCode::F(code))));
         f.render_widget(
             Paragraph::new(Line::from(vec![
-                Span::styled(
-                    format!(" {key} "),
-                    Style::new().bg(SELECTED).fg(ACCENT).bold(),
-                ),
+                Span::styled(format!(" {key} "), tag_style()),
                 label(format!(" {action}")),
             ])),
             at,
@@ -190,10 +355,20 @@ fn one_char(text: &str) -> Option<char> {
     chars.next().is_none().then_some(c)
 }
 
-/// The tab row drawn at `area`, each tab clickable
+/// The tab row drawn at `area`, each tab clickable, the picked one with
+/// the red corner under its end
 pub(super) fn tab_bar(f: &mut Frame, area: Rect, titles: &[String], selected: usize) {
     tabs_at(area, titles);
     f.render_widget(Paragraph::new(tabs(titles, selected)), area);
+    let end: u16 = titles
+        .iter()
+        .take(selected + 1)
+        .map(|t| t.chars().count() as u16 + 2)
+        .sum::<u16>()
+        + selected as u16;
+    if area.x + end < area.right() {
+        corner(f.buffer_mut(), area.x + end, area.y + 1);
+    }
 }
 
 /// Where `tabs` puts each title on a line drawn at `area`, so a click
@@ -321,7 +496,7 @@ impl Clicks {
     }
 }
 
-/// A row of views or modes, the selected one filled with the accent. Every
+/// A row of views or modes in small capitals, the selected one a tag. Every
 /// screen draws its tabs this way; a number goes in the title only where
 /// the number keys pick the tab.
 pub(super) fn tabs(titles: &[String], selected: usize) -> Line<'static> {
@@ -331,12 +506,12 @@ pub(super) fn tabs(titles: &[String], selected: usize) -> Line<'static> {
             spans.push(Span::raw(" "));
         }
         spans.push(if i == selected {
-            Span::styled(
-                format!(" {title} "),
-                Style::new().fg(Color::Black).bg(ACCENT).bold(),
-            )
+            tag(title)
         } else {
-            Span::styled(format!(" {title} "), Style::new().fg(LABEL))
+            Span::styled(
+                format!(" {} ", title.to_uppercase()),
+                Style::new().fg(LABEL),
+            )
         });
     }
     Line::from(spans)
@@ -380,9 +555,9 @@ pub(super) fn help(f: &mut Frame, area: Rect, rows: &[(&str, &str)], notes: &[St
     f.render_widget(
         Paragraph::new(lines).block(
             Block::bordered()
-                .border_type(BorderType::Rounded)
+                .border_type(BorderType::Plain)
                 .border_style(Style::new().fg(ACCENT))
-                .title(Span::styled(" keys ", Style::new().fg(ACCENT).bold())),
+                .title(tag("keys")),
         ),
         popup,
     );

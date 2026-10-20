@@ -3,11 +3,12 @@
 //! colours, or adjusts it for a light terminal or for `NO_COLOR`, so no
 //! drawing code has to know.
 //!
-//! - **pepe**, the default where the terminal has true colour: pepe's own
-//!   palette, warm darks with one ember accent; the heatmap glows from
-//!   embers to flame; panels sit on a surface a shade lighter than the ground
+//! - **pepe**, the default where the terminal has true colour: the pepper's
+//!   own palette, as on the site — an ink ground, cream text, pepper red as
+//!   the one accent; the heatmap glows from ink to red to cream; panels sit
+//!   on a surface a shade lighter than the ground
 //! - **nord**, **dracula**, **gruvbox**, **tokyo-night**, **catppuccin**,
-//!   and **paper** for a light background: the same roles in other true
+//!   and **paper** for a light background (the site's cream): the same roles in other true
 //!   colour palettes, each worked out from a dozen colours (see `Base`)
 //! - **terminal** (or **dark**): the 256-colour grays and cyan the screens
 //!   name, on the terminal's own background
@@ -214,29 +215,40 @@ fn detect(
 /// palette, nothing at all elsewhere, where panels keep only their spacing.
 pub const PANEL: Color = Color::Indexed(235);
 
-/// pepe's palette
+/// pepe's palette: the pepper's ink, cream and red, as on the site
 pub mod pepe {
     use ratatui::style::Color;
 
-    pub const GROUND: Color = Color::Rgb(0x14, 0x0f, 0x0d);
-    pub const SURFACE: Color = Color::Rgb(0x1d, 0x16, 0x13);
-    pub const TEXT: Color = Color::Rgb(0xf3, 0xe8, 0xde);
-    pub const EMBER: Color = Color::Rgb(0xff, 0x8a, 0x3d);
-    pub const LABEL: Color = Color::Rgb(0x9c, 0x8a, 0x7e);
-    pub const GOOD: Color = Color::Rgb(0x9c, 0xcf, 0x6a);
-    pub const WARN: Color = Color::Rgb(0xf0, 0xcf, 0x5a);
-    pub const BAD: Color = Color::Rgb(0xff, 0x5a, 0x6e);
-    /// Few requests → many: embers to flame
-    pub const HEAT: [Color; 9] = [
-        Color::Rgb(0x2e, 0x1d, 0x17),
-        Color::Rgb(0x46, 0x24, 0x1a),
-        Color::Rgb(0x65, 0x2c, 0x19),
-        Color::Rgb(0x8b, 0x36, 0x17),
-        Color::Rgb(0xb4, 0x45, 0x16),
-        Color::Rgb(0xda, 0x5d, 0x1b),
+    pub const GROUND: Color = Color::Rgb(0x14, 0x10, 0x10);
+    pub const SURFACE: Color = Color::Rgb(0x1d, 0x17, 0x15);
+    pub const TEXT: Color = Color::Rgb(0xf6, 0xe9, 0xda);
+    /// The one accent: the pepper's red
+    pub const PEPPER: Color = Color::Rgb(0xf2, 0x45, 0x2c);
+    pub const LABEL: Color = Color::Rgb(0xa8, 0x96, 0x8a);
+    pub const GOOD: Color = Color::Rgb(0x9f, 0xdc, 0x5c);
+    pub const WARN: Color = Color::Rgb(0xff, 0xd5, 0x4a);
+    pub const BAD: Color = Color::Rgb(0xff, 0x6b, 0x7c);
+    /// The outline of the mascot: what's written on a band, in any theme
+    pub const INK: Color = Color::Rgb(0x1d, 0x16, 0x13);
+    /// A mode's band, the same in every theme: a load test's ember, a
+    /// ping's lime, a ramp's gold, the setup's red
+    pub const BANDS: [Color; 4] = [
         Color::Rgb(0xff, 0x8a, 0x3d),
-        Color::Rgb(0xff, 0xc2, 0x7a),
-        Color::Rgb(0xff, 0xe3, 0xb8),
+        Color::Rgb(0x9f, 0xdc, 0x5c),
+        Color::Rgb(0xff, 0xd5, 0x4a),
+        Color::Rgb(0xf2, 0x45, 0x2c),
+    ];
+    /// Few requests → many: ink to red to cream
+    pub const HEAT: [Color; 9] = [
+        Color::Rgb(0x2f, 0x16, 0x13),
+        Color::Rgb(0x45, 0x1c, 0x16),
+        Color::Rgb(0x5f, 0x22, 0x1a),
+        Color::Rgb(0x7f, 0x29, 0x1d),
+        Color::Rgb(0xa2, 0x32, 0x22),
+        Color::Rgb(0xca, 0x3b, 0x27),
+        PEPPER,
+        Color::Rgb(0xf9, 0x9e, 0x8d),
+        Color::Rgb(0xfd, 0xdb, 0xd1),
     ];
 }
 
@@ -287,6 +299,12 @@ pub struct Palette {
     pub strong: Color,
     /// Few requests → many
     pub heat: [Color; 9],
+    /// What's written on a band or a badge: the pepper's ink, in any theme
+    pub ink: Color,
+    /// A card's hard shadow
+    pub shadow: Color,
+    /// The modes' bands: a load test, a ping, a ramp, the setup
+    pub bands: [Color; 4],
 }
 
 static PEPE: Palette = {
@@ -296,30 +314,33 @@ static PEPE: Palette = {
         surface: SURFACE,
         text: TEXT,
         bright: Color::Rgb(0xff, 0xf6, 0xee),
-        accent: EMBER,
-        accent_dim: Color::Rgb(0xb4, 0x45, 0x16),
+        accent: PEPPER,
+        accent_dim: Color::Rgb(0xa4, 0x32, 0x22),
         label: LABEL,
         good: GOOD,
         warn: WARN,
         bad: BAD,
         blue: Color::Rgb(0x8c, 0xb8, 0xff),
-        magenta: Color::Rgb(0xff, 0xc2, 0x7a),
+        magenta: Color::Rgb(0xff, 0x9a, 0xa8),
         cool: Color::Rgb(0x8c, 0xd2, 0xff),
         string: Color::Rgb(0xb8, 0xd9, 0x8a),
         keyword: Color::Rgb(0xe8, 0xa8, 0xc8),
         attr: Color::Rgb(0xe0, 0xb9, 0x8a),
         spark: Color::Rgb(0xff, 0xd2, 0x7a),
-        number: Color::Rgb(0xff, 0xb0, 0x70),
+        number: Color::Rgb(0xff, 0x8a, 0x3d),
         fail_fill: Color::Rgb(0x5a, 0x1a, 0x24),
         selected: Color::Rgb(0x2e, 0x24, 0x20),
-        fill: Color::Rgb(0x4a, 0x2a, 0x1c),
-        rule: Color::Rgb(0x3a, 0x2c, 0x25),
+        fill: Color::Rgb(0x4c, 0x1d, 0x17),
+        rule: Color::Rgb(0x3d, 0x2f, 0x28),
         dim: [Color::Rgb(0x5f, 0x50, 0x48), Color::Rgb(0x6f, 0x5e, 0x53)],
         punct: Color::Rgb(0x8a, 0x7a, 0x6e),
-        faint: Color::Rgb(0x7f, 0x6d, 0x61),
+        faint: Color::Rgb(0x85, 0x76, 0x6a),
         soft: Color::Rgb(0xb9, 0xa5, 0x97),
         strong: Color::Rgb(0xe0, 0xd3, 0xc7),
         heat: HEAT,
+        ink: INK,
+        shadow: PEPPER,
+        bands: BANDS,
     }
 };
 
@@ -413,6 +434,10 @@ impl Base {
                 rgb(mix(accent, bright, 50)),
                 rgb(mix(accent, bright, 85)),
             ],
+            ink: pepe::INK,
+            // A shadow in the accent on a dark ground, in the text on a light one
+            shadow: rgb(if light { text } else { accent }),
+            bands: pepe::BANDS,
         }
     }
 }
@@ -498,16 +523,17 @@ static CATPPUCCIN: Palette = Base {
 .palette();
 
 static PAPER: Palette = Base {
-    ground: (0xf7, 0xf3, 0xea),
-    surface: (0xee, 0xe8, 0xdb),
-    text: (0x2b, 0x26, 0x22),
-    label: (0x6f, 0x65, 0x5c),
-    accent: (0xc2, 0x41, 0x0c),
-    good: (0x3f, 0x7d, 0x20),
+    // The site's cream, its ink, and the pepper's red deep enough to read on it
+    ground: (0xff, 0xf1, 0xe0),
+    surface: (0xfb, 0xe6, 0xcd),
+    text: (0x1d, 0x16, 0x13),
+    label: (0x5a, 0x4a, 0x40),
+    accent: (0xb9, 0x26, 0x1a),
+    good: (0x2f, 0x7d, 0x32),
     warn: (0x9a, 0x67, 0x00),
     bad: (0xc6, 0x28, 0x39),
     blue: (0x2f, 0x5f, 0xb3),
-    magenta: (0x8a, 0x3e, 0xa8),
+    magenta: (0xb0, 0x3c, 0x6e),
     cyan: (0x0f, 0x7b, 0x8a),
     orange: (0xb3, 0x52, 0x0e),
 }
@@ -537,6 +563,12 @@ impl Palette {
             Color::Magenta | Color::LightMagenta => self.magenta,
             Color::Cyan | Color::LightCyan => self.accent,
             Color::Indexed(n) => match n {
+                16 => self.ink,
+                88 => self.shadow,
+                208 => self.bands[0],
+                113 => self.bands[1],
+                221 => self.bands[2],
+                203 => self.bands[3],
                 81 => self.accent,
                 67 => self.accent_dim,
                 117 => self.cool,
@@ -886,9 +918,9 @@ mod tests {
         buf.set_string(3, 0, " ", Style::new().bg(PANEL));
         buf.set_string(4, 0, "▀", Style::new().fg(Color::Indexed(196)));
         adjust(&mut buf, Theme::Pepe, &[Rect::new(4, 0, 1, 1)]);
-        assert_eq!(buf[(0, 0)].fg, pepe::EMBER);
+        assert_eq!(buf[(0, 0)].fg, pepe::PEPPER);
         assert_eq!(buf[(0, 0)].bg, pepe::GROUND);
-        assert_eq!(buf[(1, 0)].fg, Color::Rgb(0x3a, 0x2c, 0x25));
+        assert_eq!(buf[(1, 0)].fg, Color::Rgb(0x3d, 0x2f, 0x28));
         assert_eq!(buf[(2, 0)].fg, pepe::HEAT[8]);
         assert_eq!(buf[(2, 0)].bg, pepe::HEAT[1]);
         assert_eq!(buf[(3, 0)].bg, pepe::SURFACE);

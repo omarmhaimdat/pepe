@@ -83,7 +83,9 @@ pub fn render(d: &Dashboard, f: &mut Frame) {
     }
 
     let big = area.height >= BIG_MASCOT_MIN_HEIGHT && area.width >= BIG_MASCOT_MIN_WIDTH;
-    let [header, _, tabs, _, body, footer] = Layout::vertical([
+    // The band's checker is the gap under it
+    let [band, header, _, tabs, _, body, footer] = Layout::vertical([
+        Constraint::Length(2),
         Constraint::Length(header_height(d, big)),
         Constraint::Length(1),
         Constraint::Length(1),
@@ -93,6 +95,7 @@ pub fn render(d: &Dashboard, f: &mut Frame) {
     ])
     .areas(area);
 
+    render_band(d, f, band);
     render_header(d, f, header, big);
     render_tabs(d, f, tabs);
     match d.tab {
@@ -120,7 +123,7 @@ pub(super) fn value(text: impl Into<String>, color: Color) -> Span<'static> {
 
 pub(super) fn heading(text: &str) -> Line<'static> {
     if super::theme::current().true_color() {
-        return Line::raw(text.to_string());
+        return Line::from(label(text.to_uppercase()));
     }
     Line::from(Span::styled(
         text.to_uppercase(),
@@ -130,9 +133,13 @@ pub(super) fn heading(text: &str) -> Line<'static> {
 
 /// Section title followed by a rule to the edge: "LATENCY ────────"
 pub(super) fn section(f: &mut Frame, area: Rect, title: &str, right: Option<Line<'static>>) {
-    // On pepe's panels a title is a word, not a rule: the panel is the edge
+    // On pepe's cards a title is a word in small capitals, not a rule: the
+    // card is the edge
     if super::theme::current().true_color() {
-        f.render_widget(Paragraph::new(Line::raw(title.to_string())), area);
+        f.render_widget(
+            Paragraph::new(Line::from(label(title.to_uppercase()))),
+            area,
+        );
         if let Some(right) = right {
             f.render_widget(Paragraph::new(right).alignment(Alignment::Right), area);
         }
@@ -259,16 +266,17 @@ const MAX_HEADER_NOTES: usize = 4;
 const BIG_MASCOT_MIN_HEIGHT: u16 = 46;
 const BIG_MASCOT_MIN_WIDTH: u16 = 146;
 
+/// The header under the band, whose top line is the title
 fn header_height(d: &Dashboard, big: bool) -> u16 {
     if big {
-        // title, gap, then the mascot and the panels beside him
-        return 2 + BIG_BODY;
+        // the mascot and the panels beside him
+        return BIG_BODY;
     }
     let content = match &d.verdict {
-        // title, progress, gap, headline, gap, notes
-        Some(v) => 5 + v.notes.len().min(MAX_HEADER_NOTES) as u16,
-        // title, progress, gap, labels, three rows of digits
-        None => 7,
+        // progress, gap, headline, gap, notes
+        Some(v) => 4 + v.notes.len().min(MAX_HEADER_NOTES) as u16,
+        // progress, gap, labels, three rows of digits
+        None => 6,
     };
     // The mascot plus its speech line
     content.max(mascot::HEIGHT + 1)
@@ -294,14 +302,12 @@ fn render_header(d: &Dashboard, f: &mut Frame, area: Rect, big: bool) {
         mascot::keep(pet);
     }
 
-    let [title, progress, _, rest] = Layout::vertical([
-        Constraint::Length(1),
+    let [progress, _, rest] = Layout::vertical([
         Constraint::Length(1),
         Constraint::Length(1),
         Constraint::Min(0),
     ])
     .areas(main);
-    render_title(d, f, title);
     render_progress(d, f, progress);
     match &d.verdict {
         Some(_) => render_verdict(d, f, rest),
@@ -309,41 +315,41 @@ fn render_header(d: &Dashboard, f: &mut Frame, area: Rect, big: bool) {
     }
 }
 
-fn render_title(d: &Dashboard, f: &mut Frame, area: Rect) {
-    let (state, color) = if d.interrupted {
-        ("■ stopped", BAD)
+/// The band: the request, and where the run is, in ink on the load test's
+/// ember
+fn render_band(d: &Dashboard, f: &mut Frame, area: Rect) {
+    let state = if d.interrupted {
+        "■ stopped"
     } else if d.finished.is_some() {
-        ("✔ done", GOOD)
+        "✔ done"
     } else if d.paused {
-        ("‖ paused", WARN)
+        "‖ paused"
     } else if d.warming {
-        ("◌ warming up", WARN)
+        "◌ warming up"
     } else {
-        ("● running", GOOD)
+        "● running"
     };
     let clock = match (d.warming, d.warmup_left) {
         (true, Some(left)) => format!("{} left", format::span(left)),
         _ => format::clock(d.elapsed()),
     };
-    let right = Line::from(vec![
-        value(state, color),
-        label("   concurrency "),
-        value(d.concurrency.to_string(), Color::Reset),
-        label("   "),
-        value(clock, Color::Reset),
-    ]);
-
-    let prefix = format!("pepe  {} ", d.args.method);
-    let room = (area.width as usize).saturating_sub(right.width() + prefix.chars().count() + 2);
-    let left = Line::from(vec![
-        value("pepe", ACCENT),
+    let right = vec![
+        Span::raw(state.to_uppercase()).bold(),
+        Span::raw("   concurrency "),
+        Span::raw(d.concurrency.to_string()).bold(),
+        Span::raw("   "),
+        Span::raw(clock).bold(),
+    ];
+    let right_width: usize = right.iter().map(|s| s.width()).sum::<usize>() + 1;
+    // " pepe " and the spaces around it, the method and a space
+    let lead = 8 + d.args.method.chars().count() + 2;
+    let room = (area.width as usize).saturating_sub(right_width + lead + 2);
+    let left = vec![
+        Span::raw(d.args.method.clone()).bold(),
         Span::raw("  "),
-        value(d.args.method.clone(), Color::Magenta),
-        Span::raw(" "),
         Span::raw(truncate(&d.args.url, room)),
-    ]);
-    f.render_widget(Paragraph::new(left), area);
-    f.render_widget(Paragraph::new(right).alignment(Alignment::Right), area);
+    ];
+    kit::band(f, area, kit::Band::Run, left, right);
 }
 
 /// How far the run is: percent, what that means in words, and its colour
@@ -464,7 +470,7 @@ fn render_hero(d: &Dashboard, f: &mut Frame, area: Rect) {
     }))
     .split(area);
     for ((name, text, color), column) in heroes.into_iter().zip(columns.iter()) {
-        let mut lines = vec![Line::from(label(name.to_uppercase()))];
+        let mut lines = vec![Line::from(kit::tag(name))];
         if big {
             let (num, unit) = bigtext::split_unit(&text);
             let unit = if num.is_empty() { text.as_str() } else { unit };
@@ -528,13 +534,7 @@ fn heat_of(p99_ms: f64) -> (&'static str, f64) {
 }
 
 fn render_big_header(d: &Dashboard, f: &mut Frame, area: Rect) {
-    let [title, _, body] = Layout::vertical([
-        Constraint::Length(1),
-        Constraint::Length(1),
-        Constraint::Length(BIG_BODY),
-    ])
-    .areas(area);
-    render_title(d, f, title);
+    let body = area;
 
     let [pet, _, cards, _, run] = Layout::horizontal([
         Constraint::Length(mascot::BIG_WIDTH),
@@ -799,9 +799,9 @@ fn render_verdict(d: &Dashboard, f: &mut Frame, area: Rect) {
     let color = level_color(verdict.level);
     let mut lines = vec![
         Line::from(vec![
-            Span::styled(
-                format!(" {} {} ", verdict.level.symbol(), verdict.level.headline()),
-                Style::new().fg(Color::Black).bg(color).bold(),
+            kit::badge(
+                &format!("{} {}", verdict.level.symbol(), verdict.level.headline()),
+                color,
             ),
             Span::raw("  "),
             Span::styled(
@@ -1025,7 +1025,7 @@ fn render_live(d: &Dashboard, f: &mut Frame, body: Rect) {
         Constraint::Min(0),
     ])
     .areas(left);
-    panel(f, charts_panel);
+    kit::card(f, charts_panel, Some("latency · throughput"), false, true);
     let [heat_title, heat, line_title, lines, rps_title, rps, axis] = Layout::vertical([
         Constraint::Length(1),
         Constraint::Length(heat_rows),
@@ -1086,21 +1086,22 @@ fn render_live(d: &Dashboard, f: &mut Frame, body: Rect) {
         render_time_axis(&columns, f, axis);
     }
 
-    if bottom.height >= 5 {
+    // A card of four rows holds its heading and a request: room enough
+    if bottom.height >= 4 {
         let [latest, _, errors] = Layout::horizontal([
             Constraint::Fill(3),
             Constraint::Length(2),
             Constraint::Fill(2),
         ])
         .areas(bottom);
-        panel(f, latest);
-        panel(f, errors);
+        kit::card(f, latest, None, false, false);
+        kit::card(f, errors, None, false, false);
         render_latest(d, f, inset(latest, 2, 1));
         render_errors(d, f, inset(errors, 2, 1));
     }
 
     if with_stats {
-        panel(f, stats);
+        kit::card(f, stats, Some("totals"), false, false);
         render_stats_column(d, f, inset(stats, 2, 1));
     }
 }
@@ -3363,7 +3364,7 @@ mod tests {
             .iter()
             .map(|c| c.symbol())
             .collect();
-        assert!(screen.contains("1 Endpoints") && screen.contains("4 Requests"));
+        assert!(screen.contains("1 ENDPOINTS") && screen.contains("4 REQUESTS"));
         assert!(screen.contains("GET /b/{id}") && screen.contains("with failures"));
 
         for (w, h) in [(60, 18), (100, 30), (220, 60)] {
