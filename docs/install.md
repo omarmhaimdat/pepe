@@ -111,9 +111,9 @@ pepe draws in its own palette on terminals that say they can show true colour, a
 
 | Theme | |
 | --- | --- |
-| `pepe` | pepe's own: warm darks, one ember accent |
+| `pepe` | The pepper's own, as on this site: an ink ground, cream text, pepper red as the one accent |
 | `nord`, `dracula`, `gruvbox`, `tokyo-night`, `catppuccin` | The same screens in those palettes, in true colour |
-| `paper` | True colour on a light ground |
+| `paper` | The same on the site's cream, for a light ground |
 | `terminal` | The terminal's own background and 256 colours |
 | `light` | The 256 colours chosen for a light background |
 | `none` | No colour: selections in reverse video, the heatmap in shades, the verdict uncoloured |
