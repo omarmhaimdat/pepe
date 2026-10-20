@@ -6,6 +6,73 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+## [0.52.0](https://github.com/omarmhaimdat/pepe/compare/v0.51.1...v0.52.0) - 2026-10-20
+
+### Added
+
+- *(ui)* the screens in the pepper's colours: a band for the mode, cards, tags ([#220](https://github.com/omarmhaimdat/pepe/pull/220))
+
+  ## What
+
+  pepe's screens take the site's look, starting with the shared pieces and
+  the load-test dashboard.
+
+  - **The palette.**
+  - `pepe` now has an ink ground, cream text and the pepper's red as the
+  one accent (it was ember), lime for good and gold for warnings.
+    - The heatmap runs from ink to red to cream.
+    - `paper` takes the site's cream.
+  - There are three new roles, each the same in every theme: the ink
+  written on a band or a badge, a card's hard shadow (red on dark, ink on
+  light), and the modes' band colours.
+  - **The kit** ([src/ui/kit.rs](src/ui/kit.rs)):
+  - `band`: the mode's colour across the top, with `pepe` in an ink chip,
+  the title in ink and the site's checker strip under it.
+  - `card`: a square frame on the panel surface, its title a tag set into
+  the border, and an optional hard shadow half a cell right and below. The
+  frame sits in the panel's existing padding, so nothing drawn inside
+  moves.
+  - `tag`, `badge`, `corner`: tags are reverse video, so they read in
+  every theme, including `NO_COLOR`.
+  - Every panel is square now, and key chips and tabs are tags. The picked
+  tab has the red corner square, and titles inside a card are small
+  capitals.
+  - **The dashboard:**
+  - The ember band holds the method, the URL, the state, the concurrency
+  and the clock.
+  - The big numbers' names are tags, and the verdict is a badge in ink on
+  its level's colour.
+  - On the live tab, the charts, the totals, the latest requests and the
+  errors are cards, and the charts card carries the shadow.
+
+  Ping, ramp and setup get their bands (lime, gold, red) in follow-ups.
+  The palette already holds those colours, and the kit's `Band` takes a
+  variant per screen as each one moves over. Those screens already get the
+  square frames, tags and chips from this change.
+
+  ## Why
+
+  The site and the docs have the pepper's look
+  ([omarmhaimdat/pepe#216](https://github.com/omarmhaimdat/pepe/pull/216)),
+  and the screens didn't match. The mock-up that came before this work
+  recorded the real screens and laid them out again in the site's style.
+  This PR builds that design for the dashboard.
+
+  ## Checked
+
+  - `cargo test`: 409 passed. Four tests that read tab titles now expect
+  small capitals.
+  - `cargo +1.98 clippy --all-targets -- -D warnings` and `cargo fmt
+  --check`: clean.
+  - Recorded the live dashboard at 120×36 against `bench/server` on
+  localhost in a hidden terminal, in the `pepe` and `paper` themes, and
+  compared it with the mock-up.
+  - Ping and setup were recorded too, to check the square frames, tag
+  titles, chips and tabs there.
+  - `python3 site/build-docs.py --check`: current. The themes table in
+  `docs/install.md` describes the new palettes.
+
+
 ## [0.51.1](https://github.com/omarmhaimdat/pepe/compare/v0.51.0...v0.51.1) - 2026-10-19
 
 ### Performance
