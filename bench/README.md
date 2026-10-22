@@ -803,7 +803,24 @@ file in the page cache.
 | `awk '{c[$9]++}'` (counts one field) | 13.28 s | 0.44M | 65 | |
 
 The first row and awk's were measured on an earlier log of the same
-shape and size (865 MB). Four copies of the file end to end (3.45 GB)
+shape and size (865 MB).
+
+**Paths by slot.** Each minute, hour and day now keeps its
+busiest paths and its request times in buckets, and each path its
+times, status codes and upstream time, for the traffic view held to one
+path. The same 862 MB log on the same machine, before and after, best of
+five (three piped), measured on 2026-10-22:
+
+| | time | CPU | memory |
+| --- | ---: | ---: | ---: |
+| the file, before | 0.27 s | 2.69 s | 103 MB |
+| the file, after | 0.28 s | 2.93 s | 138 MB |
+| piped in, before | 2.14 s | | 18 MB |
+| piped in, after | 2.21 s | | 22 MB |
+
+The report is the same to the byte before and after. The memory is each
+reading thread's slots holding their times: about 2.5 MB a thread for
+nine days, added together once read. Four copies of the file end to end (3.45 GB)
 take 0.84 s. The report is the same to the byte whichever way the file
 is read; a test reads one log both ways and compares.
 

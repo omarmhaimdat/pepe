@@ -1064,6 +1064,88 @@ pub struct Slot {
     pub peak: u32,
     /// Error log lines at `error` and above
     pub faults: u64,
+    /// Its request times, for its percentiles
+    pub times: Coarse,
+}
+
+/// Request times in buckets an eighth of a doubling wide, from 32µs to
+/// eight minutes: few enough to keep for every slot and every path. A
+/// percentile is read between a bucket's ends, within a few percent.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Coarse {
+    counts: [u32; COARSE],
+}
+
+/// Buckets of a `Coarse`
+const COARSE: usize = 176;
+
+impl Default for Coarse {
+    fn default() -> Self {
+        Coarse {
+            counts: [0; COARSE],
+        }
+    }
+}
+
+impl Coarse {
+    /// The bucket of a time in microseconds: eight to a doubling of 32µs
+    fn index(us: u64) -> usize {
+        let unit = us >> 5;
+        if unit < 8 {
+            return unit as usize;
+        }
+        let exp = 63 - unit.leading_zeros();
+        let shift = exp - 3;
+        let top = unit >> shift;
+        ((shift as usize + 1) * 8 + (top as usize - 8)).min(COARSE - 1)
+    }
+
+    /// Where a bucket starts, in microseconds
+    fn low(index: usize) -> u64 {
+        if index < 8 {
+            return (index as u64) << 5;
+        }
+        let shift = index / 8 - 1;
+        let top = 8 + (index % 8) as u64;
+        (top << shift) << 5
+    }
+
+    pub fn record(&mut self, us: u64) {
+        let count = &mut self.counts[Self::index(us)];
+        *count = count.saturating_add(1);
+    }
+
+    pub fn add(&mut self, other: &Coarse) {
+        for (mine, theirs) in self.counts.iter_mut().zip(other.counts) {
+            *mine = mine.saturating_add(theirs);
+        }
+    }
+
+    pub fn count(&self) -> u64 {
+        self.counts.iter().map(|c| u64::from(*c)).sum()
+    }
+
+    /// The time `q` of the requests took no longer than, read between the
+    /// ends of the bucket it falls in
+    pub fn percentile(&self, q: f64) -> Option<Duration> {
+        let total = self.count();
+        if total == 0 {
+            return None;
+        }
+        let rank = (q.clamp(0.0, 1.0) * total as f64).max(1.0);
+        let mut below = 0.0;
+        for (index, count) in self.counts.iter().enumerate() {
+            let count = f64::from(*count);
+            if count > 0.0 && below + count >= rank {
+                let (low, high) = (Self::low(index), Self::low(index + 1));
+                let within = (rank - below) / count;
+                let us = low as f64 + (high - low) as f64 * within;
+                return Some(Duration::from_micros(us as u64));
+            }
+            below += count;
+        }
+        None
+    }
 }
 
 /// Counts by time, the newest `cap` of them. The one being counted into
@@ -1076,7 +1158,7 @@ struct Rolling<V> {
     cap: usize,
 }
 
-impl<V: Default + Copy> Rolling<V> {
+impl<V: Default> Rolling<V> {
     fn new(cap: usize) -> Self {
         Rolling {
             map: BTreeMap::new(),
@@ -1131,6 +1213,21 @@ impl<V: Default + Copy> Rolling<V> {
             .chain(open.map(|(key, v)| (*key, v)))
     }
 
+    /// The count at `key`, when there is one
+    fn get(&self, key: i64) -> Option<&V> {
+        match &self.open {
+            Some((open, v)) if *open == key => Some(v),
+            _ => self.map.get(&key),
+        }
+    }
+
+    /// Every key and its count, in no order
+    fn iter(&self) -> impl Iterator<Item = (i64, &V)> {
+        self.range(i64::MIN, i64::MAX)
+    }
+}
+
+impl<V: Default + Copy> Rolling<V> {
     /// Every count, oldest first
     fn all(&self) -> Vec<(i64, V)> {
         let mut all: Vec<(i64, V)> = self.map.iter().map(|(key, v)| (*key, *v)).collect();
@@ -1159,6 +1256,132 @@ impl Slots {
     /// The slot `local` falls in; none when it is older than all those kept
     fn at(&mut self, local: i64) -> Option<&mut Slot> {
         self.slots.at(local.div_euclid(self.grain.seconds()))
+    }
+}
+
+/// What one path saw in one slot
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
+pub struct PathCount {
+    /// The path's place in `Stats::paths`
+    pub id: u32,
+    pub c4xx: u32,
+    pub c5xx: u32,
+    pub requests: u64,
+    pub timed: u64,
+    pub time_us: u64,
+}
+
+impl PathCount {
+    fn add(&mut self, other: &PathCount) {
+        self.requests += other.requests;
+        self.c4xx = self.c4xx.saturating_add(other.c4xx);
+        self.c5xx = self.c5xx.saturating_add(other.c5xx);
+        self.timed += other.timed;
+        self.time_us += other.time_us;
+    }
+
+    pub fn mean_time(&self) -> Option<Duration> {
+        (self.timed > 0).then(|| Duration::from_micros(self.time_us / self.timed))
+    }
+}
+
+/// The paths of one slot, the busiest `SLOT_PATHS` of them
+#[derive(Debug, Clone, Default)]
+pub struct PathTable {
+    pub rows: Vec<PathCount>,
+}
+
+/// Paths kept for each slot. When a slot has more, a new path takes the
+/// place of the least requested one if it has at least as many requests:
+/// the paths that matter in a slot come early and often, and keep theirs.
+const SLOT_PATHS: usize = 64;
+
+/// A grain's slots, path by path
+#[derive(Debug, Clone)]
+struct PathSlots {
+    grain: Grain,
+    slots: Rolling<PathTable>,
+    /// Where each path is in the slot held out of the map, plus one; 0
+    /// where it isn't. A request finds its path's count without a search.
+    index: Vec<u8>,
+    /// The slot `index` is for
+    indexed: Option<i64>,
+}
+
+impl PathSlots {
+    fn new(grain: Grain) -> Self {
+        PathSlots {
+            grain,
+            slots: Rolling::new(grain.kept()),
+            index: Vec::new(),
+            indexed: None,
+        }
+    }
+
+    /// Add `count` to its path in the slot `local` falls in
+    fn add(&mut self, local: i64, count: &PathCount) {
+        let key = local.div_euclid(self.grain.seconds());
+        let PathSlots {
+            slots,
+            index,
+            indexed,
+            ..
+        } = self;
+        if *indexed != Some(key) {
+            if let Some(open) = slots.held().filter(|_| indexed.is_some()) {
+                for row in &open.rows {
+                    if let Some(place) = index.get_mut(row.id as usize) {
+                        *place = 0;
+                    }
+                }
+            }
+            *indexed = None;
+            let Some(table) = slots.at(key) else {
+                return;
+            };
+            for (place, row) in table.rows.iter().enumerate() {
+                let id = row.id as usize;
+                if index.len() <= id {
+                    index.resize(id + 1, 0);
+                }
+                index[id] = place as u8 + 1;
+            }
+            *indexed = Some(key);
+        }
+        let Some(table) = slots.held() else {
+            return;
+        };
+        let id = count.id as usize;
+        if index.len() <= id {
+            index.resize(id + 1, 0);
+        }
+        match index[id] {
+            0 if table.rows.len() < SLOT_PATHS => {
+                table.rows.push(*count);
+                index[id] = table.rows.len() as u8;
+            }
+            0 => {
+                let (place, least) = table
+                    .rows
+                    .iter()
+                    .enumerate()
+                    .min_by_key(|(_, row)| row.requests)
+                    .map(|(place, row)| (place, *row))
+                    .expect("a full table");
+                if count.requests >= least.requests {
+                    index[least.id as usize] = 0;
+                    table.rows[place] = *count;
+                    index[id] = place as u8 + 1;
+                }
+            }
+            place => table.rows[place as usize - 1].add(count),
+        }
+    }
+
+    /// Let go of the index, when the counts are added to from elsewhere
+    fn unindex(&mut self) {
+        self.index.clear();
+        self.indexed = None;
     }
 }
 
@@ -1213,17 +1436,44 @@ impl<V: Tally> Top<V> {
     }
 
     fn get(&mut self, name: &str) -> Option<&mut V> {
+        self.get_placed(name).map(|(_, count)| count)
+    }
+
+    /// A name's count, and its place: the number it is known by
+    fn get_placed(&mut self, name: &str) -> Option<(u32, &mut V)> {
         if let Some(&place) = self.places.get(name) {
-            return self.counts.get_mut(place as usize);
+            return self
+                .counts
+                .get_mut(place as usize)
+                .map(|count| (place, count));
         }
         if self.counts.len() >= self.cap {
             self.other += 1;
             return None;
         }
-        self.places
-            .insert(name.to_string(), self.counts.len() as u32);
+        let place = self.counts.len() as u32;
+        self.places.insert(name.to_string(), place);
         self.counts.push(V::default());
-        self.counts.last_mut()
+        self.counts.last_mut().map(|count| (place, count))
+    }
+
+    /// The place a name is counted at
+    pub fn place(&self, name: &str) -> Option<u32> {
+        self.places.get(name).copied()
+    }
+
+    /// A name's count
+    pub fn count(&self, name: &str) -> Option<&V> {
+        self.counts.get(*self.places.get(name)? as usize)
+    }
+
+    /// Every name, at its place
+    pub fn names(&self) -> Vec<&str> {
+        let mut names = vec![""; self.counts.len()];
+        for (name, place) in &self.places {
+            names[*place as usize] = name;
+        }
+        names
     }
 
     /// Add what another reader counted
@@ -1344,7 +1594,18 @@ pub struct PathStat {
     pub c5xx: u64,
     pub time_us: u64,
     pub timed: u64,
+    /// Sum of `$upstream_response_time`, in microseconds, over the
+    /// `upstreamed` requests that had one and a request time
+    pub upstream_us: u64,
+    pub upstreamed: u64,
+    /// Its request times, for its percentiles
+    pub times: Coarse,
+    /// Its status codes, the first `PATH_CODES` it answered
+    pub codes: [(u16, u64); PATH_CODES],
 }
+
+/// Status codes counted for each path; others are left out of its mix
+const PATH_CODES: usize = 8;
 
 impl Tally for PathStat {
     fn add(&mut self, other: &Self) {
@@ -1353,6 +1614,14 @@ impl Tally for PathStat {
         self.c5xx += other.c5xx;
         self.time_us += other.time_us;
         self.timed += other.timed;
+        self.upstream_us += other.upstream_us;
+        self.upstreamed += other.upstreamed;
+        self.times.add(&other.times);
+        for (code, n) in other.codes {
+            if n > 0 {
+                self.code(code, n);
+            }
+        }
     }
 
     fn requests(&self) -> u64 {
@@ -1363,6 +1632,34 @@ impl Tally for PathStat {
 impl PathStat {
     pub fn mean_time(&self) -> Option<Duration> {
         (self.timed > 0).then(|| Duration::from_micros(self.time_us / self.timed))
+    }
+
+    fn code(&mut self, code: u16, n: u64) {
+        for slot in &mut self.codes {
+            if slot.0 == code && slot.1 > 0 {
+                slot.1 += n;
+                return;
+            }
+            if slot.1 == 0 {
+                *slot = (code, n);
+                return;
+            }
+        }
+    }
+
+    /// Its status codes, most answered first
+    pub fn statuses(&self) -> Vec<(u16, u64)> {
+        let mut codes: Vec<(u16, u64)> =
+            self.codes.iter().copied().filter(|(_, n)| *n > 0).collect();
+        codes.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(&b.0)));
+        codes
+    }
+
+    /// The share of its request time spent waiting on the upstream, over
+    /// the requests that said both
+    pub fn upstream_share(&self) -> Option<f64> {
+        (self.upstreamed > 0 && self.time_us > 0)
+            .then(|| (self.upstream_us as f64 / self.time_us as f64).min(1.0))
     }
 }
 
@@ -1496,6 +1793,8 @@ pub struct Stats {
     /// The busiest second, and its requests
     pub peak: Option<(Stamp, u32)>,
     slots: [Slots; 3],
+    /// The same slots, path by path
+    path_slots: [PathSlots; 3],
     /// Error log lines, by level and by what they say
     pub faults: u64,
     pub levels: BTreeMap<String, u64>,
@@ -1505,6 +1804,13 @@ pub struct Stats {
     /// Lines pushed out of `recent` so far: a line's number is this plus
     /// its place there
     pub recent_base: u64,
+    /// The path the log view is held to: its lines are kept apart, as many
+    /// as `recent` keeps of all of them
+    pub focus: Option<String>,
+    pub focused: VecDeque<Recent>,
+    pub focused_base: u64,
+    /// The line being counted is one of the focused path's
+    matched: bool,
     /// How far the reading is
     pub read_bytes: u64,
     pub total_bytes: u64,
@@ -1551,12 +1857,17 @@ impl Default for Stats {
             seconds: Rolling::new(SECONDS_KEPT),
             peak: None,
             slots: Grain::ALL.map(Slots::new),
+            path_slots: Grain::ALL.map(PathSlots::new),
             faults: 0,
             levels: BTreeMap::new(),
             causes: HashMap::new(),
             other_causes: 0,
             recent: VecDeque::new(),
             recent_base: 0,
+            focus: None,
+            focused: VecDeque::new(),
+            focused_base: 0,
+            matched: false,
             read_bytes: 0,
             total_bytes: 0,
             caught_up: false,
@@ -1705,12 +2016,77 @@ pub fn clean(text: &str) -> Cow<'_, str> {
     Cow::Owned(out)
 }
 
+/// Keep a line for the log view in `lines`, in its place by time: an error
+/// log read after the access log has its lines among the requests they
+/// were written between. `base` counts the lines pushed out.
+fn keep_in(
+    lines: &mut VecDeque<Recent>,
+    base: &mut u64,
+    raw: &str,
+    kind: Kind,
+    at: i64,
+    order: u64,
+) {
+    let full = lines.len() == RECENT;
+    let in_order = lines.back().is_none_or(|last| last.at <= at);
+    let place = if in_order {
+        lines.len()
+    } else {
+        lines.partition_point(|kept| kept.at <= at)
+    };
+    if full {
+        *base += 1;
+        // Older than everything kept: it would be the first to go
+        if place == 0 {
+            return;
+        }
+    }
+    // The line that goes makes room for the one that comes: while a
+    // long log is read, nothing is allocated for the lines passing by
+    let mut text = match full.then(|| lines.pop_front()).flatten() {
+        Some(gone) => gone.text,
+        None => String::new(),
+    };
+    text.clear();
+    let cut = cut_at(raw);
+    text.push_str(&raw[..cut]);
+    if cut < raw.len() {
+        text.push('…');
+    }
+    lines.insert(
+        place - usize::from(full),
+        Recent {
+            text,
+            kind,
+            at,
+            order,
+        },
+    );
+}
+
+/// The path a line is counted under: its target without the query, and
+/// with ids made `*` unless `exact`. An error log line's is its request's.
+pub fn line_path(line: &Line<'_>, exact: bool) -> Option<String> {
+    let target = match line {
+        Line::Request(r) => &*r.target,
+        Line::Fault(f) if !f.request.is_empty() => request_line(f.request).1,
+        _ => return None,
+    };
+    let path = split_at_byte(target, b'?').map_or(target, |(path, _)| path);
+    let mut scratch = String::new();
+    Some(match exact {
+        true => path.to_string(),
+        false => grouped_into(path, &mut scratch).to_string(),
+    })
+}
+
 impl Stats {
     /// Count one line. `wall` is the clock's second, for telling a log
     /// that is being written from one that was.
     pub fn fold(&mut self, line: Line<'_>, raw: &str, wall: i64) {
         self.lines += 1;
         self.order += 1;
+        self.matched = false;
         let at = match &line {
             Line::Request(r) => r.at,
             Line::Fault(f) => f.at,
@@ -1740,52 +2116,35 @@ impl Stats {
             self.carry = at.at;
         }
         if self.keeping {
-            self.keep(raw, kind, self.carry);
+            keep_in(
+                &mut self.recent,
+                &mut self.recent_base,
+                raw,
+                kind,
+                self.carry,
+                self.order,
+            );
+            if self.matched {
+                keep_in(
+                    &mut self.focused,
+                    &mut self.focused_base,
+                    raw,
+                    kind,
+                    self.carry,
+                    self.order,
+                );
+            }
         } else {
             self.recent_base += 1;
         }
     }
 
-    /// Keep a line for the log view, in its place by time: an error log
-    /// read after the access log has its lines among the requests they
-    /// were written between
-    fn keep(&mut self, raw: &str, kind: Kind, at: i64) {
-        let full = self.recent.len() == RECENT;
-        let in_order = self.recent.back().is_none_or(|last| last.at <= at);
-        let place = if in_order {
-            self.recent.len()
-        } else {
-            self.recent.partition_point(|kept| kept.at <= at)
-        };
-        if full {
-            self.recent_base += 1;
-            // Older than everything kept: it would be the first to go
-            if place == 0 {
-                return;
-            }
-        }
-        // The line that goes makes room for the one that comes: while a
-        // long log is read, nothing is allocated for the lines passing by
-        let mut text = match full.then(|| self.recent.pop_front()).flatten() {
-            Some(gone) => gone.text,
-            None => String::new(),
-        };
-        text.clear();
-        let cut = cut_at(raw);
-        text.push_str(&raw[..cut]);
-        if cut < raw.len() {
-            text.push('…');
-        }
-        let order = self.order;
-        self.recent.insert(
-            place - usize::from(full),
-            Recent {
-                text,
-                kind,
-                at,
-                order,
-            },
-        );
+    /// Hold the log view to a path's lines, starting with `lines`, the ones
+    /// of it already kept; none lets go
+    pub fn set_focus(&mut self, path: Option<String>, lines: Vec<Recent>) {
+        self.focus = path;
+        self.focused = lines.into();
+        self.focused_base = 0;
     }
 
     fn seen(&mut self, at: Stamp, wall: i64) {
@@ -1814,13 +2173,24 @@ impl Stats {
         } else {
             grouped_into(path, &mut scratch)
         };
-        if let Some(stat) = self.paths.get(path) {
+        if self.focus.is_some() {
+            self.matched = self.focus.as_deref() == Some(path);
+        }
+        let mut place = None;
+        if let Some((at, stat)) = self.paths.get_placed(path) {
+            place = Some(at);
             stat.requests += 1;
             stat.c4xx += c4xx;
             stat.c5xx += c5xx;
+            stat.code(r.status, 1);
             if let Some(us) = time_us {
                 stat.time_us += us;
                 stat.timed += 1;
+                stat.times.record(us);
+                if let Some(upstream) = r.upstream {
+                    stat.upstream_us += (upstream * 1e6) as u64;
+                    stat.upstreamed += 1;
+                }
             }
         }
         self.scratch = scratch;
@@ -1906,13 +2276,33 @@ impl Stats {
                 slot.timed += 1;
             }
             slot.peak = slot.peak.max(this_second);
+            if let Some(us) = time_us {
+                slot.times.record(us);
+            }
         }
         self.hot = found.then_some(at);
+        if let Some(id) = place {
+            let count = PathCount {
+                id,
+                c4xx: c4xx as u32,
+                c5xx: c5xx as u32,
+                requests: 1,
+                timed: u64::from(time_us.is_some()),
+                time_us: time_us.unwrap_or(0),
+            };
+            for slots in &mut self.path_slots {
+                slots.add(at.local(), &count);
+            }
+        }
     }
 
     fn fault(&mut self, f: &Fault, raw: &str, wall: i64) {
         self.hot = None;
         self.faults += 1;
+        if let Some(focus) = &self.focus {
+            let path = line_path(&Line::Fault(f.clone()), self.exact_paths);
+            self.matched = path.as_deref() == Some(focus.as_str());
+        }
         match self.levels.get_mut(f.level) {
             Some(count) => *count += 1,
             None => {
@@ -2015,7 +2405,23 @@ impl Stats {
             *self.statuses.entry(code).or_default() += n;
         }
         self.methods.absorb(other.methods);
+        // Their paths are known by their own places; the counts of each
+        // slot follow the names to the places they have here
+        let theirs: Vec<String> = other.paths.names().into_iter().map(String::from).collect();
         self.paths.absorb(other.paths);
+        let places: Vec<Option<u32>> = theirs.iter().map(|name| self.paths.place(name)).collect();
+        for (mine, theirs) in self.path_slots.iter_mut().zip(&other.path_slots) {
+            mine.unindex();
+            let size = mine.grain.seconds();
+            for (key, table) in theirs.slots.iter() {
+                for row in &table.rows {
+                    if let Some(Some(id)) = places.get(row.id as usize) {
+                        mine.add(key * size, &PathCount { id: *id, ..*row });
+                    }
+                }
+            }
+            mine.unindex();
+        }
         self.clients.absorb(other.clients);
         self.agents.absorb(other.agents);
         self.params.absorb(other.params);
@@ -2047,6 +2453,7 @@ impl Stats {
                     mine.timed += slot.timed;
                     mine.faults += slot.faults;
                     mine.peak = mine.peak.max(slot.peak);
+                    mine.times.add(&slot.times);
                 }
             }
         }
@@ -2147,25 +2554,112 @@ impl Stats {
     /// it the log covers
     pub fn rows(&self, grain: Grain, clock: Clock) -> Vec<Row> {
         let size = grain.seconds();
-        let first = self.first.map_or(i64::MIN, Stamp::local);
-        // Now on the log's clock; the second in progress counts
-        let now = clock.now + i64::from(clock.offset) + 1;
         self.slots[grain as usize]
             .slots
             .all()
             .iter()
             .map(|(key, slot)| {
-                let start = key * size;
-                let from = start.max(first);
-                let to = (start + size).min(now.max(from + 1));
+                let (seconds, partial) = self.covered(key * size, size, clock);
                 Row {
-                    start,
+                    start: key * size,
                     slot: *slot,
-                    rate: slot.requests as f64 / (to - from).max(1) as f64,
-                    partial: to - from < size,
+                    rate: slot.requests as f64 / seconds as f64,
+                    partial,
                 }
             })
             .collect()
+    }
+
+    /// How much of the slot starting at `start` the log covers, in
+    /// seconds, and whether that is less than all of it
+    fn covered(&self, start: i64, size: i64, clock: Clock) -> (i64, bool) {
+        let first = self.first.map_or(i64::MIN, Stamp::local);
+        // Now on the log's clock; the second in progress counts
+        let now = clock.now + i64::from(clock.offset) + 1;
+        let from = start.max(first);
+        let to = (start + size).min(now.max(from + 1));
+        ((to - from).max(1), to - from < size)
+    }
+
+    /// The paths a slot counted, in no order
+    pub fn slot_table(&self, grain: Grain, start: i64) -> &[PathCount] {
+        let key = start.div_euclid(grain.seconds());
+        self.path_slots[grain as usize]
+            .slots
+            .get(key)
+            .map_or(&[], |table| table.rows.as_slice())
+    }
+
+    /// The paths a slot counted, busiest first
+    pub fn slot_paths(&self, grain: Grain, start: i64) -> Vec<PathCount> {
+        let mut rows = self.slot_table(grain, start).to_vec();
+        rows.sort_by(|a, b| b.requests.cmp(&a.requests).then(a.id.cmp(&b.id)));
+        rows
+    }
+
+    /// A grain's slots as one path saw them, oldest first: every slot the
+    /// log has, with none where the path wasn't asked for
+    pub fn path_rows(&self, grain: Grain, clock: Clock, path: &str) -> Vec<Row> {
+        let size = grain.seconds();
+        let id = self.paths.place(path);
+        let tables = &self.path_slots[grain as usize].slots;
+        self.slots[grain as usize]
+            .slots
+            .all()
+            .iter()
+            .map(|(key, _)| {
+                let count = id
+                    .and_then(|id| tables.get(*key)?.rows.iter().find(|row| row.id == id))
+                    .copied()
+                    .unwrap_or_default();
+                let (seconds, partial) = self.covered(key * size, size, clock);
+                Row {
+                    start: key * size,
+                    slot: Slot {
+                        requests: count.requests,
+                        c4xx: u64::from(count.c4xx),
+                        c5xx: u64::from(count.c5xx),
+                        time_us: count.time_us,
+                        timed: count.timed,
+                        ..Slot::default()
+                    },
+                    rate: count.requests as f64 / seconds as f64,
+                    partial,
+                }
+            })
+            .collect()
+    }
+
+    /// A path's rate over the `window` seconds up to now. A path isn't
+    /// counted by the second: a minute the window starts inside of counts
+    /// for the part of it the window has.
+    pub fn path_now(&self, clock: Clock, window: i64, path: &str) -> Now {
+        let mut now = Now::default();
+        let Some(id) = self.paths.place(path) else {
+            return now;
+        };
+        // The window on the log's clock, the second in progress counted
+        let end = clock.now + i64::from(clock.offset) + 1;
+        let start = end - window;
+        let (mut requests, mut c4xx, mut c5xx) = (0.0, 0.0, 0.0);
+        for (key, table) in self.path_slots[Grain::Minute as usize]
+            .slots
+            .range(start.div_euclid(60), (end - 1).div_euclid(60))
+        {
+            let Some(row) = table.rows.iter().find(|row| row.id == id) else {
+                continue;
+            };
+            let (from, to) = (key * 60, (key * 60 + 60).min(end));
+            let part = (to - from.max(start)) as f64 / (to - from).max(1) as f64;
+            requests += row.requests as f64 * part;
+            c4xx += f64::from(row.c4xx) * part;
+            c5xx += f64::from(row.c5xx) * part;
+        }
+        now.requests = requests.round() as u64;
+        now.c4xx = c4xx.round() as u64;
+        now.c5xx = c5xx.round() as u64;
+        now.rate = requests / window as f64;
+        now
     }
 
     /// Error log causes, most frequent first
@@ -3584,6 +4078,48 @@ mod tests {
         assert_eq!(stats.params.top(5, |n| *n), [("x", &60)]);
         assert_eq!(stats.clients.len(), 3);
 
+        // Each minute has its paths; a path has its own minutes
+        let names = stats.paths.names();
+        let second = stats.slot_paths(Grain::Minute, minutes[1].start);
+        assert_eq!(second.len(), 1);
+        assert_eq!(
+            (
+                names[second[0].id as usize],
+                second[0].requests,
+                second[0].c5xx
+            ),
+            ("/a", 240, 60)
+        );
+        let first = stats.slot_paths(Grain::Minute, minutes[0].start);
+        assert_eq!(
+            first
+                .iter()
+                .map(|c| (names[c.id as usize], c.requests))
+                .collect::<Vec<_>>(),
+            [("/a", 60), ("/b", 60)]
+        );
+        let a = stats.path_rows(Grain::Minute, clock, "/a");
+        assert_eq!(
+            a.iter()
+                .map(|r| (r.slot.requests, r.rate))
+                .collect::<Vec<_>>(),
+            [(60, 1.0), (240, 4.0), (0, 0.0)]
+        );
+        assert_eq!(
+            stats.path_rows(Grain::Minute, clock, "/nowhere")[1]
+                .slot
+                .requests,
+            0
+        );
+        // The last 60 seconds: half of the second minute, all /a, and the
+        // 30 seconds of the third, all /c
+        let c = stats.path_now(clock, 60, "/c");
+        assert_eq!((c.requests, c.rate, c.c4xx), (30, 0.5, 30));
+        let a = stats.path_now(clock, 60, "/a");
+        assert_eq!((a.requests, a.rate, a.c5xx), (120, 2.0, 30));
+        let a = stats.paths.count("/a").unwrap();
+        assert_eq!(a.statuses(), [(200, 240), (503, 60)]);
+
         // The same log, being written: now is the clock's, and the minute
         // in progress is measured to it
         let stats = counted(&lines, AT + start + 150);
@@ -3593,6 +4129,78 @@ mod tests {
         assert_eq!(stats.now(clock, 60).requests, 30);
         let minutes = stats.rows(Grain::Minute, clock);
         assert_eq!((minutes[2].rate, minutes[2].partial), (0.5, false));
+    }
+
+    #[test]
+    fn coarse_times_give_percentiles_within_a_few_percent() {
+        let mut coarse = Coarse::default();
+        assert_eq!(coarse.percentile(0.5), None);
+        // 1ms to 10s, evenly
+        let times: Vec<u64> = (1..=10_000).map(|i| i * 1_000).collect();
+        for t in &times {
+            coarse.record(*t);
+        }
+        for q in [0.5, 0.9, 0.95, 0.99, 0.999] {
+            let truth = times[(q * times.len() as f64) as usize - 1] as f64;
+            let read = coarse.percentile(q).unwrap().as_micros() as f64;
+            // Within a bucket, the times are taken to be spread evenly: the
+            // last one, which the times end inside of, is read furthest off
+            assert!(
+                (read - truth).abs() / truth < 0.05,
+                "p{q}: {read} for {truth}"
+            );
+        }
+        // Every bucket starts where the one before it ends
+        for i in 0..COARSE - 1 {
+            assert_eq!(Coarse::index(Coarse::low(i + 1)), i + 1, "{i}");
+            assert_eq!(Coarse::index(Coarse::low(i + 1) - 1), i, "{i}");
+        }
+        // What is past the last bucket is counted in it
+        coarse.record(u64::MAX);
+        assert_eq!(coarse.count(), 10_001);
+        let mut twice = coarse;
+        twice.add(&coarse);
+        assert_eq!(twice.count(), 20_002);
+    }
+
+    #[test]
+    fn a_slot_keeps_its_busiest_paths() {
+        let mut slots = PathSlots::new(Grain::Minute);
+        let one = |id: u32, n: u64| PathCount {
+            id,
+            requests: n,
+            ..PathCount::default()
+        };
+        // A path asked for often comes early, and keeps its place
+        for _ in 0..5 {
+            slots.add(0, &one(0, 1));
+        }
+        for id in 1..SLOT_PATHS as u32 + 40 {
+            slots.add(10, &one(id, 1));
+        }
+        slots.add(20, &one(0, 1));
+        let table = &slots.slots.get(0).unwrap().rows;
+        assert_eq!(table.len(), SLOT_PATHS);
+        assert_eq!(table.iter().find(|c| c.id == 0).unwrap().requests, 6);
+        // The next minute starts again
+        slots.add(60, &one(500, 3));
+        assert_eq!(slots.slots.get(1).unwrap().rows, [one(500, 3)]);
+        // A line written late finds its minute, and the index follows
+        slots.add(30, &one(0, 1));
+        slots.add(61, &one(500, 1));
+        assert_eq!(
+            slots
+                .slots
+                .get(0)
+                .unwrap()
+                .rows
+                .iter()
+                .find(|c| c.id == 0)
+                .unwrap()
+                .requests,
+            7
+        );
+        assert_eq!(slots.slots.get(1).unwrap().rows, [one(500, 4)]);
     }
 
     #[test]
@@ -3887,6 +4495,44 @@ mod tests {
             assert_eq!(many.recent_base, one.recent_base, "{chunk}");
             assert_eq!(many.first_unread, one.first_unread, "{chunk}");
             assert!(many.stitched.is_empty());
+            // Each slot's times and paths, by name: the readers know the
+            // paths by places of their own
+            let clock = one.clock(wall);
+            for grain in Grain::ALL {
+                assert_eq!(many.rows(grain, clock), one.rows(grain, clock), "{chunk}");
+                let named = |stats: &Stats| -> Vec<(i64, Vec<(String, PathCount)>)> {
+                    let names = stats.paths.names();
+                    stats
+                        .rows(grain, clock)
+                        .iter()
+                        .map(|row| {
+                            let mut paths: Vec<(String, PathCount)> = stats
+                                .slot_paths(grain, row.start)
+                                .into_iter()
+                                .map(|c| {
+                                    (names[c.id as usize].to_string(), PathCount { id: 0, ..c })
+                                })
+                                .collect();
+                            paths.sort_by(|a, b| a.0.cmp(&b.0));
+                            (row.start, paths)
+                        })
+                        .collect()
+                };
+                assert_eq!(named(&many), named(&one), "{chunk} {grain:?}");
+            }
+            for (name, stat) in one.paths.top(10, |p| p.requests) {
+                let theirs = many.paths.count(name).unwrap();
+                assert_eq!(
+                    (
+                        theirs.requests,
+                        theirs.times,
+                        theirs.upstream_us,
+                        theirs.statuses()
+                    ),
+                    (stat.requests, stat.times, stat.upstream_us, stat.statuses()),
+                    "{chunk} {name}"
+                );
+            }
         }
         // Too small to be worth a second thread
         assert_eq!(sprint(&path, &job, &Shared::default(), 0, 1 << 30, 8), 0);
