@@ -19,7 +19,7 @@ use ratatui::{
 use tokio::time::MissedTickBehavior;
 
 use super::kit;
-use super::kit::{about_line, help, marker, wrap, FAINT, FIELD, SELECTED};
+use super::kit::{about_line, help, marker, tag, wrap, FAINT, FIELD, SELECTED};
 use super::view::{
     bar, inset, label, panel, section, status_color, truncate, value, ACCENT, BAD, GOOD, LABEL,
     RULE, WARN,
@@ -27,7 +27,7 @@ use super::view::{
 use super::{bigtext, format, settings, theme};
 use crate::logs::{
     self, ago, busiest, day_and_time, echo, offset_label, percent, rate, time_of_day, typical,
-    versus, Clock, Grain, Now, Parser, Recent, Row, Shared, Stats,
+    versus, Clock, Grain, Now, Parser, PathStat, Recent, Row, Shared, Stats,
 };
 
 /// How often the screen is drawn again while nothing is pressed
@@ -50,6 +50,17 @@ const CARD_H: u16 = 4;
 const BAR_MAX: u16 = 4;
 /// The chart's axis labels
 const AXIS: u16 = 7;
+/// The busiest paths' colours in the traffic chart, the rest drawn as
+/// `BAR`: none of them says anything of health
+const SERIES: [Color; 4] = [
+    Color::Indexed(215),
+    Color::Indexed(117),
+    Color::Indexed(176),
+    Color::Indexed(180),
+];
+/// The traffic view has the picked slot's paths beside its chart from
+/// this width
+const SIDE_FROM: u16 = 110;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Tab {
@@ -121,6 +132,36 @@ pub struct LogsScreen {
     show_help: bool,
     /// Tells a second click on a line from the first
     clicks: kit::Clicks,
+    /// The path the traffic and the log are held to
+    path: Option<String>,
+    /// The path picker, while it is open
+    picker: Option<Picker>,
+}
+
+/// Picking a path by typing a part of it
+#[derive(Debug, Default)]
+struct Picker {
+    query: String,
+    /// The match picked
+    at: usize,
+}
+
+/// Whether `name` has the letters of `query` in order; how well, when it
+/// does: as one piece first, then by how early that piece starts
+fn matches(name: &str, query: &str) -> Option<usize> {
+    if query.is_empty() {
+        return Some(0);
+    }
+    let name = name.to_lowercase();
+    let query = query.to_lowercase();
+    if let Some(at) = name.find(&query) {
+        return Some(at);
+    }
+    let mut letters = name.chars();
+    query
+        .chars()
+        .all(|c| letters.any(|n| n == c))
+        .then_some(usize::MAX / 2)
 }
 
 /// A list beside the paths: each name, its requests, and its colour
@@ -184,19 +225,102 @@ impl LogsScreen {
             inspecting: false,
             show_help: false,
             clicks: kit::Clicks::default(),
+            path: None,
+            picker: None,
+        }
+    }
+
+    /// The paths the picker offers for what is typed, best first
+    fn candidates<'a>(&self, stats: &'a Stats, query: &str) -> Vec<(&'a str, &'a PathStat)> {
+        let mut found: Vec<(usize, &str, &PathStat)> = stats
+            .paths
+            .top(stats.paths.len(), |p| p.requests)
+            .into_iter()
+            .filter_map(|(name, stat)| Some((matches(name, query)?, name, stat)))
+            .collect();
+        found.sort_by_key(|(rank, _, stat)| (*rank, std::cmp::Reverse(stat.requests)));
+        found
+            .into_iter()
+            .map(|(_, name, stat)| (name, stat))
+            .collect()
+    }
+
+    /// Hold the traffic and the log to a path, or let go of it. The log
+    /// starts with the lines of it already kept, and keeps its own from
+    /// then on.
+    fn set_path(&mut self, path: Option<String>) {
+        let mut stats = self.shared.lock();
+        let seed: Vec<Recent> = match &path {
+            Some(path) => stats
+                .recent
+                .iter()
+                .filter(|line| {
+                    logs::line_path(&self.parser.read(&line.text), stats.exact_paths).as_deref()
+                        == Some(path.as_str())
+                })
+                .cloned()
+                .collect(),
+            None => Vec::new(),
+        };
+        stats.set_focus(path.clone(), seed);
+        drop(stats);
+        self.path = path;
+        self.line = None;
+        self.inspecting = false;
+    }
+
+    /// A key while the picker is open
+    fn picker_key(&mut self, key: KeyEvent) {
+        let Some(picker) = self.picker.as_mut() else {
+            return;
+        };
+        match key.code {
+            KeyCode::Esc => self.picker = None,
+            KeyCode::Up => picker.at = picker.at.saturating_sub(1),
+            KeyCode::Down => picker.at += 1,
+            KeyCode::PageUp => picker.at = picker.at.saturating_sub(10),
+            KeyCode::PageDown => picker.at += 10,
+            KeyCode::Backspace => {
+                picker.query.pop();
+                picker.at = 0;
+            }
+            KeyCode::Char(c) if !key.modifiers.contains(KeyModifiers::CONTROL) => {
+                picker.query.push(c);
+                picker.at = 0;
+            }
+            KeyCode::Enter => {
+                let query = picker.query.clone();
+                let at = picker.at;
+                let stats = self.shared.lock();
+                let picked = self
+                    .candidates(&stats, &query)
+                    .get(at)
+                    .map(|(name, _)| name.to_string());
+                drop(stats);
+                if let Some(path) = picked {
+                    self.picker = None;
+                    self.set_path(Some(path));
+                    if self.tab == Tab::Paths {
+                        self.tab = Tab::Traffic;
+                    }
+                }
+            }
+            _ => {}
         }
     }
 
     /// The lines the log view shows, with their numbers, oldest first
     fn lines<'a>(&self, stats: &'a Stats) -> Vec<(u64, &'a Recent)> {
         let needle = self.search.to_lowercase();
-        stats
-            .recent
-            .iter()
+        let (kept, base) = match self.path.is_some() && stats.focus == self.path {
+            true => (&stats.focused, stats.focused_base),
+            false => (&stats.recent, stats.recent_base),
+        };
+        kept.iter()
             .enumerate()
             .filter(|(_, line)| !self.errors_only || line.kind.is_error())
             .filter(|(_, line)| needle.is_empty() || line.text.to_lowercase().contains(&needle))
-            .map(|(i, line)| (stats.recent_base + i as u64, line))
+            .map(|(i, line)| (base + i as u64, line))
             .collect()
     }
 
@@ -247,6 +371,10 @@ impl LogsScreen {
             }
             return false;
         }
+        // The picker takes keys, the footer's chips among them
+        if self.picker.is_some() && !matches!(kit::click(&event), Some(kit::Hit::Key(_))) {
+            return false;
+        }
         match kit::click(&event) {
             Some(kit::Hit::Key(key)) => self.key(key),
             Some(kit::Hit::Tab(index)) => {
@@ -272,6 +400,10 @@ impl LogsScreen {
             return true;
         }
         if settings::key(key) {
+            return false;
+        }
+        if self.picker.is_some() {
+            self.picker_key(key);
             return false;
         }
         if self.searching {
@@ -325,9 +457,19 @@ impl LogsScreen {
                 self.searching = true;
                 self.line = None;
             }
+            KeyCode::Char('p') if matches!(self.tab, Tab::Traffic | Tab::Paths | Tab::Log) => {
+                self.picker = Some(Picker::default());
+            }
+            KeyCode::Char('l') if self.tab == Tab::Traffic && self.path.is_some() => {
+                self.tab = Tab::Log;
+            }
+            KeyCode::Char('c') if self.tab == Tab::Traffic => self.set_path(None),
             KeyCode::Char('c') if self.tab == Tab::Log => {
                 self.errors_only = false;
                 self.search.clear();
+                if self.path.is_some() {
+                    self.set_path(None);
+                }
             }
             KeyCode::Enter if self.tab == Tab::Log => self.inspecting = true,
             // Esc lets go of what is held, one thing at a time, then leaves
@@ -339,6 +481,8 @@ impl LogsScreen {
                     self.errors_only = false;
                 } else if self.tab == Tab::Traffic && self.slot > 0 {
                     self.slot = 0;
+                } else if matches!(self.tab, Tab::Traffic | Tab::Log) && self.path.is_some() {
+                    self.set_path(None);
                 } else {
                     return true;
                 }
@@ -430,7 +574,14 @@ impl LogsScreen {
         let stats = shared.lock();
         let clock = stats.clock(wall);
         let now = stats.now(clock, self.window);
-        let rows = stats.rows(self.grain, clock);
+        // The traffic view's slots and rate now: the log's, or one path's
+        let (rows, traffic_now) = match &self.path {
+            Some(path) => (
+                stats.path_rows(self.grain, clock, path),
+                stats.path_now(clock, self.window, path),
+            ),
+            None => (stats.rows(self.grain, clock), now),
+        };
         let notes = self.notes(&stats);
 
         // The title, the views, then what the view needs above itself: the
@@ -478,7 +629,7 @@ impl LogsScreen {
                     height: CARD_H,
                     ..above_area
                 };
-                self.render_cards(f, cards, &stats, clock, &now, &rows);
+                self.render_cards(f, cards, &stats, clock, &traffic_now, &rows);
             }
             _ => self.render_strip(f, above_area, &stats, clock, &now),
         }
@@ -492,7 +643,7 @@ impl LogsScreen {
             Tab::Dashboard => self.render_dashboard(f, body, &stats, clock, &now),
             Tab::Traffic => {
                 let inner = on_panel(f);
-                self.render_traffic(f, inner, &stats, &now, &rows)
+                self.render_traffic(f, inner, &stats, clock, &traffic_now, &rows)
             }
             Tab::Paths => {
                 let inner = on_panel(f);
@@ -516,14 +667,33 @@ impl LogsScreen {
                 ("?", "keys"),
                 ("q", "quit"),
             ],
+            _ if self.picker.is_some() => {
+                vec![("↑↓", "pick"), ("enter", "hold to it"), ("esc", "close")]
+            }
+            Tab::Traffic if self.path.is_some() => vec![
+                ("m h d", "per minute, hour, day"),
+                ("↑↓", "pick a slot"),
+                ("p", "another path"),
+                ("l", "its lines"),
+                ("c", "all paths"),
+                ("?", "keys"),
+                ("q", "quit"),
+            ],
             Tab::Traffic => vec![
                 ("m h d", "per minute, hour, day"),
                 ("↑↓", "pick a slot"),
+                ("p", "one path"),
                 ("tab", "view"),
                 ("?", "keys"),
                 ("q", "quit"),
             ],
-            Tab::Paths => vec![("s", "sort"), ("tab", "view"), ("?", "keys"), ("q", "quit")],
+            Tab::Paths => vec![
+                ("s", "sort"),
+                ("p", "one path's traffic"),
+                ("tab", "view"),
+                ("?", "keys"),
+                ("q", "quit"),
+            ],
             Tab::Errors => vec![
                 ("↑↓", "pick a message"),
                 ("tab", "view"),
@@ -535,6 +705,7 @@ impl LogsScreen {
                 ("enter", "its fields"),
                 ("x", "errors only"),
                 ("/", "search"),
+                ("p", "one path"),
                 ("tab", "view"),
                 ("?", "keys"),
                 ("q", "quit"),
@@ -544,6 +715,9 @@ impl LogsScreen {
 
         if self.inspecting {
             self.render_inspector(f, area, &stats);
+        }
+        if self.picker.is_some() {
+            self.render_picker(f, area, &stats);
         }
         if self.show_help {
             help(
@@ -555,6 +729,9 @@ impl LogsScreen {
                     ("↑ ↓ / j k", "pick a slot, a message or a line"),
                     ("PgUp PgDn", "ten at a time; home and end, the ends"),
                     ("s", "paths: most requested, most 5xx, most 4xx, slowest"),
+                    ("p", "hold the traffic and the log to one path"),
+                    ("l", "traffic: the held path's lines"),
+                    ("c", "let go of the path and the log's filters"),
                     ("x", "log: only failed requests and error log lines"),
                     ("/", "log: search the lines; c clears the filters"),
                     ("enter", "log: everything read from the picked line"),
@@ -1351,10 +1528,25 @@ impl LogsScreen {
         let per_second = |r: f64| value(format!("{} req/s", rate(r)), Color::Reset);
         let against = |then: f64| label(format!("now {}", versus(now.rate, then)));
         let mut cards: Vec<(String, Span, Line)> = Vec::new();
-        let seconds = stats.last_seconds(
-            clock,
-            (CARD as usize).saturating_sub(4).min(self.window as usize),
-        );
+        let held = self
+            .path
+            .as_deref()
+            .and_then(|path| Some((path, stats.paths.count(path)?)));
+        let seconds = match held {
+            // A path isn't counted by the second: its last minutes instead
+            Some((path, _)) => {
+                let minutes = stats.path_rows(Grain::Minute, clock, path);
+                let n = (CARD as usize).saturating_sub(4).min(minutes.len());
+                minutes[minutes.len() - n..]
+                    .iter()
+                    .map(|row| row.slot.requests.min(u64::from(u32::MAX)) as u32)
+                    .collect()
+            }
+            None => stats.last_seconds(
+                clock,
+                (CARD as usize).saturating_sub(4).min(self.window as usize),
+            ),
+        };
         cards.push((
             if clock.live {
                 "NOW".into()
@@ -1402,19 +1594,48 @@ impl LogsScreen {
             ),
             label(format!("4xx {}", percent(now.share_4xx()))).into(),
         ));
-        if stats.time.count() > 0 {
-            let at = |q: f64| format::latency(Duration::from_micros(stats.time.percentile(q)));
-            cards.push((
-                "REQUEST TIME".into(),
-                value(format!("p50 {}", at(50.0)), Color::Reset),
-                label(format!("p99 {}", at(99.0))).into(),
-            ));
+        match held {
+            Some((_, stat)) => {
+                if stat.times.count() > 0 {
+                    let at = |q: f64| {
+                        stat.times
+                            .percentile(q)
+                            .map(format::latency)
+                            .unwrap_or_default()
+                    };
+                    cards.push((
+                        "REQUEST TIME".into(),
+                        value(format!("p50 {}", at(0.5)), Color::Reset),
+                        label(format!("p95 {} · p99 {}", at(0.95), at(0.99))).into(),
+                    ));
+                }
+                cards.push((
+                    "IN ALL".into(),
+                    value(format::count(stat.requests), Color::Reset),
+                    label(format!(
+                        "requests · {} of all",
+                        percent(stat.requests as f64 / stats.requests.max(1) as f64)
+                    ))
+                    .into(),
+                ));
+            }
+            None => {
+                if stats.time.count() > 0 {
+                    let at =
+                        |q: f64| format::latency(Duration::from_micros(stats.time.percentile(q)));
+                    cards.push((
+                        "REQUEST TIME".into(),
+                        value(format!("p50 {}", at(50.0)), Color::Reset),
+                        label(format!("p99 {}", at(99.0))).into(),
+                    ));
+                }
+                cards.push((
+                    "IN ALL".into(),
+                    value(format::count(stats.requests), Color::Reset),
+                    label(format!("requests · {}", format::bytes(stats.bytes as f64))).into(),
+                ));
+            }
         }
-        cards.push((
-            "IN ALL".into(),
-            value(format::count(stats.requests), Color::Reset),
-            label(format!("requests · {}", format::bytes(stats.bytes as f64))).into(),
-        ));
 
         let fit = (((area.width + 1) / (CARD + 1)) as usize).clamp(1, cards.len());
         // The total gives way first, then the comparisons from the right
@@ -1457,6 +1678,7 @@ impl LogsScreen {
         f: &mut Frame,
         area: Rect,
         stats: &Stats,
+        clock: Clock,
         now: &Now,
         rows: &[Row],
     ) {
@@ -1478,35 +1700,113 @@ impl LogsScreen {
             h if h >= 14 => 6,
             _ => 0,
         };
-        let [chart, _, heading, table] = Layout::vertical([
+        let [top, _, title, heading, table] = Layout::vertical([
             Constraint::Length(chart_height),
             Constraint::Length(u16::from(chart_height > 0)),
+            Constraint::Length(1),
             Constraint::Length(1),
             Constraint::Min(1),
         ])
         .areas(area);
+        // Beside the chart, when there is room: the picked slot's paths,
+        // or what the held path answers and how long it takes
+        let (chart, side) = if area.width >= SIDE_FROM && chart_height > 0 {
+            let [chart, _, side] = Layout::horizontal([
+                Constraint::Percentage(55),
+                Constraint::Length(3),
+                Constraint::Min(0),
+            ])
+            .areas(top);
+            (chart, Some(side))
+        } else {
+            (top, None)
+        };
+        let names = stats.paths.names();
+        let held = self.path.as_deref();
+
+        // The busiest paths of the slots the chart shows, each a colour
+        let shown = (chart.width.saturating_sub(AXIS) as usize).min(rows.len());
+        let mut series: Vec<u32> = Vec::new();
+        let mut stacks: Vec<[u64; 4]> = Vec::new();
+        if held.is_none() && chart_height > 0 {
+            let mut sums: std::collections::HashMap<u32, u64> = Default::default();
+            for row in &rows[rows.len() - shown..] {
+                for count in stats.slot_table(self.grain, row.start) {
+                    *sums.entry(count.id).or_default() += count.requests;
+                }
+            }
+            let mut sums: Vec<(u32, u64)> = sums.into_iter().collect();
+            sums.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(&b.0)));
+            series = sums.iter().take(SERIES.len()).map(|(id, _)| *id).collect();
+            stacks = rows
+                .iter()
+                .map(|row| {
+                    let mut stack = [0; 4];
+                    if row.start >= rows[rows.len() - shown].start {
+                        for count in stats.slot_table(self.grain, row.start) {
+                            if let Some(i) = series.iter().position(|id| *id == count.id) {
+                                stack[i] = count.requests;
+                            }
+                        }
+                    }
+                    stack
+                })
+                .collect();
+        }
         if chart_height > 0 {
-            self.render_chart(f, chart, rows, now.rate, picked);
+            self.render_chart(f, chart, rows, now.rate, picked, &stacks);
+        }
+        if let Some(side) = side {
+            match held {
+                Some(path) => self.render_held(f, side, stats, path),
+                None => self.render_slot_paths(f, side, stats, clock, &rows[picked], &series),
+            }
         }
 
+        // What the table is of
+        let what = match held {
+            Some(path) => Line::from(vec![tag(path), label("  c lets go · l its lines")]),
+            None => Line::from(label(format!(
+                "every path · {} of them · p holds one",
+                format::count(stats.paths.len() as u64)
+            ))),
+        };
+        section(
+            f,
+            title,
+            &format!("Traffic · per {}", self.grain.name()),
+            Some(what),
+        );
+
         let timed = rows.iter().any(|r| r.slot.timed > 0);
-        let logged = rows.iter().any(|r| r.slot.faults > 0);
+        let logged = held.is_none() && rows.iter().any(|r| r.slot.faults > 0);
         let mut head = format!(
-            "  {:<17}{:>12}{:>9}{:>8}{:>8}{:>8}",
+            "  {:<17}{:>12}{:>9}",
             format!("per {}", self.grain.name()),
             "requests",
             "req/s",
-            "peak/s",
-            "4xx",
-            "5xx"
         );
+        if held.is_none() {
+            head.push_str(&right("peak/s".into(), 8));
+        }
+        head.push_str(&format!("{:>8}{:>8}", "4xx", "5xx"));
         if timed {
-            head.push_str(&right("mean time".into(), 11));
+            match held {
+                Some(_) => head.push_str(&right("mean time".into(), 11)),
+                None => head.push_str(&format!("{:>9}{:>9}", "p50", "p99")),
+            }
         }
         if logged {
             head.push_str(&right("errors".into(), 8));
         }
+        if held.is_some() {
+            head.push_str(&right("of all".into(), 8));
+        }
         head.push_str(&right("now vs".into(), 9));
+        let room = (table.width as usize).saturating_sub(head.chars().count() + 2);
+        if held.is_none() && room >= 12 {
+            head.push_str("  busiest path");
+        }
         f.render_widget(
             Paragraph::new(Span::styled(head.clone(), Style::new().fg(LABEL).bold())),
             heading,
@@ -1515,7 +1815,11 @@ impl LogsScreen {
         let most = rows.iter().map(|r| r.rate).fold(0.0, f64::max).max(1e-9);
         let height = table.height as usize;
         let from = scroll(self.slot, rows.len(), height);
-        let room = (table.width as usize).saturating_sub(head.chars().count() + 2);
+        // The log's own slots, to say what share of each the path is
+        let all = match held {
+            Some(_) => stats.rows(self.grain, clock),
+            None => Vec::new(),
+        };
         let lines: Vec<Line> = rows
             .iter()
             .rev()
@@ -1534,17 +1838,34 @@ impl LogsScreen {
                     Span::raw(format!(" {:<17}", self.grain.label(row.start))),
                     Span::raw(right(format::count(slot.requests), 12)),
                     Span::raw(right(rate(row.rate), 9)).bold(),
-                    Span::raw(right(format::count(u64::from(slot.peak)), 8)),
-                    share(slot.c4xx, Color::Reset),
-                    share(
-                        slot.c5xx,
-                        failing_color(of(slot.c5xx)).max_or(WARN, slot.c5xx),
-                    ),
                 ];
+                if held.is_none() {
+                    spans.push(Span::raw(right(format::count(u64::from(slot.peak)), 8)));
+                }
+                spans.push(share(slot.c4xx, Color::Reset));
+                spans.push(share(
+                    slot.c5xx,
+                    failing_color(of(slot.c5xx)).max_or(WARN, slot.c5xx),
+                ));
                 if timed {
-                    let mean = (slot.timed > 0)
-                        .then(|| format::latency(Duration::from_micros(slot.time_us / slot.timed)));
-                    spans.push(Span::raw(right(mean.unwrap_or_default(), 11)));
+                    match held {
+                        Some(_) => {
+                            let mean = (slot.timed > 0).then(|| {
+                                format::latency(Duration::from_micros(slot.time_us / slot.timed))
+                            });
+                            spans.push(Span::raw(right(mean.unwrap_or_default(), 11)));
+                        }
+                        None => {
+                            let at = |q: f64| {
+                                slot.times
+                                    .percentile(q)
+                                    .map(format::latency)
+                                    .unwrap_or_default()
+                            };
+                            spans.push(Span::raw(right(at(0.5), 9)));
+                            spans.push(Span::raw(right(at(0.99), 9)));
+                        }
+                    }
                 }
                 if logged {
                     let color = if slot.faults > 0 { BAD } else { FAINT };
@@ -1553,11 +1874,51 @@ impl LogsScreen {
                         Style::new().fg(color),
                     ));
                 }
-                spans.push(label(right(versus(now.rate, row.rate), 9)));
-                spans.push(Span::styled(
-                    format!("  {}", bar(row.rate / most, room)),
-                    Style::new().fg(BAR),
-                ));
+                if held.is_some() {
+                    let whole = all
+                        .iter()
+                        .find(|r| r.start == row.start)
+                        .map_or(0, |r| r.slot.requests);
+                    let color = if slot.requests == 0 { FAINT } else { LABEL };
+                    spans.push(Span::styled(
+                        right(percent(slot.requests as f64 / whole.max(1) as f64), 8),
+                        Style::new().fg(color),
+                    ));
+                }
+                // A slot the held path wasn't asked for in has nothing to
+                // hold now against
+                match (held, slot.requests) {
+                    (Some(_), 0) => {
+                        spans.push(Span::styled(right("·".into(), 9), Style::new().fg(FAINT)))
+                    }
+                    _ => spans.push(label(right(versus(now.rate, row.rate), 9))),
+                }
+                match held {
+                    Some(_) => spans.push(Span::styled(
+                        format!("  {}", bar(row.rate / most, room)),
+                        Style::new().fg(BAR),
+                    )),
+                    None if room >= 12 => {
+                        let busiest = stats
+                            .slot_table(self.grain, row.start)
+                            .iter()
+                            .max_by(|a, b| a.requests.cmp(&b.requests).then(b.id.cmp(&a.id)))
+                            .copied();
+                        if let Some(count) = busiest {
+                            let name = names.get(count.id as usize).copied().unwrap_or("");
+                            let share = format!(" {}", percent(of(count.requests)));
+                            let width = room.saturating_sub(share.len() + 2);
+                            let color = series
+                                .iter()
+                                .position(|id| *id == count.id)
+                                .map_or(Color::Reset, |i| SERIES[i]);
+                            spans.push(Span::raw("  "));
+                            spans.push(Span::styled(truncate(name, width), Style::new().fg(color)));
+                            spans.push(label(share));
+                        }
+                    }
+                    None => {}
+                }
                 if row.partial {
                     spans.push(Span::styled(" partial", Style::new().fg(FAINT)));
                 }
@@ -1572,9 +1933,208 @@ impl LogsScreen {
         f.render_widget(Paragraph::new(lines), table);
     }
 
+    /// The picked slot's busiest paths: their rate then, how that holds
+    /// against what each usually sees, what fails, and how long they take
+    fn render_slot_paths(
+        &self,
+        f: &mut Frame,
+        area: Rect,
+        stats: &Stats,
+        clock: Clock,
+        row: &Row,
+        series: &[u32],
+    ) {
+        if area.height < 3 {
+            return;
+        }
+        let [title, heading, list] = Layout::vertical([
+            Constraint::Length(1),
+            Constraint::Length(1),
+            Constraint::Min(0),
+        ])
+        .areas(area);
+        // The seconds the slot's rate is over
+        let seconds = row.slot.requests as f64 / row.rate.max(1e-9);
+        section(
+            f,
+            title,
+            &self.grain.label(row.start),
+            Some(Line::from(vec![
+                value(format!("{}/s", rate(row.rate)), Color::Reset),
+                label(format!(
+                    " · {} paths",
+                    format::count(stats.paths.len() as u64)
+                )),
+            ])),
+        );
+        let numbers = 8 + 8 + 7 + 9;
+        let name_width = (area.width as usize).saturating_sub(numbers + 2).max(8);
+        f.render_widget(
+            Paragraph::new(Span::styled(
+                format!(
+                    "  {:<name_width$}{:>8}{:>8}{:>7}{:>9}",
+                    "", "req/s", "usual", "5xx", "mean"
+                ),
+                Style::new().fg(LABEL).bold(),
+            )),
+            heading,
+        );
+        let names = stats.paths.names();
+        let paths = stats.slot_paths(self.grain, row.start);
+        let room = list.height as usize;
+        let shown = match paths.len() > room {
+            true => room.saturating_sub(1),
+            false => paths.len(),
+        };
+        let mut lines: Vec<Line> = paths
+            .iter()
+            .take(shown)
+            .map(|count| {
+                let name = names.get(count.id as usize).copied().unwrap_or("");
+                let path_rate = count.requests as f64 / seconds.max(1e-9);
+                let usual = typical(&stats.path_rows(self.grain, clock, name));
+                let failing = f64::from(count.c5xx) / count.requests.max(1) as f64;
+                let color = series
+                    .iter()
+                    .position(|id| *id == count.id)
+                    .map_or(BAR, |i| SERIES[i]);
+                Line::from(vec![
+                    Span::styled("■ ", Style::new().fg(color)),
+                    Span::raw(format!("{:<name_width$}", truncate(name, name_width))),
+                    Span::raw(right(rate(path_rate), 8)).bold(),
+                    label(right(
+                        usual.map(|u| versus(path_rate, u)).unwrap_or_default(),
+                        8,
+                    )),
+                    Span::styled(
+                        right(
+                            match count.c5xx {
+                                0 => "·".into(),
+                                _ => percent(failing),
+                            },
+                            7,
+                        ),
+                        Style::new().fg(match count.c5xx {
+                            0 => FAINT,
+                            n => failing_color(failing).max_or(WARN, u64::from(n)),
+                        }),
+                    ),
+                    Span::raw(right(
+                        count.mean_time().map(format::latency).unwrap_or_default(),
+                        9,
+                    )),
+                ])
+            })
+            .collect();
+        let counted: u64 = paths.iter().map(|count| count.requests).sum();
+        let rest = row.slot.requests.saturating_sub(counted)
+            + paths
+                .iter()
+                .skip(shown)
+                .map(|count| count.requests)
+                .sum::<u64>();
+        if rest > 0 && lines.len() < room {
+            let what = "the others";
+            lines.push(Line::from(vec![
+                Span::styled("░ ", Style::new().fg(FAINT)),
+                label(format!("{what:<name_width$}")),
+                label(right(rate(rest as f64 / seconds.max(1e-9)), 8)),
+            ]));
+        }
+        f.render_widget(Paragraph::new(lines), list);
+    }
+
+    /// What the held path answers, how long it takes and where that time
+    /// goes, over all the log
+    fn render_held(&self, f: &mut Frame, area: Rect, stats: &Stats, path: &str) {
+        let Some(stat) = stats.paths.count(path) else {
+            f.render_widget(Paragraph::new(label("Not asked for yet")), area);
+            return;
+        };
+        let mut lines: Vec<Line> = Vec::new();
+        let total = stat.requests.max(1) as f64;
+        let mut codes: Vec<Span> = vec![label(format!("{:<9}", "status"))];
+        for (code, n) in stat.statuses().into_iter().take(5) {
+            let color = match code {
+                0 => FAINT,
+                code => status_color(code),
+            };
+            codes.push(value(format!("{code} "), color));
+            codes.push(Span::raw(format!("{}  ", percent(n as f64 / total))));
+        }
+        lines.push(Line::from(codes));
+        let width = (area.width as usize).saturating_sub(9);
+        let share = |n: u64| n as f64 / total;
+        let fails = vec![
+            label(format!("{:<9}", "fails")),
+            value(
+                format!("5xx {}", percent(share(stat.c5xx))),
+                failing_color(share(stat.c5xx)).max_or(WARN, stat.c5xx),
+            ),
+            label(format!("   4xx {}", percent(share(stat.c4xx)))),
+        ];
+        lines.push(Line::from(fails));
+        lines.push(Line::default());
+        if stat.times.count() > 0 {
+            let at = |q: f64| {
+                stat.times
+                    .percentile(q)
+                    .map(format::latency)
+                    .unwrap_or_default()
+            };
+            lines.push(Line::from(vec![
+                label(format!("{:<9}", "time")),
+                label("p50 "),
+                Span::raw(at(0.5)).bold(),
+                label("   p95 "),
+                Span::raw(at(0.95)).bold(),
+                label("   p99 "),
+                Span::raw(at(0.99)).bold(),
+            ]));
+        }
+        if let Some(upstream) = stat.upstream_share() {
+            let half = width.saturating_sub(4) / 2;
+            let waiting = ((1.0 - upstream) * half as f64 * 2.0).round() as usize;
+            lines.push(Line::from(vec![
+                label(format!("{:<9}", "spent")),
+                Span::styled("█".repeat(waiting.min(half * 2)), Style::new().fg(BAR)),
+                Span::styled(
+                    "█".repeat((half * 2).saturating_sub(waiting)),
+                    Style::new().fg(SERIES[0]),
+                ),
+            ]));
+            lines.push(Line::from(vec![
+                label(format!("{:<9}", "")),
+                label(format!("in nginx {}", percent(1.0 - upstream))),
+                Span::styled(
+                    format!("   upstream {}", percent(upstream)),
+                    Style::new().fg(SERIES[0]),
+                ),
+            ]));
+        }
+        lines.push(Line::default());
+        lines.push(Line::from(vec![
+            label(format!("{:<9}", "in all")),
+            Span::raw(format::count(stat.requests)).bold(),
+            label(format!(
+                " requests · {} of all",
+                percent(stat.requests as f64 / stats.requests.max(1) as f64)
+            )),
+        ]));
+        f.render_widget(Paragraph::new(lines), area);
+    }
+
     /// A bar for each slot, the newest at the right, and the rate now as a
     /// line across them
-    fn render_chart(&self, f: &mut Frame, area: Rect, rows: &[Row], now: f64, picked: usize) {
+    fn render_chart(
+        &self,
+        f: &mut Frame,
+        area: Rect,
+        rows: &[Row],
+        now: f64,
+        picked: usize,
+        stacks: &[[u64; 4]],
+    ) {
         let height = area.height.saturating_sub(1);
         let width = area.width.saturating_sub(AXIS);
         if height == 0 || width == 0 {
@@ -1615,10 +2175,28 @@ impl LogsScreen {
                     _ => '█',
                 };
                 let failing = slot.slot.c5xx as f64 / slot.slot.requests.max(1) as f64;
-                let color = match failing_color(failing) {
-                    Color::Reset if first + i == picked => ACCENT,
-                    Color::Reset => BAR,
-                    color => color,
+                let color = match stacks.get(first + i) {
+                    // Split by path, the busiest at the bottom: the cell's
+                    // colour is the path its middle is in
+                    Some(stack) => {
+                        let middle = row * 8 + filled.saturating_sub(row * 8).min(8) / 2;
+                        let share = f64::from(middle) / f64::from(filled.max(1));
+                        let at = (share * slot.slot.requests as f64) as u64;
+                        let mut below = 0;
+                        stack
+                            .iter()
+                            .zip(SERIES)
+                            .find(|(n, _)| {
+                                below += **n;
+                                at < below
+                            })
+                            .map_or(BAR, |(_, color)| color)
+                    }
+                    None => match failing_color(failing) {
+                        Color::Reset if first + i == picked => ACCENT,
+                        Color::Reset => BAR,
+                        color => color,
+                    },
                 };
                 buf.set_string(
                     left + i as u16 * per,
@@ -1999,7 +2577,14 @@ impl LogsScreen {
             Layout::vertical([Constraint::Length(1), Constraint::Min(1)]).areas(area);
         let lines = self.lines(stats);
         let mut filters: Vec<Span> = Vec::new();
+        if let Some(path) = &self.path {
+            filters.push(label("path "));
+            filters.push(tag(path));
+        }
         if self.errors_only {
+            if !filters.is_empty() {
+                filters.push(label(" · "));
+            }
             filters.push(value("errors only", WARN));
         }
         if self.searching || !self.search.is_empty() {
@@ -2018,9 +2603,13 @@ impl LogsScreen {
                 format::count(lines.len() as u64)
             )));
         }
+        let kept = match self.path {
+            Some(_) => stats.focused.len(),
+            None => stats.recent.len(),
+        };
         filters.push(label(format!(
             "the last {} lines",
-            format::count(stats.recent.len() as u64)
+            format::count(kept as u64)
         )));
         let heading = if self.line.is_some() {
             "Log"
@@ -2062,12 +2651,105 @@ impl LogsScreen {
         if shown.is_empty() {
             let why = if stats.recent.is_empty() {
                 "No line read yet"
+            } else if self.path.is_some() && stats.focused.is_empty() {
+                "None of the lines kept is this path's; its next ones will be"
             } else {
                 "No line passes the filters; c clears them"
             };
             f.render_widget(Paragraph::new(label(why)), list);
         } else {
             f.render_widget(Paragraph::new(shown), list);
+        }
+    }
+
+    /// The path picker: what is typed, and the paths that have it
+    fn render_picker(&self, f: &mut Frame, area: Rect, stats: &Stats) {
+        let Some(picker) = &self.picker else {
+            return;
+        };
+        let width = area.width.saturating_sub(8).min(90);
+        let height = area.height.saturating_sub(4).min(20);
+        let [popup] = Layout::horizontal([Constraint::Length(width)])
+            .flex(Flex::Center)
+            .areas(area);
+        let [popup] = Layout::vertical([Constraint::Length(height)])
+            .flex(Flex::Center)
+            .areas(popup);
+        f.render_widget(Clear, popup);
+        let found = self.candidates(stats, &picker.query);
+        let block = Block::bordered()
+            .border_type(BorderType::Rounded)
+            .border_style(Style::new().fg(ACCENT))
+            .title(Span::styled(
+                " hold to a path ",
+                Style::new().fg(ACCENT).bold(),
+            ))
+            .title_bottom(
+                Line::from(label(format!(
+                    " {} of {} paths · enter holds · esc closes ",
+                    format::count(found.len() as u64),
+                    format::count(stats.paths.len() as u64)
+                )))
+                .right_aligned(),
+            );
+        let inner = block.inner(popup);
+        f.render_widget(block, popup);
+        let [typed, _, list] = Layout::vertical([
+            Constraint::Length(1),
+            Constraint::Length(1),
+            Constraint::Min(0),
+        ])
+        .areas(inset(inner, 1, 0));
+        f.render_widget(
+            Paragraph::new(Line::from(vec![
+                label("path › "),
+                Span::styled(format!("{}▏", picker.query), Style::new().bg(FIELD)),
+            ])),
+            typed,
+        );
+        let at = picker.at.min(found.len().saturating_sub(1));
+        let room = list.height as usize;
+        let from = scroll(at, found.len(), room);
+        let numbers = 12 + 8 + 10;
+        let name_width = (list.width as usize).saturating_sub(numbers + 2).max(8);
+        let total = stats.requests.max(1) as f64;
+        let lines: Vec<Line> = found
+            .iter()
+            .enumerate()
+            .skip(from)
+            .take(room)
+            .map(|(i, (name, stat))| {
+                let failing = stat.c5xx as f64 / stat.requests.max(1) as f64;
+                let line = Line::from(vec![
+                    marker(i == at, true),
+                    Span::raw(format!(" {:<name_width$}", truncate(name, name_width))),
+                    Span::raw(right(format::count(stat.requests), 12)).bold(),
+                    label(right(percent(stat.requests as f64 / total), 8)),
+                    Span::styled(
+                        right(
+                            match stat.c5xx {
+                                0 => "·".into(),
+                                _ => format!("5xx {}", percent(failing)),
+                            },
+                            10,
+                        ),
+                        Style::new().fg(match stat.c5xx {
+                            0 => FAINT,
+                            n => failing_color(failing).max_or(WARN, n),
+                        }),
+                    ),
+                ]);
+                if i == at {
+                    line.style(Style::new().bg(SELECTED))
+                } else {
+                    line
+                }
+            })
+            .collect();
+        if lines.is_empty() {
+            f.render_widget(Paragraph::new(label("No path has that in it")), list);
+        } else {
+            f.render_widget(Paragraph::new(lines), list);
         }
     }
 
@@ -2232,6 +2914,76 @@ mod tests {
 
     fn press(screen: &mut LogsScreen, code: KeyCode) -> bool {
         screen.key(KeyEvent::from(code))
+    }
+
+    #[test]
+    fn traffic_and_the_log_are_held_to_a_path() {
+        let mut screen = screen();
+        press(&mut screen, KeyCode::Char('2'));
+        let all = draw(&mut screen, 140, 44);
+        println!("{all}");
+        // Beside the chart, the picked minute's paths; under it, each
+        // minute's busiest
+        assert!(all.contains("every path · 3 of them"), "{all}");
+        assert!(all.contains("■ /search"), "{all}");
+        assert!(all.contains("busiest path"), "{all}");
+        assert!(all.contains("p99"), "{all}");
+
+        // p opens the picker; typing narrows it, enter holds to the path
+        press(&mut screen, KeyCode::Char('p'));
+        for c in "srch".chars() {
+            press(&mut screen, KeyCode::Char(c));
+        }
+        let picking = draw(&mut screen, 140, 44);
+        println!("{picking}");
+        assert!(picking.contains("hold to a path"), "{picking}");
+        assert!(picking.contains("1 of 3 paths"), "{picking}");
+        press(&mut screen, KeyCode::Enter);
+        assert_eq!(screen.path.as_deref(), Some("/search"));
+        let held = draw(&mut screen, 140, 44);
+        println!("{held}");
+        assert!(held.contains("c lets go"), "{held}");
+        assert!(held.contains("502"), "the path's status codes: {held}");
+        assert!(held.contains("of all"), "{held}");
+        assert!(!held.contains("busiest path"), "{held}");
+
+        // l shows its lines: the requests and the error log's, no others
+        press(&mut screen, KeyCode::Char('l'));
+        assert_eq!(screen.tab, Tab::Log);
+        let log = draw(&mut screen, 140, 44);
+        println!("{log}");
+        assert!(log.contains("/search?q=tea"), "{log}");
+        assert!(log.contains("connect() failed"), "{log}");
+        assert!(!log.contains("missing.png"), "{log}");
+        {
+            let stats = screen.shared.lock();
+            let lines = screen.lines(&stats);
+            assert!(lines.iter().all(|(_, line)| line.text.contains("/search")));
+        }
+        // What is read from then on is kept for it too
+        {
+            let mut stats = screen.shared.lock();
+            let line = hit(630, "/search?q=pot", 200);
+            stats.fold(screen.parser.read(&line), &line, AT + 86_400);
+            let line = hit(630, "/", 200);
+            stats.fold(screen.parser.read(&line), &line, AT + 86_400);
+            assert!(stats.focused.back().unwrap().text.contains("q=pot"));
+        }
+        // Held, picking and narrow, every size still draws
+        for tab in ['2', '3', '5'] {
+            press(&mut screen, KeyCode::Char(tab));
+            for (width, height) in [(60, 16), (80, 24), (109, 30), (200, 60)] {
+                draw(&mut screen, width, height);
+                press(&mut screen, KeyCode::Char('p'));
+                draw(&mut screen, width, height);
+                press(&mut screen, KeyCode::Esc);
+            }
+        }
+        press(&mut screen, KeyCode::Char('5'));
+        // c lets go of it
+        press(&mut screen, KeyCode::Char('c'));
+        assert_eq!(screen.path, None);
+        assert_eq!(screen.shared.lock().focus, None);
     }
 
     #[test]

@@ -27,10 +27,21 @@ Lines are counted as a stream, so memory doesn't grow with the log: every second
 | View | Shows |
 | --- | --- |
 | **Dashboard** | Opens first. The rate now, the share answering 5xx and the request time drawn large; a verdict in a word (Steady, Busy, Quiet, Degraded, Failing) with what fails and what the error log says of it; traffic as a bar for every few seconds of the last minutes or hour, 4xx and 5xx in their colours; the top paths, the status codes, the error log's messages and the newest lines |
-| **Traffic** | A bar per slot with the rate now drawn across them, and the table of slots; `m`, `h`, `d` switch between minutes, hours and days |
+| **Traffic** | A bar per slot, split by the busiest paths in their colours, with the rate now drawn across them; beside it, the picked slot's paths with their rate, how that holds against their usual, their 5xx and their mean time; under it, the table of slots with their p50, p99 and busiest path. `m`, `h`, `d` switch between minutes, hours and days; `p` holds it to one path |
 | **Paths** | The paths by requests, 5xx, 4xx or mean time (`s`), with status codes, clients, user agents, methods and query parameter names beside them |
 | **Errors** | The error log's messages grouped by cause, most frequent first, each with the first line that said it; the paths answering 5xx and 4xx |
-| **Log** | The last 2,000 lines of all the files in time order; `x` keeps failures, `/` searches, `enter` shows everything read from a line, query parameters one by one |
+| **Log** | The last 2,000 lines of all the files in time order; `x` keeps failures, `/` searches, `p` keeps one path's, `enter` shows everything read from a line, query parameters one by one |
+
+### One path
+
+`p` on the traffic, the paths or the log opens a picker: type a part of a path, letters in order are enough (`srch` finds `/search`), and `enter` holds the screen to it.
+
+- **Traffic** is then that path's alone: its bars with its 5xx, its rate now against its usual minute, hour or day, and a table of slots with its requests, failures, mean time and share of all the traffic. Beside the chart, its status codes, its p50, p95 and p99, and how much of its time was spent waiting on the upstream rather than in nginx (from `$upstream_response_time`).
+- **Log** keeps the path's lines: its requests and the error log lines about them (by the `request:` nginx writes in them). It starts with those among the last 2,000 lines, and from then on keeps 2,000 of its own, however busy the other paths are. `l` goes there from the traffic.
+
+`c` or `esc` lets go of it.
+
+Each minute, hour and day keeps its 64 busiest paths. When a slot sees more, a new path takes the place of the least asked for one only if it has as many requests, so a path asked for often keeps its count; the rest are counted as the others. Percentiles are read from buckets an eighth of a doubling wide, within a few percent.
 
 ### Keys
 
@@ -42,6 +53,9 @@ Lines are counted as a stream, so memory doesn't grow with the log: every second
 | `s` | Paths: most requested, most 5xx, most 4xx, slowest |
 | `x` | Log: only failed requests and error log lines |
 | `/` | Log: search the lines; `c` clears the filters |
+| `p` | Traffic, paths, log: hold the screen to one path |
+| `l` | Traffic: the held path's lines |
+| `c` | Traffic: let go of the path; log: of every filter |
 | `enter` | Log: everything read from the picked line |
 | `esc` | Let go of the pick, then quit |
 | `?` | Show all keys |
