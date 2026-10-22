@@ -6,6 +6,68 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+## [0.53.0](https://github.com/omarmhaimdat/pepe/compare/v0.52.0...v0.53.0) - 2026-10-22
+
+### Added
+
+- *(logs)* traffic split by path, and the screen held to one path ([#223](https://github.com/omarmhaimdat/pepe/pull/223))
+
+  First of three PRs making `pepe logs` more powerful (then findings and
+  alerts, then the MCP tool, flag filters and `.gz`).
+
+  ## What changes
+
+  **Traffic tab, every path**
+  - Each bar is split by the four busiest paths of the slots shown, in
+  their own colours (none of them green, yellow or red, so nothing reads
+  as health); the rest in the usual bar colour.
+  - Beside the chart (110 columns and up): the picked slot's paths with
+  their rate then, how that holds against their usual slot, their 5xx
+  share and mean time, and the others.
+  - The table gets each slot's p50 and p99 and its busiest path with its
+  share, in place of the bar.
+
+  **One path (`p`)**
+  - `p` on Traffic, Paths or Log opens a picker: letters in order are
+  enough (`srch` → `/search`), `enter` holds the screen to the path.
+  - Traffic is then that path's alone: its bars, its rate now against its
+  usual, and a table of its slots with requests, 4xx, 5xx, mean time and
+  share of all traffic. Beside the chart: its status codes, p50/p95/p99,
+  and the share of its time spent waiting on the upstream.
+  - Log keeps the path's lines, the error log's lines about it included
+  (by their `request:`). It starts with those among the last 2,000 and
+  keeps 2,000 of its own from then on. `l` goes there from Traffic; `c` or
+  `esc` lets go.
+
+  ## How it is counted
+  - Each minute, hour and day keeps a table of its 64 busiest paths, found
+  by an index so a request needs no search. When a slot has more, a new
+  path replaces the least requested one only if it has as many requests.
+  - Times are kept in buckets an eighth of a doubling wide (176 × u32) for
+  every slot and every path; a test holds percentiles within 5% of the
+  truth.
+  - The threads that read a file merge per-path slots by name; a test
+  checks that every core reading the file counts what one thread would,
+  slot by slot and path by path.
+
+  ## Cost (bench/README.md)
+  862 MB, 9-day generated log, same machine, before → after:
+
+  | | time | memory |
+  | --- | ---: | ---: |
+  | the file, every core | 0.27 s → 0.28 s (CPU 2.69 → 2.93 s) | 103 → 138
+  MB |
+  | piped, one thread | 2.14 → 2.21 s | 18 → 22 MB |
+
+  The `--json` report is byte-identical before and after.
+
+  ## 1.0
+  No flag, `pepe.toml` key, report field or MCP tool changes, so this
+  doesn't move the 1.0 clock. New keys only: `p`, `l`, and `c` on Traffic.
+
+  Please squash-merge with this title so release-plz picks it up.
+
+
 ## [0.52.0](https://github.com/omarmhaimdat/pepe/compare/v0.51.1...v0.52.0) - 2026-10-20
 
 ### Added
