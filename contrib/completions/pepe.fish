@@ -435,6 +435,10 @@ complete -c pepe -n "__fish_pepe_using_subcommand logs" -l format -d 'The access
 complete -c pepe -n "__fish_pepe_using_subcommand logs" -l window -d 'What "now" is measured over, e.g. 10s, 1m, 5m' -r
 complete -c pepe -n "__fish_pepe_using_subcommand logs" -l since -d 'How far back to start, e.g. 90m, 24h, 7d. At a terminal a log that is being written is shown live, from five minutes back, without it' -r
 complete -c pepe -n "__fish_pepe_using_subcommand logs" -l rows -d 'Rows in each table of the report' -r
+complete -c pepe -n "__fish_pepe_using_subcommand logs" -l path -d 'Count only the requests to these paths, with * for any run of characters: /api/*, /login; repeat for more. An error log line counts when its request does' -r
+complete -c pepe -n "__fish_pepe_using_subcommand logs" -l status -d 'Count only the requests that answered these: 404, 5xx, 4xx,503; repeat for more. Error log lines are still counted' -r
+complete -c pepe -n "__fish_pepe_using_subcommand logs" -l host -d 'Count only the requests to these hosts (the log\'s $host): shop.test exactly, .example.com for it and every host under it; repeat for more' -r
+complete -c pepe -n "__fish_pepe_using_subcommand logs" -l until -d 'Leave out what is newer than this, e.g. 1h for up to an hour ago; with --since, a stretch in the past. A log read up to a time in the past isn\'t followed' -r
 complete -c pepe -n "__fish_pepe_using_subcommand logs" -s n -l number -d 'Number of requests to perform' -r
 complete -c pepe -n "__fish_pepe_using_subcommand logs" -s z -l duration -d 'Duration of the test, e.g. 10s, 3m, 2h (mutually exclusive with -n)' -r
 complete -c pepe -n "__fish_pepe_using_subcommand logs" -s m -l method -d 'HTTP method, e.g. GET, POST, PUT, DELETE' -r

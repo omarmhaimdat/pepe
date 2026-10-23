@@ -231,9 +231,11 @@ pub fn findings(stats: &Stats, clock: Clock, window: i64) -> Vec<Finding> {
     let (u5, _, un) = shares(usual_rows.iter().map(|r| (1.0, r)));
     let usual_5xx = (un > 0.0).then(|| u5 / un);
 
-    // Every path, failing
+    // Every path, failing. With only some statuses counted, a share of
+    // them says nothing.
+    let shares_mean = !stats.statuses_filtered;
     let s5 = now.share_5xx();
-    if now.requests >= ENOUGH {
+    if shares_mean && now.requests >= ENOUGH {
         let usual = usual_5xx.unwrap_or(0.0);
         let out_of_usual = s5 >= usual * TIMES_USUAL;
         // Failing this much is bad however long it has gone on; less is
@@ -326,7 +328,7 @@ pub fn findings(stats: &Stats, clock: Clock, window: i64) -> Vec<Finding> {
                 slower = Some((ratio, mean_now, mean_before, path));
             }
         }
-        if theirs.requests < ENOUGH {
+        if !shares_mean || theirs.requests < ENOUGH {
             continue;
         }
         let n = theirs.requests as f64;
@@ -583,8 +585,11 @@ pub fn findings(stats: &Stats, clock: Clock, window: i64) -> Vec<Finding> {
         ));
     }
     if !out.iter().any(|f| f.level >= Level::Warn) && now.requests > 0 {
-        let mut text = format!("5xx {} now", percent(s5));
-        if let Some(usual) = usual_5xx {
+        let mut text = match shares_mean {
+            true => format!("5xx {} now", percent(s5)),
+            false => format!("{} req/s of the statuses counted", rate(now.rate)),
+        };
+        if let Some(usual) = usual_5xx.filter(|_| shares_mean) {
             text.push_str(&format!(", {} usually", percent(usual)));
         }
         if let Some((usual, against)) = usual_minute {

@@ -35,6 +35,36 @@ pub(crate) async fn run_logs(
         .as_deref()
         .map(|since| crate::logs::span(since).unwrap_or_else(|e| fail(format!("--since: {e}"))))
         .map(|since| crate::logs::wall() - since);
+    let until = what
+        .until
+        .as_deref()
+        .map(|until| crate::logs::span(until).unwrap_or_else(|e| fail(format!("--until: {e}"))))
+        .map(|until| crate::logs::wall() - until);
+    if let (Some(since), Some(until)) = (since, until) {
+        if until <= since {
+            fail("--until is before --since: nothing is between them; --since 2h --until 1h is the hour before last".into());
+        }
+    }
+    let mut statuses = Vec::new();
+    for text in &what.statuses {
+        statuses.extend(
+            crate::logs::StatusMatch::parse_list(text)
+                .unwrap_or_else(|e| fail(format!("--status {e}"))),
+        );
+    }
+    for path in &what.paths {
+        if !path.starts_with('/') && !path.starts_with('*') {
+            fail(format!(
+                "--path {path:?}: a path starts with /, as in /api/*"
+            ));
+        }
+    }
+    let filter = crate::logs::Filter {
+        paths: what.paths.clone(),
+        statuses,
+        hosts: what.hosts.clone(),
+        until,
+    };
     let piped = !stdin().is_terminal();
     let mut files = what.files.clone();
     let dash = files.iter().any(|f| f.as_os_str() == "-");
@@ -69,7 +99,7 @@ pub(crate) async fn run_logs(
     // once and for the chart to have something in it. A log nobody is
     // writing has no now, and is read whole.
     let mut since = since;
-    if screen && since.is_none() && !what.all && !files.is_empty() {
+    if screen && since.is_none() && until.is_none() && !what.all && !files.is_empty() {
         let wall = crate::logs::wall();
         if crate::logs::being_written(&files, &parser, wall) {
             since = Some(wall - window.max(crate::logs::LOOKBACK));
@@ -82,8 +112,17 @@ pub(crate) async fn run_logs(
         since,
         follow: screen,
         exact_paths: what.exact_paths,
+        filter,
     };
-    let name = job.name();
+    // A stretch in the past has nothing more coming
+    if until.is_some() {
+        job.follow = false;
+    }
+    // The title says what was kept, so a filtered log never reads as all
+    let name = match job.filter.describe() {
+        kept if kept.is_empty() => job.name(),
+        kept => format!("{} · {kept}", job.name()),
+    };
     let run = |load: String| crate::webhook::Run {
         mode: "logs".into(),
         target: name.clone(),
@@ -144,6 +183,19 @@ pub(crate) async fn run_logs(
     }
     let check = update::Check::start();
     let shared = crate::logs::start(job.clone());
+    // --metrics: the page is rendered again every second while it follows
+    if exporter::address().is_some() {
+        let shared = shared.clone();
+        let conditions = conditions.clone();
+        tokio::spawn(async move {
+            loop {
+                tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+                exporter::publish(|| {
+                    exporter::logs_page(&shared.lock(), crate::logs::wall(), window, &conditions)
+                });
+            }
+        });
+    }
     if !hooks.is_empty() {
         crate::webhook::begin(run(format!("following {name}")), &hooks);
     }

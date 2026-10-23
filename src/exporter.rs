@@ -442,6 +442,151 @@ pub fn run_page(
 }
 
 /// The page of a ping: each target's counts, latency and phases
+/// nginx's logs, as `pepe logs` counts them while it follows them: the
+/// counters since the reading began, the last `window` as gauges, what is
+/// out of the usual, and each `--fail-if`
+pub fn logs_page(
+    stats: &crate::logs::Stats,
+    wall: i64,
+    window: i64,
+    conditions: &[crate::logs_verdict::Condition],
+) -> String {
+    let mut page = Page::default();
+    let clock = stats.clock(wall);
+    let now = stats.now(clock, window);
+    let classes: Vec<(String, u64)> = (1..=5)
+        .map(|class| {
+            let n = stats
+                .statuses
+                .range(class * 100..(class + 1) * 100)
+                .map(|(_, n)| n)
+                .sum();
+            (format!("{class}xx"), n)
+        })
+        .collect();
+    let labels: Vec<[(&str, &str); 1]> = classes
+        .iter()
+        .map(|(class, _)| [("class", class.as_str())])
+        .collect();
+    page.counter(
+        "pepe_logs_requests_total",
+        "Requests in the access log, by status class",
+        &classes
+            .iter()
+            .zip(&labels)
+            .map(|((_, n), l)| (l.as_slice(), *n as f64))
+            .collect::<Vec<_>>(),
+    );
+    page.counter(
+        "pepe_logs_bytes_total",
+        "Body bytes sent, as the access log says",
+        &[(&[], stats.bytes as f64)],
+    );
+    let levels: Vec<(&str, f64)> = stats
+        .levels
+        .iter()
+        .map(|(level, n)| (level.as_str(), *n as f64))
+        .collect();
+    let level_labels: Vec<[(&str, &str); 1]> = levels
+        .iter()
+        .map(|(level, _)| [("level", *level)])
+        .collect();
+    page.counter(
+        "pepe_logs_error_log_lines_total",
+        "Error log lines, by level",
+        &levels
+            .iter()
+            .zip(&level_labels)
+            .map(|((_, n), l)| (l.as_slice(), *n))
+            .collect::<Vec<_>>(),
+    );
+    page.counter(
+        "pepe_logs_unread_lines_total",
+        "Lines nothing could be read from",
+        &[(&[], stats.unread as f64)],
+    );
+    page.gauge(
+        "pepe_logs_requests_per_second",
+        "The request rate over the last window",
+        &[(&[], now.rate)],
+    );
+    page.gauge(
+        "pepe_logs_5xx_ratio",
+        "The share of the last window's requests answering 5xx",
+        &[(&[], now.share_5xx())],
+    );
+    page.gauge(
+        "pepe_logs_4xx_ratio",
+        "The share of the last window's requests answering 4xx",
+        &[(&[], now.share_4xx())],
+    );
+    page.gauge(
+        "pepe_logs_live",
+        "1 while the log is being written",
+        &[(&[], f64::from(u8::from(clock.live)))],
+    );
+    if stats.time.count() > 0 {
+        page.histogram(
+            "pepe_logs_request_duration_seconds",
+            "$request_time of every request read",
+            &[(&[], &stats.time)],
+        );
+    }
+    if stats.upstream.count() > 0 {
+        page.histogram(
+            "pepe_logs_upstream_duration_seconds",
+            "$upstream_response_time of every request read",
+            &[(&[], &stats.upstream)],
+        );
+    }
+    let findings = crate::logs_verdict::findings(stats, clock, window);
+    let counts: Vec<(&str, f64)> = ["bad", "warn", "note"]
+        .iter()
+        .map(|level| {
+            (
+                *level,
+                findings.iter().filter(|f| f.level.name() == *level).count() as f64,
+            )
+        })
+        .collect();
+    let finding_labels: Vec<[(&str, &str); 1]> = counts
+        .iter()
+        .map(|(level, _)| [("level", *level)])
+        .collect();
+    page.gauge(
+        "pepe_logs_findings",
+        "What is out of the usual now, by how serious",
+        &counts
+            .iter()
+            .zip(&finding_labels)
+            .map(|((_, n), l)| (l.as_slice(), *n))
+            .collect::<Vec<_>>(),
+    );
+    if !conditions.is_empty() {
+        let checks: Vec<(String, f64)> = conditions
+            .iter()
+            .map(|c| {
+                let check = c.check(stats, clock, window, crate::logs_verdict::Scope::Window);
+                (c.text.clone(), f64::from(u8::from(!check.held)))
+            })
+            .collect();
+        let check_labels: Vec<[(&str, &str); 1]> = checks
+            .iter()
+            .map(|(text, _)| [("condition", text.as_str())])
+            .collect();
+        page.gauge(
+            "pepe_logs_fail_if_crossed",
+            "1 while a --fail-if is crossed over the last window",
+            &checks
+                .iter()
+                .zip(&check_labels)
+                .map(|((_, v), l)| (l.as_slice(), *v))
+                .collect::<Vec<_>>(),
+        );
+    }
+    page.finish()
+}
+
 pub fn ping_page(state: &crate::ping::State) -> String {
     let mut page = Page::default();
     let names: Vec<String> = state

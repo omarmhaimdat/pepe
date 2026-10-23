@@ -820,7 +820,25 @@ five (three piped), measured on 2026-10-22:
 
 The report is the same to the byte before and after. The memory is each
 reading thread's slots holding their times: about 2.5 MB a thread for
-nine days, added together once read. Four copies of the file end to end (3.45 GB)
+nine days, added together once read.
+
+**Gzip'd logs.** A rotated `access.log.2.gz` is read as it is:
+a thread of its own unpacks it a chunk at a time while the lines before
+are counted, as `zcat | pepe logs -` would have it in two processes. A
+gzip stream can't be taken up in the middle, so it is one thread's, not
+every core's. On a 189 MB, 1.29M-line log (21 MB gzip'd), the best of
+three on 2026-10-23:
+
+| | time | memory |
+| --- | ---: | ---: |
+| the plain file, every core | 0.09 s | 113 MB |
+| `zcat file.gz \| pepe logs -` | 0.52 s | |
+| `pepe logs file.gz`, unpacked in the same thread | 0.71 s | 26 MB |
+| `pepe logs file.gz`, unpacked on its own thread | 0.51 s | 28 MB |
+
+The filters (`--path`, `--status`, `--host`, `--until`) are asked
+about once a chunk when none is given; with none, reading the 862 MB log
+costs what v0.54 did (0.35 s median, 3.1 s of CPU, about 140 MB). Four copies of the file end to end (3.45 GB)
 take 0.84 s. The report is the same to the byte whichever way the file
 is read; a test reads one log both ways and compares.
 

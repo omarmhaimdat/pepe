@@ -27,7 +27,9 @@ service (a query, a call, a lock) its time goes to. Every tool returns pepe's JS
 (schema_version 1). `ping` splits a request into DNS, connect, TLS, first byte and download. \
 `run` loads a URL; with `otlp: \":4318\"` and the service exporting OpenTelemetry to \
 http://localhost:4318, its report's `spans` say which operation the server's time went to, \
-over all requests and in the slowest. `ramp` finds the capacity. `compare` holds two saved \
+over all requests and in the slowest. `ramp` finds the capacity. `logs` reads nginx's \
+access and error logs and says what is out of the usual now, path by path, sending nothing. \
+`compare` holds two saved \
 reports (`save` on the others) against each other and names what moved, inside the service \
 too. The `speed-up` prompt walks the loop: measure, find the slow operation, change the code, \
 measure again, compare. Only send to what you are allowed to load; the server's guardrails \
@@ -439,6 +441,41 @@ pub fn command_for(name: &str, args: &Value) -> Result<Vec<String>, String> {
             load_flags(&mut argv, args);
             argv.push(log.to_string());
         }
+        "logs" => {
+            // nginx's own when none is named; nothing is piped in to an
+            // MCP server, so a log has to be a file
+            let mut files: Vec<String> = args
+                .get("files")
+                .and_then(Value::as_array)
+                .map(|f| {
+                    f.iter()
+                        .filter_map(Value::as_str)
+                        .map(str::to_string)
+                        .collect()
+                })
+                .unwrap_or_default();
+            if files.is_empty() {
+                files = crate::logs::default_files()
+                    .iter()
+                    .map(|p| p.display().to_string())
+                    .collect();
+            }
+            if files.is_empty() {
+                return Err("files is required: there is no /var/log/nginx/access.log here; name the access and error logs".into());
+            }
+            argv.extend(["logs".to_string(), "--json".to_string()]);
+            flag(&mut argv, args, "since", "--since");
+            flag(&mut argv, args, "until", "--until");
+            flag(&mut argv, args, "window", "--window");
+            flag(&mut argv, args, "format", "--format");
+            flags(&mut argv, args, "path", "--path");
+            flags(&mut argv, args, "status", "--status");
+            flags(&mut argv, args, "host", "--host");
+            flags(&mut argv, args, "fail_if", "--fail-if");
+            switch(&mut argv, args, "exact_paths", "--exact-paths");
+            flag(&mut argv, args, "rows", "--rows");
+            argv.extend(files);
+        }
         "compare" => {
             let before = required(args, "before")?;
             let after = required(args, "after")?;
@@ -602,6 +639,23 @@ pub fn tools() -> Vec<Value> {
             }),
         }),
         json!({
+            "name": "logs",
+            "description": "Read nginx's access and error logs (rotated and .gz ones too) and say how busy the server is now against each minute, hour and day before, which paths and clients, what the error log says, and what is out of the usual. Read `verdict.findings` first: each has a level (bad, warn, note, good), a kind, a text, and the path, since when, now and usual where they apply; `fail_if` has each limit. Sends nothing to anyone.",
+            "inputSchema": schema(&[], &|p| {
+                p.insert("files".into(), strings("Access and error logs; /var/log/nginx's own when none is given"));
+                p.insert("since".into(), string("Leave out what is older than this: '15m', '24h', '7d'"));
+                p.insert("until".into(), string("Leave out what is newer than this, for a stretch in the past: '1h'"));
+                p.insert("window".into(), string("What 'now' is measured over (60s)"));
+                p.insert("path".into(), strings("Only these paths, * for any run of characters: '/api/*'"));
+                p.insert("status".into(), strings("Only requests answering these: '5xx', '404', '4xx,503'"));
+                p.insert("host".into(), strings("Only these hosts: 'shop.test', '.example.com' for it and under it"));
+                p.insert("fail_if".into(), strings("Limits that make the exit code 4: '5xx > 2%', '4xx > 20%', 'p99 > 1s', 'rate < 5/s'"));
+                p.insert("format".into(), string("The access log's log_format, on one line, when it isn't combined"));
+                p.insert("exact_paths".into(), boolean("Count /items/1 and /items/2 apart"));
+                p.insert("rows".into(), integer("Rows in each table of the report (10)"));
+            }),
+        }),
+        json!({
             "name": "compare",
             "description": "Hold a pepe JSON report against an earlier one of the same test and say what moved: a verdict (faster, same, slower, better, worse), each number before and after with whether the change is beyond the usual spread, and findings. Run, ramp and ping reports all compare. Two run reports with `spans` (from `otlp`) also say which operation inside the service moved, in `operations`.",
             "inputSchema": schema(&["before", "after"], &|p| {
@@ -622,9 +676,10 @@ pub fn tools() -> Vec<Value> {
             "api" => "Load-test an OpenAPI spec",
             "flow" => "Run a request flow",
             "replay" => "Replay an access log",
+            "logs" => "Read nginx's logs",
             _ => "Compare two reports",
         };
-        let reads = name == "compare";
+        let reads = name == "compare" || name == "logs";
         tool["annotations"] =
             json!({"title": title, "readOnlyHint": reads, "openWorldHint": !reads});
     }
@@ -634,6 +689,41 @@ pub fn tools() -> Vec<Value> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_logs_tool_reads_files_with_filters() {
+        let argv = command_for(
+            "logs",
+            &json!({"files": ["/var/log/nginx/access.log", "access.log.2.gz"], "since": "15m", "path": ["/api/*"], "status": ["5xx"], "host": [".shop.test"], "fail_if": ["5xx > 2%"], "exact_paths": true}),
+        )
+        .unwrap();
+        assert_eq!(
+            argv,
+            [
+                "logs",
+                "--json",
+                "--since",
+                "15m",
+                "--path",
+                "/api/*",
+                "--status",
+                "5xx",
+                "--host",
+                ".shop.test",
+                "--fail-if",
+                "5xx > 2%",
+                "--exact-paths",
+                "/var/log/nginx/access.log",
+                "access.log.2.gz"
+            ]
+        );
+        // With no file named and no nginx here, it says so
+        if crate::logs::default_files().is_empty() {
+            assert!(command_for("logs", &json!({}))
+                .unwrap_err()
+                .contains("files is required"));
+        }
+    }
 
     #[test]
     fn tool_calls_become_pepe_commands() {
@@ -827,11 +917,11 @@ mod tests {
             .collect();
         assert_eq!(
             names,
-            ["run", "ping", "ramp", "api", "flow", "replay", "compare"]
+            ["run", "ping", "ramp", "api", "flow", "replay", "logs", "compare"]
         );
         for tool in list["result"]["tools"].as_array().unwrap() {
             assert_eq!(tool["inputSchema"]["type"], "object", "{}", tool["name"]);
-            let reads = tool["name"] == "compare";
+            let reads = tool["name"] == "compare" || tool["name"] == "logs";
             assert_eq!(
                 tool["annotations"]["readOnlyHint"], reads,
                 "{}",
