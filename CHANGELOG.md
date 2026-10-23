@@ -6,6 +6,63 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+## [0.54.0](https://github.com/omarmhaimdat/pepe/compare/v0.53.0...v0.54.0) - 2026-10-23
+
+### Added
+
+- *(logs)* findings, --fail-if limits and webhooks for nginx's logs ([#225](https://github.com/omarmhaimdat/pepe/pull/225))
+
+  Second of three PRs making `pepe logs` more powerful (after #223's
+  per-path traffic; next: MCP tool, flag filters, `.gz`).
+
+  ## What changes
+
+  **Findings.** The last minute (`--window`) is compared with the minutes
+  before it and with the same hour a day before. What is out of the usual
+  is listed most serious first, on the dashboard, in the text report and
+  in `--json`:
+
+  | Level | Rule |
+  | --- | --- |
+  | bad | ≥5% of requests answer 5xx · a path answers 5xx to ≥10% or 4xx
+  to ≥50% · error log at ≥10× its usual · traffic under a tenth of usual
+  while live · p99 ≥5× a usual minute and over 1s |
+  | warn | the same, lower: ≥1% 5xx and 3× usual · path ≥2% 5xx / ≥30% 4xx
+  and 3× usual · error log 3× · traffic under a third or twice usual · p99
+  2× and over 200ms |
+  | note | one client sends ≥20% of requests and twice the next ·
+  unreadable lines |
+  | good | nothing out of the usual |
+
+  - A path's share needs ≥5 failed requests in the window, so one failure
+  in forty isn't a finding.
+  - Each finding says since when and what the usual was. A latency finding
+  names the path whose mean time changed most, and whether that time is
+  upstream (the app) or inside nginx.
+  - On the dashboard, `↑` `↓` pick a finding and `enter` opens it: Traffic
+  held to its path ([#223](https://github.com/omarmhaimdat/pepe/pull/223)), or the Errors or Paths tab.
+  - The verdict word now follows the findings (any bad → Failing).
+
+  **`--fail-if`** gets its own grammar in `pepe logs`: `5xx > 2%`, `4xx >
+  20%`, `p99 > 1s`, `rate < 5/s` (rate is the one measure that also takes
+  `<`).
+  - Read once (piped, `--json`, cron), it is checked against everything
+  read, so `--since 15m` sets the period.
+  - While following, it is checked against the last `--window` every
+  second.
+  - A crossed limit gives exit code 4 after the report. On the screen,
+  crossing it even once counts, and the report says when.
+
+  **Webhooks and Slack** now work in `pepe logs`:
+  - Read once: `end`, and `fail` when a limit was crossed.
+  - While following: a finding turning bad, a limit crossed or held again,
+  and a finding going away are sent as `anomaly` events. `--slack` keeps
+  one message up to date. Nothing is sent until the log has been read up
+  to where it is being written.
+  - The webhook layout reads a logs report: requests, rate now, 5xx share,
+  p50/p99, time span, and the findings.
+
+
 ## [0.53.0](https://github.com/omarmhaimdat/pepe/compare/v0.52.0...v0.53.0) - 2026-10-22
 
 ### Added
