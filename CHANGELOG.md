@@ -6,6 +6,98 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+## [0.55.0](https://github.com/omarmhaimdat/pepe/compare/v0.54.0...v0.55.0) - 2026-10-23
+
+### Added
+
+- *(logs)* --path, --status, --host and --until, .gz read as is, --metrics, and a logs MCP tool ([#227](https://github.com/omarmhaimdat/pepe/pull/227))
+
+  Third of three PRs making `pepe logs` more powerful (after #223's
+  per-path traffic and #225's findings and alerts).
+
+  ## What changes
+
+  **Filters.** `--path '/api/*'`, `--status 5xx` (or `404`, `4xx,503`),
+  `--host .example.com` (or an exact host) and `--until 1h` keep only
+  those lines.
+  - The filters apply everywhere: every view, the findings, `--fail-if`
+  and the report.
+  - The title shows what was kept (`access.log · /api/* · 5xx`), and the
+  report counts what was left out (`logs.lines_filtered_out`).
+  - Error-log lines are kept by their `request:` and `host:` (added to the
+  error-log parser). A status filter never drops them.
+  - With `--status`, 5xx/4xx share findings are skipped, since they'd read
+  "5xx 100% now, 100% usually".
+  - `--since 2h --until 1h` reads a stretch in the past, and such a log
+  isn't followed. Bad input exits 2 with the reason.
+
+  **`.gz` read as is.** Rotated `access.log.2.gz` files are recognised by
+  their first two bytes, including multi-member gzip.
+  - Unpacking runs on a thread of its own, passing chunks to the reader
+  through a bounded channel.
+  - A `.gz` is never followed, not checked for "being written", and never
+  split across cores. Read progress counts its size on disk.
+  - The docs no longer suggest `zcat ... | pepe logs -`.
+  - New dependency: `flate2` with its pure-Rust backend (`miniz_oxide`),
+  no C to build.
+
+  **`--metrics` while following.** The Prometheus page is re-rendered
+  every second:
+  - `pepe_logs_requests_total{class}`, `_bytes_total`,
+  `_error_log_lines_total{level}`, `_unread_lines_total`
+  - last window: `_requests_per_second`, `_5xx_ratio`, `_4xx_ratio`,
+  `_live`
+  - histograms: `_request_duration_seconds`, `_upstream_duration_seconds`
+  - `pepe_logs_findings{level}` and `pepe_logs_fail_if_crossed{condition}`
+
+  **MCP `logs` tool.** It takes `files` (nginx's own if none are named),
+  `since`, `until`, `window`, `path`, `status`, `host`, `fail_if`,
+  `format`, `exact_paths` and `rows`, and is marked read-only with no
+  outside effects. Exit 4 comes back as an answer, not an error. The
+  server instructions, AGENTS.md, docs/agents.md, llms.txt and the skill
+  list it.
+
+  ## Checked
+  - 425 tests pass; clippy 1.98 is clean. New tests cover glob, status and
+  host matching, the filter on requests and error-log lines, `--until`, a
+  two-member `.gz` giving the same report as the plain file (and not
+  "being written"), and the MCP argument mapping.
+  - By hand:
+  - `pepe mcp` answered a `logs` call over stdio with the verdict and
+  `fail_if`.
+  - `--metrics` was scraped from a live screen driven in a pty, and the
+  session quit cleanly.
+  - The filters, and bad `--status` / `--until` values, were run on the
+  generated log.
+
+  ## Cost (bench/README.md)
+  | | before | after |
+  | --- | ---: | ---: |
+  | 862 MB log, every core, no filter (against v0.54) | 0.35 s, 3.1 s CPU,
+  ~140 MB | same |
+  | 189 MB log as `.gz`: `zcat \| pepe logs -` → `pepe logs file.gz` |
+  0.52 s | 0.51 s, 28 MB |
+
+  Unpacking on the reading thread took 0.71 s, which is why it gets a
+  thread of its own. A first version checked the filter on every line and
+  cost about 4% CPU; it is now checked once per chunk.
+
+  ## Caveats
+  - The MCP `logs` tool reads any file the server's user can read, like
+  `replay` and `compare` do. The report can quote a line it couldn't parse
+  (`first_unread_line`) and error-log examples. Whoever starts `pepe mcp`
+  decides what it runs as.
+  - `--host` needs `$host` in the log format; the default `combined`
+  format has none.
+
+  ## 1.0
+  This adds `pepe logs` flags (`--path`, `--status`, `--host`, `--until`),
+  a report field (`lines_filtered_out`) and an MCP tool, so it restarts
+  the month without a flag or schema change.
+
+  Please squash-merge with this title so release-plz picks it up.
+
+
 ## [0.54.0](https://github.com/omarmhaimdat/pepe/compare/v0.53.0...v0.54.0) - 2026-10-23
 
 ### Added
