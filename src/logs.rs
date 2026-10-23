@@ -398,6 +398,7 @@ pub struct Fault<'a> {
     pub client: &'a str,
     pub request: &'a str,
     pub upstream: &'a str,
+    pub host: &'a str,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -915,6 +916,7 @@ fn fault(line: &str) -> Option<Fault<'_>> {
         client: said(", client: ").unwrap_or(""),
         request: said(", request: ").unwrap_or(""),
         upstream: said(", upstream: ").unwrap_or(""),
+        host: said(", host: ").unwrap_or(""),
     })
 }
 
@@ -1772,6 +1774,8 @@ pub struct Stats {
     pub undated: u64,
     /// Lines older than `--since`
     pub skipped: u64,
+    /// Lines the filters left out
+    pub filtered: u64,
     /// The second nothing older than is counted
     pub since: Option<i64>,
     pub first: Option<Stamp>,
@@ -1818,6 +1822,8 @@ pub struct Stats {
     pub caught_up: bool,
     /// Count `/items/1` and `/items/2` apart
     pub exact_paths: bool,
+    /// Only some statuses are counted: a share answering 5xx says nothing
+    pub statuses_filtered: bool,
     /// Why a file couldn't be read
     pub trouble: Option<String>,
 }
@@ -1842,6 +1848,7 @@ impl Default for Stats {
             stitched: HashMap::new(),
             undated: 0,
             skipped: 0,
+            filtered: 0,
             since: None,
             first: None,
             last: None,
@@ -1872,6 +1879,7 @@ impl Default for Stats {
             total_bytes: 0,
             caught_up: false,
             exact_paths: false,
+            statuses_filtered: false,
             trouble: None,
         }
     }
@@ -2379,6 +2387,7 @@ impl Stats {
         self.unread += other.unread;
         self.undated += other.undated;
         self.skipped += other.skipped;
+        self.filtered += other.filtered;
         self.faults += other.faults;
         self.other_causes += other.other_causes;
         self.read_bytes += other.read_bytes;
@@ -2786,6 +2795,181 @@ pub struct Job {
     pub follow: bool,
     /// Count `/items/1` and `/items/2` apart
     pub exact_paths: bool,
+    /// Which lines are counted: by path, status, host and time
+    pub filter: Filter,
+}
+
+/// Which lines are counted. A request is counted when it passes every
+/// filter given; an error log line, when its request and its host do (a
+/// status says nothing of it, and is no reason to leave it out).
+#[derive(Debug, Clone, Default)]
+pub struct Filter {
+    /// Paths, with `*` for any run of characters: `/api/*`
+    pub paths: Vec<String>,
+    /// Status codes and classes: 404, 5xx
+    pub statuses: Vec<StatusMatch>,
+    /// Hosts: `shop.test` exactly, `.example.com` that one and under it
+    pub hosts: Vec<String>,
+    /// Leave out what is newer than this second
+    pub until: Option<i64>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum StatusMatch {
+    Code(u16),
+    /// 4 for 4xx
+    Class(u16),
+}
+
+impl StatusMatch {
+    /// `404`, `5xx`, or several: `4xx,503`
+    pub fn parse_list(text: &str) -> Result<Vec<StatusMatch>, String> {
+        text.split(',')
+            .map(str::trim)
+            .filter(|part| !part.is_empty())
+            .map(|part| {
+                let lower = part.to_ascii_lowercase();
+                if let Some(class) = lower.strip_suffix("xx") {
+                    return match class.parse::<u16>() {
+                        Ok(class @ 1..=5) => Ok(StatusMatch::Class(class)),
+                        _ => Err(format!("{part:?}: a class is 1xx to 5xx")),
+                    };
+                }
+                match lower.parse::<u16>() {
+                    Ok(code @ 100..=599) => Ok(StatusMatch::Code(code)),
+                    _ => Err(format!(
+                        "{part:?}: a status is a code, 404, or a class, 5xx"
+                    )),
+                }
+            })
+            .collect()
+    }
+
+    fn matches(self, status: u16) -> bool {
+        match self {
+            StatusMatch::Code(code) => status == code,
+            StatusMatch::Class(class) => status / 100 == class,
+        }
+    }
+}
+
+/// `*` for any run of characters, `?` for any one
+pub fn glob(pattern: &str, text: &str) -> bool {
+    let (p, t): (Vec<char>, Vec<char>) = (pattern.chars().collect(), text.chars().collect());
+    let (mut pi, mut ti) = (0, 0);
+    let mut star: Option<(usize, usize)> = None;
+    while ti < t.len() {
+        if pi < p.len() && (p[pi] == '?' || p[pi] == t[ti]) {
+            pi += 1;
+            ti += 1;
+        } else if pi < p.len() && p[pi] == '*' {
+            star = Some((pi, ti));
+            pi += 1;
+        } else if let Some((sp, st)) = star {
+            pi = sp + 1;
+            ti = st + 1;
+            star = Some((sp, st + 1));
+        } else {
+            return false;
+        }
+    }
+    p[pi..].iter().all(|c| *c == '*')
+}
+
+/// `shop.test` is that host; `.example.com` is it and every host under it
+fn host_matches(rule: &str, host: &str) -> bool {
+    let host = host.split(':').next().unwrap_or(host).to_ascii_lowercase();
+    let rule = rule.to_ascii_lowercase();
+    match rule.strip_prefix('.') {
+        Some(domain) => host == domain || host.ends_with(&rule),
+        None => host == rule,
+    }
+}
+
+impl Filter {
+    /// What it keeps, for a title: `/api/* · 5xx · until 22 Oct 14:00`
+    pub fn describe(&self) -> String {
+        let mut parts: Vec<String> = Vec::new();
+        if !self.paths.is_empty() {
+            parts.push(self.paths.join(", "));
+        }
+        if !self.statuses.is_empty() {
+            parts.push(
+                self.statuses
+                    .iter()
+                    .map(|m| match m {
+                        StatusMatch::Code(code) => code.to_string(),
+                        StatusMatch::Class(class) => format!("{class}xx"),
+                    })
+                    .collect::<Vec<_>>()
+                    .join(", "),
+            );
+        }
+        if !self.hosts.is_empty() {
+            parts.push(self.hosts.join(", "));
+        }
+        if let Some(until) = self.until {
+            parts.push(format!(
+                "until {}",
+                day_and_time(until + i64::from(local_offset()))
+            ));
+        }
+        parts.join(" · ")
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.paths.is_empty()
+            && self.statuses.is_empty()
+            && self.hosts.is_empty()
+            && self.until.is_none()
+    }
+
+    /// Whether a line is counted
+    pub fn passes(&self, line: &Line<'_>) -> bool {
+        if self.is_empty() {
+            return true;
+        }
+        let (at, target, status, host) = match line {
+            Line::Request(r) => (r.at, Some(&*r.target), Some(r.status), Some(&*r.host)),
+            Line::Fault(f) => (
+                f.at,
+                (!f.request.is_empty()).then(|| request_line(f.request).1),
+                None,
+                Some(f.host),
+            ),
+            Line::Unread => {
+                return self.paths.is_empty() && self.hosts.is_empty() && self.statuses.is_empty()
+            }
+        };
+        if let (Some(until), Some(at)) = (self.until, at) {
+            if at.at > until {
+                return false;
+            }
+        }
+        if !self.paths.is_empty() {
+            let Some(target) = target else {
+                return false;
+            };
+            let path = split_at_byte(target, b'?').map_or(target, |(path, _)| path);
+            if !self.paths.iter().any(|p| glob(p, path) || glob(p, target)) {
+                return false;
+            }
+        }
+        if !self.statuses.is_empty() {
+            if let Some(status) = status {
+                if !self.statuses.iter().any(|m| m.matches(status)) {
+                    return false;
+                }
+            }
+        }
+        if !self.hosts.is_empty() {
+            match host.filter(|h| !h.is_empty()) {
+                Some(host) if self.hosts.iter().any(|rule| host_matches(rule, host)) => {}
+                _ => return false,
+            }
+        }
+        true
+    }
 }
 
 impl Job {
@@ -2805,11 +2989,107 @@ impl Job {
     }
 }
 
+/// Whether a file is gzip, by its first two bytes: `access.log.2.gz`, as
+/// logrotate leaves it
+pub fn is_gz(path: &Path) -> bool {
+    use std::io::Read;
+    let mut magic = [0u8; 2];
+    std::fs::File::open(path)
+        .and_then(|mut file| file.read_exact(&mut magic))
+        .is_ok_and(|()| magic == [0x1f, 0x8b])
+}
+
+/// What a thread of its own unpacked from a gzip'd file, a chunk at a
+/// time: the unpacking goes on while the lines before are counted, as
+/// `zcat | pepe logs -` would have it, in one process
+struct Unpacked {
+    chunks: std::sync::mpsc::Receiver<std::io::Result<Vec<u8>>>,
+    chunk: Vec<u8>,
+    at: usize,
+}
+
+impl Unpacked {
+    fn start(file: std::fs::File) -> Unpacked {
+        use std::io::Read;
+        // A few chunks ahead: enough to keep both threads busy, little
+        // enough that memory doesn't grow with the file
+        let (tx, rx) = std::sync::mpsc::sync_channel(4);
+        let spawned = std::thread::Builder::new()
+            .name("pepe-gunzip".into())
+            .spawn(move || {
+                let mut gz =
+                    flate2::read::MultiGzDecoder::new(BufReader::with_capacity(CHUNK, file));
+                loop {
+                    let mut chunk = vec![0; CHUNK];
+                    let mut filled = 0;
+                    while filled < chunk.len() {
+                        match gz.read(&mut chunk[filled..]) {
+                            Ok(0) => break,
+                            Ok(n) => filled += n,
+                            Err(e) if e.kind() == std::io::ErrorKind::Interrupted => continue,
+                            Err(e) => {
+                                let _ = tx.send(Err(e));
+                                return;
+                            }
+                        }
+                    }
+                    chunk.truncate(filled);
+                    let done = filled == 0;
+                    if tx.send(Ok(chunk)).is_err() || done {
+                        return;
+                    }
+                }
+            });
+        if let Err(e) = spawned {
+            let (tx, rx) = std::sync::mpsc::sync_channel(1);
+            let _ = tx.send(Err(e));
+            return Unpacked {
+                chunks: rx,
+                chunk: Vec::new(),
+                at: 0,
+            };
+        }
+        Unpacked {
+            chunks: rx,
+            chunk: Vec::new(),
+            at: 0,
+        }
+    }
+}
+
+impl std::io::Read for Unpacked {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        if self.at == self.chunk.len() {
+            match self.chunks.recv() {
+                Ok(Ok(chunk)) => {
+                    self.chunk = chunk;
+                    self.at = 0;
+                }
+                Ok(Err(e)) => return Err(e),
+                // The unpacking is over
+                Err(_) => return Ok(0),
+            }
+        }
+        let n = buf.len().min(self.chunk.len() - self.at);
+        buf[..n].copy_from_slice(&self.chunk[self.at..self.at + n]);
+        self.at += n;
+        Ok(n)
+    }
+}
+
+/// A file's lines, unpacked when it is gzip
+fn lines_of(path: &Path) -> Option<Box<dyn BufRead + Send>> {
+    let file = std::fs::File::open(path).ok()?;
+    Some(match is_gz(path) {
+        true => Box::new(BufReader::new(flate2::read::MultiGzDecoder::new(file))),
+        false => Box::new(BufReader::new(file)),
+    })
+}
+
 /// The time of a file's first line that has one: rotated logs are read
 /// oldest first, so that every second is counted whole
 fn first_stamp(path: &Path, parser: &Parser) -> Option<i64> {
-    let file = std::fs::File::open(path).ok()?;
-    let mut lines = BufReader::new(file).split(b'\n');
+    let mut lines = lines_of(path)?.split(b'\n');
     for _ in 0..50 {
         let line = lines.next()?.ok()?;
         let at = match parser.read(&String::from_utf8_lossy(&line)) {
@@ -2829,6 +3109,8 @@ fn fold_lines(chunk: &[u8], job: &Job, stats: &mut Stats, wall: i64) {
     // Nearly every chunk is UTF-8 as it stands, and is found to be all at
     // once; one that isn't is looked at by line
     let valid = std::str::from_utf8(chunk).is_ok();
+    // Asked once a chunk: nearly every reading has no filter
+    let filtering = !job.filter.is_empty();
     let mut from = 0;
     while from < chunk.len() {
         let end = memchr::memchr(b'\n', &chunk[from..]).map_or(chunk.len(), |i| from + i);
@@ -2857,6 +3139,10 @@ fn fold_lines(chunk: &[u8], job: &Job, stats: &mut Stats, wall: i64) {
                 stats.skipped += 1;
                 continue;
             }
+        }
+        if filtering && !job.filter.passes(&line) {
+            stats.filtered += 1;
+            continue;
         }
         stats.fold(line, text, wall);
     }
@@ -3029,6 +3315,10 @@ fn seek_since(path: &Path, parser: &Parser, since: i64) -> u64 {
 
 /// The time of a file's last line that has one
 fn last_stamp(path: &Path, parser: &Parser) -> Option<i64> {
+    // A file gzip'd is one logrotate is done with
+    if is_gz(path) {
+        return None;
+    }
     let file = std::fs::File::open(path).ok()?;
     let len = file.metadata().ok()?.len();
     let mut buf = vec![0; 64 * 1024];
@@ -3068,6 +3358,9 @@ struct Tail {
     identity: u64,
     /// The start of a line whose end hasn't been written yet
     pending: Vec<u8>,
+    /// Gzip'd: read once, unpacked, and never followed; its size on disk
+    /// is what it adds to how far the reading is
+    gz: Option<u64>,
 }
 
 #[cfg(unix)]
@@ -3103,12 +3396,17 @@ impl Tail {
         if meta.is_dir() {
             return Err(format!("{} is a directory", path.display()));
         }
+        let gz = is_gz(path);
         Ok(Tail {
             path: Some(path.to_path_buf()),
-            input: Box::new(BufReader::with_capacity(CHUNK, file)),
+            input: match gz {
+                true => Box::new(BufReader::with_capacity(CHUNK, Unpacked::start(file))),
+                false => Box::new(BufReader::with_capacity(CHUNK, file)),
+            },
             position,
             identity: identity(&meta),
             pending: Vec::new(),
+            gz: gz.then_some(meta.len()),
         })
     }
 
@@ -3123,6 +3421,7 @@ impl Tail {
             position: 0,
             identity: 0,
             pending: Vec::new(),
+            gz: None,
         }
     }
 
@@ -3157,7 +3456,9 @@ impl Tail {
             if whole > 0 {
                 let mut stats = shared.lock();
                 let wall = wall();
-                stats.read_bytes += whole as u64;
+                if self.gz.is_none() {
+                    stats.read_bytes += whole as u64;
+                }
                 fold_lines(&self.pending[..whole], job, &mut stats, wall);
                 // A pipe has no end to be short of: once read from, it is
                 // caught up with, and the screen is live from its first line
@@ -3168,6 +3469,10 @@ impl Tail {
                 self.pending.drain(..whole);
             }
             if read == 0 {
+                if let Some(size) = self.gz.take() {
+                    shared.lock().read_bytes += size;
+                    self.gz = Some(0);
+                }
                 return;
             }
         }
@@ -3176,7 +3481,7 @@ impl Tail {
     /// The path names another file now, or this one was emptied: logrotate
     /// has been. Read the old file out and start on the new one.
     fn reopen_if_rotated(&mut self, job: &Job, shared: &Shared) {
-        let Some(path) = self.path.clone() else {
+        let Some(path) = self.path.clone().filter(|_| self.gz.is_none()) else {
             return;
         };
         let Ok(meta) = std::fs::metadata(&path) else {
@@ -3210,6 +3515,7 @@ pub fn read(job: &Job, shared: &Shared) {
         }
     }
     shared.lock().exact_paths = job.exact_paths;
+    shared.lock().statuses_filtered = !job.filter.statuses.is_empty();
     shared.lock().total_bytes = files
         .iter()
         .filter_map(|path| std::fs::metadata(path).ok())
@@ -3224,7 +3530,9 @@ pub fn read(job: &Job, shared: &Shared) {
         // time is. What it has from there is first read by every core,
         // when that is worth it; its last lines and what comes after,
         // by this thread.
-        if let Some(path) = tail.path.clone() {
+        // A gzip'd file can't be taken up in the middle: it is read whole,
+        // by this thread
+        if let Some(path) = tail.path.clone().filter(|_| tail.gz.is_none()) {
             let origin = job
                 .since
                 .map_or(0, |since| seek_since(&path, &job.parser, since));
@@ -3346,6 +3654,13 @@ pub fn report(stats: &Stats, name: &str, wall: i64, window: i64, rows: usize) ->
     if stats.faults > 0 {
         let _ = write!(out, " · {}", counted(stats.faults, "error log line"));
     }
+    if stats.filtered > 0 {
+        let _ = write!(
+            out,
+            " · {} left out by the filters",
+            counted(stats.filtered, "line")
+        );
+    }
     if let (Some(first), Some(last)) = (stats.first, stats.last) {
         let _ = write!(
             out,
@@ -3362,6 +3677,7 @@ pub fn report(stats: &Stats, name: &str, wall: i64, window: i64, rows: usize) ->
     }
 
     let glyph = match now.share_5xx() {
+        _ if stats.statuses_filtered => '·',
         s if s >= 0.05 => '✖',
         s if s >= 0.01 => '▲',
         _ => '✔',
@@ -3611,6 +3927,7 @@ pub fn json_report(
             "first_unread_line": stats.first_unread,
             "requests_without_time": stats.undated,
             "lines_before_since": stats.skipped,
+            "lines_filtered_out": stats.filtered,
             "bytes_sent": stats.bytes,
             "first": stats.first.map(Stamp::iso),
             "last": stats.last.map(Stamp::iso),
@@ -4204,6 +4521,127 @@ mod tests {
     }
 
     #[test]
+    fn filters_keep_what_they_name() {
+        assert!(glob("/api/*", "/api/orders/7"));
+        assert!(glob("*/login", "/admin/login"));
+        assert!(glob("/item?", "/items"));
+        assert!(!glob("/api/*", "/apix"));
+        assert!(glob("*", ""));
+        assert_eq!(
+            StatusMatch::parse_list("4xx, 503").unwrap(),
+            [StatusMatch::Class(4), StatusMatch::Code(503)]
+        );
+        for wrong in ["6xx", "99", "abc", "1000"] {
+            assert!(StatusMatch::parse_list(wrong).is_err(), "{wrong}");
+        }
+        assert!(host_matches(".shop.test", "api.shop.test"));
+        assert!(host_matches(".shop.test", "shop.test:8080"));
+        assert!(!host_matches(".shop.test", "badshop.test"));
+        assert!(host_matches("Shop.Test", "shop.test"));
+
+        let parser = Parser::new(Some(
+            r#"$host $remote_addr [$time_local] "$request" $status $body_bytes_sent"#,
+        ))
+        .unwrap();
+        let line = |host: &str, path: &str, status: u16| {
+            format!(
+                r#"{host} 10.0.0.1 [08/Oct/2026:11:55:36 +0000] "GET {path} HTTP/1.1" {status} 10"#
+            )
+        };
+        let filter = Filter {
+            paths: vec!["/api/*".into()],
+            statuses: vec![StatusMatch::Class(5)],
+            hosts: vec![".shop.test".into()],
+            until: None,
+        };
+        let passes = |text: &str| filter.passes(&parser.read(text));
+        assert!(passes(&line("api.shop.test", "/api/orders/7?x=1", 502)));
+        assert!(
+            !passes(&line("api.shop.test", "/api/orders/7", 200)),
+            "status"
+        );
+        assert!(!passes(&line("api.shop.test", "/login", 502)), "path");
+        assert!(!passes(&line("other.test", "/api/x", 502)), "host");
+        // An error log line: its request and its host; a status is no
+        // reason to leave it out
+        let fault = r#"2026/10/08 11:55:36 [error] 7#7: *1 upstream timed out, client: 10.0.0.1, server: _, request: "GET /api/x HTTP/1.1", upstream: "http://127.0.0.1:8080/api/x", host: "api.shop.test""#;
+        assert!(passes(fault));
+        assert!(!passes(&fault.replace("/api/x", "/login")));
+        // Until: what is newer is left out
+        let until = Filter {
+            until: Some(AT - 1),
+            ..Filter::default()
+        };
+        assert!(!until.passes(&parser.read(&line("a", "/", 200))));
+        assert!(Filter::default().passes(&Line::Unread));
+        assert_eq!(filter.describe(), "/api/* · 5xx · .shop.test");
+    }
+
+    #[test]
+    fn a_gzip_log_is_read_as_the_same_log_unpacked() {
+        use std::io::Write;
+        let dir = std::env::temp_dir().join(format!("pepe-gz-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let mut log = String::new();
+        for s in 0..600 {
+            log.push_str(&hit(
+                s,
+                &format!("/p/{}", s % 7),
+                if s % 50 == 0 { 502 } else { 200 },
+            ));
+            log.push('\n');
+        }
+        let plain = dir.join("access.log.1");
+        std::fs::write(&plain, &log).unwrap();
+        // Two members, as a log gzip'd and appended to would be
+        let packed = dir.join("access.log.1.gz");
+        let mut bytes = Vec::new();
+        let cut = log[..log.len() / 2].rfind('\n').unwrap() + 1;
+        let (first, second) = log.split_at(cut);
+        for part in [first, second] {
+            let mut gz = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::fast());
+            gz.write_all(part.as_bytes()).unwrap();
+            bytes.extend(gz.finish().unwrap());
+        }
+        std::fs::write(&packed, &bytes).unwrap();
+        assert!(is_gz(&packed) && !is_gz(&plain));
+        let read = |path: &PathBuf| {
+            let job = Job {
+                files: vec![path.clone()],
+                piped: None,
+                parser: Parser::default(),
+                since: None,
+                follow: false,
+                exact_paths: false,
+                filter: Filter::default(),
+            };
+            let shared = Shared::default();
+            read(&job, &shared);
+            let stats = shared.lock();
+            (
+                json_report(&stats, &job, AT + 86_400, 60, 10),
+                stats.read_bytes,
+                stats.total_bytes,
+            )
+        };
+        let (mut unpacked, ..) = read(&plain);
+        let (mut gz, read_bytes, total) = read(&packed);
+        assert_eq!(gz["logs"]["requests"], 600);
+        // Only the name differs
+        unpacked["logs"]["files"] = serde_json::Value::Null;
+        gz["logs"]["files"] = serde_json::Value::Null;
+        assert_eq!(gz, unpacked);
+        // How far the reading is, in bytes on disk
+        assert_eq!(
+            (read_bytes, total),
+            (bytes.len() as u64, bytes.len() as u64)
+        );
+        // A gzip'd log isn't being written
+        assert!(!being_written(&[packed], &Parser::default(), AT + 600));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
     fn versus_and_rates_read_well() {
         assert_eq!(versus(112.0, 100.0), "+12%");
         assert_eq!(versus(340.0, 100.0), "×3.4");
@@ -4307,6 +4745,7 @@ mod tests {
             since: Some(AT + 1),
             follow: false,
             exact_paths: false,
+            filter: Filter::default(),
         };
         assert_eq!(job.name(), "access.log +1");
         // Piped in, a log is caught up with from its first chunk: there is
@@ -4453,6 +4892,7 @@ mod tests {
             since: Some(AT + 10),
             follow: false,
             exact_paths: false,
+            filter: Filter::default(),
         };
         let wall = AT + 86_400;
         let one = Shared::default();
@@ -4637,6 +5077,7 @@ mod tests {
                 since: Some(since),
                 follow: false,
                 exact_paths: false,
+                filter: Filter::default(),
             };
             let shared = Shared::default();
             read(&job, &shared);

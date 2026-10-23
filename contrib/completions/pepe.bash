@@ -1730,7 +1730,7 @@ _pepe() {
             return 0
             ;;
         pepe__subcmd__logs)
-            opts="-h -n -z -m -H -t -d -p -k -i -c -u --format --window --since --all --exact-paths --rows --help --number --duration --method --headers --timeout --warmup --threads --rate --body --proxy --insecure --disable-compression --disable-keepalive --disable-redirects --json --trace-header --vars --webhook --webhook-on --slack --export --snapshot --allow-host --max-requests --max-rate --max-concurrency --dry-run --fail-if --metrics --setup --config --write-config --load --keep --record --concurrency --user-agent"
+            opts="-h -n -z -m -H -t -d -p -k -i -c -u --format --window --since --all --exact-paths --rows --path --status --host --until --help --number --duration --method --headers --timeout --warmup --threads --rate --body --proxy --insecure --disable-compression --disable-keepalive --disable-redirects --json --trace-header --vars --webhook --webhook-on --slack --export --snapshot --allow-host --max-requests --max-rate --max-concurrency --dry-run --fail-if --metrics --setup --config --write-config --load --keep --record --concurrency --user-agent"
             if [[ ${cur} == -* || ${COMP_CWORD} -eq 2 ]] ; then
                 COMPREPLY=( $(compgen -W "${opts}" -- "${cur}") )
                 return 0
@@ -1749,6 +1749,22 @@ _pepe() {
                     return 0
                     ;;
                 --rows)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --path)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --status)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --host)
+                    COMPREPLY=($(compgen -f "${cur}"))
+                    return 0
+                    ;;
+                --until)
                     COMPREPLY=($(compgen -f "${cur}"))
                     return 0
                     ;;

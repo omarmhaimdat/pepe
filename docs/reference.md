@@ -1174,6 +1174,18 @@ Options:
           
           [default: 10]
 
+      --path <PATH>
+          Count only the requests to these paths, with * for any run of characters: /api/*, /login; repeat for more. An error log line counts when its request does
+
+      --status <CODES>
+          Count only the requests that answered these: 404, 5xx, 4xx,503; repeat for more. Error log lines are still counted
+
+      --host <HOST>
+          Count only the requests to these hosts (the log's $host): shop.test exactly, .example.com for it and every host under it; repeat for more
+
+      --until <TIME>
+          Leave out what is newer than this, e.g. 1h for up to an hour ago; with --since, a stretch in the past. A log read up to a time in the past isn't followed
+
   -h, --help
           Print help
 

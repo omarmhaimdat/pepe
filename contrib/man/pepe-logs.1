@@ -4,7 +4,7 @@
 .SH NAME
 pepe\-logs \- Read nginx logs: requests per second now, against each minute, hour and day
 .SH SYNOPSIS
-\fBpepe logs\fR [\fB\-\-format\fR] [\fB\-\-window\fR] [\fB\-\-since\fR] [\fB\-\-all\fR] [\fB\-\-exact\-paths\fR] [\fB\-\-rows\fR] [\fB\-h\fR|\fB\-\-help\fR] [\fIFILES\fR] 
+\fBpepe logs\fR [\fB\-\-format\fR] [\fB\-\-window\fR] [\fB\-\-since\fR] [\fB\-\-all\fR] [\fB\-\-exact\-paths\fR] [\fB\-\-rows\fR] [\fB\-\-path\fR] [\fB\-\-status\fR] [\fB\-\-host\fR] [\fB\-\-until\fR] [\fB\-h\fR|\fB\-\-help\fR] [\fIFILES\fR] 
 .SH DESCRIPTION
 Read nginx logs: requests per second now, against each minute, hour and day
 .SH OPTIONS
@@ -26,6 +26,18 @@ Count /items/1 and /items/2 apart. Without it the numbers and ids in a path coun
 .TP
 \fB\-\-rows\fR \fI<N>\fR [default: 10]
 Rows in each table of the report
+.TP
+\fB\-\-path\fR \fI<PATH>\fR
+Count only the requests to these paths, with * for any run of characters: /api/*, /login; repeat for more. An error log line counts when its request does
+.TP
+\fB\-\-status\fR \fI<CODES>\fR
+Count only the requests that answered these: 404, 5xx, 4xx,503; repeat for more. Error log lines are still counted
+.TP
+\fB\-\-host\fR \fI<HOST>\fR
+Count only the requests to these hosts (the log\*(Aqs $host): shop.test exactly, .example.com for it and every host under it; repeat for more
+.TP
+\fB\-\-until\fR \fI<TIME>\fR
+Leave out what is newer than this, e.g. 1h for up to an hour ago; with \-\-since, a stretch in the past. A log read up to a time in the past isn\*(Aqt followed
 .TP
 \fB\-h\fR, \fB\-\-help\fR
 Print help

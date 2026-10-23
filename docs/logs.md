@@ -7,16 +7,28 @@ What the server already knows about its traffic: `pepe logs` reads nginx's acces
 ```bash
 pepe logs /var/log/nginx/access.log /var/log/nginx/error.log
 pepe logs                                      # nginx's own, in /var/log/nginx
-zcat access.log.*.gz | pepe logs -
+pepe logs /var/log/nginx/access.log*             # rotated ones too, .gz as they are
 docker compose logs -f -n 1000 nginx | pepe logs
 pepe logs access.log --since 24h --json > traffic.json
+pepe logs access.log --path '/api/*' --status 5xx --since 2h --until 1h
 ```
 
 ## How it reads
 
 At a terminal a log that is being written is shown live: the screen starts five minutes back, so that now is right at once, and follows the files as they are written, through rotation. `--since 24h` starts further back and `--all` reads everything first; either way the place to start is found in the file without reading what is before it. A log whose last line is older than five minutes has no now, and is read whole. Piped out, or with `--json`, the files are read to the end and a report is printed.
 
-Lines are counted as a stream, so memory doesn't grow with the log: every second of the last hour, a day of minutes, ninety days of hours and ten years of days are kept, with capped tables of paths, clients and user agents. What a file already has is read by every core at once, some gigabytes a second, and what is appended after that by one. Rotated files can be given in any order. What is piped in is followed too, until its writer ends, and the `nginx-1  | ` that `docker compose logs` puts in front of each line is left out, with the colour it writes into a pipe.
+Lines are counted as a stream, so memory doesn't grow with the log: every second of the last hour, a day of minutes, ninety days of hours and ten years of days are kept, with capped tables of paths, clients and user agents. What a file already has is read by every core at once, some gigabytes a second, and what is appended after that by one. Rotated files can be given in any order, and gzip'd ones (`access.log.2.gz`) are read as they are, unpacked as they're read, on one thread since a gzip stream can't be taken up in the middle. What is piped in is followed too, until its writer ends, and the `nginx-1  | ` that `docker compose logs` puts in front of each line is left out, with the colour it writes into a pipe.
+
+## Keeping only some lines
+
+| Flag | Keeps |
+| --- | --- |
+| `--path '/api/*'` | Requests to that path, `*` for any run of characters; repeat for more. Matched against the path as written, without its query |
+| `--status 5xx` | Requests that answered that: a code (`404`), a class (`5xx`), or several (`4xx,503`); repeat for more |
+| `--host .example.com` | Requests to that `$host`: `shop.test` exactly, `.example.com` for it and every host under it; a log whose format has no `$host` has nothing to keep |
+| `--until 1h` | What was written up to an hour ago; with `--since 2h`, the hour before last. A log read up to a time in the past isn't followed |
+
+Every view, the findings and the report count only what the filters keep, and the title says what that is (`access.log · /api/* · 5xx`). An error log line is kept when its request and its host are (nginx writes both in it); a status says nothing of it. With `--status`, a share answering 5xx says nothing either, and the findings leave shares out. The report counts the lines left out (`lines_filtered_out` in JSON).
 
 ## Now against before
 
@@ -95,6 +107,14 @@ Read once (piped, `--json`, from cron) a limit is held against everything read, 
 
 `--webhook`, `--webhook-on` and `--slack` work as they do for a load test (see [webhooks](webhooks.md)). Read once, the hooks get the verdict at the end, and `fail` when a limit was crossed. While a log is followed, a finding turning bad, a limit crossed or held again, and a finding going away are `anomaly` events, and `--slack` keeps one message up to date with the rate, the 5xx and the findings; the verdict goes out when the screen is left. A plain URL is sent the end only, unless `--webhook-on anomaly,end` says more.
 
+## Prometheus
+
+`--metrics :9100` serves the numbers at `http://ADDR/metrics` while a log is followed, rendered again every second: `pepe_logs_requests_total{class}`, `pepe_logs_bytes_total`, `pepe_logs_error_log_lines_total{level}`, `pepe_logs_unread_lines_total`; for the last `--window`, `pepe_logs_requests_per_second`, `pepe_logs_5xx_ratio`, `pepe_logs_4xx_ratio` and `pepe_logs_live`; the histograms `pepe_logs_request_duration_seconds` and `pepe_logs_upstream_duration_seconds`; `pepe_logs_findings{level}`, what is out of the usual now; and `pepe_logs_fail_if_crossed{condition}` for each `--fail-if`.
+
+## As an MCP tool
+
+`pepe mcp` has a `logs` tool: `files` (nginx's own when none), `since`, `until`, `window`, `path`, `status`, `host`, `fail_if`, `format`, `exact_paths` and `rows`, the same as the flags, returning the JSON report. It reads files and sends nothing; a limit crossed is an answer, not an error.
+
 ## Formats
 
 Access logs are read as nginx's `combined` format (Apache's too), with `rt=` and `urt=` timings after it if they are there, or as JSON lines under nginx's variable names or Caddy's. A log with a `log_format` of its own needs it said, as nginx.conf has it, on one line:
@@ -119,5 +139,10 @@ pepe logs access.log --format '$remote_addr [$time_local] "$request" $status $bo
 | `--fail-if <CONDITION>` | | Exit code 4 when crossed: `'5xx > 2%'`, `'4xx > 20%'`, `'p99 > 1s'`, `'rate < 5/s'`; repeat for more |
 | `--webhook <URL>` | | Send the verdict there; `--webhook-on` says when |
 | `--slack[=#channel]` | | Keep a Slack message up to date while the log is followed |
+| `--path <PATH>` | | Only requests to these paths: `/api/*` |
+| `--status <CODES>` | | Only requests that answered these: `5xx`, `404`, `4xx,503` |
+| `--host <HOST>` | | Only requests to these hosts: `shop.test`, `.example.com` |
+| `--until <TIME>` | | Leave out what is newer than this: `1h` |
+| `--metrics <ADDR>` | | Serve Prometheus metrics at `/metrics` while the log is followed |
 
 `--json` prints the report as JSON (with `schema_version`); piped, the text report. Both have the verdict: `verdict.level` (`healthy`, `degraded`, `failing`) and `verdict.findings[]`, each with `level`, `kind` (`errors`, `path_errors`, `path_refused`, `error_log`, `traffic_down`, `traffic_up`, `latency`, `client`, `unread`, `steady`), `text`, and when they apply `path`, `since`, `now`, `usual` and `against`; and `fail_if[]`, each `--fail-if` with `condition`, `held` and `measured`.

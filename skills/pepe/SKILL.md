@@ -115,7 +115,7 @@ names them; a row a request, or a row a chain in a flow).
 ## As an MCP server
 
 `pepe mcp` serves the modes as tools over stdio: `run`, `ping`, `ramp`,
-`api`, `flow`, `replay` and `compare`, each returning the JSON report;
+`api`, `flow`, `replay`, `logs` and `compare`, each returning the JSON report;
 `run` takes `otlp`, and the others but `compare` take `save`.
 The guardrail flags given to `pepe mcp` hold for every call, and a call
 can't loosen them; a `ping` without `count` or `duration` sends five.

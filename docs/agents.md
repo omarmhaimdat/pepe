@@ -42,7 +42,7 @@ pepe · dry run · nothing sent
 
 ## As an MCP server
 
-`pepe mcp` serves the modes as tools over stdio, in the Model Context Protocol: `run`, `ping`, `ramp`, `api`, `flow`, `replay` and `compare`, each returning pepe's JSON report as text and as structured content. The guardrail flags `pepe mcp` is started with hold for every call, so whoever starts the server decides where it may send and how much, and a tool call can't loosen them.
+`pepe mcp` serves the modes as tools over stdio, in the Model Context Protocol: `run`, `ping`, `ramp`, `api`, `flow`, `replay`, `logs` and `compare`, each returning pepe's JSON report as text and as structured content. The guardrail flags `pepe mcp` is started with hold for every call, so whoever starts the server decides where it may send and how much, and a tool call can't loosen them.
 
 ```bash
 pepe mcp --allow-host .staging.example.com --max-requests 10000 --max-rate 500 --max-concurrency 64
