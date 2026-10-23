@@ -1,5 +1,6 @@
 {
   "name": "pepe",
+  "version": "0.55.0",
   "description": "Find why an HTTP endpoint is slow and prove a fix: ping it by phase, load-test it, see which operation inside the service the time goes to (from its OpenTelemetry spans), and compare before and after. A skill, pepe's MCP server under guardrails, and a /pepe:speed-up command.",
   "author": {
     "name": "Omar Mhaimdat",

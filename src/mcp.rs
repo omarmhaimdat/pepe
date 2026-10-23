@@ -885,6 +885,27 @@ mod tests {
         assert_eq!(portable["mcpServers"]["pepe"]["type"], "stdio");
     }
 
+    /// A marketplace pins a plugin to a release and records its version, so
+    /// both manifests carry the crate's; the release PR bumps them with it
+    /// (.github/workflows/release-plz.yml)
+    #[test]
+    fn the_plugin_manifests_carry_the_release_version() {
+        for (path, text) in [
+            ("plugin.json", include_str!("../plugin.json")),
+            (
+                ".claude-plugin/plugin.json",
+                include_str!("../.claude-plugin/plugin.json"),
+            ),
+        ] {
+            let manifest: Value = serde_json::from_str(text).unwrap();
+            assert_eq!(
+                manifest["version"].as_str(),
+                Some(env!("CARGO_PKG_VERSION")),
+                "{path}'s version must be Cargo.toml's"
+            );
+        }
+    }
+
     #[tokio::test]
     async fn the_protocol_answers_initialize_list_and_unknowns() {
         let guard = vec!["--allow-host".to_string(), ".x.test".to_string()];
