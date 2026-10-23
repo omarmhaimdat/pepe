@@ -23,8 +23,13 @@ import termios
 import time
 
 ESCAPES = re.compile(rb"\x1b\[[0-9;?]*[ -/]*[@-~]|\x1b\][^\x07]*\x07|\x1b[()][A-Za-z0-9]")
-# What the dashboard's title says once the run is over
-OVER = re.compile(rb"done|stopped|Healthy|Degraded|Failing")
+# What the dashboard's title says once the run is over (in capitals since
+# the screens were redrawn in v0.52)
+OVER = re.compile(rb"done|stopped|healthy|degraded|failing", re.IGNORECASE)
+# A frame is written in one burst: output that comes after this long a gap
+# starts the next. ratatui moves the cursor to each change rather than
+# home, so there is no one sequence to count.
+FRAME_GAP = 0.004
 
 
 def cpu_seconds(pid):
@@ -58,6 +63,7 @@ def main():
     fcntl.ioctl(fd, termios.TIOCSWINSZ, struct.pack("HHHH", a.rows, a.cols, 0, 0))
     start = time.monotonic()
     frames = 0
+    last_chunk = 0.0
     out = bytearray()
     sent_keys = False
     quit_at = None
@@ -94,7 +100,9 @@ def main():
                 break
             if not chunk:
                 break
-            frames += chunk.count(b"\x1b[H")
+            if now - last_chunk >= FRAME_GAP:
+                frames += 1
+            last_chunk = time.monotonic()
             tail = (tail + chunk)[-65536:]
         try:
             done, status = os.waitpid(pid, os.WNOHANG)

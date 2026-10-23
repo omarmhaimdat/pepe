@@ -686,10 +686,32 @@ the same two calls. What is still there to take:
   code are resident. Laying the code out so that what a run uses is
   together (a profile-guided link) would halve that; it is a change to
   how every release is built.
-- **Flows** build a request at every step and still go through reqwest.
 - **Fewer trips to the kernel**: several requests per system call
   (io_uring) is the only thing left that is larger than a few percent,
   and it is Linux only.
+
+### Flows
+
+A flow fills in each step's values as it goes, so its requests can't be
+written before the run the way a plain run's are. Until now that sent
+every step through reqwest. A step is now written to the wire when it is
+sent (`direct::Route::of`), over the worker's connection to the step's
+origin, which the worker finds among the few it has met and keeps from
+step to step and chain to chain. What only reqwest does (a proxy,
+credentials in the URL, the rest of a redirect) still goes through it.
+
+Two steps (`/` and `/json`), 100,000 chains at 64, best of three on the
+M4 Pro against the Rust server, measured on 2026-10-23:
+
+| | wall | CPU | CPU ms / 1k requests | peak RSS |
+| --- | ---: | ---: | ---: | ---: |
+| v0.55.0 | 3.38 s | 2.93 s | 14.7 | 14.6 MB |
+| now | 1.60 s | 1.42 s | 7.1 | 6.2 MB |
+| a plain run of the same 200,000 requests | 1.28 s | 1.12 s | 5.6 | 6.5 MB |
+
+What is left between a flow and a plain run is filling in the step:
+its URL parsed, its headers put together and its request written, a
+few hundred nanoseconds a request.
 
 ## What the binary links
 

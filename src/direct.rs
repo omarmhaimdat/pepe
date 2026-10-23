@@ -108,6 +108,14 @@ impl Setup {
     }
 }
 
+impl Setup {
+    /// The headers every request of the run carries: `-H`, `User-Agent`
+    /// and `Accept`
+    pub fn headers(&self) -> &HeaderMap {
+        &self.headers
+    }
+}
+
 /// reqwest sends through the proxy these name; the direct path has none
 fn proxy_in_environment() -> bool {
     [
@@ -195,7 +203,7 @@ impl rustls::client::danger::ServerCertVerifier for AnyCertificate {
 
 /// Where connections go: a scheme, a host and a port
 #[derive(Debug, PartialEq)]
-struct Origin {
+pub struct Origin {
     /// The name to verify the certificate against; None for plain HTTP
     tls: Option<ServerName<'static>>,
     /// Without the brackets an IPv6 address has in a URL
@@ -268,6 +276,18 @@ impl Routes {
     }
 }
 
+impl Lines {
+    /// A worker's connections for routes made as they're sent (see
+    /// `Route::of`): one is opened for each origin as it is first met
+    pub fn growing() -> Self {
+        Lines {
+            connections: Vec::new(),
+            watch: Watch::new(),
+            stamped: Vec::new(),
+        }
+    }
+}
+
 impl Route {
     fn new(
         setup: &Setup,
@@ -275,7 +295,21 @@ impl Route {
         own: &HeaderMap,
         origins: &mut Vec<Arc<Origin>>,
     ) -> Option<Self> {
-        let url = &request.url;
+        let body = request.body.as_deref().unwrap_or_default();
+        Self::of(setup, &request.method, &request.url, own, body, origins)
+    }
+
+    /// A request made as it is sent, a flow's step with its values filled
+    /// in: None when it needs what only reqwest does. `origins` are those
+    /// the worker has met, and grow by this one's if it is new.
+    pub fn of(
+        setup: &Setup,
+        method: &Method,
+        url: &reqwest::Url,
+        own: &HeaderMap,
+        body: &[u8],
+        origins: &mut Vec<Arc<Origin>>,
+    ) -> Option<Self> {
         let https = match url.scheme() {
             "http" => false,
             "https" => true,
@@ -287,21 +321,26 @@ impl Route {
         }
         let authority = url.host_str()?;
         let host = authority.trim_start_matches('[').trim_end_matches(']');
-        let origin = Origin {
-            tls: match https {
-                true => Some(ServerName::try_from(host.to_string()).ok()?),
-                false => None,
-            },
-            host: host.to_string(),
-            port: url.port_or_known_default()?,
-        };
-        let line = origins
+        let port = url.port_or_known_default()?;
+        // Looked up before one is made: a flow meets the same few origins
+        // at every step
+        let line = match origins
             .iter()
-            .position(|known| **known == origin)
-            .unwrap_or_else(|| {
-                origins.push(Arc::new(origin));
+            .position(|o| o.port == port && o.tls.is_some() == https && o.host == host)
+        {
+            Some(line) => line,
+            None => {
+                origins.push(Arc::new(Origin {
+                    tls: match https {
+                        true => Some(ServerName::try_from(host.to_string()).ok()?),
+                        false => None,
+                    },
+                    host: host.to_string(),
+                    port,
+                }));
                 origins.len() - 1
-            });
+            }
+        };
 
         // The target's own headers win over the run's, name by name
         let mut headers = own.clone();
@@ -330,8 +369,6 @@ impl Route {
                 HeaderValue::from_static(crate::trace::TRACEPARENT_BLANK),
             );
         }
-        let body = request.body.as_deref().unwrap_or_default();
-        let method = &request.method;
         let bytes = wire::request(method, &path, &headers, body);
         let trace_at = crate::trace::propagating().and_then(|_| {
             let name = b"\r\ntraceparent: ";
@@ -667,8 +704,12 @@ impl Response<'_> {
 pub enum Sent<'a> {
     Answered(Response<'a>),
     /// A redirect, and the run follows them: the target is reqwest's from
-    /// now on, this request included
-    Redirected,
+    /// now on. This request is answered, so it goes on from where the
+    /// server sent it rather than being sent again.
+    Redirected {
+        status: StatusCode,
+        location: String,
+    },
 }
 
 impl Lines {
@@ -698,6 +739,10 @@ impl Lines {
             }
             _ => &route.bytes,
         };
+        // A flow's worker meets its origins as it goes
+        if route.line >= connections.len() {
+            connections.resize_with(route.line + 1, || None);
+        }
         let line = &mut connections[route.line];
         watch.deadline = (start + setup.timeout).into();
         let head = match watch.guard(send_on(setup, route, bytes, line, start)).await {
@@ -715,17 +760,20 @@ impl Lines {
             *line = None;
             return Err(Failure::said("invalid HTTP status-code parsed"));
         };
-        let location = line.as_ref().is_some_and(|c| {
+        let location = line.as_ref().and_then(|c| {
             c.headers()
-                .any(|(name, _)| name.eq_ignore_ascii_case(b"location"))
+                .find(|(name, _)| name.eq_ignore_ascii_case(b"location"))
+                .and_then(|(_, value)| std::str::from_utf8(value).ok())
+                .map(str::to_string)
         });
         // What reqwest's redirect policy follows
-        if setup.follow_redirects && location && matches!(head.status, 301 | 302 | 303 | 307 | 308)
-        {
+        if let Some(location) = location.filter(|_| {
+            setup.follow_redirects && matches!(head.status, 301 | 302 | 303 | 307 | 308)
+        }) {
             route.redirects.store(true, Ordering::Relaxed);
             // Its body is unread, so the connection can't be used again
             *line = None;
-            return Ok(Sent::Redirected);
+            return Ok(Sent::Redirected { status, location });
         }
         let connection = line.as_mut().expect("it answered");
         Ok(Sent::Answered(Response {
@@ -1222,6 +1270,9 @@ mod tests {
         .await;
         let results = run(request(&srv.url, settings()), 2, 12).await;
         assert_eq!(statuses(&results), vec![Some(200); 12]);
+        // Each request went out once, then to where it was sent: the one
+        // the direct path got a redirect for wasn't sent again
+        assert_eq!(srv.requests.load(Ordering::Relaxed), 24);
 
         // Told not to follow them, the redirect is the answer
         let stay = RequestSettings {
@@ -1230,6 +1281,74 @@ mod tests {
         };
         let results = run(request(&srv.url, stay), 2, 6).await;
         assert_eq!(statuses(&results), vec![Some(302); 6]);
+    }
+
+    /// A POST answered with a 307 goes on, body and all, to where it was
+    /// sent; with a 303 it becomes a GET. Neither is sent twice.
+    #[tokio::test]
+    async fn a_redirected_post_is_sent_once_and_goes_on_as_the_status_says() {
+        static POSTS: AtomicU64 = AtomicU64::new(0);
+        static ON: AtomicU64 = AtomicU64::new(0);
+        fn handler(head: &str) -> Reply {
+            if head.starts_with("POST /start ") {
+                POSTS.fetch_add(1, Ordering::Relaxed);
+                Reply::Answer(
+                    "HTTP/1.1 307 Temporary Redirect\r\nlocation: /on\r\ncontent-length: 0\r\n\r\n",
+                )
+            } else if head.starts_with("POST /see ") {
+                POSTS.fetch_add(1, Ordering::Relaxed);
+                Reply::Answer(
+                    "HTTP/1.1 303 See Other\r\nlocation: /on\r\ncontent-length: 0\r\n\r\n",
+                )
+            } else if head.starts_with("POST /on ") || head.starts_with("GET /on ") {
+                ON.fetch_add(1, Ordering::Relaxed);
+                Reply::Answer(OK)
+            } else {
+                Reply::Answer("HTTP/1.1 400 Bad Request\r\ncontent-length: 0\r\n\r\n")
+            }
+        }
+        let srv = server(handler).await;
+        let post = |path: &str| {
+            Request::new(
+                format!("{}{path}", srv.url),
+                "POST".into(),
+                Some("{}".into()),
+                &[],
+                settings(),
+            )
+            .unwrap()
+        };
+        let results = run(post("/start"), 2, 6).await;
+        assert_eq!(statuses(&results), vec![Some(200); 6]);
+        assert_eq!(POSTS.load(Ordering::Relaxed), 6, "each POST once");
+        assert_eq!(ON.load(Ordering::Relaxed), 6);
+        let results = run(post("/see"), 1, 3).await;
+        assert_eq!(statuses(&results), vec![Some(200); 3]);
+        assert_eq!(POSTS.load(Ordering::Relaxed), 9);
+        assert_eq!(ON.load(Ordering::Relaxed), 9);
+    }
+
+    /// A flow's steps go direct too, each worker over one connection per
+    /// origin that it keeps from step to step and chain to chain
+    #[tokio::test]
+    async fn a_flow_keeps_one_connection_per_worker_across_steps() {
+        let srv = server(|_| Reply::Answer(OK)).await;
+        let flow = crate::flow::parse(&format!(
+            "[[step]]\nurl = \"{0}/a\"\n[[step]]\nmethod = \"POST\"\nurl = \"{0}/b\"\nbody = \"x\"\n",
+            srv.url
+        ))
+        .unwrap();
+        let req = request(&srv.url, settings());
+        let clients = req.build_clients(1).unwrap().0;
+        assert!(clients.list[0].direct.is_some(), "the run goes direct");
+        let mut load = load::start_flow(clients, flow, 2, Plan::Count(10), false);
+        let mut results = Vec::new();
+        while let Some(stat) = load.recv().await {
+            results.push(stat);
+        }
+        assert_eq!(statuses(&results), vec![Some(200); 20]);
+        assert_eq!(srv.requests.load(Ordering::Relaxed), 20);
+        assert_eq!(srv.connections.load(Ordering::Relaxed), 2);
     }
 
     #[tokio::test]

@@ -123,6 +123,10 @@ pub struct Sender {
     /// redirect never needs it, and is spared its connection pool, its
     /// TLS setup and its resolver.
     client: std::sync::OnceLock<reqwest::Client>,
+    /// The same client without the run's headers: it takes a redirect the
+    /// direct path met on from there, with the headers given per request
+    /// so that those that mustn't go to another host can be left out
+    bare: std::sync::OnceLock<reqwest::Client>,
     request: Arc<Request>,
     times: Option<Arc<ConnectTimes>>,
 }
@@ -132,6 +136,7 @@ impl Sender {
         let direct = direct::Setup::new(request, times).map(Arc::new);
         let sender = Self {
             client: Default::default(),
+            bare: Default::default(),
             request: request.clone(),
             times: times.cloned(),
             direct,
@@ -146,10 +151,25 @@ impl Sender {
 
     fn build(&self) -> Result<&reqwest::Client, PepeError> {
         if self.client.get().is_none() {
-            let client = self.request.build_client_with(self.times.as_ref())?;
+            let client = self.request.build_client_with(self.times.as_ref(), true)?;
             let _ = self.client.set(client);
         }
         Ok(self.client.get().expect("set above"))
+    }
+
+    /// The client without the run's headers, built now if need be
+    pub fn bare_client(&self) -> Result<&reqwest::Client, Failure> {
+        if self.bare.get().is_none() {
+            let client = self
+                .request
+                .build_client_with(self.times.as_ref(), false)
+                .map_err(|e| Failure {
+                    kind: crate::response::ErrorKind::Other,
+                    message: e.to_string(),
+                })?;
+            let _ = self.bare.set(client);
+        }
+        Ok(self.bare.get().expect("set above"))
     }
 
     /// The reqwest client, built now if this is the first request for it
@@ -239,9 +259,12 @@ impl Request {
         Sender::new(&Arc::new(self.clone()), None)
     }
 
+    /// `with_headers`: the run's headers go out with every request as the
+    /// client's defaults
     fn build_client_with(
         &self,
         times: Option<&Arc<ConnectTimes>>,
+        with_headers: bool,
     ) -> Result<reqwest::Client, PepeError> {
         let mut request_headers = self.headers.clone();
         // A User-Agent given with -H wins over the default one
@@ -255,6 +278,9 @@ impl Request {
             );
         }
 
+        if !with_headers {
+            request_headers.clear();
+        }
         let mut client_builder = reqwest::Client::builder()
             .default_headers(request_headers)
             .timeout(std::time::Duration::from_secs(self.settings.timeout as u64))
