@@ -179,7 +179,8 @@ pub struct Cli {
 
     /// End with exit code 4 when the run crosses this, for CI and scripts:
     /// 'p99 > 300ms', 'errors > 1%'; repeat for more. The report is still
-    /// printed. (pepe ping has --slo for the same.)
+    /// printed. pepe logs takes '5xx > 2%', '4xx > 20%' and 'rate < 5/s'
+    /// too. (pepe ping has --slo for the same.)
     #[arg(long, global = true, value_name = "CONDITION")]
     pub fail_if: Vec<String>,
 

@@ -20,7 +20,7 @@ As an MCP server: `pepe mcp` serves the modes as tools over stdio (`run`, `ping`
 - [OpenAPI](https://pepe.mhaimdat.com/docs/api.html): `pepe api`, endpoints by tag, parameters, credentials
 - [Flows](https://pepe.mhaimdat.com/docs/flow.html): `pepe flow`, the flow file, captures and holes
 - [Replay](https://pepe.mhaimdat.com/docs/replay.html): `pepe replay`, an access log's URLs in their proportions
-- [nginx logs](https://pepe.mhaimdat.com/docs/logs.html): `pepe logs`, the rate now against each minute, hour and day
+- [nginx logs](https://pepe.mhaimdat.com/docs/logs.html): `pepe logs`, the rate now against each minute, hour and day, what is out of the usual, and `--fail-if` limits for cron
 - [Compare](https://pepe.mhaimdat.com/docs/compare.html): `pepe compare`, the verdict, the badge, the card
 - [Output and exit codes](https://pepe.mhaimdat.com/docs/output.html): the JSON report, `pepe schema`, `--fail-if`, Prometheus metrics, exit codes
 - [CI and Docker](https://pepe.mhaimdat.com/docs/ci.html): the GitHub Action and its inputs and outputs

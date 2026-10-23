@@ -130,6 +130,18 @@ Read `verdict` (`faster`, `same`, `slower`, `better`, `worse`),
 `regression`, `changes[]` with `significant` and `noise_percent`, and
 `findings`. Ping reports compare too, phase by phase.
 
+## Watch nginx
+
+```bash
+pepe logs /var/log/nginx/access.log /var/log/nginx/error.log --since 15m --json --fail-if '5xx > 2%' --fail-if 'rate < 5/s'
+```
+
+Read `verdict.level` and `verdict.findings[]` (`level`, `kind`, `text`,
+`path`, `since`, `now`, `usual`): what is out of the usual in the last
+minute, most serious first; and `fail_if[]` (`condition`, `held`,
+`measured`). A crossed limit is exit code 4. `--webhook` sends the
+verdict, so a cron line is an alert.
+
 ## A whole API, a journey, real traffic
 
 `pepe api openapi.yaml --all --json` (writes need `--include-writes`;

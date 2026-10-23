@@ -972,6 +972,57 @@ impl Outcome {
                 findings,
             };
         }
+        // nginx's logs: how busy, what fails, how long it takes
+        if let Some(logs) = report.get("logs").filter(|l| l.is_object()) {
+            let requests = logs["requests"].as_u64().unwrap_or(0);
+            let failed: u64 = report["status_codes"]
+                .as_object()
+                .map(|codes| {
+                    codes
+                        .iter()
+                        .filter(|(code, _)| code.starts_with('5'))
+                        .filter_map(|(_, n)| n.as_u64())
+                        .sum()
+                })
+                .unwrap_or(0);
+            let mut fields = vec![
+                ("Requests".into(), count(requests)),
+                (
+                    "Req/s now".into(),
+                    format!("{:.1}", num(&report["now"]["requests_per_second"])),
+                ),
+                (
+                    "5xx".into(),
+                    format!(
+                        "{:.2}%",
+                        if requests == 0 {
+                            0.0
+                        } else {
+                            failed as f64 * 100.0 / requests as f64
+                        }
+                    ),
+                ),
+            ];
+            let times = &report["request_time_ms"];
+            if times.is_object() {
+                fields.push(("p50".into(), latency(&times["p50"])));
+                fields.push(("p99".into(), latency(&times["p99"])));
+            }
+            if let (Some(first), Some(last)) = (logs["first"].as_str(), logs["last"].as_str()) {
+                fields.push(("From".into(), first.to_string()));
+                fields.push(("To".into(), last.to_string()));
+            }
+            return Outcome {
+                level: report["verdict"]["level"]
+                    .as_str()
+                    .unwrap_or("healthy")
+                    .to_string(),
+                requests,
+                failed,
+                fields,
+                findings: texts(&report["verdict"]["findings"]),
+            };
+        }
         // A ping: a line per target
         let targets = report["targets"].as_array().cloned().unwrap_or_default();
         let mut fields = Vec::new();
@@ -1622,6 +1673,32 @@ async fn futures_join(tasks: Vec<tokio::task::JoinHandle<()>>) {
     }
 }
 
+/// The hooks of the run going now, by a short name each: `slack #ops`,
+/// `hooks.slack.com`
+pub fn current_names() -> Vec<String> {
+    let Ok(state) = STATE.lock() else {
+        return Vec::new();
+    };
+    let Some(state) = state.as_ref() else {
+        return Vec::new();
+    };
+    state
+        .lines
+        .iter()
+        .map(|line| {
+            let url = line.hook.webhook.url.trim();
+            match url.strip_prefix("slack:") {
+                Some("") => "slack".to_string(),
+                Some(channel) => format!("slack {channel}"),
+                None => reqwest::Url::parse(url)
+                    .ok()
+                    .and_then(|u| u.host_str().map(str::to_string))
+                    .unwrap_or_else(|| mask(url)),
+            }
+        })
+        .collect()
+}
+
 /// The hooks of the run going now, as they stand
 #[cfg(test)]
 pub fn current() -> Vec<Webhook> {
@@ -1784,6 +1861,38 @@ async fn send_test(hook: &Webhook, run: &Run) -> Result<(), String> {
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn a_logs_report_says_its_numbers_and_findings() {
+        let report = json!({
+            "logs": { "requests": 1000, "first": "2026-10-08T11:00:00+00:00", "last": "2026-10-08T12:00:00+00:00" },
+            "now": { "requests_per_second": 4.25 },
+            "status_codes": { "200": 950, "502": 40, "504": 10 },
+            "request_time_ms": { "p50": 12.0, "p90": 40.0, "p99": 900.0 },
+            "verdict": { "level": "failing", "findings": [
+                { "level": "bad", "kind": "path_errors", "text": "/orders/* answers 5xx to 21% since 04:11 (502)" }
+            ] },
+        });
+        let outcome = Outcome::of(&report);
+        assert_eq!(
+            (outcome.level.as_str(), outcome.requests, outcome.failed),
+            ("failing", 1000, 50)
+        );
+        let field = |name: &str| {
+            outcome
+                .fields
+                .iter()
+                .find(|(n, _)| n == name)
+                .map(|(_, v)| v.clone())
+                .unwrap()
+        };
+        assert_eq!(field("5xx"), "5.00%");
+        assert_eq!(field("Req/s now"), "4.2");
+        assert_eq!(
+            outcome.findings,
+            ["/orders/* answers 5xx to 21% since 04:11 (502)"]
+        );
+    }
     use super::*;
 
     fn run() -> Run {
