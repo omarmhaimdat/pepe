@@ -26,6 +26,7 @@ mod insights;
 mod json_report;
 mod load;
 mod logs;
+mod logs_verdict;
 mod mcp;
 mod metrics;
 mod modes;

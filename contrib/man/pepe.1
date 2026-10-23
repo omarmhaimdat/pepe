@@ -111,7 +111,7 @@ Refuse a concurrency above this
 Say what would be sent, to where and how much, and send nothing; as JSON with \-\-json
 .TP
 \fB\-\-fail\-if\fR \fI<CONDITION>\fR
-End with exit code 4 when the run crosses this, for CI and scripts: \*(Aqp99 > 300ms\*(Aq, \*(Aqerrors > 1%\*(Aq; repeat for more. The report is still printed. (pepe ping has \-\-slo for the same.)
+End with exit code 4 when the run crosses this, for CI and scripts: \*(Aqp99 > 300ms\*(Aq, \*(Aqerrors > 1%\*(Aq; repeat for more. The report is still printed. pepe logs takes \*(Aq5xx > 2%\*(Aq, \*(Aq4xx > 20%\*(Aq and \*(Aqrate < 5/s\*(Aq too. (pepe ping has \-\-slo for the same.)
 .TP
 \fB\-\-metrics\fR \fI<ADDR>\fR
 Serve the live numbers for Prometheus at http://ADDR/metrics while the run goes, e.g. :9100 or 127.0.0.1:9100, so a soak run or a long ping shows up in Grafana next to the server\*(Aqs own

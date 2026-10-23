@@ -171,6 +171,14 @@ pepe compare before.json after.json --json --gate
 
 Read `verdict` (`faster`, `same`, `slower`, `better`, `worse`), `regression`, each `changes[]` entry with `significant` (moved more than two such runs wobble) and `noise_percent`, and `findings`. Ping reports compare too, phase by phase.
 
+## Watch nginx
+
+```bash
+pepe logs /var/log/nginx/access.log /var/log/nginx/error.log --since 15m --json --fail-if '5xx > 2%' --fail-if 'rate < 5/s'
+```
+
+Read `verdict.level` (`healthy`, `degraded`, `failing`) and `verdict.findings[]`, what is out of the usual in the last minute, most serious first, each with `level`, `kind`, `text`, and `path`, `since`, `now`, `usual` when they apply; and `fail_if[]` with `condition`, `held` and `measured`. A crossed limit is exit code 4, and `--webhook` sends the verdict, so a cron line is an alert. See [nginx logs](logs.md#what-is-wrong).
+
 ## Test a whole API or a journey
 
 `pepe api openapi.yaml --all --json` runs every endpoint that has the values it needs (`--set id=1,2,3` gives values; writes need `--include-writes`), with `endpoints[]` in the report. `pepe flow checkout.toml --json` runs a sequence where each step feeds the next, with `flow.steps[]`. `pepe replay access.log --base-url "$STAGING" --json` sends a log's URLs in their real proportions, with `replay.urls[]`.

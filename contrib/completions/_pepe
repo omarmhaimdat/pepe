@@ -43,7 +43,7 @@ _pepe() {
 '--max-requests=[Refuse a run that would send more requests than this\: -n above it, or -z without a --rate that bounds it]:N:_default' \
 '--max-rate=[Refuse a --rate above this, and a run with no --rate at all, which sends as fast as the target answers]:PER_SECOND:_default' \
 '--max-concurrency=[Refuse a concurrency above this]:N:_default' \
-'*--fail-if=[End with exit code 4 when the run crosses this, for CI and scripts\: '\''p99 > 300ms'\'', '\''errors > 1%'\''; repeat for more. The report is still printed. (pepe ping has --slo for the same.)]:CONDITION:_default' \
+'*--fail-if=[End with exit code 4 when the run crosses this, for CI and scripts\: '\''p99 > 300ms'\'', '\''errors > 1%'\''; repeat for more. The report is still printed. pepe logs takes '\''5xx > 2%'\'', '\''4xx > 20%'\'' and '\''rate < 5/s'\'' too. (pepe ping has --slo for the same.)]:CONDITION:_default' \
 '--metrics=[Serve the live numbers for Prometheus at http\://ADDR/metrics while the run goes, e.g. \:9100 or 127.0.0.1\:9100, so a soak run or a long ping shows up in Grafana next to the server'\''s own]:ADDR:_default' \
 '--otlp=[Take the service'\''s OpenTelemetry spans at ADDR (OTLP over HTTP, as \:4318) and say where its time went\: each request carries its own traceparent, and the report breaks the server'\''s time down by span. Point the service at it\: OTEL_EXPORTER_OTLP_ENDPOINT=http\://localhost\:4318]:ADDR:_default' \
 '--config=[Read settings from this file instead of ./pepe.toml; flags on the command line win over it]:FILE:_files' \
@@ -123,7 +123,7 @@ fail\:"A failure"))' \
 '--max-requests=[Refuse a run that would send more requests than this\: -n above it, or -z without a --rate that bounds it]:N:_default' \
 '--max-rate=[Refuse a --rate above this, and a run with no --rate at all, which sends as fast as the target answers]:PER_SECOND:_default' \
 '--max-concurrency=[Refuse a concurrency above this]:N:_default' \
-'*--fail-if=[End with exit code 4 when the run crosses this, for CI and scripts\: '\''p99 > 300ms'\'', '\''errors > 1%'\''; repeat for more. The report is still printed. (pepe ping has --slo for the same.)]:CONDITION:_default' \
+'*--fail-if=[End with exit code 4 when the run crosses this, for CI and scripts\: '\''p99 > 300ms'\'', '\''errors > 1%'\''; repeat for more. The report is still printed. pepe logs takes '\''5xx > 2%'\'', '\''4xx > 20%'\'' and '\''rate < 5/s'\'' too. (pepe ping has --slo for the same.)]:CONDITION:_default' \
 '--metrics=[Serve the live numbers for Prometheus at http\://ADDR/metrics while the run goes, e.g. \:9100 or 127.0.0.1\:9100, so a soak run or a long ping shows up in Grafana next to the server'\''s own]:ADDR:_default' \
 '--config=[Read settings from this file instead of ./pepe.toml; flags on the command line win over it]:FILE:_files' \
 '--write-config=[Write the settings as they stand to this file, as a pepe.toml, and exit]:FILE:_files' \
@@ -198,7 +198,7 @@ _arguments "${_arguments_options[@]}" : \
 '--max-requests=[Refuse a run that would send more requests than this\: -n above it, or -z without a --rate that bounds it]:N:_default' \
 '--max-rate=[Refuse a --rate above this, and a run with no --rate at all, which sends as fast as the target answers]:PER_SECOND:_default' \
 '--max-concurrency=[Refuse a concurrency above this]:N:_default' \
-'*--fail-if=[End with exit code 4 when the run crosses this, for CI and scripts\: '\''p99 > 300ms'\'', '\''errors > 1%'\''; repeat for more. The report is still printed. (pepe ping has --slo for the same.)]:CONDITION:_default' \
+'*--fail-if=[End with exit code 4 when the run crosses this, for CI and scripts\: '\''p99 > 300ms'\'', '\''errors > 1%'\''; repeat for more. The report is still printed. pepe logs takes '\''5xx > 2%'\'', '\''4xx > 20%'\'' and '\''rate < 5/s'\'' too. (pepe ping has --slo for the same.)]:CONDITION:_default' \
 '--metrics=[Serve the live numbers for Prometheus at http\://ADDR/metrics while the run goes, e.g. \:9100 or 127.0.0.1\:9100, so a soak run or a long ping shows up in Grafana next to the server'\''s own]:ADDR:_default' \
 '--config=[Read settings from this file instead of ./pepe.toml; flags on the command line win over it]:FILE:_files' \
 '--write-config=[Write the settings as they stand to this file, as a pepe.toml, and exit]:FILE:_files' \
@@ -254,7 +254,7 @@ _arguments "${_arguments_options[@]}" : \
 '--max-requests=[Refuse a run that would send more requests than this\: -n above it, or -z without a --rate that bounds it]:N:_default' \
 '--max-rate=[Refuse a --rate above this, and a run with no --rate at all, which sends as fast as the target answers]:PER_SECOND:_default' \
 '--max-concurrency=[Refuse a concurrency above this]:N:_default' \
-'*--fail-if=[End with exit code 4 when the run crosses this, for CI and scripts\: '\''p99 > 300ms'\'', '\''errors > 1%'\''; repeat for more. The report is still printed. (pepe ping has --slo for the same.)]:CONDITION:_default' \
+'*--fail-if=[End with exit code 4 when the run crosses this, for CI and scripts\: '\''p99 > 300ms'\'', '\''errors > 1%'\''; repeat for more. The report is still printed. pepe logs takes '\''5xx > 2%'\'', '\''4xx > 20%'\'' and '\''rate < 5/s'\'' too. (pepe ping has --slo for the same.)]:CONDITION:_default' \
 '--metrics=[Serve the live numbers for Prometheus at http\://ADDR/metrics while the run goes, e.g. \:9100 or 127.0.0.1\:9100, so a soak run or a long ping shows up in Grafana next to the server'\''s own]:ADDR:_default' \
 '--config=[Read settings from this file instead of ./pepe.toml; flags on the command line win over it]:FILE:_files' \
 '--write-config=[Write the settings as they stand to this file, as a pepe.toml, and exit]:FILE:_files' \
@@ -311,7 +311,7 @@ _arguments "${_arguments_options[@]}" : \
 '--max-requests=[Refuse a run that would send more requests than this\: -n above it, or -z without a --rate that bounds it]:N:_default' \
 '--max-rate=[Refuse a --rate above this, and a run with no --rate at all, which sends as fast as the target answers]:PER_SECOND:_default' \
 '--max-concurrency=[Refuse a concurrency above this]:N:_default' \
-'*--fail-if=[End with exit code 4 when the run crosses this, for CI and scripts\: '\''p99 > 300ms'\'', '\''errors > 1%'\''; repeat for more. The report is still printed. (pepe ping has --slo for the same.)]:CONDITION:_default' \
+'*--fail-if=[End with exit code 4 when the run crosses this, for CI and scripts\: '\''p99 > 300ms'\'', '\''errors > 1%'\''; repeat for more. The report is still printed. pepe logs takes '\''5xx > 2%'\'', '\''4xx > 20%'\'' and '\''rate < 5/s'\'' too. (pepe ping has --slo for the same.)]:CONDITION:_default' \
 '--metrics=[Serve the live numbers for Prometheus at http\://ADDR/metrics while the run goes, e.g. \:9100 or 127.0.0.1\:9100, so a soak run or a long ping shows up in Grafana next to the server'\''s own]:ADDR:_default' \
 '--config=[Read settings from this file instead of ./pepe.toml; flags on the command line win over it]:FILE:_files' \
 '--write-config=[Write the settings as they stand to this file, as a pepe.toml, and exit]:FILE:_files' \
@@ -367,7 +367,7 @@ _arguments "${_arguments_options[@]}" : \
 '--max-requests=[Refuse a run that would send more requests than this\: -n above it, or -z without a --rate that bounds it]:N:_default' \
 '--max-rate=[Refuse a --rate above this, and a run with no --rate at all, which sends as fast as the target answers]:PER_SECOND:_default' \
 '--max-concurrency=[Refuse a concurrency above this]:N:_default' \
-'*--fail-if=[End with exit code 4 when the run crosses this, for CI and scripts\: '\''p99 > 300ms'\'', '\''errors > 1%'\''; repeat for more. The report is still printed. (pepe ping has --slo for the same.)]:CONDITION:_default' \
+'*--fail-if=[End with exit code 4 when the run crosses this, for CI and scripts\: '\''p99 > 300ms'\'', '\''errors > 1%'\''; repeat for more. The report is still printed. pepe logs takes '\''5xx > 2%'\'', '\''4xx > 20%'\'' and '\''rate < 5/s'\'' too. (pepe ping has --slo for the same.)]:CONDITION:_default' \
 '--metrics=[Serve the live numbers for Prometheus at http\://ADDR/metrics while the run goes, e.g. \:9100 or 127.0.0.1\:9100, so a soak run or a long ping shows up in Grafana next to the server'\''s own]:ADDR:_default' \
 '--config=[Read settings from this file instead of ./pepe.toml; flags on the command line win over it]:FILE:_files' \
 '--write-config=[Write the settings as they stand to this file, as a pepe.toml, and exit]:FILE:_files' \
@@ -428,7 +428,7 @@ _arguments "${_arguments_options[@]}" : \
 '--max-requests=[Refuse a run that would send more requests than this\: -n above it, or -z without a --rate that bounds it]:N:_default' \
 '--max-rate=[Refuse a --rate above this, and a run with no --rate at all, which sends as fast as the target answers]:PER_SECOND:_default' \
 '--max-concurrency=[Refuse a concurrency above this]:N:_default' \
-'*--fail-if=[End with exit code 4 when the run crosses this, for CI and scripts\: '\''p99 > 300ms'\'', '\''errors > 1%'\''; repeat for more. The report is still printed. (pepe ping has --slo for the same.)]:CONDITION:_default' \
+'*--fail-if=[End with exit code 4 when the run crosses this, for CI and scripts\: '\''p99 > 300ms'\'', '\''errors > 1%'\''; repeat for more. The report is still printed. pepe logs takes '\''5xx > 2%'\'', '\''4xx > 20%'\'' and '\''rate < 5/s'\'' too. (pepe ping has --slo for the same.)]:CONDITION:_default' \
 '--metrics=[Serve the live numbers for Prometheus at http\://ADDR/metrics while the run goes, e.g. \:9100 or 127.0.0.1\:9100, so a soak run or a long ping shows up in Grafana next to the server'\''s own]:ADDR:_default' \
 '--config=[Read settings from this file instead of ./pepe.toml; flags on the command line win over it]:FILE:_files' \
 '--write-config=[Write the settings as they stand to this file, as a pepe.toml, and exit]:FILE:_files' \
@@ -485,7 +485,7 @@ _arguments "${_arguments_options[@]}" : \
 '--max-requests=[Refuse a run that would send more requests than this\: -n above it, or -z without a --rate that bounds it]:N:_default' \
 '--max-rate=[Refuse a --rate above this, and a run with no --rate at all, which sends as fast as the target answers]:PER_SECOND:_default' \
 '--max-concurrency=[Refuse a concurrency above this]:N:_default' \
-'*--fail-if=[End with exit code 4 when the run crosses this, for CI and scripts\: '\''p99 > 300ms'\'', '\''errors > 1%'\''; repeat for more. The report is still printed. (pepe ping has --slo for the same.)]:CONDITION:_default' \
+'*--fail-if=[End with exit code 4 when the run crosses this, for CI and scripts\: '\''p99 > 300ms'\'', '\''errors > 1%'\''; repeat for more. The report is still printed. pepe logs takes '\''5xx > 2%'\'', '\''4xx > 20%'\'' and '\''rate < 5/s'\'' too. (pepe ping has --slo for the same.)]:CONDITION:_default' \
 '--metrics=[Serve the live numbers for Prometheus at http\://ADDR/metrics while the run goes, e.g. \:9100 or 127.0.0.1\:9100, so a soak run or a long ping shows up in Grafana next to the server'\''s own]:ADDR:_default' \
 '--config=[Read settings from this file instead of ./pepe.toml; flags on the command line win over it]:FILE:_files' \
 '--write-config=[Write the settings as they stand to this file, as a pepe.toml, and exit]:FILE:_files' \
@@ -542,7 +542,7 @@ _arguments "${_arguments_options[@]}" : \
 '--max-requests=[Refuse a run that would send more requests than this\: -n above it, or -z without a --rate that bounds it]:N:_default' \
 '--max-rate=[Refuse a --rate above this, and a run with no --rate at all, which sends as fast as the target answers]:PER_SECOND:_default' \
 '--max-concurrency=[Refuse a concurrency above this]:N:_default' \
-'*--fail-if=[End with exit code 4 when the run crosses this, for CI and scripts\: '\''p99 > 300ms'\'', '\''errors > 1%'\''; repeat for more. The report is still printed. (pepe ping has --slo for the same.)]:CONDITION:_default' \
+'*--fail-if=[End with exit code 4 when the run crosses this, for CI and scripts\: '\''p99 > 300ms'\'', '\''errors > 1%'\''; repeat for more. The report is still printed. pepe logs takes '\''5xx > 2%'\'', '\''4xx > 20%'\'' and '\''rate < 5/s'\'' too. (pepe ping has --slo for the same.)]:CONDITION:_default' \
 '--metrics=[Serve the live numbers for Prometheus at http\://ADDR/metrics while the run goes, e.g. \:9100 or 127.0.0.1\:9100, so a soak run or a long ping shows up in Grafana next to the server'\''s own]:ADDR:_default' \
 '--config=[Read settings from this file instead of ./pepe.toml; flags on the command line win over it]:FILE:_files' \
 '--write-config=[Write the settings as they stand to this file, as a pepe.toml, and exit]:FILE:_files' \
@@ -602,7 +602,7 @@ _arguments "${_arguments_options[@]}" : \
 '--max-requests=[Refuse a run that would send more requests than this\: -n above it, or -z without a --rate that bounds it]:N:_default' \
 '--max-rate=[Refuse a --rate above this, and a run with no --rate at all, which sends as fast as the target answers]:PER_SECOND:_default' \
 '--max-concurrency=[Refuse a concurrency above this]:N:_default' \
-'*--fail-if=[End with exit code 4 when the run crosses this, for CI and scripts\: '\''p99 > 300ms'\'', '\''errors > 1%'\''; repeat for more. The report is still printed. (pepe ping has --slo for the same.)]:CONDITION:_default' \
+'*--fail-if=[End with exit code 4 when the run crosses this, for CI and scripts\: '\''p99 > 300ms'\'', '\''errors > 1%'\''; repeat for more. The report is still printed. pepe logs takes '\''5xx > 2%'\'', '\''4xx > 20%'\'' and '\''rate < 5/s'\'' too. (pepe ping has --slo for the same.)]:CONDITION:_default' \
 '--metrics=[Serve the live numbers for Prometheus at http\://ADDR/metrics while the run goes, e.g. \:9100 or 127.0.0.1\:9100, so a soak run or a long ping shows up in Grafana next to the server'\''s own]:ADDR:_default' \
 '--config=[Read settings from this file instead of ./pepe.toml; flags on the command line win over it]:FILE:_files' \
 '--write-config=[Write the settings as they stand to this file, as a pepe.toml, and exit]:FILE:_files' \
@@ -659,7 +659,7 @@ _arguments "${_arguments_options[@]}" : \
 '--max-requests=[Refuse a run that would send more requests than this\: -n above it, or -z without a --rate that bounds it]:N:_default' \
 '--max-rate=[Refuse a --rate above this, and a run with no --rate at all, which sends as fast as the target answers]:PER_SECOND:_default' \
 '--max-concurrency=[Refuse a concurrency above this]:N:_default' \
-'*--fail-if=[End with exit code 4 when the run crosses this, for CI and scripts\: '\''p99 > 300ms'\'', '\''errors > 1%'\''; repeat for more. The report is still printed. (pepe ping has --slo for the same.)]:CONDITION:_default' \
+'*--fail-if=[End with exit code 4 when the run crosses this, for CI and scripts\: '\''p99 > 300ms'\'', '\''errors > 1%'\''; repeat for more. The report is still printed. pepe logs takes '\''5xx > 2%'\'', '\''4xx > 20%'\'' and '\''rate < 5/s'\'' too. (pepe ping has --slo for the same.)]:CONDITION:_default' \
 '--metrics=[Serve the live numbers for Prometheus at http\://ADDR/metrics while the run goes, e.g. \:9100 or 127.0.0.1\:9100, so a soak run or a long ping shows up in Grafana next to the server'\''s own]:ADDR:_default' \
 '--config=[Read settings from this file instead of ./pepe.toml; flags on the command line win over it]:FILE:_files' \
 '--write-config=[Write the settings as they stand to this file, as a pepe.toml, and exit]:FILE:_files' \
@@ -714,7 +714,7 @@ _arguments "${_arguments_options[@]}" : \
 '--max-requests=[Refuse a run that would send more requests than this\: -n above it, or -z without a --rate that bounds it]:N:_default' \
 '--max-rate=[Refuse a --rate above this, and a run with no --rate at all, which sends as fast as the target answers]:PER_SECOND:_default' \
 '--max-concurrency=[Refuse a concurrency above this]:N:_default' \
-'*--fail-if=[End with exit code 4 when the run crosses this, for CI and scripts\: '\''p99 > 300ms'\'', '\''errors > 1%'\''; repeat for more. The report is still printed. (pepe ping has --slo for the same.)]:CONDITION:_default' \
+'*--fail-if=[End with exit code 4 when the run crosses this, for CI and scripts\: '\''p99 > 300ms'\'', '\''errors > 1%'\''; repeat for more. The report is still printed. pepe logs takes '\''5xx > 2%'\'', '\''4xx > 20%'\'' and '\''rate < 5/s'\'' too. (pepe ping has --slo for the same.)]:CONDITION:_default' \
 '--metrics=[Serve the live numbers for Prometheus at http\://ADDR/metrics while the run goes, e.g. \:9100 or 127.0.0.1\:9100, so a soak run or a long ping shows up in Grafana next to the server'\''s own]:ADDR:_default' \
 '--config=[Read settings from this file instead of ./pepe.toml; flags on the command line win over it]:FILE:_files' \
 '--write-config=[Write the settings as they stand to this file, as a pepe.toml, and exit]:FILE:_files' \
@@ -768,7 +768,7 @@ _arguments "${_arguments_options[@]}" : \
 '--max-requests=[Refuse a run that would send more requests than this\: -n above it, or -z without a --rate that bounds it]:N:_default' \
 '--max-rate=[Refuse a --rate above this, and a run with no --rate at all, which sends as fast as the target answers]:PER_SECOND:_default' \
 '--max-concurrency=[Refuse a concurrency above this]:N:_default' \
-'*--fail-if=[End with exit code 4 when the run crosses this, for CI and scripts\: '\''p99 > 300ms'\'', '\''errors > 1%'\''; repeat for more. The report is still printed. (pepe ping has --slo for the same.)]:CONDITION:_default' \
+'*--fail-if=[End with exit code 4 when the run crosses this, for CI and scripts\: '\''p99 > 300ms'\'', '\''errors > 1%'\''; repeat for more. The report is still printed. pepe logs takes '\''5xx > 2%'\'', '\''4xx > 20%'\'' and '\''rate < 5/s'\'' too. (pepe ping has --slo for the same.)]:CONDITION:_default' \
 '--metrics=[Serve the live numbers for Prometheus at http\://ADDR/metrics while the run goes, e.g. \:9100 or 127.0.0.1\:9100, so a soak run or a long ping shows up in Grafana next to the server'\''s own]:ADDR:_default' \
 '--config=[Read settings from this file instead of ./pepe.toml; flags on the command line win over it]:FILE:_files' \
 '--write-config=[Write the settings as they stand to this file, as a pepe.toml, and exit]:FILE:_files' \
@@ -824,7 +824,7 @@ _arguments "${_arguments_options[@]}" : \
 '--max-requests=[Refuse a run that would send more requests than this\: -n above it, or -z without a --rate that bounds it]:N:_default' \
 '--max-rate=[Refuse a --rate above this, and a run with no --rate at all, which sends as fast as the target answers]:PER_SECOND:_default' \
 '--max-concurrency=[Refuse a concurrency above this]:N:_default' \
-'*--fail-if=[End with exit code 4 when the run crosses this, for CI and scripts\: '\''p99 > 300ms'\'', '\''errors > 1%'\''; repeat for more. The report is still printed. (pepe ping has --slo for the same.)]:CONDITION:_default' \
+'*--fail-if=[End with exit code 4 when the run crosses this, for CI and scripts\: '\''p99 > 300ms'\'', '\''errors > 1%'\''; repeat for more. The report is still printed. pepe logs takes '\''5xx > 2%'\'', '\''4xx > 20%'\'' and '\''rate < 5/s'\'' too. (pepe ping has --slo for the same.)]:CONDITION:_default' \
 '--metrics=[Serve the live numbers for Prometheus at http\://ADDR/metrics while the run goes, e.g. \:9100 or 127.0.0.1\:9100, so a soak run or a long ping shows up in Grafana next to the server'\''s own]:ADDR:_default' \
 '--config=[Read settings from this file instead of ./pepe.toml; flags on the command line win over it]:FILE:_files' \
 '--write-config=[Write the settings as they stand to this file, as a pepe.toml, and exit]:FILE:_files' \
@@ -880,7 +880,7 @@ _arguments "${_arguments_options[@]}" : \
 '--max-requests=[Refuse a run that would send more requests than this\: -n above it, or -z without a --rate that bounds it]:N:_default' \
 '--max-rate=[Refuse a --rate above this, and a run with no --rate at all, which sends as fast as the target answers]:PER_SECOND:_default' \
 '--max-concurrency=[Refuse a concurrency above this]:N:_default' \
-'*--fail-if=[End with exit code 4 when the run crosses this, for CI and scripts\: '\''p99 > 300ms'\'', '\''errors > 1%'\''; repeat for more. The report is still printed. (pepe ping has --slo for the same.)]:CONDITION:_default' \
+'*--fail-if=[End with exit code 4 when the run crosses this, for CI and scripts\: '\''p99 > 300ms'\'', '\''errors > 1%'\''; repeat for more. The report is still printed. pepe logs takes '\''5xx > 2%'\'', '\''4xx > 20%'\'' and '\''rate < 5/s'\'' too. (pepe ping has --slo for the same.)]:CONDITION:_default' \
 '--metrics=[Serve the live numbers for Prometheus at http\://ADDR/metrics while the run goes, e.g. \:9100 or 127.0.0.1\:9100, so a soak run or a long ping shows up in Grafana next to the server'\''s own]:ADDR:_default' \
 '--config=[Read settings from this file instead of ./pepe.toml; flags on the command line win over it]:FILE:_files' \
 '--write-config=[Write the settings as they stand to this file, as a pepe.toml, and exit]:FILE:_files' \
@@ -944,7 +944,7 @@ _arguments "${_arguments_options[@]}" : \
 '--max-requests=[Refuse a run that would send more requests than this\: -n above it, or -z without a --rate that bounds it]:N:_default' \
 '--max-rate=[Refuse a --rate above this, and a run with no --rate at all, which sends as fast as the target answers]:PER_SECOND:_default' \
 '--max-concurrency=[Refuse a concurrency above this]:N:_default' \
-'*--fail-if=[End with exit code 4 when the run crosses this, for CI and scripts\: '\''p99 > 300ms'\'', '\''errors > 1%'\''; repeat for more. The report is still printed. (pepe ping has --slo for the same.)]:CONDITION:_default' \
+'*--fail-if=[End with exit code 4 when the run crosses this, for CI and scripts\: '\''p99 > 300ms'\'', '\''errors > 1%'\''; repeat for more. The report is still printed. pepe logs takes '\''5xx > 2%'\'', '\''4xx > 20%'\'' and '\''rate < 5/s'\'' too. (pepe ping has --slo for the same.)]:CONDITION:_default' \
 '--metrics=[Serve the live numbers for Prometheus at http\://ADDR/metrics while the run goes, e.g. \:9100 or 127.0.0.1\:9100, so a soak run or a long ping shows up in Grafana next to the server'\''s own]:ADDR:_default' \
 '--config=[Read settings from this file instead of ./pepe.toml; flags on the command line win over it]:FILE:_files' \
 '--write-config=[Write the settings as they stand to this file, as a pepe.toml, and exit]:FILE:_files' \
@@ -998,7 +998,7 @@ _arguments "${_arguments_options[@]}" : \
 '--max-requests=[Refuse a run that would send more requests than this\: -n above it, or -z without a --rate that bounds it]:N:_default' \
 '--max-rate=[Refuse a --rate above this, and a run with no --rate at all, which sends as fast as the target answers]:PER_SECOND:_default' \
 '--max-concurrency=[Refuse a concurrency above this]:N:_default' \
-'*--fail-if=[End with exit code 4 when the run crosses this, for CI and scripts\: '\''p99 > 300ms'\'', '\''errors > 1%'\''; repeat for more. The report is still printed. (pepe ping has --slo for the same.)]:CONDITION:_default' \
+'*--fail-if=[End with exit code 4 when the run crosses this, for CI and scripts\: '\''p99 > 300ms'\'', '\''errors > 1%'\''; repeat for more. The report is still printed. pepe logs takes '\''5xx > 2%'\'', '\''4xx > 20%'\'' and '\''rate < 5/s'\'' too. (pepe ping has --slo for the same.)]:CONDITION:_default' \
 '--metrics=[Serve the live numbers for Prometheus at http\://ADDR/metrics while the run goes, e.g. \:9100 or 127.0.0.1\:9100, so a soak run or a long ping shows up in Grafana next to the server'\''s own]:ADDR:_default' \
 '--config=[Read settings from this file instead of ./pepe.toml; flags on the command line win over it]:FILE:_files' \
 '--write-config=[Write the settings as they stand to this file, as a pepe.toml, and exit]:FILE:_files' \
@@ -1052,7 +1052,7 @@ _arguments "${_arguments_options[@]}" : \
 '--max-requests=[Refuse a run that would send more requests than this\: -n above it, or -z without a --rate that bounds it]:N:_default' \
 '--max-rate=[Refuse a --rate above this, and a run with no --rate at all, which sends as fast as the target answers]:PER_SECOND:_default' \
 '--max-concurrency=[Refuse a concurrency above this]:N:_default' \
-'*--fail-if=[End with exit code 4 when the run crosses this, for CI and scripts\: '\''p99 > 300ms'\'', '\''errors > 1%'\''; repeat for more. The report is still printed. (pepe ping has --slo for the same.)]:CONDITION:_default' \
+'*--fail-if=[End with exit code 4 when the run crosses this, for CI and scripts\: '\''p99 > 300ms'\'', '\''errors > 1%'\''; repeat for more. The report is still printed. pepe logs takes '\''5xx > 2%'\'', '\''4xx > 20%'\'' and '\''rate < 5/s'\'' too. (pepe ping has --slo for the same.)]:CONDITION:_default' \
 '--metrics=[Serve the live numbers for Prometheus at http\://ADDR/metrics while the run goes, e.g. \:9100 or 127.0.0.1\:9100, so a soak run or a long ping shows up in Grafana next to the server'\''s own]:ADDR:_default' \
 '--config=[Read settings from this file instead of ./pepe.toml; flags on the command line win over it]:FILE:_files' \
 '--write-config=[Write the settings as they stand to this file, as a pepe.toml, and exit]:FILE:_files' \
@@ -1107,7 +1107,7 @@ _arguments "${_arguments_options[@]}" : \
 '--max-requests=[Refuse a run that would send more requests than this\: -n above it, or -z without a --rate that bounds it]:N:_default' \
 '--max-rate=[Refuse a --rate above this, and a run with no --rate at all, which sends as fast as the target answers]:PER_SECOND:_default' \
 '--max-concurrency=[Refuse a concurrency above this]:N:_default' \
-'*--fail-if=[End with exit code 4 when the run crosses this, for CI and scripts\: '\''p99 > 300ms'\'', '\''errors > 1%'\''; repeat for more. The report is still printed. (pepe ping has --slo for the same.)]:CONDITION:_default' \
+'*--fail-if=[End with exit code 4 when the run crosses this, for CI and scripts\: '\''p99 > 300ms'\'', '\''errors > 1%'\''; repeat for more. The report is still printed. pepe logs takes '\''5xx > 2%'\'', '\''4xx > 20%'\'' and '\''rate < 5/s'\'' too. (pepe ping has --slo for the same.)]:CONDITION:_default' \
 '--metrics=[Serve the live numbers for Prometheus at http\://ADDR/metrics while the run goes, e.g. \:9100 or 127.0.0.1\:9100, so a soak run or a long ping shows up in Grafana next to the server'\''s own]:ADDR:_default' \
 '--config=[Read settings from this file instead of ./pepe.toml; flags on the command line win over it]:FILE:_files' \
 '--write-config=[Write the settings as they stand to this file, as a pepe.toml, and exit]:FILE:_files' \
@@ -1161,7 +1161,7 @@ _arguments "${_arguments_options[@]}" : \
 '--max-requests=[Refuse a run that would send more requests than this\: -n above it, or -z without a --rate that bounds it]:N:_default' \
 '--max-rate=[Refuse a --rate above this, and a run with no --rate at all, which sends as fast as the target answers]:PER_SECOND:_default' \
 '--max-concurrency=[Refuse a concurrency above this]:N:_default' \
-'*--fail-if=[End with exit code 4 when the run crosses this, for CI and scripts\: '\''p99 > 300ms'\'', '\''errors > 1%'\''; repeat for more. The report is still printed. (pepe ping has --slo for the same.)]:CONDITION:_default' \
+'*--fail-if=[End with exit code 4 when the run crosses this, for CI and scripts\: '\''p99 > 300ms'\'', '\''errors > 1%'\''; repeat for more. The report is still printed. pepe logs takes '\''5xx > 2%'\'', '\''4xx > 20%'\'' and '\''rate < 5/s'\'' too. (pepe ping has --slo for the same.)]:CONDITION:_default' \
 '--metrics=[Serve the live numbers for Prometheus at http\://ADDR/metrics while the run goes, e.g. \:9100 or 127.0.0.1\:9100, so a soak run or a long ping shows up in Grafana next to the server'\''s own]:ADDR:_default' \
 '--config=[Read settings from this file instead of ./pepe.toml; flags on the command line win over it]:FILE:_files' \
 '--write-config=[Write the settings as they stand to this file, as a pepe.toml, and exit]:FILE:_files' \
@@ -1216,7 +1216,7 @@ _arguments "${_arguments_options[@]}" : \
 '--max-requests=[Refuse a run that would send more requests than this\: -n above it, or -z without a --rate that bounds it]:N:_default' \
 '--max-rate=[Refuse a --rate above this, and a run with no --rate at all, which sends as fast as the target answers]:PER_SECOND:_default' \
 '--max-concurrency=[Refuse a concurrency above this]:N:_default' \
-'*--fail-if=[End with exit code 4 when the run crosses this, for CI and scripts\: '\''p99 > 300ms'\'', '\''errors > 1%'\''; repeat for more. The report is still printed. (pepe ping has --slo for the same.)]:CONDITION:_default' \
+'*--fail-if=[End with exit code 4 when the run crosses this, for CI and scripts\: '\''p99 > 300ms'\'', '\''errors > 1%'\''; repeat for more. The report is still printed. pepe logs takes '\''5xx > 2%'\'', '\''4xx > 20%'\'' and '\''rate < 5/s'\'' too. (pepe ping has --slo for the same.)]:CONDITION:_default' \
 '--metrics=[Serve the live numbers for Prometheus at http\://ADDR/metrics while the run goes, e.g. \:9100 or 127.0.0.1\:9100, so a soak run or a long ping shows up in Grafana next to the server'\''s own]:ADDR:_default' \
 '--config=[Read settings from this file instead of ./pepe.toml; flags on the command line win over it]:FILE:_files' \
 '--write-config=[Write the settings as they stand to this file, as a pepe.toml, and exit]:FILE:_files' \
@@ -1270,7 +1270,7 @@ _arguments "${_arguments_options[@]}" : \
 '--max-requests=[Refuse a run that would send more requests than this\: -n above it, or -z without a --rate that bounds it]:N:_default' \
 '--max-rate=[Refuse a --rate above this, and a run with no --rate at all, which sends as fast as the target answers]:PER_SECOND:_default' \
 '--max-concurrency=[Refuse a concurrency above this]:N:_default' \
-'*--fail-if=[End with exit code 4 when the run crosses this, for CI and scripts\: '\''p99 > 300ms'\'', '\''errors > 1%'\''; repeat for more. The report is still printed. (pepe ping has --slo for the same.)]:CONDITION:_default' \
+'*--fail-if=[End with exit code 4 when the run crosses this, for CI and scripts\: '\''p99 > 300ms'\'', '\''errors > 1%'\''; repeat for more. The report is still printed. pepe logs takes '\''5xx > 2%'\'', '\''4xx > 20%'\'' and '\''rate < 5/s'\'' too. (pepe ping has --slo for the same.)]:CONDITION:_default' \
 '--metrics=[Serve the live numbers for Prometheus at http\://ADDR/metrics while the run goes, e.g. \:9100 or 127.0.0.1\:9100, so a soak run or a long ping shows up in Grafana next to the server'\''s own]:ADDR:_default' \
 '--config=[Read settings from this file instead of ./pepe.toml; flags on the command line win over it]:FILE:_files' \
 '--write-config=[Write the settings as they stand to this file, as a pepe.toml, and exit]:FILE:_files' \
@@ -1379,7 +1379,7 @@ _arguments "${_arguments_options[@]}" : \
 '--max-requests=[Refuse a run that would send more requests than this\: -n above it, or -z without a --rate that bounds it]:N:_default' \
 '--max-rate=[Refuse a --rate above this, and a run with no --rate at all, which sends as fast as the target answers]:PER_SECOND:_default' \
 '--max-concurrency=[Refuse a concurrency above this]:N:_default' \
-'*--fail-if=[End with exit code 4 when the run crosses this, for CI and scripts\: '\''p99 > 300ms'\'', '\''errors > 1%'\''; repeat for more. The report is still printed. (pepe ping has --slo for the same.)]:CONDITION:_default' \
+'*--fail-if=[End with exit code 4 when the run crosses this, for CI and scripts\: '\''p99 > 300ms'\'', '\''errors > 1%'\''; repeat for more. The report is still printed. pepe logs takes '\''5xx > 2%'\'', '\''4xx > 20%'\'' and '\''rate < 5/s'\'' too. (pepe ping has --slo for the same.)]:CONDITION:_default' \
 '--metrics=[Serve the live numbers for Prometheus at http\://ADDR/metrics while the run goes, e.g. \:9100 or 127.0.0.1\:9100, so a soak run or a long ping shows up in Grafana next to the server'\''s own]:ADDR:_default' \
 '--config=[Read settings from this file instead of ./pepe.toml; flags on the command line win over it]:FILE:_files' \
 '--write-config=[Write the settings as they stand to this file, as a pepe.toml, and exit]:FILE:_files' \

@@ -25,10 +25,12 @@ use super::view::{
     RULE, WARN,
 };
 use super::{bigtext, format, settings, theme};
+use crate::diagnose::Level;
 use crate::logs::{
     self, ago, busiest, day_and_time, echo, offset_label, percent, rate, time_of_day, typical,
     versus, Clock, Grain, Now, Parser, PathStat, Recent, Row, Shared, Stats,
 };
+use crate::logs_verdict::{Kind, Watch};
 
 /// How often the screen is drawn again while nothing is pressed
 const FRAME: Duration = Duration::from_millis(200);
@@ -136,6 +138,10 @@ pub struct LogsScreen {
     path: Option<String>,
     /// The path picker, while it is open
     picker: Option<Picker>,
+    /// The findings and the `--fail-if` limits, worked out once a second
+    watch: Watch,
+    /// The finding picked on the dashboard
+    finding: usize,
 }
 
 /// Picking a path by typing a part of it
@@ -227,6 +233,36 @@ impl LogsScreen {
             clicks: kit::Clicks::default(),
             path: None,
             picker: None,
+            watch: Watch::new(Vec::new(), window),
+            finding: 0,
+        }
+    }
+
+    /// Hold the logs to these limits, and say what goes wrong
+    pub fn watching(mut self, watch: Watch) -> Self {
+        self.watch = watch;
+        self
+    }
+
+    /// The findings and the limits as the screen leaves them
+    pub fn into_watch(self) -> Watch {
+        self.watch
+    }
+
+    /// Open what the picked finding is about: its path's traffic, the
+    /// error log, the paths
+    fn open_finding(&mut self) {
+        let Some(finding) = self.watch.findings.get(self.finding).cloned() else {
+            return;
+        };
+        self.tab = match finding.kind {
+            Kind::ErrorLog => Tab::Errors,
+            Kind::Client | Kind::Unread => Tab::Paths,
+            _ => Tab::Traffic,
+        };
+        if self.tab == Tab::Traffic {
+            self.set_path(finding.path.clone());
+            self.slot = 0;
         }
     }
 
@@ -348,7 +384,11 @@ impl LogsScreen {
             Tab::Traffic => self.slot = step(self.slot),
             Tab::Errors => self.cause = step(self.cause),
             Tab::Log => self.move_line(by),
-            Tab::Dashboard | Tab::Paths => {}
+            Tab::Dashboard => {
+                let last = self.watch.findings.len().saturating_sub(1);
+                self.finding = step(self.finding).min(last);
+            }
+            Tab::Paths => {}
         }
     }
 
@@ -472,6 +512,7 @@ impl LogsScreen {
                 }
             }
             KeyCode::Enter if self.tab == Tab::Log => self.inspecting = true,
+            KeyCode::Enter if self.tab == Tab::Dashboard => self.open_finding(),
             // Esc lets go of what is held, one thing at a time, then leaves
             KeyCode::Esc => {
                 if self.tab == Tab::Log && self.line.is_some() {
@@ -572,6 +613,7 @@ impl LogsScreen {
         }
         let shared = self.shared.clone();
         let stats = shared.lock();
+        self.watch.tick(&stats, wall);
         let clock = stats.clock(wall);
         let now = stats.now(clock, self.window);
         // The traffic view's slots and rate now: the log's, or one path's
@@ -661,6 +703,13 @@ impl LogsScreen {
 
         let keys: Vec<(&str, &str)> = match self.tab {
             _ if self.searching => vec![("enter", "keep"), ("esc", "clear")],
+            Tab::Dashboard if !self.watch.findings.is_empty() => vec![
+                ("↑↓", "pick a finding"),
+                ("enter", "open it"),
+                ("tab", "next view"),
+                ("?", "keys"),
+                ("q", "quit"),
+            ],
             Tab::Dashboard => vec![
                 ("tab", "next view"),
                 ("2-5", "traffic, paths, errors, log"),
@@ -728,6 +777,10 @@ impl LogsScreen {
                     ("m h d", "traffic per minute, hour or day; g goes round"),
                     ("↑ ↓ / j k", "pick a slot, a message or a line"),
                     ("PgUp PgDn", "ten at a time; home and end, the ends"),
+                    (
+                        "↑ ↓ enter",
+                        "dashboard: pick a finding and open what it is about",
+                    ),
                     ("s", "paths: most requested, most 5xx, most 4xx, slowest"),
                     ("p", "hold the traffic and the log to one path"),
                     ("l", "traffic: the held path's lines"),
@@ -826,9 +879,17 @@ impl LogsScreen {
         minutes: &[Row],
     ) -> (Color, Vec<Line<'static>>) {
         let usual = typical(minutes);
+        let worst = self.watch.findings.iter().map(|f| f.level).max();
+        let wrong = self
+            .watch
+            .findings
+            .iter()
+            .any(|f| f.level == Level::Warn && f.kind != Kind::TrafficUp);
         let (glyph, word, color) = match (now.share_5xx(), usual) {
             _ if !stats.caught_up => ("…", "Reading", LABEL),
             _ if stats.last.is_none() => ("…", "Waiting", LABEL),
+            _ if worst == Some(Level::Bad) => ("✖", "Failing", BAD),
+            _ if wrong => ("▲", "Degraded", WARN),
             (s, _) if s >= 0.05 => ("✖", "Failing", BAD),
             (s, _) if s >= 0.01 => ("▲", "Degraded", WARN),
             _ if !clock.live => ("■", "Ended", LABEL),
@@ -958,15 +1019,31 @@ impl LogsScreen {
             r => r,
         };
         let left = rest.saturating_sub(lists_h + 1);
+        // What is wrong, under the numbers: a line each, and one for the
+        // limits and the webhooks. The chart keeps room for itself; the
+        // newest lines give way first.
+        let shown = self.watch.findings.len().min(6) as u16;
+        let extra = u16::from(!self.watch.conditions.is_empty() || crate::webhook::live());
+        let findings_h = match shown {
+            0 => 0,
+            // Its title, and a row of padding above and below
+            n => match (n + extra + 3).min(left.saturating_sub(8)) {
+                h if h >= 4 => h,
+                _ => 0,
+            },
+        };
+        let left = left.saturating_sub(findings_h + u16::from(findings_h > 0));
         let latest_h = match left {
             l if l >= 22 => 9,
             l if l >= 16 => 7,
             _ => 0,
         };
         let chart_h = left.saturating_sub(latest_h + u16::from(latest_h > 0));
-        let [heroes, _, chart, _, lists, _, latest] = Layout::vertical([
+        let [heroes, _, findings, _, chart, _, lists, _, latest] = Layout::vertical([
             Constraint::Length(hero_h),
             Constraint::Length(1),
+            Constraint::Length(findings_h),
+            Constraint::Length(u16::from(findings_h > 0)),
             Constraint::Length(chart_h),
             Constraint::Length(u16::from(chart_h > 0)),
             Constraint::Length(lists_h),
@@ -1088,6 +1165,11 @@ impl LogsScreen {
             .collect();
         f.render_widget(Paragraph::new(said), inner);
 
+        if findings_h >= 3 {
+            panel(f, findings);
+            self.render_findings(f, inset(findings, 2, 1), clock);
+        }
+
         // ── Traffic, a bar for every few seconds, coloured by what was answered
         if chart_h >= 6 {
             panel(f, chart);
@@ -1158,6 +1240,98 @@ impl LogsScreen {
 
     /// The last minutes or the last hour, as much as is known and fits: a
     /// bar for every few seconds, its 4xx and 5xx in their colours on top
+    /// The findings, most serious first, and the limits under them
+    fn render_findings(&self, f: &mut Frame, area: Rect, clock: Clock) {
+        let [title, list] =
+            Layout::vertical([Constraint::Length(1), Constraint::Min(0)]).areas(area);
+        section(
+            f,
+            title,
+            "Findings",
+            Some(Line::from(label(format!(
+                "the last {} against the usual minute, hour and day",
+                format::span(Duration::from_secs(self.window as u64))
+            )))),
+        );
+        let extra = usize::from(!self.watch.conditions.is_empty() || crate::webhook::live());
+        let room = (list.height as usize).saturating_sub(extra);
+        let picked = self
+            .finding
+            .min(self.watch.findings.len().saturating_sub(1));
+        let from = scroll(picked, self.watch.findings.len(), room);
+        let width = list.width as usize;
+        let mut lines: Vec<Line> = self
+            .watch
+            .findings
+            .iter()
+            .enumerate()
+            .skip(from)
+            .take(room)
+            .map(|(i, finding)| {
+                let color = match finding.level {
+                    Level::Bad => BAD,
+                    Level::Warn => WARN,
+                    Level::Note => LABEL,
+                    Level::Good => GOOD,
+                };
+                let opens = match finding.kind {
+                    Kind::ErrorLog => "→ errors",
+                    Kind::Client | Kind::Unread => "→ paths",
+                    Kind::Steady => "",
+                    _ => "→ traffic",
+                };
+                let room = width.saturating_sub(10 + opens.len() + 2);
+                let line = Line::from(vec![
+                    marker(i == picked, true),
+                    value(
+                        format!(" {} {:<5} ", finding.level.glyph(), finding.level.name()),
+                        color,
+                    ),
+                    Span::raw(format!("{:<room$}", truncate(&finding.text, room))),
+                    label(format!("  {opens}")),
+                ]);
+                if i == picked && self.tab == Tab::Dashboard {
+                    line.style(Style::new().bg(SELECTED))
+                } else {
+                    line
+                }
+            })
+            .collect();
+        if extra > 0 {
+            let mut spans: Vec<Span> = Vec::new();
+            let checks = self.watch.checks();
+            if !checks.is_empty() {
+                spans.push(label("fail-if  "));
+            }
+            for (check, tally) in checks.iter().zip(&self.watch.tallies) {
+                let (glyph, color) = match (tally.crossing, check.held) {
+                    (true, _) => ("✖", BAD),
+                    (false, false) => ("▲", WARN),
+                    (false, true) => ("✔", GOOD),
+                };
+                spans.push(value(format!("{glyph} {}", check.text), color));
+                let now = tally
+                    .now
+                    .as_ref()
+                    .map(|c| c.measured.clone())
+                    .unwrap_or_default();
+                spans.push(label(match &tally.crossed {
+                    Some((at, _)) if !tally.crossing => format!(
+                        ": {now}, crossed at {}   ",
+                        time_of_day(*at + i64::from(clock.offset))
+                    ),
+                    _ => format!(": {now}   "),
+                }));
+            }
+            if crate::webhook::live() {
+                let hooks = crate::webhook::current_names();
+                spans.push(label(format!("webhooks {}", hooks.join(", "))));
+            }
+            lines.push(Line::from(spans));
+        }
+        f.render_widget(Paragraph::new(lines), list);
+    }
+
     fn render_live_chart(&self, f: &mut Frame, area: Rect, stats: &Stats, clock: Clock) {
         let [head, plot] =
             Layout::vertical([Constraint::Length(1), Constraint::Min(0)]).areas(area);
@@ -2917,6 +3091,45 @@ mod tests {
     }
 
     #[test]
+    fn the_dashboard_says_what_is_wrong_and_opens_it() {
+        let conditions = vec![
+            crate::logs_verdict::Condition::parse("5xx > 2%").unwrap(),
+            crate::logs_verdict::Condition::parse("p99 > 5s").unwrap(),
+        ];
+        let mut screen = screen().watching(Watch::new(conditions, 60));
+        let drawn = draw(&mut screen, 140, 50);
+        println!("{drawn}");
+        assert!(drawn.contains("FINDINGS"), "{drawn}");
+        assert!(drawn.contains("/search answers 5xx"), "{drawn}");
+        assert!(drawn.contains("fail-if"), "{drawn}");
+        assert!(drawn.contains("✖ 5xx > 2%"), "{drawn}");
+        assert!(drawn.contains("✔ p99 > 5s"), "{drawn}");
+        assert!(drawn.contains("Failing"), "{drawn}");
+        // The limits as the screen leaves them: the crossed one with when
+        let checks = screen.watch.checks();
+        assert!(!checks[0].held && checks[0].measured.contains(" at "));
+        assert!(checks[1].held);
+        // enter opens what the picked finding is about
+        let at = screen
+            .watch
+            .findings
+            .iter()
+            .position(|f| f.path.as_deref() == Some("/search"))
+            .unwrap();
+        for _ in 0..at {
+            press(&mut screen, KeyCode::Down);
+        }
+        press(&mut screen, KeyCode::Enter);
+        assert_eq!(screen.tab, Tab::Traffic);
+        assert_eq!(screen.path.as_deref(), Some("/search"));
+        // Small screens still draw
+        press(&mut screen, KeyCode::Char('1'));
+        for (width, height) in [(60, 16), (80, 24), (100, 30)] {
+            draw(&mut screen, width, height);
+        }
+    }
+
+    #[test]
     fn traffic_and_the_log_are_held_to_a_path() {
         let mut screen = screen();
         press(&mut screen, KeyCode::Char('2'));
@@ -3230,8 +3443,9 @@ mod tests {
             text.contains(" 1 DASHBOARD   2 TRAFFIC   3 PATHS   4 ERRORS 10   5 LOG"),
             "{text}"
         );
-        // The verdict: 5% of the last minute answered 5xx, and why
-        assert!(text.contains("▲ Degraded"), "{text}");
+        // The verdict: /search answers 5xx to a tenth of its requests,
+        // which is bad however long it has gone on
+        assert!(text.contains("✖ Failing"), "{text}");
         assert!(text.contains("2.0 req/s, as in a usual minute"), "{text}");
         assert!(text.contains("busiest minute 2.0 req/s at 12:05"), "{text}");
         assert!(text.contains("✖ /search answers 5xx: 30 of 300"), "{text}");
@@ -3274,9 +3488,12 @@ mod tests {
             text.contains("ERROR LOG") && text.contains("10 lines"),
             "{text}"
         );
+        // The newest lines, at the foot of a screen tall enough for them
+        // beside the findings
+        let tall = draw(&mut s, 150, 60);
         assert!(
-            text.contains("LATEST") && text.contains("what is this"),
-            "{text}"
+            tall.contains("LATEST") && tall.contains("what is this"),
+            "{tall}"
         );
         // The other views keep the numbers in a line above them
         press(&mut s, KeyCode::Char('3'));

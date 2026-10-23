@@ -61,6 +61,40 @@ Each minute, hour and day keeps its 64 busiest paths. When a slot sees more, a n
 | `?` | Show all keys |
 | `q` / `Ctrl-C` | Quit; the report is left in your shell |
 
+## What is wrong
+
+The last minute (`--window`) is held against the minutes before it, and against the same hour a day before, and what is out of the usual is said as findings, most serious first: on the dashboard, in the report and in `--json`. `↑` `↓` pick one on the dashboard, and `enter` opens what it is about: the traffic held to its path, the errors, the paths.
+
+| Level | Said when |
+| --- | --- |
+| bad | 5% of requests answer 5xx; a path answers 5xx to 10% of its requests, or 4xx to half of them; the error log has ten times its usual errors; traffic is under a tenth of its usual while the log is being written; p99 is five times a usual minute's and over a second |
+| warn | 1% answer 5xx, three times the usual; a path answers 5xx to 2% or 4xx to 30%, three times its usual; the error log has three times its usual; traffic is under a third of its usual, or twice it; p99 is twice a usual minute's and over 200ms |
+| note | one client sends a fifth of all requests and twice the next one; lines couldn't be read |
+| good | nothing out of the usual |
+
+A path's share needs at least five failed requests in the window, so that one failure in forty isn't a finding. A finding says since when, from the minutes it has been true in, and what the usual was. Slower requests name the path whose mean time changed most, and whether its time is spent in nginx or waiting on the upstream (`$upstream_response_time`), which is the app.
+
+## Limits and alerts
+
+`--fail-if` holds the logs to a limit, and ends with exit code 4 when it is crossed, after the report:
+
+```bash
+pepe logs /var/log/nginx/access.log /var/log/nginx/error.log --since 15m \
+  --fail-if '5xx > 2%' --fail-if 'p99 > 1s' --fail-if 'rate < 5/s' \
+  --webhook "$SLACK_WEBHOOK_URL"
+```
+
+| Measure | Takes | Means |
+| --- | --- | --- |
+| `5xx` (or `errors`) | a percentage | the share answering 5xx |
+| `4xx` | a percentage | the share answering 4xx |
+| `p50`, `p99`, `p99.9`… | a time: `500ms`, `2s` | that percentile of `$request_time` |
+| `rate` | requests a second: `5/s` | the request rate; the one measure that also takes `<` |
+
+Read once (piped, `--json`, from cron) a limit is held against everything read, so `--since` says over what. While a log is followed it is held against the last `--window`, every second; a limit crossed even once makes the exit code 4 when the screen is left, and the report says when it was crossed. The dashboard shows each limit under the findings.
+
+`--webhook`, `--webhook-on` and `--slack` work as they do for a load test (see [webhooks](webhooks.md)). Read once, the hooks get the verdict at the end, and `fail` when a limit was crossed. While a log is followed, a finding turning bad, a limit crossed or held again, and a finding going away are `anomaly` events, and `--slack` keeps one message up to date with the rate, the 5xx and the findings; the verdict goes out when the screen is left. A plain URL is sent the end only, unless `--webhook-on anomaly,end` says more.
+
 ## Formats
 
 Access logs are read as nginx's `combined` format (Apache's too), with `rt=` and `urt=` timings after it if they are there, or as JSON lines under nginx's variable names or Caddy's. A log with a `log_format` of its own needs it said, as nginx.conf has it, on one line:
@@ -82,5 +116,8 @@ pepe logs access.log --format '$remote_addr [$time_local] "$request" $status $bo
 | `--all` | | Read everything before following, rather than starting five minutes back |
 | `--exact-paths` | | Count `/items/1` and `/items/2` apart |
 | `--rows <N>` | 10 | Rows in each table of the report |
+| `--fail-if <CONDITION>` | | Exit code 4 when crossed: `'5xx > 2%'`, `'4xx > 20%'`, `'p99 > 1s'`, `'rate < 5/s'`; repeat for more |
+| `--webhook <URL>` | | Send the verdict there; `--webhook-on` says when |
+| `--slack[=#channel]` | | Keep a Slack message up to date while the log is followed |
 
-`--json` prints the report as JSON (with `schema_version`); piped, the text report.
+`--json` prints the report as JSON (with `schema_version`); piped, the text report. Both have the verdict: `verdict.level` (`healthy`, `degraded`, `failing`) and `verdict.findings[]`, each with `level`, `kind` (`errors`, `path_errors`, `path_refused`, `error_log`, `traffic_down`, `traffic_up`, `latency`, `client`, `unread`, `steady`), `text`, and when they apply `path`, `since`, `now`, `usual` and `against`; and `fail_if[]`, each `--fail-if` with `condition`, `held` and `measured`.
