@@ -443,6 +443,9 @@ enum Report {
         cache: Option<crate::cache::CacheStatus>,
         /// `--otlp`: the request's half of its trace id; 0 when it had none
         trace: u64,
+        /// `--rate`: microseconds it started after its slot; `u32::MAX`
+        /// when the run isn't paced
+        waited_us: u32,
     },
     Full(Box<ResponseStats>),
 }
@@ -466,6 +469,9 @@ impl From<ResponseStats> for Report {
                 warmup: stats.warmup,
                 cache: stats.cache_status,
                 trace: stats.trace.unwrap_or(0),
+                waited_us: stats
+                    .waited
+                    .map_or(u32::MAX, |w| w.as_micros().min(u32::MAX as u128 - 1) as u32),
             },
             _ => Self::Full(Box::new(stats)),
         }
@@ -485,6 +491,7 @@ impl From<Report> for ResponseStats {
                 warmup,
                 cache,
                 trace,
+                waited_us,
             } => ResponseStats {
                 duration: Duration::from_nanos(duration),
                 ttfb: Some(Duration::from_nanos(ttfb)),
@@ -494,6 +501,8 @@ impl From<Report> for ResponseStats {
                 warmup,
                 cache_status: cache,
                 trace: (trace != 0).then_some(trace),
+                waited: (waited_us != u32::MAX)
+                    .then(|| Duration::from_micros(u64::from(waited_us))),
                 ..Default::default()
             },
         }
@@ -689,7 +698,9 @@ impl Control {
     /// A schedule more than `RATE_BACKLOG` behind is moved up to now and
     /// the starts in between counted as missed: the concurrency couldn't
     /// carry the rate, and a burst of the backlog would say nothing true.
-    fn pace(&self) -> Option<Duration> {
+    /// The slot taken comes back as how long to wait for it and how late
+    /// it already is, one of them zero.
+    fn pace(&self) -> Option<Slot> {
         let interval = self.interval_ns.load(Ordering::Relaxed);
         if interval == 0 {
             return None;
@@ -697,7 +708,10 @@ impl Control {
         let now = self.now_ns();
         let slot = self.next_slot_ns.fetch_add(interval, Ordering::Relaxed);
         if slot > now {
-            return Some(Duration::from_nanos(slot - now));
+            return Some(Slot {
+                wait: Duration::from_nanos(slot - now),
+                late: Duration::ZERO,
+            });
         }
         // Too far behind: the schedule moves up to now, once, whichever
         // worker sees it first; the starts skipped are counted as missed
@@ -713,7 +727,10 @@ impl Control {
                     .fetch_add((now - was) / interval, Ordering::Relaxed);
             }
         }
-        None
+        Some(Slot {
+            wait: Duration::ZERO,
+            late: Duration::from_nanos(now - slot),
+        })
     }
 
     /// Wait out a `--rate` slot for a request already taken from the plan.
@@ -819,6 +836,15 @@ impl Control {
             changed.await;
         }
     }
+}
+
+/// A start on the `--rate` schedule
+#[derive(Debug, Clone, Copy)]
+struct Slot {
+    /// Until it comes
+    wait: Duration,
+    /// How long ago it came, when every unit of concurrency was busy then
+    late: Duration,
 }
 
 /// Lets one request per interval measure DNS, without any locking
@@ -1324,8 +1350,9 @@ async fn worker(shard: Arc<Shard>, slot: usize) {
             shard.control.drain();
             break;
         };
-        if let Some(wait) = shard.control.pace() {
-            if !shard.control.wait_for(wait).await {
+        let slot = shard.control.pace();
+        if let Some(slot) = slot.filter(|s| !s.wait.is_zero()) {
+            if !shard.control.wait_for(slot.wait).await {
                 shard.control.unclaim(warmup);
                 break;
             }
@@ -1336,6 +1363,7 @@ async fn worker(shard: Arc<Shard>, slot: usize) {
         };
         let mut stats = send_one(&shard, &mut lines, &mut failure_bodies).await;
         stats.warmup = warmup;
+        stats.waited = slot.map(|s| s.late);
         if shard.tx.send(stats.into()).is_err() {
             break;
         }
@@ -1376,7 +1404,8 @@ async fn flow_worker(shard: Arc<Shard>, slot: usize) {
             }
             // `--rate` paces every request, steps included. A chain not
             // yet begun when the run ends gives its turn back.
-            if let Some(wait) = shard.control.pace() {
+            let slot = shard.control.pace();
+            if let Some(wait) = slot.map(|s| s.wait).filter(|w| !w.is_zero()) {
                 match index {
                     0 if !shard.control.wait_for(wait).await => {
                         shard.control.unclaim(warmup);
@@ -1404,6 +1433,7 @@ async fn flow_worker(shard: Arc<Shard>, slot: usize) {
             .await;
             // A chain begun in the warm-up is the warm-up's, every step of it
             stats.warmup = warmup;
+            stats.waited = slot.map(|s| s.late);
             if shard.tx.send(stats.into()).is_err() {
                 break 'chains;
             }
@@ -2084,6 +2114,59 @@ mod tests {
             results[0].error_message.as_deref(),
             Some("HTTP 401 where 200 was expected")
         );
+    }
+
+    /// A paced request that couldn't go out on its slot says how late it
+    /// was: one connection against 30ms answers can't carry 100 a second,
+    /// and each request waits longer than the one before. On time, none do.
+    #[tokio::test]
+    async fn a_request_that_misses_its_slot_says_how_late_it_was() {
+        let srv = server(Duration::from_millis(30)).await;
+        let req = request(&srv.url, "GET", None);
+        let load = start(
+            req.build_clients(1).unwrap().0,
+            req,
+            1,
+            Plan::Count(10),
+            false,
+        );
+        load.set_rate(Some(100.0));
+        let results = drain(load).await;
+        let waited: Vec<Duration> = results.iter().map(|r| r.waited.unwrap()).collect();
+        assert!(waited[9] >= Duration::from_millis(150), "{waited:?}");
+        assert!(
+            waited.windows(2).filter(|w| w[1] > w[0]).count() >= 7,
+            "{waited:?}"
+        );
+        let mut metrics = crate::metrics::Metrics::default();
+        results.iter().for_each(|r| metrics.record(r));
+        assert!(metrics.late >= 8, "{}", metrics.late);
+        assert!(metrics.response_time(99.0) > metrics.percentile(99.0) * 4);
+
+        let srv = server(Duration::ZERO).await;
+        let req = request(&srv.url, "GET", None);
+        let load = start(
+            req.build_clients(1).unwrap().0,
+            req,
+            4,
+            Plan::Count(10),
+            false,
+        );
+        load.set_rate(Some(50.0));
+        let results = drain(load).await;
+        assert!(results
+            .iter()
+            .all(|r| r.waited.is_some_and(|w| w < Duration::from_millis(5))));
+        // Unpaced, there is no schedule to be late for
+        let req = request(&srv.url, "GET", None);
+        let load = start(
+            req.build_clients(1).unwrap().0,
+            req,
+            4,
+            Plan::Count(10),
+            false,
+        );
+        assert!(drain(load).await.iter().all(|r| r.waited.is_none()));
     }
 
     /// Workers that have nothing left to send don't wait for a slot first:

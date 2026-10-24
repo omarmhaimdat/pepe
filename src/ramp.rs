@@ -593,6 +593,41 @@ pub fn capacity(steps: &[Step]) -> Option<Capacity> {
     if points.len() < FIT_STEPS {
         return None;
     }
+    fitted(steps, &points).or_else(|| plateau(steps, &points))
+}
+
+/// The last clean steps that have to sit level for a plateau to be read
+/// off them, and how close to the most measured they have to be
+const PLATEAU_STEPS: usize = 3;
+const PLATEAU_TOLERANCE: f64 = 0.05;
+
+/// Capacity measured rather than fitted: when the curve can't describe
+/// the steps (a hard knee, where a pool or a lock fills up all at once,
+/// is no smooth curve) but the last of them sat level with the most any
+/// step got, that most is the capacity, reached at the first step within
+/// 5% of it
+fn plateau(steps: &[Step], points: &[(f64, f64)]) -> Option<Capacity> {
+    let most = points.iter().map(|&(_, x)| x).fold(0.0, f64::max);
+    let last = &points[points.len().checked_sub(PLATEAU_STEPS)?..];
+    if most <= 0.0
+        || !last
+            .iter()
+            .all(|&(_, x)| x >= most * (1.0 - PLATEAU_TOLERANCE))
+    {
+        return None;
+    }
+    let at = points.iter().find(|&&(_, x)| x >= most * 0.95)?.0;
+    Some(Capacity {
+        rps: most,
+        at,
+        extrapolated: false,
+        latency_doubles_at: latency_doubling(steps),
+    })
+}
+
+/// Capacity read off the Universal Scalability Law fitted to the steps,
+/// when the fit describes them
+fn fitted(steps: &[Step], points: &[(f64, f64)]) -> Option<Capacity> {
     let (a, b, c) = fit_quadratic(&points.iter().map(|&(n, x)| (n, n / x)).collect::<Vec<_>>())?;
     let model = |n: f64| n / (a + b * n + c * n * n);
     // The fit has to describe what was measured before it says anything
@@ -1164,6 +1199,25 @@ mod tests {
                 step(n, x.round() as u64, 10, 0)
             })
             .collect()
+    }
+
+    /// A semaphore of 10 at 10ms each: throughput climbs to ~860 a second
+    /// at 10 and stays there. No smooth curve fits that knee, which once
+    /// left the capacity unsaid; the plateau measured is the capacity.
+    #[test]
+    fn a_hard_knee_is_a_capacity_measured_not_fitted() {
+        let wobble = [1.0, 0.98, 1.02, 0.99, 1.01, 0.97, 1.03, 1.0];
+        let steps: Vec<Step> = (1..=20)
+            .map(|i| {
+                let level = 2 * i;
+                let rps = 86.0 * level.min(10) as f64 * wobble[i as usize % wobble.len()];
+                step(level, rps as u64, 10, 0)
+            })
+            .collect();
+        let c = capacity(&steps).expect("a plateau is a capacity");
+        assert!((860.0..=890.0).contains(&c.rps), "rps {}", c.rps);
+        assert!((10.0..=12.0).contains(&c.at), "at {}", c.at);
+        assert!(!c.extrapolated);
     }
 
     #[test]

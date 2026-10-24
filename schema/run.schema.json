@@ -97,6 +97,28 @@
             }
           }
         },
+        "schedule": {
+          "type": "object",
+          "description": "--rate: how far the requests kept to the schedule. latency is timed from when each request went out; response_time_ms from its slot",
+          "required": ["paced_requests", "late_requests", "late_percent", "wait_ms", "response_time_ms"],
+          "properties": {
+            "paced_requests": { "type": "integer" },
+            "late_requests": { "type": "integer", "description": "Started a millisecond or more after their slot, every connection being busy" },
+            "late_percent": { "type": "number" },
+            "wait_ms": {
+            "type": "object",
+            "required": ["median", "p90", "p99", "max"],
+            "description": "How long after their slot the requests started",
+            "properties": { "median": { "type": "number" }, "p90": { "type": "number" }, "p99": { "type": "number" }, "max": { "type": "number" } }
+          },
+            "response_time_ms": {
+            "type": "object",
+            "required": ["median", "p90", "p99", "max"],
+            "description": "Each request's latency counted from its slot: what a user arriving on schedule saw",
+            "properties": { "median": { "type": "number" }, "p90": { "type": "number" }, "p99": { "type": "number" }, "max": { "type": "number" } }
+          }
+          }
+        },
         "failures": {
           "type": "array",
           "description": "Failed requests by cause, most frequent first; absent when nothing failed",
@@ -256,6 +278,15 @@
         "p90_ms": { "type": "number" },
         "p95_ms": { "type": "number" },
         "p99_ms": { "type": "number" },
+        "quantiles_ms": {
+          "type": "array",
+          "description": "The latency at points of its distribution, finer in the tail: q percent of the requests took ms or less",
+          "items": {
+            "type": "object",
+            "required": ["q", "ms"],
+            "properties": { "q": { "type": "number" }, "ms": { "type": "number" } }
+          }
+        },
         "phases": {
           "type": "object",
           "description": "Where the time went",

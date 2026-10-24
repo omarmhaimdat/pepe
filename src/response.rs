@@ -252,6 +252,11 @@ pub struct ResponseStats {
     pub server_timing: Option<Box<[ServerTiming]>>,
     /// `--otlp`: this request's half of the trace id it was sent with
     pub trace: Option<u64>,
+    /// `--rate`: how long after its slot on the schedule the request went
+    /// out, because every unit of concurrency was busy then; None when
+    /// the run isn't paced. A user arriving on schedule would have waited
+    /// this long on top of `duration`.
+    pub waited: Option<Duration>,
 }
 
 impl ResponseStats {
