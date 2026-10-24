@@ -90,7 +90,10 @@ cause, `anomalies`. Read `generator.peak_busy_percent`: near 100, pepe
 rather than the target was the limit, so add `--threads auto` and run
 again. `--rate` is an open loop (arrivals at that rate, as users
 arrive); without it the run is a closed loop that finds the most the
-target can do.
+target can do. Under `--rate`, `latency` is timed from when each request
+went out; `summary.schedule` says how many started late because every
+connection was busy (`late_requests`) and `response_time_ms`, the latency
+counted from each request's slot, which is what a user on schedule saw.
 
 ## Find the capacity
 

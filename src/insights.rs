@@ -197,6 +197,10 @@ impl Watch {
 /// Error share (percent) at which a run is failing, or merely degraded
 const FAILING_ERROR_PCT: f64 = 5.0;
 const DEGRADED_ERROR_PCT: f64 = 0.5;
+/// `--rate`: share (percent) of paced requests that started late at which
+/// the run is failing to hold the rate, or merely degraded
+const LATE_FAILING_PCT: f64 = 10.0;
+const LATE_DEGRADED_PCT: f64 = 1.0;
 /// p99 / p50 at which the tail is worth pointing out, and at which it hurts
 pub const LONG_TAIL: f64 = 5.0;
 pub const BAD_TAIL: f64 = 10.0;
@@ -217,6 +221,8 @@ pub fn verdict(m: &Metrics, samples: &[Sample], interrupted: bool) -> Verdict {
     if m.success == 0 {
         notes.push(note(Level::Failing, "Every request failed".into()));
         notes.extend(causes(m, Level::Failing));
+        // How fast nothing worked says nothing about the target
+        return finish(notes);
     } else if error_pct > 0.0 {
         let level = match error_pct {
             p if p >= FAILING_ERROR_PCT => Level::Failing,
@@ -259,6 +265,27 @@ pub fn verdict(m: &Metrics, samples: &[Sample], interrupted: bool) -> Verdict {
         notes.push(note(
             Level::Healthy,
             format!("Tight latency: p99 is {:.1}× the median", p99 / p50),
+        ));
+    }
+
+    // `--rate`: requests that couldn't start on their slot. Their latency
+    // is timed from when they went out, so the wait is in no number
+    // above; a user arriving on schedule had it on top.
+    if m.paced > 0 && m.late > 0 {
+        let share = m.late as f64 / m.paced as f64 * 100.0;
+        let level = match share {
+            s if s >= LATE_FAILING_PCT => Level::Failing,
+            s if s >= LATE_DEGRADED_PCT => Level::Degraded,
+            _ => Level::Healthy,
+        };
+        notes.push(note(
+            level,
+            format!(
+                "{} of requests started late, the concurrency all busy: counted from when they were due, p99 is {} (as sent, {})",
+                pct(share),
+                ms(m.response_time(99.0).as_micros() as f64),
+                ms(p99)
+            ),
         ));
     }
 
