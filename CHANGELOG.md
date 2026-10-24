@@ -6,6 +6,103 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+## [0.55.2](https://github.com/omarmhaimdat/pepe/compare/v0.55.1...v0.55.2) - 2026-10-24
+
+### Performance
+
+- *(load)* flows on the direct path, and a run sends what it was asked to ([#230](https://github.com/omarmhaimdat/pepe/pull/230))
+
+  ## What
+
+  **Flows go direct.** A step is written to the wire when it is sent
+  (`direct::Route::of`), with its values filled in, over the worker's
+  connection to the step's origin. The worker keeps that connection from
+  step to step and from chain to chain. Proxies, credentials in the URL
+  and the rest of a redirect still go through reqwest.
+
+  Two steps, 100,000 chains at 64, best of three on the M4 Pro:
+
+  | | wall | CPU ms / 1k | peak RSS |
+  | --- | ---: | ---: | ---: |
+  | v0.55.0 | 3.38 s | 14.7 | 14.6 MB |
+  | this branch | 1.60 s | 7.1 | 6.2 MB |
+  | plain run, same 200k requests | 1.28 s | 5.6 | 6.5 MB |
+
+  **The engine sends what a run asks for.** Each fix below was reproduced
+  against a counting server, before and after:
+
+  | | v0.55.0 | this branch |
+  | --- | --- | --- |
+  | `-n 20 -c 4 -m POST` answered with a 307 | 24 POSTs to the start | 20
+  |
+  | `-n 4 -c 4 --rate 1` | ends after 7.0 s, reports 0.57 req/s | 3.0 s |
+  | `-z 3s -c 16 --rate 1` | ends after 18 s | 3.0 s |
+  | replay of a 5,000-URL log, `/hot` at 99.5% | `/hot` got 44.9% | 99.5%
+  |
+  | flow `-n 1 --warmup 1s` | 13,860 requests counted as measured | 2 |
+
+  - **Redirects:** `Sent::Redirected` carries the status and the
+  `Location`. reqwest takes it on from there with the method and body
+  reqwest's own policy would use: 301, 302 and 303 become a GET, 307 and
+  308 keep the method and body. reqwest is no longer handed the original
+  request to send again. The hop goes through a client without the run's
+  headers, with those headers added per request, so `Authorization`,
+  `Cookie` and the like stay behind when the redirect leaves the origin.
+  - **Pacing:**
+    - A worker claims its request before it takes a schedule slot.
+  - A wait on a slot ends on a stop, or when a timed run reaches its
+  deadline. A counted run still sends every request it has claimed.
+  - The backlog reset no longer loses its compare-exchange to other
+  workers.
+  - **Schedule:** weights adding up to 4,096 or less are still an exact
+  cycle. Larger totals are spread over a golden-ratio sequence rather than
+  rounding every rare target up to a slot.
+  - **Flow warm-up:** every step of a chain begun in the warm-up is marked
+  as warm-up.
+  - **Drain:** at most 65,536 results are taken per drain, so a stop or a
+  frame never waits behind a backlog.
+  - **`bench/tui.py`:** finds the end of a run again on the v0.52 screens
+  (the title says HEALTHY now) and counts frames by bursts.
+
+  `bench/compare.sh` against v0.55.0, five rounds: every workload within
+  ±5% CPU, the stated noise. The signs flip between runs.
+
+  ## Tests
+
+  429 pass, clippy is clean. New tests:
+
+  - a redirect is not sent twice
+  - a POST answered with a 307 or a 303 goes on as the status says, sent
+  once
+  - a flow keeps one connection per worker across steps and chains
+  - a paced run ends with its last request, and a timed one at its
+  deadline
+  - rare targets don't take the busy one's share
+
+  ## Not in this PR
+
+  Reviewing the engine turned up more, all reproduced on v0.55.0. They are
+  left for their own PRs:
+
+  - **Guardrails:**
+  - `--rate=1e-300` gets past every cap: 32,826 requests under
+  `--max-requests 20`.
+    - `--warmup` and flow steps aren't counted against `--max-requests`.
+    - Redirects aren't checked against `--allow-host`.
+    - `--load`, `rerun` and the Slack runner don't read `pepe.toml`.
+    - MCP tool arguments can add `--allow-host`.
+    - `pepe api` paths can change the host.
+    - A proxy's host isn't checked.
+    - Live concurrency changes go past `--max-concurrency`.
+  - **Numbers:**
+    - `pepe compare` calls a 2.4× p99 regression "same".
+  - `--rate` latency leaves out the time requests waited for a slot, and
+  the verdict says healthy.
+    - `pepe ramp` reports capacity `null` on a hard plateau.
+    - Ping's `--jsonl` and `--csv` drop and repeat samples.
+    - p99.9 is off by one rank.
+
+
 ## [0.55.1](https://github.com/omarmhaimdat/pepe/compare/v0.55.0...v0.55.1) - 2026-10-24
 
 ### Fixed
