@@ -13,17 +13,42 @@ use crate::ui::format;
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct Guard {
     /// Hosts a request may go to: `api.example.com` exactly, or
-    /// `.example.com` for it and every subdomain; empty allows any
-    pub hosts: Vec<String>,
+    /// `.example.com` for it and every subdomain. One list for each place
+    /// that names some (the command line, a `pepe.toml`, this machine's
+    /// settings), and a host must be in every one; none allows any.
+    pub hosts: Vec<Vec<String>>,
     pub max_requests: Option<u64>,
     pub max_rate: Option<f64>,
     pub max_concurrency: Option<u32>,
 }
 
+/// The guard this process runs under, set once its files and flags are
+/// read: a run steered while it goes (keys, Slack, stdin) is held to it
+static HELD: std::sync::OnceLock<Guard> = std::sync::OnceLock::new();
+
+/// Hold this process to `guard` from now on
+pub fn hold(guard: Guard) {
+    let _ = HELD.set(guard);
+}
+
+/// The guard this process runs under, if one was set
+pub fn held() -> Option<&'static Guard> {
+    HELD.get()
+}
+
+/// The smallest `--rate`: one request every quarter of an hour. Below it a
+/// run isn't paced in any sense that matters, and the interval between
+/// starts no longer fits the schedule's clock.
+pub const MIN_RATE: f64 = 1.0 / 900.0;
+
 impl Guard {
     pub fn of(cli: &Cli) -> Guard {
+        let mut hosts: Vec<Vec<String>> = cli.held_hosts.clone();
+        if !cli.allow_host.is_empty() && !hosts.contains(&cli.allow_host) {
+            hosts.insert(0, cli.allow_host.clone());
+        }
         Guard {
-            hosts: cli.allow_host.clone(),
+            hosts,
             max_requests: cli.max_requests,
             max_rate: cli.max_rate,
             max_concurrency: cli.max_concurrency,
@@ -32,11 +57,6 @@ impl Guard {
 
     pub fn is_empty(&self) -> bool {
         *self == Guard::default()
-    }
-
-    /// Whether `host` is one of the allowed; any when none is named
-    pub fn allows(&self, host: &str) -> bool {
-        self.hosts.is_empty() || host_allowed(&self.hosts, host)
     }
 
     /// An error naming the host when `url` may not be sent to
@@ -52,18 +72,36 @@ impl Guard {
     }
 
     pub fn check_host(&self, host: &str) -> Result<(), String> {
-        if self.allows(host) {
-            return Ok(());
-        }
-        Err(format!(
-            "{host} isn't an allowed host (--allow-host {})",
-            self.hosts.join(", ")
-        ))
+        refuse_host(&self.hosts, host)
     }
 
-    /// The load of a plain run, an API run, a flow or a replay: `-n` or
-    /// `-z` with `--rate`, and `-c`
+    /// The load of a plain run, an API run or a replay: `-n` or `-z` with
+    /// `--rate`, a warm-up, and `-c`
     pub fn check_run(&self, cli: &Cli) -> Result<(), String> {
+        self.check_load(cli, 1)
+    }
+
+    /// The load of a flow of `steps` steps: `-n` counts its chains, and
+    /// each sends a request for every step
+    pub fn check_flow(&self, cli: &Cli, steps: usize) -> Result<(), String> {
+        self.check_load(cli, steps.max(1) as u64)
+    }
+
+    /// `-p`: every request goes to the proxy, so it is held to the hosts
+    /// as a target is. One in the environment is the machine's, not the
+    /// run's, and is left to it.
+    pub fn check_proxy(&self, cli: &Cli) -> Result<(), String> {
+        match &cli.proxy {
+            Some(proxy) => self
+                .check_url(proxy)
+                .map_err(|e| format!("the proxy (-p): {e}")),
+            None => Ok(()),
+        }
+    }
+
+    /// `per`: requests sent for each one `-n` counts
+    fn check_load(&self, cli: &Cli, per: u64) -> Result<(), String> {
+        self.check_proxy(cli)?;
         if let Some(max) = self.max_concurrency {
             if cli.concurrency > max {
                 return Err(format!(
@@ -86,19 +124,55 @@ impl Guard {
             }
         }
         if let Some(max) = self.max_requests {
+            let steps = match per {
+                1 => String::new(),
+                n => format!(" of {n} steps"),
+            };
+            // A warm-up sends on top of the plan: as fast as the target
+            // answers unless paced, so only a rate bounds it
+            let warmup = match (cli.warmup(), cli.rate) {
+                (None, _) => 0.0,
+                (Some(warmup), Some(rate)) => rate * warmup.as_secs_f64(),
+                (Some(warmup), None) => {
+                    return Err(format!(
+                        "a {} warm-up without --rate sends as fast as the target answers, with no bound on its requests; --max-requests {max} needs a --rate with it",
+                        format::span(warmup)
+                    ))
+                }
+            };
             match cli.run_duration() {
                 None => {
-                    if u64::from(cli.number) > max {
-                        return Err(format!("-n {} is over --max-requests {max}", cli.number));
+                    // The rate paces each step, so a warm-up's count is
+                    // in requests already
+                    let would = u64::from(cli.number) as f64 * per as f64 + warmup;
+                    if would > max as f64 {
+                        return Err(match (per, warmup > 0.0) {
+                            (1, false) => format!("-n {} is over --max-requests {max}", cli.number),
+                            _ => format!(
+                                "-n {}{steps}{} is about {} requests, over --max-requests {max}",
+                                cli.number,
+                                if warmup > 0.0 { " after the warm-up" } else { "" },
+                                format::count(would.round() as u64)
+                            ),
+                        });
                     }
                 }
                 Some(duration) => match cli.rate {
                     Some(rate) => {
-                        let would = rate * duration.as_secs_f64();
+                        // The rate paces every request, a flow's steps
+                        // included; a chain begun before the deadline
+                        // gets to finish, so a flow can send one chain
+                        // more for each worker
+                        let tail = match per {
+                            1 => 0.0,
+                            n => (u64::from(cli.concurrency) * (n - 1)) as f64,
+                        };
+                        let would = rate * duration.as_secs_f64() + warmup + tail;
                         if would > max as f64 {
                             return Err(format!(
-                                "--rate {rate} for {} is about {} requests, over --max-requests {max}",
+                                "--rate {rate} for {}{} is about {} requests, over --max-requests {max}",
                                 format::span(duration),
+                                if warmup > 0.0 { " and its warm-up" } else { "" },
                                 format::count(would.round() as u64)
                             ));
                         }
@@ -184,7 +258,8 @@ impl Guard {
         }
         let mut parts = Vec::new();
         if !self.hosts.is_empty() {
-            parts.push(format!("hosts {}", self.hosts.join(", ")));
+            let lists: Vec<String> = self.hosts.iter().map(|list| list.join(", ")).collect();
+            parts.push(format!("hosts {}", lists.join(" and also ")));
         }
         if let Some(n) = self.max_requests {
             parts.push(format!("at most {} requests", format::count(n)));
@@ -196,6 +271,17 @@ impl Guard {
             parts.push(format!("at most {c} in flight"));
         }
         Some(parts.join(" · "))
+    }
+}
+
+/// An error naming `host` and the list that doesn't allow it
+pub fn refuse_host(layers: &[Vec<String>], host: &str) -> Result<(), String> {
+    match layers.iter().find(|allowed| !host_allowed(allowed, host)) {
+        None => Ok(()),
+        Some(allowed) => Err(format!(
+            "{host} isn't an allowed host (--allow-host {})",
+            allowed.join(", ")
+        )),
     }
 }
 
@@ -518,6 +604,100 @@ mod tests {
             .check_ping(200, Duration::from_millis(100), Some(1), None)
             .unwrap_err()
             .contains("over --max-rate"));
+    }
+
+    /// What a run sends on top of `-n` counts against `--max-requests`
+    /// too: a warm-up, and every step of a flow's chains
+    #[test]
+    fn a_warmup_and_a_flows_steps_count_against_the_cap() {
+        let guard = Guard::of(&cli(&["--max-requests", "100", "https://x"]));
+        // Unpaced, a warm-up has no bound at all
+        let err = guard
+            .check_run(&cli(&["-n", "1", "-c", "1", "--warmup", "1s", "https://x"]))
+            .unwrap_err();
+        assert!(err.contains("warm-up without --rate"), "{err}");
+        // Paced, it is its rate for its length: 50 + 10 × 5 = 100, then 101
+        let paced = |n: &str| {
+            cli(&[
+                "-n",
+                n,
+                "-c",
+                "1",
+                "--rate",
+                "10",
+                "--warmup",
+                "5s",
+                "https://x",
+            ])
+        };
+        assert!(guard.check_run(&paced("50")).is_ok());
+        let err = guard.check_run(&paced("51")).unwrap_err();
+        assert!(
+            err.contains("after the warm-up") && err.contains("101"),
+            "{err}"
+        );
+        // A chain of 3 steps is 3 requests
+        let chains = cli(&["-n", "34", "-c", "1", "https://x"]);
+        assert!(guard.check_run(&chains).is_ok());
+        let err = guard.check_flow(&chains, 3).unwrap_err();
+        assert!(err.contains("of 3 steps") && err.contains("102"), "{err}");
+        assert!(guard
+            .check_flow(&cli(&["-n", "33", "-c", "1", "https://x"]), 3)
+            .is_ok());
+    }
+
+    /// A host has to be in every list that names hosts: the command line
+    /// can't widen what a file allows, nor a file what the machine allows
+    #[test]
+    fn hosts_from_every_place_must_all_allow_it() {
+        let mut c = cli(&[
+            "--allow-host",
+            "127.0.0.1",
+            "--allow-host",
+            "localhost",
+            "https://x",
+        ]);
+        c.held_hosts = vec![vec!["localhost".into()]];
+        let guard = Guard::of(&c);
+        assert!(guard.check_host("localhost").is_ok());
+        let err = guard.check_host("127.0.0.1").unwrap_err();
+        assert!(err.contains("--allow-host localhost"), "{err}");
+        assert!(guard.describe().unwrap().contains("and also"));
+    }
+
+    #[test]
+    fn a_proxy_is_held_to_the_hosts() {
+        let guard = Guard::of(&cli(&["--allow-host", ".allowed.test", "https://x"]));
+        let via = |proxy: &str| {
+            cli(&[
+                "-n",
+                "1",
+                "-c",
+                "1",
+                "-p",
+                proxy,
+                "https://api.allowed.test",
+            ])
+        };
+        assert!(guard
+            .check_run(&via("http://proxy.allowed.test:3128"))
+            .is_ok());
+        let err = guard.check_run(&via("http://127.0.0.1:3128")).unwrap_err();
+        assert!(err.contains("the proxy (-p)"), "{err}");
+    }
+
+    /// A rate too small to pace is refused before the run: the interval
+    /// it makes once overflowed into no pacing at all
+    #[test]
+    fn a_rate_too_small_to_pace_is_refused() {
+        let mut tiny = cli(&["--rate=1e-300", "https://x"]);
+        assert!(tiny
+            .validate()
+            .unwrap_err()
+            .to_string()
+            .contains("at least one every 15 minutes"));
+        let mut slow = cli(&["--rate", "0.01", "https://x"]);
+        assert!(slow.validate().is_ok());
     }
 
     #[test]

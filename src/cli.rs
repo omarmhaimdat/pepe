@@ -158,6 +158,12 @@ pub struct Cli {
     #[arg(long, global = true, value_name = "HOST")]
     pub allow_host: Vec<String>,
 
+    /// The `allow-host` lists of the files that hold this run (a
+    /// `pepe.toml`, the machine's settings, a saved test), each of which
+    /// a host must be in as well as the command line's
+    #[arg(skip)]
+    pub held_hosts: Vec<Vec<String>>,
+
     /// Refuse a run that would send more requests than this: -n above
     /// it, or -z without a --rate that bounds it
     #[arg(long, global = true, value_name = "N")]
@@ -731,11 +737,12 @@ impl Cli {
             Self::parse_duration_for("--warmup", warmup)?;
         }
         if let Some(rate) = self.rate {
-            if !(rate > 0.0 && rate.is_finite()) {
+            if !(rate >= crate::guard::MIN_RATE && rate.is_finite()) {
                 return Err(Error::raw(
                     clap::error::ErrorKind::ValueValidation,
                     format!(
-                        "--rate {rate}: the rate is requests per second, above 0, as in --rate 500"
+                        "--rate {rate}: the rate is requests per second, at least one every 15 minutes ({:.4}), as in --rate 500",
+                        crate::guard::MIN_RATE
                     ),
                 ));
             }
@@ -1245,6 +1252,7 @@ impl Cli {
                 Some(_) => (self.concurrency as usize).max(crate::request::IDLE_CONNECTIONS),
                 None => crate::request::IDLE_CONNECTIONS,
             },
+            allowed_hosts: crate::guard::Guard::of(self).hosts,
         }
     }
 

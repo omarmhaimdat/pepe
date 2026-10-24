@@ -113,7 +113,15 @@ pub struct RequestSettings {
     /// Idle connections the pool keeps per host: `IDLE_CONNECTIONS`, or
     /// the concurrency when the run is paced
     pub idle_connections: usize,
+    /// `--allow-host`, from every place that names hosts (see
+    /// `guard::Guard`): a redirect is followed only to a host each list
+    /// allows, and a flow's step is sent only to one. Empty allows any.
+    pub allowed_hosts: Vec<Vec<String>>,
 }
+
+/// Redirects a run follows before it calls the answer a failure, as
+/// reqwest's own policy does
+const MAX_REDIRECTS: usize = 10;
 
 /// What a load shard sends with: the direct path's setup when the run can
 /// use it (see `direct`), and a reqwest client for what that leaves out
@@ -155,6 +163,20 @@ impl Sender {
             let _ = self.client.set(client);
         }
         Ok(self.client.get().expect("set above"))
+    }
+
+    /// Whether `url` may be sent to under `--allow-host`, and why not
+    pub fn check_host(&self, url: &reqwest::Url) -> Result<(), Failure> {
+        let hosts = &self.request.settings.allowed_hosts;
+        if hosts.is_empty() {
+            return Ok(());
+        }
+        crate::guard::refuse_host(hosts, url.host_str().unwrap_or_default()).map_err(|why| {
+            Failure {
+                kind: crate::response::ErrorKind::Other,
+                message: why,
+            }
+        })
     }
 
     /// The client without the run's headers, built now if need be
@@ -307,6 +329,20 @@ impl Request {
 
         if self.settings.disable_redirects {
             client_builder = client_builder.redirect(reqwest::redirect::Policy::none());
+        } else if !self.settings.allowed_hosts.is_empty() {
+            // Each hop is checked, not only where the run began
+            let hosts = self.settings.allowed_hosts.clone();
+            client_builder =
+                client_builder.redirect(reqwest::redirect::Policy::custom(move |attempt| {
+                    let host = attempt.url().host_str().unwrap_or_default().to_string();
+                    if attempt.previous().len() >= MAX_REDIRECTS {
+                        attempt.error("too many redirects")
+                    } else if let Err(why) = crate::guard::refuse_host(&hosts, &host) {
+                        attempt.error(format!("redirect refused: {why}"))
+                    } else {
+                        attempt.follow()
+                    }
+                }));
         }
 
         if let Some(times) = times {
@@ -331,6 +367,7 @@ mod tests {
             proxy: None,
             user_agent: "pepe/test".into(),
             idle_connections: IDLE_CONNECTIONS,
+            allowed_hosts: Vec::new(),
         }
     }
 

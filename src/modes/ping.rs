@@ -97,6 +97,7 @@ pub(crate) async fn run_ping(
         duration: args.run_duration(),
         compression: !args.disable_compression,
         http1: what.http1,
+        allowed_hosts: crate::guard::Guard::of(args).hosts,
     };
     let targets = crate::ping::targets(crate::ping::Words {
         words: &what.targets,
@@ -125,7 +126,10 @@ pub(crate) async fn run_ping(
             fail(e);
         }
     }
-    if let Err(e) = guard.check_ping(targets.len(), every, count, args.run_duration()) {
+    if let Err(e) = guard
+        .check_ping(targets.len(), every, count, args.run_duration())
+        .and_then(|_| guard.check_proxy(args))
+    {
         fail(e);
     }
     if args.dry_run {

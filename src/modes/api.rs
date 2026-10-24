@@ -233,8 +233,20 @@ pub(crate) async fn run_api(
         }
     };
     let guard = guard::Guard::of(args);
+    // Every URL an endpoint can be sent to, not only the server's: a path
+    // or a value can take a request somewhere the base URL doesn't say
+    let every_url = || {
+        (0..run.endpoints.len()).try_for_each(|index| {
+            run.urls(index).iter().try_for_each(|url| {
+                guard
+                    .check_url(url)
+                    .map_err(|e| format!("{}: {e}", run.endpoints[index].label))
+            })
+        })
+    };
     if let Err(e) = guard
         .check_url(&run.spec.base_url)
+        .and_then(|_| every_url())
         .and_then(|_| guard.check_run(args))
     {
         eprintln!("error: {e}");

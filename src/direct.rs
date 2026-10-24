@@ -1027,6 +1027,7 @@ mod tests {
             proxy: None,
             user_agent: "pepe/test".into(),
             idle_connections: crate::request::IDLE_CONNECTIONS,
+            allowed_hosts: Vec::new(),
         }
     }
 
@@ -1349,6 +1350,48 @@ mod tests {
         assert_eq!(statuses(&results), vec![Some(200); 20]);
         assert_eq!(srv.requests.load(Ordering::Relaxed), 20);
         assert_eq!(srv.connections.load(Ordering::Relaxed), 2);
+    }
+
+    /// `--allow-host` holds where a redirect goes: the first hop, which
+    /// pepe sends itself, and the client's own after it
+    #[tokio::test]
+    async fn a_redirect_to_a_host_not_allowed_is_refused() {
+        static THERE: AtomicU64 = AtomicU64::new(0);
+        static PORT: AtomicU64 = AtomicU64::new(0);
+        fn handler(head: &str) -> Reply {
+            if head.starts_with("GET /there ") {
+                THERE.fetch_add(1, Ordering::Relaxed);
+                return Reply::Answer(OK);
+            }
+            // Leaked once per port: a test's worth of servers
+            let answer = format!(
+                "HTTP/1.1 302 Found\r\nlocation: http://localhost:{}/there\r\ncontent-length: 0\r\n\r\n",
+                PORT.load(Ordering::Relaxed)
+            );
+            Reply::Answer(Box::leak(answer.into_boxed_str()))
+        }
+        let srv = server(handler).await;
+        let port = srv.url.rsplit(':').next().unwrap().parse::<u64>().unwrap();
+        PORT.store(port, Ordering::Relaxed);
+        let held = RequestSettings {
+            allowed_hosts: vec![vec!["127.0.0.1".into()]],
+            ..settings()
+        };
+        let results = run(request(&srv.url, held), 2, 6).await;
+        assert_eq!(statuses(&results), vec![None; 6]);
+        assert!(
+            results.iter().all(|r| r
+                .error_message
+                .as_deref()
+                .is_some_and(|m| m.contains("isn't an allowed host"))),
+            "{:?}",
+            results.iter().map(|r| &r.error_message).collect::<Vec<_>>()
+        );
+        assert_eq!(
+            THERE.load(Ordering::Relaxed),
+            0,
+            "nothing reached localhost"
+        );
     }
 
     #[tokio::test]

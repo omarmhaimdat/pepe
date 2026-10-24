@@ -530,6 +530,7 @@ mod tests {
             duration: None,
             compression: true,
             http1: false,
+            allowed_hosts: Vec::new(),
         }
     }
 
