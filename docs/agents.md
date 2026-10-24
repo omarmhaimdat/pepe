@@ -14,14 +14,14 @@ The repository carries the same in [AGENTS.md](AGENTS.md), what an agent reads f
 
 ## Guardrails
 
-Where a run may be pointed and how much it may send, checked in every mode before anything is sent. A refusal is exit code 2 with the reason on stderr. Set them on every call, or once in a `pepe.toml` next to the code (`allow-host`, `max-requests`, `max-rate`, `max-concurrency`), where the command line can't loosen them by leaving them out.
+Where a run may be pointed and how much it may send, checked in every mode before anything is sent. A refusal is exit code 2 with the reason on stderr. Set them on every call, or once in a `pepe.toml` next to the code (`allow-host`, `max-requests`, `max-rate`, `max-concurrency`), where the command line can tighten them but never loosen them.
 
 | Flag | Holds |
 | --- | --- |
-| `--allow-host .example.com` | Every target's host must be `example.com` or under it; `api.example.com` is that host exactly; repeat for more. A flow step whose host comes from a capture, and a ping of a command (`--cmd`), are refused under it |
-| `--max-requests 5000` | `-n` must be under it; `-z` needs a `--rate` that bounds it; a ping needs `-n` or `-z`; a ramp is refused, having no bound |
+| `--allow-host .example.com` | Every target's host must be `example.com` or under it; `api.example.com` is that host exactly; repeat for more. Every redirect hop is checked too, and a `-p` proxy. A flow step whose host comes from a capture, and a ping of a command (`--cmd`), are refused under it |
+| `--max-requests 5000` | `-n` must be under it, times a flow's steps; `-z` needs a `--rate` that bounds it; a `--warmup` counts too, and needs a `--rate`; a ping needs `-n` or `-z`; a ramp is refused, having no bound |
 | `--max-rate 500` | `--rate` must be under it, and must be given: without it a run sends as fast as the target answers. A ping's targets over its interval count |
-| `--max-concurrency 64` | `-c`, and a ramp's top step, must be under it |
+| `--max-concurrency 64` | `-c`, and a ramp's top step, must be under it, and so must a change made while the run goes (keys, Slack) |
 | `--dry-run` | Says what would be sent, to where and how much, with secrets in headers masked, and sends nothing; `--json` gives it as JSON with `"sent": 0`. Use it before the real call when the URL came from input |
 
 ```bash

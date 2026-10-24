@@ -288,10 +288,16 @@ impl LoadHandle {
     }
 
     /// Change how many requests may be in flight, while the run is going.
-    /// Returns the new value, clamped to `1..=MAX_CONCURRENCY`. Lowering it
-    /// takes effect as the surplus requests finish.
+    /// Returns the new value, clamped to `1..=MAX_CONCURRENCY` and to
+    /// `--max-concurrency`. Lowering it takes effect as the surplus
+    /// requests finish.
     pub fn set_concurrency(&self, target: usize) -> usize {
-        let target = target.clamp(1, MAX_CONCURRENCY);
+        let most = crate::guard::held()
+            .and_then(|g| g.max_concurrency)
+            .map_or(MAX_CONCURRENCY, |max| {
+                (max as usize).clamp(1, MAX_CONCURRENCY)
+            });
+        let target = target.clamp(1, most);
         self.control.concurrency.store(target, Ordering::Relaxed);
         self.control.changed.notify_waiters();
         target
@@ -362,11 +368,20 @@ impl LoadHandle {
     /// `--rate`: start this many requests a second, spread evenly, instead
     /// of as many as the concurrency allows; None lifts it. The schedule
     /// starts now, so a change doesn't owe a burst.
+    ///
+    /// Held to `--max-rate`, and to no slower than `guard::MIN_RATE`: a
+    /// rate so small that its interval overflows would be no pacing at all.
     pub fn set_rate(&self, per_second: Option<f64>) {
         let c = &self.control;
+        let most = crate::guard::held().and_then(|g| g.max_rate);
+        let per_second = match (per_second, most) {
+            (Some(rate), Some(max)) => Some(rate.min(max)),
+            (None, Some(max)) => Some(max),
+            (rate, None) => rate,
+        };
         let interval = per_second
-            .filter(|r| *r > 0.0 && r.is_finite())
-            .map_or(0, |r| (1e9 / r).max(1.0) as u64);
+            .filter(|r| r.is_finite())
+            .map_or(0, |r| (1e9 / r.max(crate::guard::MIN_RATE)).max(1.0) as u64);
         c.next_slot_ns.store(c.now_ns(), Ordering::Relaxed);
         c.interval_ns.store(interval, Ordering::Relaxed);
     }
@@ -729,6 +744,22 @@ impl Control {
             }
             changed.await;
         }
+    }
+
+    /// A request claimed in the warm-up that waited for its slot past the
+    /// end of it is the plan's, not the warm-up's: whether it still is the
+    /// warm-up's, or None when the plan has none left to give it
+    fn recheck(&self, warmup: bool) -> Option<bool> {
+        if !warmup || self.warming() {
+            return Some(warmup);
+        }
+        self.warmed.fetch_sub(1, Ordering::Relaxed);
+        self.sent
+            .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |n| {
+                (n < self.limit).then_some(n + 1)
+            })
+            .ok()
+            .map(|_| false)
     }
 
     /// Give back a request `claim` took and that never went out
@@ -1299,6 +1330,10 @@ async fn worker(shard: Arc<Shard>, slot: usize) {
                 break;
             }
         }
+        let Some(warmup) = shard.control.recheck(warmup) else {
+            shard.control.drain();
+            break;
+        };
         let mut stats = send_one(&shard, &mut lines, &mut failure_bodies).await;
         stats.warmup = warmup;
         if shard.tx.send(stats.into()).is_err() {
@@ -1322,7 +1357,7 @@ async fn flow_worker(shard: Arc<Shard>, slot: usize) {
     let mut lines = direct::Lines::growing();
     let mut origins = Vec::new();
     'chains: while shard.turn(slot, || lines.close()).await {
-        let Some(warmup) = shard.control.claim() else {
+        let Some(mut warmup) = shard.control.claim() else {
             shard.control.drain();
             break;
         };
@@ -1350,6 +1385,13 @@ async fn flow_worker(shard: Arc<Shard>, slot: usize) {
                     0 => {}
                     _ => tokio::time::sleep(wait).await,
                 }
+            }
+            if index == 0 {
+                let Some(now) = shard.control.recheck(warmup) else {
+                    shard.control.drain();
+                    break 'chains;
+                };
+                warmup = now;
             }
             let (mut stats, ok) = send_step(
                 &shard,
@@ -1395,6 +1437,16 @@ async fn send_step(
             return (stats, false);
         }
     };
+    // A value captured at run time can change where a step goes, so
+    // `--allow-host` is held at every step, not only before the run
+    if let Err(why) = shard.sender.check_host(request.url()) {
+        let mut stats = ResponseStats {
+            endpoint: index,
+            ..Default::default()
+        };
+        stats.fail_step(why.message);
+        return (stats, false);
+    }
     let body_cap = if step.captures.is_empty() {
         0
     } else {
@@ -1709,6 +1761,15 @@ fn run_headers(shard: &Shard) -> reqwest::header::HeaderMap {
 /// Send the request a redirect asked for, through reqwest, which follows
 /// any further ones by its own policy
 async fn send_hop(shard: &Shard, request: reqwest::Request) -> Result<reqwest::Response, Failure> {
+    // `--allow-host` holds where a redirect sends it, as the client's own
+    // policy does for the hops after
+    shard
+        .sender
+        .check_host(request.url())
+        .map_err(|why| Failure {
+            message: format!("redirect refused: {}", why.message),
+            ..why
+        })?;
     match shard.sender.bare_client() {
         Ok(client) => client.execute(request).await.map_err(|e| Failure::from(&e)),
         Err(failure) => Err(failure),
@@ -1841,6 +1902,7 @@ mod tests {
             proxy: None,
             user_agent: "pepe/test".into(),
             idle_connections: crate::request::IDLE_CONNECTIONS,
+            allowed_hosts: Vec::new(),
         };
         Request::new(
             url.into(),

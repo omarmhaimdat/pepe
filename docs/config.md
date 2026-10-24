@@ -257,7 +257,7 @@ From strongest to weakest:
 
 A key a file leaves out is taken from the one under it, a table key by key (`[ramp]`, `[api]`) or whole (`[ping]`). `vars` and `export` from `[defaults]` apply only where there's no `pepe.toml` or saved test.
 
-The caps are the exception. Where `pepe.toml` and `[defaults]` both set `max-requests`, `max-rate` or `max-concurrency`, the lower one holds, so a file in a directory can't loosen what the machine is held to. A cap or `--allow-host` typed on the command line replaces the files', the one way to change it for a single run.
+The guardrails are the exception: every place that sets them holds at once. `[defaults]`, `./pepe.toml` (read for its guardrails even when `--load` or `--config` names another file), the saved test or `--config` file, and the command line each count. Of their `max-requests`, `max-rate` and `max-concurrency` the lowest holds, and a host must be allowed by every `allow-host` list that names hosts. A flag can tighten a file's guardrails for one run, but never loosen them: to allow more, change the file.
 
 ## Flow files
 

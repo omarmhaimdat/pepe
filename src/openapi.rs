@@ -412,6 +412,14 @@ impl Spec {
 
         let mut operations = Vec::new();
         for (path, item) in paths {
+            // Each is put after the server's URL as it stands: one without
+            // its slash would run into the host (`@evil.test/` makes the
+            // server's host a user name)
+            if !path.starts_with('/') {
+                return Err(format!(
+                    "path {path:?} doesn't start with a /, as an OpenAPI path must"
+                ));
+            }
             let item = resolve(doc, item);
             let shared = item.get("parameters").and_then(Value::as_array);
             for method in ["get", "head", "options", "post", "put", "patch", "delete"] {
@@ -1513,6 +1521,13 @@ paths:
         assert!(parse_document("{not json: [").is_err());
         let doc = parse_document(r#"{"hello": 1}"#).unwrap();
         assert!(Spec::parse(&doc, None, None).unwrap_err().contains("paths"));
+        // A path without its slash would run into the server's host
+        let doc = parse_document(
+            r#"{"servers": [{"url": "http://api.allowed.test"}], "paths": {"@evil.test/x": {"get": {}}}}"#,
+        )
+        .unwrap();
+        let err = Spec::parse(&doc, None, None).unwrap_err();
+        assert!(err.contains("doesn't start with a /"), "{err}");
     }
 
     #[test]
