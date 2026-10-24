@@ -33,6 +33,10 @@ const DNS_PROBE_INTERVAL: Duration = Duration::from_secs(1);
 /// copying every one would cost real throughput, so they're sampled evenly.
 const DETAILS_PER_SECOND: u32 = 1_000;
 
+/// Results taken off the channel at a time (see `LoadHandle::drain`): a
+/// few hundred milliseconds' worth at the fastest a thread sends
+pub const DRAIN_AT_ONCE: usize = 65_536;
+
 /// How often a shard measures how busy its thread is
 const BUSY_SAMPLE: Duration = Duration::from_secs(1);
 /// A `--rate` schedule more than this far behind is moved up to now; the
@@ -199,14 +203,19 @@ impl LoadHandle {
     /// than awaiting each result: a send to a waiting receiver has to wake it
     /// up through the kernel, which at a hundred thousand results a second
     /// was a fifth of a run's CPU.
+    ///
+    /// At most `DRAIN_AT_ONCE` are taken a call, so that whatever else
+    /// waits on the same thread (a stop, a snapshot, the screen) gets its
+    /// turn even if results come faster than they're recorded.
     pub fn drain(&mut self, mut each: impl FnMut(ResponseStats)) -> bool {
-        loop {
+        for _ in 0..DRAIN_AT_ONCE {
             match self.rx.try_recv() {
                 Ok(report) => each(report.into()),
                 Err(mpsc::error::TryRecvError::Empty) => return true,
                 Err(mpsc::error::TryRecvError::Disconnected) => return false,
             }
         }
+        true
     }
 
     /// The next result, when it comes; None once the run is over and the
@@ -675,21 +684,59 @@ impl Control {
         if slot > now {
             return Some(Duration::from_nanos(slot - now));
         }
-        let behind = now - slot;
-        if behind > RATE_BACKLOG.as_nanos() as u64
-            && self
-                .next_slot_ns
-                .compare_exchange(
-                    slot + interval,
-                    now + interval,
-                    Ordering::Relaxed,
-                    Ordering::Relaxed,
-                )
-                .is_ok()
-        {
-            self.missed.fetch_add(behind / interval, Ordering::Relaxed);
+        // Too far behind: the schedule moves up to now, once, whichever
+        // worker sees it first; the starts skipped are counted as missed
+        let backlog = RATE_BACKLOG.as_nanos() as u64;
+        if now - slot > backlog {
+            if let Ok(was) =
+                self.next_slot_ns
+                    .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |next| {
+                        (next + backlog < now).then_some(now + interval)
+                    })
+            {
+                self.missed
+                    .fetch_add((now - was) / interval, Ordering::Relaxed);
+            }
         }
         None
+    }
+
+    /// Wait out a `--rate` slot for a request already taken from the plan.
+    /// False when it isn't to be sent after all: the run was stopped, or a
+    /// timed one reached its deadline. A worker asleep on a slot past the
+    /// end doesn't hold the run open.
+    async fn wait_for(&self, wait: Duration) -> bool {
+        tokio::select! {
+            _ = tokio::time::sleep(wait) => !self.cut_short(),
+            _ = self.cut() => false,
+        }
+    }
+
+    /// Requests taken but not yet sent are to stay unsent. A counted plan
+    /// that has handed out its last request still sends those taken.
+    fn cut_short(&self) -> bool {
+        self.stopped.load(Ordering::Acquire)
+            || (self.draining.load(Ordering::Acquire)
+                && self.deadline_ns.load(Ordering::Relaxed) != NO_DEADLINE)
+    }
+
+    /// Resolves once `cut_short`
+    async fn cut(&self) {
+        loop {
+            let changed = self.changed.notified();
+            if self.cut_short() {
+                return;
+            }
+            changed.await;
+        }
+    }
+
+    /// Give back a request `claim` took and that never went out
+    fn unclaim(&self, warmup: bool) {
+        match warmup {
+            true => self.warmed.fetch_sub(1, Ordering::Relaxed),
+            false => self.sent.fetch_sub(1, Ordering::Relaxed),
+        };
     }
 
     fn now_ns(&self) -> u64 {
@@ -704,18 +751,20 @@ impl Control {
         }
     }
 
-    /// Take one of the plan's requests; false once they're all started.
-    /// Warm-up requests aren't the plan's: they're always allowed.
-    fn claim(&self) -> bool {
+    /// Take one of the plan's requests: whether it is a warm-up one, or
+    /// None once they're all started. Warm-up requests aren't the plan's:
+    /// they're always allowed.
+    fn claim(&self) -> Option<bool> {
         if self.warming() {
             self.warmed.fetch_add(1, Ordering::Relaxed);
-            return true;
+            return Some(true);
         }
         self.sent
             .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |n| {
                 (n < self.limit).then_some(n + 1)
             })
-            .is_ok()
+            .ok()
+            .map(|_| false)
     }
 
     fn drain(&self) {
@@ -851,33 +900,68 @@ pub struct Target {
 /// Longest repeating sequence used to mix targets by weight
 const MAX_SCHEDULE: usize = 4_096;
 
-/// The order targets are sent in: each appears in proportion to its weight,
+/// The order targets are sent in: each in proportion to its weight,
 /// spread out rather than in runs
-fn schedule(targets: &[Target]) -> Vec<u32> {
-    // Weighted alike (a `--vars` file's rows): each in turn, which the
-    // round-robin below would come to at a cost that grows as their square
-    if targets.iter().all(|t| t.weight == targets[0].weight) {
-        return (0..targets.len() as u32).collect();
-    }
-    let total: u64 = targets.iter().map(|t| t.weight.max(1) as u64).sum();
-    let scale = (MAX_SCHEDULE as f64 / total as f64).min(1.0);
-    let counts: Vec<usize> = targets
-        .iter()
-        .map(|t| ((t.weight.max(1) as f64 * scale).round() as usize).max(1))
-        .collect();
-    let len: usize = counts.iter().sum();
-    // Smooth weighted round-robin: always send the target furthest behind
-    let mut credit = vec![0i64; targets.len()];
-    let mut order = Vec::with_capacity(len);
-    for _ in 0..len {
-        for (c, &n) in credit.iter_mut().zip(&counts) {
-            *c += n as i64;
+enum Schedule {
+    /// A sequence of target indexes, cycled through: every target in
+    /// turn when they weigh the same, or exactly by weight when the
+    /// weights add up to no more than `MAX_SCHEDULE`
+    Cycle(Vec<u32>),
+    /// Weights too many or too large to cycle through exactly (a replayed
+    /// log with thousands of URLs): each turn lands on a point of a
+    /// low-discrepancy sequence over the weights added up, so every target
+    /// gets its share however rare, with nothing rounded up to a slot of
+    /// its own. Ends of each target's range, in order.
+    Spread(Vec<u64>),
+}
+
+impl Schedule {
+    fn new(targets: &[Target]) -> Self {
+        // Weighted alike (a `--vars` file's rows): each in turn, which the
+        // round-robin below would come to at a cost that grows as their square
+        if targets.iter().all(|t| t.weight == targets[0].weight) {
+            return Self::Cycle((0..targets.len() as u32).collect());
         }
-        let next = (0..targets.len()).max_by_key(|&i| credit[i]).unwrap_or(0);
-        credit[next] -= len as i64;
-        order.push(next as u32);
+        let total: u64 = targets.iter().map(|t| t.weight.max(1) as u64).sum();
+        if total > MAX_SCHEDULE as u64 {
+            let ends = targets
+                .iter()
+                .scan(0u64, |sum, t| {
+                    *sum += t.weight.max(1) as u64;
+                    Some(*sum)
+                })
+                .collect();
+            return Self::Spread(ends);
+        }
+        // Smooth weighted round-robin: always send the target furthest behind
+        let len = total as usize;
+        let mut credit = vec![0i64; targets.len()];
+        let mut order = Vec::with_capacity(len);
+        for _ in 0..len {
+            for (c, t) in credit.iter_mut().zip(targets) {
+                *c += t.weight.max(1) as i64;
+            }
+            let next = (0..targets.len()).max_by_key(|&i| credit[i]).unwrap_or(0);
+            credit[next] -= len as i64;
+            order.push(next as u32);
+        }
+        Self::Cycle(order)
     }
-    order
+
+    /// The target of the `turn`th request
+    fn pick(&self, turn: usize) -> usize {
+        match self {
+            Self::Cycle(order) => order[turn % order.len()] as usize,
+            Self::Spread(ends) => {
+                let total = *ends.last().expect("a run has a target");
+                // Turn times the golden ratio, mod 1, scaled to the total:
+                // consecutive turns land far apart and fill it evenly
+                let point = (turn as u64).wrapping_mul(0x9E37_79B9_7F4A_7C15);
+                let at = ((point as u128 * total as u128) >> 64) as u64;
+                ends.partition_point(|&end| end <= at)
+            }
+        }
+    }
 }
 
 /// Bodies of failed responses a worker keeps for each status it meets
@@ -906,8 +990,8 @@ impl FailureBodies {
 /// What every shard shares: the targets and the run-wide samplers
 struct Shared {
     targets: Vec<Target>,
-    /// Indexes into `targets`, cycled through
-    schedule: Vec<u32>,
+    /// Which target each request goes to
+    schedule: Schedule,
     next: AtomicUsize,
     dns: DnsSampler,
     /// Keep the start of each body for the dashboard's preview column, and
@@ -991,7 +1075,7 @@ fn start_shared(
     };
     let shared = Arc::new(Shared {
         routes,
-        schedule: schedule(&targets),
+        schedule: Schedule::new(&targets),
         targets,
         next: AtomicUsize::new(0),
         dns: DnsSampler::new(),
@@ -1202,18 +1286,19 @@ async fn worker(shard: Arc<Shard>, slot: usize) {
     let mut failure_bodies = FailureBodies::default();
     // A worker with no turn coming holds no connection open
     while shard.turn(slot, || lines.close()).await {
-        if let Some(wait) = shard.control.pace() {
-            tokio::time::sleep(wait).await;
-            if shard.control.over() {
-                break;
-            }
-        }
-        if !shard.control.claim() {
+        // The request is taken from the plan before a slot on the
+        // schedule: a worker with none left to send doesn't wait for one
+        let Some(warmup) = shard.control.claim() else {
             // The last request of the plan is out: tell every shard
             shard.control.drain();
             break;
+        };
+        if let Some(wait) = shard.control.pace() {
+            if !shard.control.wait_for(wait).await {
+                shard.control.unclaim(warmup);
+                break;
+            }
         }
-        let warmup = shard.control.warming();
         let mut stats = send_one(&shard, &mut lines, &mut failure_bodies).await;
         stats.warmup = warmup;
         if shard.tx.send(stats.into()).is_err() {
@@ -1232,11 +1317,15 @@ async fn flow_worker(shard: Arc<Shard>, slot: usize) {
         .as_ref()
         .expect("a flow worker has a flow");
     let mut vars = std::collections::HashMap::new();
-    'chains: while shard.turn(slot, || {}).await {
-        if !shard.control.claim() {
+    // The steps' connections, one per origin met, kept from step to step
+    // and chain to chain
+    let mut lines = direct::Lines::growing();
+    let mut origins = Vec::new();
+    'chains: while shard.turn(slot, || lines.close()).await {
+        let Some(warmup) = shard.control.claim() else {
             shard.control.drain();
             break;
-        }
+        };
         vars.clear();
         vars.extend(flow.vars.iter().cloned());
         // `--vars`: the next row, over the flow's own values
@@ -1250,11 +1339,29 @@ async fn flow_worker(shard: Arc<Shard>, slot: usize) {
             if index > 0 && !shard.between_steps().await {
                 break 'chains;
             }
-            // `--rate` paces every request, steps included
+            // `--rate` paces every request, steps included. A chain not
+            // yet begun when the run ends gives its turn back.
             if let Some(wait) = shard.control.pace() {
-                tokio::time::sleep(wait).await;
+                match index {
+                    0 if !shard.control.wait_for(wait).await => {
+                        shard.control.unclaim(warmup);
+                        break 'chains;
+                    }
+                    0 => {}
+                    _ => tokio::time::sleep(wait).await,
+                }
             }
-            let (stats, ok) = send_step(&shard, step, index as u16, &mut vars).await;
+            let (mut stats, ok) = send_step(
+                &shard,
+                step,
+                index as u16,
+                &mut vars,
+                &mut lines,
+                &mut origins,
+            )
+            .await;
+            // A chain begun in the warm-up is the warm-up's, every step of it
+            stats.warmup = warmup;
             if shard.tx.send(stats.into()).is_err() {
                 break 'chains;
             }
@@ -1265,12 +1372,16 @@ async fn flow_worker(shard: Arc<Shard>, slot: usize) {
     }
 }
 
-/// One step of a chain; false when the chain can't go on
+/// One step of a chain; false when the chain can't go on. It goes on
+/// the direct path when it can, over the worker's connection to its
+/// origin, as a plain run's requests do.
 async fn send_step(
     shard: &Shard,
     step: &crate::flow::Step,
     index: u16,
     vars: &mut std::collections::HashMap<String, String>,
+    lines: &mut direct::Lines,
+    origins: &mut Vec<Arc<direct::Origin>>,
 ) -> (ResponseStats, bool) {
     let shared = &shard.shared;
     let request = match step.build(vars) {
@@ -1284,22 +1395,92 @@ async fn send_step(
             return (stats, false);
         }
     };
-    let start = Instant::now();
-    let response = match shard.sender.client() {
-        Ok(client) => client.execute(request).await.map_err(|e| Failure::from(&e)),
-        Err(failure) => Err(failure),
-    };
-    let ttfb = start.elapsed();
-    let capture = shared.previews
-        && matches!(&response, Ok(r) if shared.details.claim(!r.status().is_success()));
-    let response = response.map(Answer::from);
     let body_cap = if step.captures.is_empty() {
         0
     } else {
         crate::flow::BODY_CAP
     };
-    let (mut stats, kept) =
-        ResponseStats::with_body(response, start, ttfb, shared.preview(), capture, body_cap).await;
+    let start = Instant::now();
+    let direct = shard.sender.direct.as_deref().and_then(|setup| {
+        let body = request
+            .body()
+            .and_then(|b| b.as_bytes())
+            .unwrap_or_default();
+        let route = direct::Route::of(
+            setup,
+            request.method(),
+            request.url(),
+            request.headers(),
+            body,
+            origins,
+        )?;
+        Some((setup, route))
+    });
+    let (mut stats, kept) = match direct {
+        Some((setup, route)) => match lines.send(setup, &route, start, None).await {
+            Ok(direct::Sent::Redirected { status, location }) => {
+                let hop = Hop {
+                    status,
+                    location,
+                    start,
+                };
+                let body = request
+                    .body()
+                    .and_then(|b| b.as_bytes())
+                    .map(bytes::Bytes::copy_from_slice);
+                let response = match follow(
+                    request.method(),
+                    request.url(),
+                    body,
+                    request.headers(),
+                    setup.headers(),
+                    &hop,
+                ) {
+                    Ok(next) => send_hop(shard, next).await,
+                    Err(failure) => Err(failure),
+                };
+                let ttfb = start.elapsed();
+                let capture = shared.previews
+                    && matches!(&response, Ok(r) if shared.details.claim(!r.status().is_success()));
+                let response = response.map(Answer::from);
+                ResponseStats::with_body(response, start, ttfb, shared.preview(), capture, body_cap)
+                    .await
+            }
+            sent => {
+                let ttfb = start.elapsed();
+                let response = sent.map(|sent| match sent {
+                    direct::Sent::Answered(response) => response,
+                    direct::Sent::Redirected { .. } => unreachable!("taken above"),
+                });
+                let capture = shared.previews
+                    && matches!(&response, Ok(r) if shared.details.claim(!r.status.is_success()));
+                let response = response.map(|r| Answer::Direct(r, request.url()));
+                let read = ResponseStats::with_body(
+                    response,
+                    start,
+                    ttfb,
+                    shared.preview(),
+                    capture,
+                    body_cap,
+                )
+                .await;
+                lines.done(setup, &route, read.0.error.is_some());
+                read
+            }
+        },
+        None => {
+            let response = match shard.sender.client() {
+                Ok(client) => client.execute(request).await.map_err(|e| Failure::from(&e)),
+                Err(failure) => Err(failure),
+            };
+            let ttfb = start.elapsed();
+            let capture = shared.previews
+                && matches!(&response, Ok(r) if shared.details.claim(!r.status().is_success()));
+            let response = response.map(Answer::from);
+            ResponseStats::with_body(response, start, ttfb, shared.preview(), capture, body_cap)
+                .await
+        }
+    };
     stats.endpoint = index;
     let Some(status) = stats.status_code else {
         return (stats, false);
@@ -1333,7 +1514,7 @@ async fn send_one(
 ) -> ResponseStats {
     let shared = &shard.shared;
     let turn = shared.next.fetch_add(1, Ordering::Relaxed);
-    let index = shared.schedule[turn % shared.schedule.len()] as usize;
+    let index = shared.schedule.pick(turn);
     let target = &shared.targets[index];
     let dns_times = match target.request.url.host_str() {
         // Boxed, as are the other paths a request rarely takes: a worker's
@@ -1353,9 +1534,14 @@ async fn send_one(
         let response = match sent {
             Ok(direct::Sent::Answered(response)) => Ok(response),
             Err(failure) => Err(failure),
-            // Sent again below, the way that follows redirects
-            Ok(direct::Sent::Redirected) => {
-                return Box::pin(pooled(shard, target, dns_times, trace)).await
+            // Answered with a redirect: reqwest goes on from there
+            Ok(direct::Sent::Redirected { status, location }) => {
+                let hop = Hop {
+                    status,
+                    location,
+                    start,
+                };
+                return Box::pin(redirected(shard, target, hop, dns_times, trace)).await;
             }
         };
         let capture = shared.previews
@@ -1384,6 +1570,149 @@ async fn send_one(
         return stats;
     }
     Box::pin(pooled(shard, target, dns_times, trace)).await
+}
+
+/// A redirect the direct path was answered with
+struct Hop {
+    status: reqwest::StatusCode,
+    location: String,
+    /// When the request it answers began
+    start: Instant,
+}
+
+/// Headers a redirect to another host doesn't carry, as reqwest has it
+const SENSITIVE: [reqwest::header::HeaderName; 4] = [
+    reqwest::header::AUTHORIZATION,
+    reqwest::header::COOKIE,
+    reqwest::header::PROXY_AUTHORIZATION,
+    reqwest::header::WWW_AUTHENTICATE,
+];
+
+/// The request a redirect asks for, as reqwest's own policy would make it:
+/// a 301, 302 or 303 turns anything but a GET or a HEAD into a GET without
+/// a body; a 307 or a 308 keeps the method and the body. Headers that are
+/// sensitive stay behind when the redirect leaves the host or the port.
+fn follow(
+    method: &reqwest::Method,
+    from: &reqwest::Url,
+    body: Option<bytes::Bytes>,
+    headers: &reqwest::header::HeaderMap,
+    run_headers: &reqwest::header::HeaderMap,
+    hop: &Hop,
+) -> Result<reqwest::Request, Failure> {
+    use reqwest::header::{CONTENT_ENCODING, CONTENT_LENGTH, CONTENT_TYPE, TRANSFER_ENCODING};
+    let url = from.join(&hop.location).map_err(|e| Failure {
+        kind: crate::response::ErrorKind::Other,
+        message: format!("redirect to {:?}: {e}", hop.location),
+    })?;
+    let keeps_body = matches!(hop.status.as_u16(), 307 | 308);
+    let method = match method {
+        m if keeps_body || *m == reqwest::Method::GET || *m == reqwest::Method::HEAD => m.clone(),
+        _ => reqwest::Method::GET,
+    };
+    let same_origin = url.host_str() == from.host_str()
+        && url.port_or_known_default() == from.port_or_known_default();
+    let mut next = reqwest::Request::new(method, url);
+    let all = next.headers_mut();
+    // The target's own headers win over the run's, name by name
+    *all = headers.clone();
+    for (name, value) in run_headers {
+        if !headers.contains_key(name) {
+            all.append(name, value.clone());
+        }
+    }
+    // The run's Host was for where it began
+    all.remove(reqwest::header::HOST);
+    if !same_origin {
+        SENSITIVE.iter().for_each(|name| {
+            all.remove(name);
+        });
+    }
+    if keeps_body {
+        *next.body_mut() = body.map(Into::into);
+    } else {
+        for name in [
+            TRANSFER_ENCODING,
+            CONTENT_ENCODING,
+            CONTENT_TYPE,
+            CONTENT_LENGTH,
+        ] {
+            all.remove(name);
+        }
+    }
+    Ok(next)
+}
+
+/// A request the direct path sent and got a redirect for: the rest of the
+/// way through reqwest, counted as the one request it is and timed from
+/// its start
+async fn redirected(
+    shard: &Shard,
+    target: &Target,
+    hop: Hop,
+    dns_times: Option<(Duration, Duration)>,
+    trace: Option<(u64, u64)>,
+) -> ResponseStats {
+    let shared = &shard.shared;
+    let r = &target.request;
+    let response = match follow(
+        &r.method,
+        &r.url,
+        r.body.clone(),
+        &target.headers,
+        &run_headers(shard),
+        &hop,
+    ) {
+        Ok(mut request) => {
+            if let Some((run, trace)) = trace {
+                let value = crate::trace::traceparent(run, trace);
+                if let Ok(value) = reqwest::header::HeaderValue::from_bytes(&value) {
+                    request
+                        .headers_mut()
+                        .insert(crate::trace::TRACEPARENT, value);
+                }
+            }
+            send_hop(shard, request).await
+        }
+        Err(failure) => Err(failure),
+    };
+    let ttfb = hop.start.elapsed();
+    let capture = shared.previews
+        && matches!(&response, Ok(r) if shared.details.claim(!r.status().is_success()));
+    let response = response.map(Answer::from);
+    let mut stats = ResponseStats::from_response(
+        response,
+        hop.start,
+        ttfb,
+        dns_times,
+        shared.preview(),
+        capture,
+    )
+    .await
+    .0;
+    stats.endpoint = target.endpoint;
+    stats.trace = trace.map(|(_, trace)| trace);
+    stats
+}
+
+/// The headers every request of the run carries, for a redirect taken on
+/// by hand
+fn run_headers(shard: &Shard) -> reqwest::header::HeaderMap {
+    shard
+        .sender
+        .direct
+        .as_ref()
+        .map(|setup| setup.headers().clone())
+        .unwrap_or_default()
+}
+
+/// Send the request a redirect asked for, through reqwest, which follows
+/// any further ones by its own policy
+async fn send_hop(shard: &Shard, request: reqwest::Request) -> Result<reqwest::Response, Failure> {
+    match shard.sender.bare_client() {
+        Ok(client) => client.execute(request).await.map_err(|e| Failure::from(&e)),
+        Err(failure) => Err(failure),
+    }
 }
 
 /// One request through reqwest and its connection pool: what the direct
@@ -1693,6 +2022,47 @@ mod tests {
             results[0].error_message.as_deref(),
             Some("HTTP 401 where 200 was expected")
         );
+    }
+
+    /// Workers that have nothing left to send don't wait for a slot first:
+    /// four requests at 4/s with four workers end with the last one, not a
+    /// second per worker later
+    #[tokio::test]
+    async fn a_paced_run_ends_with_its_last_request() {
+        let srv = server(Duration::ZERO).await;
+        let req = request(&srv.url, "GET", None);
+        let begin = Instant::now();
+        let load = start(
+            req.build_clients(1).unwrap().0,
+            req,
+            4,
+            Plan::Count(4),
+            false,
+        );
+        load.set_rate(Some(4.0));
+        let results = drain(load).await;
+        let took = begin.elapsed();
+        assert_eq!(results.len(), 4);
+        // Slots at 0, 250, 500 and 750ms
+        assert!(took >= Duration::from_millis(700), "took {took:?}");
+        assert!(took < Duration::from_millis(1_300), "took {took:?}");
+
+        // A timed run ends at its deadline, with workers asleep on slots
+        // past it
+        let req = request(&srv.url, "GET", None);
+        let begin = Instant::now();
+        let load = start(
+            req.build_clients(1).unwrap().0,
+            req,
+            8,
+            Plan::Duration(Duration::from_millis(600)),
+            false,
+        );
+        load.set_rate(Some(2.0));
+        let results = drain(load).await;
+        let took = begin.elapsed();
+        assert_eq!(results.len(), 2, "slots at 0 and 500ms");
+        assert!(took < Duration::from_millis(1_100), "took {took:?}");
     }
 
     #[tokio::test]
@@ -2033,15 +2403,41 @@ mod tests {
             endpoint: 0,
             weight,
         };
-        let order = schedule(&[target(3), target(1)]);
-        assert_eq!(order, [0, 1, 0, 0], "three to one, spread out");
-        let order = schedule(&[target(1), target(1), target(1)]);
-        assert_eq!(order.len(), 3);
-        // Huge weights are scaled down, keeping the proportion
-        let order = schedule(&[target(900_000), target(100_000)]);
-        assert!(order.len() <= MAX_SCHEDULE + 2);
-        let share = order.iter().filter(|&&i| i == 0).count() as f64 / order.len() as f64;
-        assert!((0.89..=0.91).contains(&share), "{share}");
+        let order = |s: &Schedule, n: usize| (0..n).map(|t| s.pick(t)).collect::<Vec<_>>();
+        let three_to_one = Schedule::new(&[target(3), target(1)]);
+        assert_eq!(
+            order(&three_to_one, 8),
+            [0, 1, 0, 0, 0, 1, 0, 0],
+            "three to one, spread out"
+        );
+        let alike = Schedule::new(&[target(1), target(1), target(1)]);
+        assert_eq!(order(&alike, 4), [0, 1, 2, 0]);
+        // Huge weights keep their proportion
+        let huge = Schedule::new(&[target(900_000), target(100_000)]);
+        let share = order(&huge, 10_000).iter().filter(|&&i| i == 0).count() as f64 / 10_000.0;
+        assert!((0.899..=0.901).contains(&share), "{share}");
+    }
+
+    /// A replayed log: one URL with nearly all of the traffic and
+    /// thousands seen once. Each gets its share; none is rounded up to a
+    /// slot of its own, which once sent the busy URL less than half.
+    #[test]
+    fn rare_targets_dont_take_the_busy_ones_share() {
+        let target = |weight| Target {
+            request: request("http://x/", "GET", None),
+            headers: Default::default(),
+            endpoint: 0,
+            weight,
+        };
+        let mut targets = vec![target(994_801)];
+        targets.extend((0..4_999).map(|_| target(1)));
+        let schedule = Schedule::new(&targets);
+        let turns = 200_000;
+        let hot = (0..turns).filter(|&t| schedule.pick(t) == 0).count();
+        let share = hot as f64 / turns as f64;
+        assert!((0.994..=0.996).contains(&share), "{share}");
+        // Spread out: never two rare ones in a row this early
+        assert!((0..1_000).all(|t| schedule.pick(t) == 0 || schedule.pick(t + 1) == 0));
     }
 
     #[tokio::test]

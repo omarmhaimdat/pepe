@@ -603,7 +603,8 @@ impl Dashboard {
 
     fn drain(&mut self, load: &mut LoadHandle) {
         self.publish_metrics();
-        loop {
+        // A bounded helping, so keys and frames keep their turn
+        for _ in 0..crate::load::DRAIN_AT_ONCE {
             match load.try_recv() {
                 Ok(stat) => self.record(stat),
                 Err(TryRecvError::Empty) => break,

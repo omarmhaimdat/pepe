@@ -205,9 +205,11 @@ in [bench/README.md](bench/README.md)).
       same binary from 13 to 26 ms per 1,000 requests, and the Linux
       tables so far are from a VM on a laptop that was in use. A
       dedicated runner makes the absolutes mean something.
-- [ ] **Flows on the direct path** (M). A flow builds a new request at
-      every step, so it still goes through reqwest and pays what plain
-      runs no longer do.
+- [x] **Flows on the direct path** (M): a step is written to the wire
+      as it is sent, with its values filled in, over the worker's
+      connection to its origin, kept from step to step and chain to
+      chain. A two-step flow costs half the CPU it did and runs 2.2×
+      faster, in 6 MB rather than 15 — next release
 - [ ] **TLS without the copies** (M). With 16 KB bodies over TLS pepe is
       level with wrk rather than ahead: rustls decrypts into a buffer of
       its own and copies out. Its unbuffered API takes a record from the
