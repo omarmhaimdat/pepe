@@ -302,11 +302,23 @@ fn attached(flag: &str, value: &str) -> String {
     }
 }
 
-/// The arguments that aren't flags, after a `--`: a URL or a file from a
-/// tool call that starts with a dash is still a URL or a file
-fn positional<S: ToString>(argv: &mut Vec<String>, items: impl IntoIterator<Item = S>) {
-    argv.push("--".into());
-    argv.extend(items.into_iter().map(|item| item.to_string()));
+/// The arguments that aren't flags: a URL, a target, a file. One that
+/// starts with a dash would be read as a flag, so none may. (Not a `--`
+/// before them: after one, a plain run reads a curl command.)
+fn positional<S: ToString>(
+    argv: &mut Vec<String>,
+    items: impl IntoIterator<Item = S>,
+) -> Result<(), String> {
+    for item in items {
+        let item = item.to_string();
+        if item.starts_with('-') {
+            return Err(format!(
+                "{item:?} starts with a dash, so it would be read as a flag: a URL, a target or a file doesn't"
+            ));
+        }
+        argv.push(item);
+    }
+    Ok(())
 }
 
 /// A flag repeated for each string of an array
@@ -385,7 +397,7 @@ pub fn command_for(name: &str, args: &Value) -> Result<Vec<String>, String> {
             load_flags(&mut argv, args);
             flag(&mut argv, args, "otlp", "--otlp");
             flag(&mut argv, args, "vars", "--vars");
-            positional(&mut argv, [url]);
+            positional(&mut argv, [url])?;
         }
         "ping" => {
             let targets: Vec<&str> = args
@@ -412,7 +424,7 @@ pub fn command_for(name: &str, args: &Value) -> Result<Vec<String>, String> {
             switch(&mut argv, args, "all_ips", "--all-ips");
             switch(&mut argv, args, "tcp", "--tcp");
             request_flags(&mut argv, args);
-            positional(&mut argv, targets);
+            positional(&mut argv, targets)?;
         }
         "ramp" => {
             let url = required(args, "url")?;
@@ -426,7 +438,7 @@ pub fn command_for(name: &str, args: &Value) -> Result<Vec<String>, String> {
             flags(&mut argv, args, "fail_if", "--fail-if");
             flag(&mut argv, args, "vars", "--vars");
             request_flags(&mut argv, args);
-            positional(&mut argv, [url]);
+            positional(&mut argv, [url])?;
         }
         "api" => {
             let spec = required(args, "spec")?;
@@ -440,14 +452,14 @@ pub fn command_for(name: &str, args: &Value) -> Result<Vec<String>, String> {
             flags(&mut argv, args, "set", "--set");
             switch(&mut argv, args, "include_writes", "--include-writes");
             load_flags(&mut argv, args);
-            positional(&mut argv, [spec]);
+            positional(&mut argv, [spec])?;
         }
         "flow" => {
             let file = required(args, "file")?;
             argv.extend(["flow".to_string(), "--json".to_string()]);
             load_flags(&mut argv, args);
             flag(&mut argv, args, "vars", "--vars");
-            positional(&mut argv, [file]);
+            positional(&mut argv, [file])?;
         }
         "replay" => {
             let log = required(args, "log")?;
@@ -455,7 +467,7 @@ pub fn command_for(name: &str, args: &Value) -> Result<Vec<String>, String> {
             flag(&mut argv, args, "base_url", "--base-url");
             switch(&mut argv, args, "include_writes", "--include-writes");
             load_flags(&mut argv, args);
-            positional(&mut argv, [log]);
+            positional(&mut argv, [log])?;
         }
         "logs" => {
             // nginx's own when none is named; nothing is piped in to an
@@ -490,7 +502,7 @@ pub fn command_for(name: &str, args: &Value) -> Result<Vec<String>, String> {
             flags(&mut argv, args, "fail_if", "--fail-if");
             switch(&mut argv, args, "exact_paths", "--exact-paths");
             flag(&mut argv, args, "rows", "--rows");
-            positional(&mut argv, files);
+            positional(&mut argv, files)?;
         }
         "compare" => {
             let before = required(args, "before")?;
@@ -498,7 +510,7 @@ pub fn command_for(name: &str, args: &Value) -> Result<Vec<String>, String> {
             argv.extend(["compare".to_string(), "--json".to_string()]);
             switch(&mut argv, args, "gate", "--gate");
             flag(&mut argv, args, "svg", "--svg");
-            positional(&mut argv, [before, after]);
+            positional(&mut argv, [before, after])?;
         }
         other => return Err(format!("no tool named {other:?}")),
     }
@@ -723,7 +735,6 @@ mod tests {
                 "--host=.shop.test",
                 "--fail-if=5xx > 2%",
                 "--exact-paths",
-                "--",
                 "/var/log/nginx/access.log",
                 "access.log.2.gz"
             ]
@@ -740,18 +751,52 @@ mod tests {
     /// looks like a flag can't add one, `--allow-host` least of all
     #[test]
     fn a_tool_call_cant_add_flags() {
-        let argv = command_for(
+        let err = command_for(
             "ping",
-            &json!({"targets": ["--allow-host=127.0.0.1", "http://127.0.0.1/"], "headers": ["--max-requests=9"]}),
+            &json!({"targets": ["--allow-host=127.0.0.1", "http://127.0.0.1/"]}),
+        )
+        .unwrap_err();
+        assert!(err.contains("starts with a dash"), "{err}");
+        let err = command_for("run", &json!({"url": "-k"})).unwrap_err();
+        assert!(err.contains("starts with a dash"), "{err}");
+        let argv = command_for(
+            "run",
+            &json!({"url": "http://127.0.0.1/", "headers": ["--max-requests=9"]}),
         )
         .unwrap();
-        let dash = argv.iter().position(|a| a == "--").unwrap();
-        assert_eq!(
-            &argv[dash + 1..],
-            ["--allow-host=127.0.0.1", "http://127.0.0.1/"]
-        );
         assert!(argv.contains(&"-H--max-requests=9".to_string()), "{argv:?}");
-        assert!(!argv[..dash].iter().any(|a| a.starts_with("--allow-host")));
+        assert!(!argv.iter().any(|a| a.starts_with("--max-requests")));
+    }
+
+    /// What each tool asks for is what pepe reads: the URL a run's, the
+    /// targets a ping's (a `--` before a run's URL once made it a curl
+    /// command, and the run had nothing to send)
+    #[test]
+    fn pepe_reads_each_tools_command_as_meant() {
+        use clap::Parser;
+        let parse = |argv: Vec<String>| {
+            crate::cli::Cli::try_parse_from(std::iter::once("pepe".to_string()).chain(argv))
+                .unwrap()
+        };
+        let run = parse(
+            command_for(
+                "run",
+                &json!({"url": "http://127.0.0.1:8089/", "requests": 5}),
+            )
+            .unwrap(),
+        );
+        assert_eq!(run.url, "http://127.0.0.1:8089/");
+        assert_eq!(run.number, 5);
+        let ping = parse(command_for("ping", &json!({"targets": ["a.test", "b.test"]})).unwrap());
+        match ping.command {
+            Some(crate::cli::Command::Ping(p)) => assert_eq!(p.targets, ["a.test", "b.test"]),
+            other => panic!("{other:?}"),
+        }
+        let ramp = parse(command_for("ramp", &json!({"url": "http://x.test/"})).unwrap());
+        match ramp.command {
+            Some(crate::cli::Command::Ramp(r)) => assert_eq!(r.url, "http://x.test/"),
+            other => panic!("{other:?}"),
+        }
     }
 
     #[test]
@@ -767,12 +812,9 @@ mod tests {
             &json!({"url": "http://localhost:8080/", "otlp": ":4318"}),
         )
         .unwrap();
-        assert_eq!(
-            traced,
-            ["--json", "--otlp=:4318", "--", "http://localhost:8080/"]
-        );
+        assert_eq!(traced, ["--json", "--otlp=:4318", "http://localhost:8080/"]);
         let few = command_for("run", &json!({"url": "https://x.test/", "requests": 2})).unwrap();
-        assert_eq!(few, ["--json", "-n2", "-c2", "--", "https://x.test/"]);
+        assert_eq!(few, ["--json", "-n2", "-c2", "https://x.test/"]);
         assert_eq!(
             argv,
             [
@@ -783,7 +825,6 @@ mod tests {
                 "-HA: b",
                 "-HC: d",
                 "--dry-run",
-                "--",
                 "https://x.test/"
             ]
         );
@@ -799,7 +840,6 @@ mod tests {
                 "--json",
                 "-n5",
                 "--slo=total=500",
-                "--",
                 "a.test",
                 "b.test"
             ]
@@ -809,10 +849,7 @@ mod tests {
             &json!({"targets": ["a.test"], "duration": "10s", "every": "200ms"}),
         )
         .unwrap();
-        assert_eq!(
-            argv,
-            ["ping", "--json", "-z10s", "--every=200ms", "--", "a.test"]
-        );
+        assert_eq!(argv, ["ping", "--json", "-z10s", "--every=200ms", "a.test"]);
         let argv = command_for(
             "ramp",
             &json!({"url": "https://x.test/", "to": 50, "until": ["errors > 1%"]}),
@@ -825,7 +862,6 @@ mod tests {
                 "--json",
                 "--to=50",
                 "--until=errors > 1%",
-                "--",
                 "https://x.test/"
             ]
         );
@@ -834,10 +870,7 @@ mod tests {
             &json!({"before": "a.json", "after": "b.json", "gate": true}),
         )
         .unwrap();
-        assert_eq!(
-            argv,
-            ["compare", "--json", "--gate", "--", "a.json", "b.json"]
-        );
+        assert_eq!(argv, ["compare", "--json", "--gate", "a.json", "b.json"]);
         let argv = command_for(
             "api",
             &json!({"spec": "openapi.yaml", "tag": ["Billing"], "all": false, "set": ["id=1,2"]}),
@@ -850,7 +883,6 @@ mod tests {
                 "--json",
                 "--tag=Billing",
                 "--set=id=1,2",
-                "--",
                 "openapi.yaml"
             ]
         );
