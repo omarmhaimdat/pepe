@@ -290,7 +290,16 @@ pub struct LatencyStats {
     /// how far a percentile can wander in a run of this size
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub quantiles_ms: Vec<Quantile>,
+    /// `--histogram`: every bucket, `[microseconds, count]`, so that
+    /// reports from several machines add up exactly (`pepe serve`'s
+    /// workers); the smallest and largest exactly, first and last
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub histogram_us: Vec<[u64; 2]>,
 }
+
+/// `--histogram`: reports keep their latency histogram whole
+pub static KEEP_HISTOGRAM: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
 
 /// A point of the latency's distribution: `q` percent of the requests
 /// took `ms` or less
@@ -592,6 +601,22 @@ impl JsonReport {
                             ms: ms(metrics.percentile(q)),
                         })
                         .collect(),
+                    histogram_us: match KEEP_HISTOGRAM.load(std::sync::atomic::Ordering::Relaxed) {
+                        true => {
+                            let hist = metrics.latency();
+                            let (min, max) = hist.extremes();
+                            let mut out: Vec<[u64; 2]> =
+                                hist.buckets().map(|(v, n)| [v, n]).collect();
+                            // The ends exactly, not their buckets' middles,
+                            // as entries of no count
+                            if hist.count() > 0 {
+                                out.insert(0, [min, 0]);
+                                out.push([max, 0]);
+                            }
+                            out
+                        }
+                        false => Vec::new(),
+                    },
                 },
                 // Sorted, so output is stable between runs
                 status_codes: metrics.status_codes.iter().map(|(k, v)| (*k, *v)).collect(),

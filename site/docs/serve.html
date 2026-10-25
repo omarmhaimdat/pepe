@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>pepe serve · load tests over HTTP, with workers and schedules</title>
+<meta name="description" content="pepe serve is pepe over HTTP: a script, an agent or a browser starts, watches, steers and compares runs, and pepe worker on other machines takes shares of a…">
+<link rel="canonical" href="https://pepe.mhaimdat.com/docs/serve.html">
+<link rel="icon" href="../assets/logo.svg" type="image/svg+xml">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#fff1e0" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#141010" media="(prefers-color-scheme: dark)">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="pepe">
+<meta property="og:url" content="https://pepe.mhaimdat.com/docs/serve.html">
+<meta property="og:title" content="pepe serve · load tests over HTTP, with workers and schedules">
+<meta property="og:description" content="pepe serve is pepe over HTTP: a script, an agent or a browser starts, watches, steers and compares runs, and pepe worker on other machines takes shares of a…">
+<meta property="og:image" content="https://pepe.mhaimdat.com/img/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="pepe: an HTTP load generator with a live terminal dashboard">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="pepe serve · load tests over HTTP, with workers and schedules">
+<meta name="twitter:description" content="pepe serve is pepe over HTTP: a script, an agent or a browser starts, watches, steers and compares runs, and pepe worker on other machines takes shares of a…">
+<meta name="twitter:image" content="https://pepe.mhaimdat.com/img/og.png">
+<script type="application/ld+json">[{"@context":"https://schema.org","@type":"TechArticle","headline":"pepe serve","description":"pepe serve is pepe over HTTP: a script, an agent or a browser starts, watches, steers and compares runs, and pepe worker on other machines takes shares of a…","url":"https://pepe.mhaimdat.com/docs/serve.html","image":"https://pepe.mhaimdat.com/img/og.png","inLanguage":"en","author":{"@type":"Person","name":"Omar Mhaimdat","url":"https://github.com/omarmhaimdat"},"publisher":{"@type":"Person","name":"Omar Mhaimdat","url":"https://github.com/omarmhaimdat"},"isPartOf":{"@type":"WebSite","name":"pepe","url":"https://pepe.mhaimdat.com/"},"about":{"@type":"SoftwareApplication","name":"pepe","url":"https://pepe.mhaimdat.com/"}},{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"pepe","item":"https://pepe.mhaimdat.com/"},{"@type":"ListItem","position":2,"name":"Docs","item":"https://pepe.mhaimdat.com/docs/"},{"@type":"ListItem","position":3,"name":"pepe serve","item":"https://pepe.mhaimdat.com/docs/serve.html"}]}]</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&amp;family=Geist+Mono:wght@400;500;600&amp;display=swap">
+<link rel="stylesheet" href="docs.css">
+<script>try{var t=localStorage.getItem('pepe-theme');if(t)document.documentElement.dataset.theme=t;}catch(e){}</script>
+</head>
+<body>
+<header class="top">
+  <button type="button" class="menu" aria-label="Pages" aria-expanded="false">☰</button>
+  <a class="brand" href="index.html"><img src="../assets/logo.svg" alt="" width="22" height="20">pepe<span>docs</span></a>
+  <div class="search"><input type="search" placeholder="Search the docs…" aria-label="Search the docs" autocomplete="off"><div class="results" hidden></div></div>
+  <nav class="links"><a href="../">Install</a><a href="https://github.com/omarmhaimdat/pepe">GitHub</a><button type="button" class="theme" aria-label="Switch between light and dark">◐</button></nav>
+</header>
+<div class="shell">
+  <aside class="side" id="side"><div class="group">Start here</div><a href="index.html">Overview</a><a href="install.html">Install</a><div class="group">Modes</div><a href="load-test.html">Load testing</a><a href="dashboard.html">The dashboard</a><a href="ping.html">Ping</a><a href="ramp.html">Ramp</a><a href="api.html">OpenAPI</a><a href="flow.html">Flows</a><a href="replay.html">Replay</a><a href="logs.html">nginx logs</a><a href="compare.html">Compare</a><div class="group">Integrate</div><a href="output.html">Output and exit codes</a><a href="ci.html">CI and Docker</a><a href="webhooks.html">Webhooks</a><a href="agents.html">Agents and scripts</a><a href="serve.html" aria-current="page">pepe serve</a><div class="group">Reference</div><a href="config.html">Config files</a><a href="reference.html">Command reference</a><a href="benchmarks.html">Benchmarks</a></aside>
+  <main class="main">
+    <article class="prose">
+<div class="kicker"><span>Integrate</span><span>pepe serve</span></div>
+<h1><span class="sel">pepe serve</span></h1>
+<p><code>pepe serve</code> is pepe over HTTP: a script, an agent or a browser starts, watches, steers and compares runs, and <code>pepe worker</code> on other machines takes shares of a run. It sends no load itself: every run is a child <code>pepe</code>, under the server's guardrails, the project's <code>pepe.toml</code> and the machine's settings, exactly as on the command line.</p>
+<figure class="code"><div class="bar"><span>bash</span><button type="button" class="copy" aria-label="Copy">copy</button></div><pre><code><span class="k">pepe</span> serve &gt; token &amp;                         <span class="c"># 127.0.0.1:7878; the token is stdout&#x27;s one line</span>
+TOKEN=$(head -1 token)
+curl -H &quot;Authorization: Bearer $TOKEN&quot; localhost:7878/api/runs \
+     -d &#x27;{&quot;url&quot;: &quot;http://127.0.0.1:8080/health&quot;, &quot;requests&quot;: 5000, &quot;concurrency&quot;: 20}&#x27;</code></pre></figure>
+<h2 id="safe-to-leave-running"><a href="#safe-to-leave-running">Safe to leave running</a></h2>
+<ul><li><strong>Loopback by default.</strong> <code>--listen</code> takes another address; any but loopback needs <code>--allow-host</code> and the <code>--max-requests</code>, <code>--max-rate</code> and <code>--max-concurrency</code> caps (in the flags, a <code>pepe.toml</code> or the settings), or the server doesn't start.</li><li><strong>A token on every call</strong> but <code>/api/health</code>: made at start and printed, or read from <code>--token-file</code> (<code>name token</code> a line, the name going in the audit log). A header, never a cookie, so a page in a browser can't start a run.</li><li><strong>The guardrails hold every run.</strong> A request can't loosen them: its own guardrail keys only tighten, a value is never read as a flag, and what reaches past them isn't taken (<code>webhook</code>, <code>slack</code>, <code>otlp</code>, a file outside the project).</li><li><strong><code>--max-runs</code></strong> (1 by default): runs going at once, here and on the workers; past it, <code>429</code>.</li><li><strong>An audit log</strong>: who did what, <code>.pepe/serve/audit.jsonl</code>.</li></ul>
+<h2 id="runs"><a href="#runs">Runs</a></h2>
+<p>A run takes the arguments <code>pepe mcp</code>'s tools do (<code>url</code>, <code>requests</code>, <code>duration</code>, <code>concurrency</code>, <code>rate</code>, <code>warmup</code>, <code>headers</code>, <code>body</code>, <code>method</code>, <code>fail_if</code>, …), with <code>mode</code> for <code>ping</code>, <code>ramp</code>, <code>api</code>, <code>flow</code> or <code>replay</code>, or a saved test by name.</p>
+<div class="table"><table><thead><tr><th>Call</th><th>Does</th></tr></thead><tbody><tr><td><code>POST /api/runs</code></td><td>Starts one: <code>{&quot;url&quot;: …, &quot;requests&quot;: 1000}</code>, <code>{&quot;mode&quot;: &quot;ping&quot;, &quot;targets&quot;: […]}</code>, <code>{&quot;test&quot;: &quot;checkout&quot;}</code> (recorded with the test's runs). <code>202</code> and its id</td></tr><tr><td><code>POST /api/runs</code> with <code>&quot;dry_run&quot;: true</code></td><td>The plan, nothing sent</td></tr><tr><td><code>GET /api/runs</code></td><td>Recent runs, and how many are going</td></tr><tr><td><code>GET /api/runs/ID</code></td><td>How it stands, and its report once it has one</td></tr><tr><td><code>GET /api/runs/ID/events</code></td><td>The run live, as Server-Sent Events: <code>start</code>, <code>progress</code> a second, <code>anomaly</code>, <code>steered</code>, <code>report</code>, <code>end</code>. <code>Last-Event-ID</code> (or <code>?after=</code>) goes on from there</td></tr><tr><td><code>GET /api/runs/ID/report</code></td><td>The report: <code>?format=json</code> (the default), <code>html</code>, <code>md</code>, <code>txt</code> or <code>csv</code></td></tr><tr><td><code>POST /api/runs/ID/pause</code> · <code>/resume</code> · <code>/stop</code></td><td>Steers it; a ping can be stopped</td></tr><tr><td><code>POST /api/runs/ID/concurrency</code> <code>{&quot;n&quot;: 40}</code></td><td>Held to <code>--max-concurrency</code></td></tr></tbody></table></div>
+<p>A refusal says why in pepe's words: <code>422</code> when a guardrail holds, <code>400</code> for what pepe can't run, <code>409</code> for what can't be done now.</p>
+<figure class="code"><div class="bar"><span>bash</span><button type="button" class="copy" aria-label="Copy">copy</button></div><pre><code>curl -N -H &quot;Authorization: Bearer $TOKEN&quot; localhost:7878/api/runs/$ID/events</code></pre></figure>
+<p>The same lines come from <code>pepe --events FILE</code> (or <code>-</code> for stdout) on any run, server or not.</p>
+<h2 id="tests-history-compare"><a href="#tests-history-compare">Tests, history, compare</a></h2>
+<div class="table"><table><thead><tr><th>Call</th><th>Does</th></tr></thead><tbody><tr><td><code>GET /api/tests</code></td><td>The saved tests (<code>.pepe/tests/</code>)</td></tr><tr><td><code>GET /api/tests/NAME</code></td><td>One, as its keys and as its file</td></tr><tr><td><code>PUT /api/tests/NAME</code></td><td>Saves one: <code>{&quot;config&quot;: {&quot;url&quot;: …}}</code>, with a <code>pepe.toml</code>'s keys, or <code>{&quot;toml&quot;: &quot;…&quot;}</code></td></tr><tr><td><code>DELETE /api/tests/NAME</code></td><td></td></tr><tr><td><code>GET /api/tests/NAME/runs</code></td><td>Its recorded runs, newest first, as <code>NAME/WHEN</code></td></tr><tr><td><code>GET /api/compare?before=A&amp;after=B</code></td><td><code>pepe compare</code>: a run's id or <code>NAME/WHEN</code> each; <code>&amp;gate=1</code> for <code>regression</code></td></tr><tr><td><code>GET /api/schema/run</code></td><td>A report's JSON Schema: <code>run</code>, <code>ramp</code>, <code>ping</code>, <code>compare</code></td></tr></tbody></table></div>
+<p>Runs started from the server and from the command line are the same files: <code>pepe history NAME</code> lists both.</p>
+<h2 id="schedules"><a href="#schedules">Schedules</a></h2>
+<div class="table"><table><thead><tr><th>Call</th><th>Does</th></tr></thead><tbody><tr><td><code>POST /api/schedules</code> <code>{&quot;test&quot;: &quot;checkout&quot;, &quot;every&quot;: &quot;1h&quot;}</code></td><td>Runs it every hour, from an hour from now; a minute at the least. <code>&quot;workers&quot;</code> shares it out</td></tr><tr><td><code>GET /api/schedules</code></td><td>With when each last ran, or why it was skipped (the server at <code>--max-runs</code>)</td></tr><tr><td><code>DELETE /api/schedules/ID</code></td><td></td></tr></tbody></table></div>
+<h2 id="workers"><a href="#workers">Workers</a></h2>
+<p>A worker joins a server from its own machine, so a run can come from several places at once, and works from behind NAT: it dials out.</p>
+<figure class="code"><div class="bar"><span>bash</span><button type="button" class="copy" aria-label="Copy">copy</button></div><pre><code><span class="k">pepe</span> --allow-host .staging.example.com --max-concurrency 200 \
+     worker --join http://pepe.internal:7878 --name eu-1 --token-file token</code></pre></figure>
+<ul><li><strong>Its own guardrails hold.</strong> A worker runs its share under the flags it was started with, the <code>pepe.toml</code> where it runs and its settings, whatever the server asks.</li><li><strong>A run shared out</strong>: <code>POST /api/runs</code> with <code>&quot;workers&quot;: &quot;all&quot;</code> or a list of names. The count, the concurrency and the rate are split among them (a duration is each one's); the run's events carry each worker's, and a progress line a second adds them up.</li><li><strong>Its report is one run's.</strong> Each share's latency histogram comes back whole, and they're added bucket by bucket, so the p99 is the p99 of every request any worker sent. <code>distributed</code> says what each sent.</li><li>A worker that leaves mid-run ends its share as failed; the run ends on the others, failing. A worker's process killed outright leaves its share's child to the end of its count or its time.</li><li><code>GET /api/workers</code> lists them, and what each is busy with.</li></ul>
+<p>A plain run and a saved test of one are shared out; the other modes run on the server.</p>
+<h2 id="health"><a href="#health">Health</a></h2>
+<p><code>GET /api/health</code> (no token): pepe's version and the reports' <code>schema_version</code>, for a load balancer or a script waiting for the server.</p>
+    </article>
+    <nav class="turn"><a class="prev" href="agents.html"><small>Previous</small>Agents and scripts</a><a class="next" href="config.html"><small>Next</small>Config files</a></nav>
+    <p class="edit"><a href="https://github.com/omarmhaimdat/pepe/edit/master/docs/serve.md">Edit this page on GitHub</a></p>
+  </main>
+  <aside class="toc"><div class="label">On this page</div><a href="#safe-to-leave-running" class="h2">Safe to leave running</a><a href="#runs" class="h2">Runs</a><a href="#tests-history-compare" class="h2">Tests, history, compare</a><a href="#schedules" class="h2">Schedules</a><a href="#workers" class="h2">Workers</a><a href="#health" class="h2">Health</a></aside>
+</div>
+<script src="docs.js" defer></script>
+</body>
+</html>

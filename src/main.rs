@@ -17,6 +17,7 @@ mod control;
 mod curl;
 mod diagnose;
 mod direct;
+mod events;
 mod export;
 mod exporter;
 mod flow;
@@ -38,6 +39,7 @@ mod replay;
 mod request;
 mod response;
 mod schema;
+mod serve;
 mod settings;
 mod slack;
 mod store;
@@ -171,6 +173,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Every file's caps and hosts, whichever of them filled in the run
     config::hold(&mut args, &holding);
     guard::hold(guard::Guard::of(&args));
+    if args.histogram {
+        json_report::KEEP_HISTOGRAM.store(true, std::sync::atomic::Ordering::Relaxed);
+    }
+    if let Some(path) = &args.events {
+        if let Err(e) = events::open(path) {
+            eprintln!("error: --events {}: {e}", path.display());
+            std::process::exit(1);
+        }
+    }
     if let Some(path) = args.write_config.take() {
         if let Err(e) = config::write(&path, &args) {
             eprintln!("error: {e}");
@@ -262,6 +273,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     if let Some(cli::Command::Mcp(_)) = &args.command {
         return mcp::serve(mcp::guard_args(&args)).await;
+    }
+    if let Some(cli::Command::Serve(what)) = &args.command {
+        return serve::serve(&args, what).await;
+    }
+    if let Some(cli::Command::Worker(what)) = &args.command {
+        return serve::worker::run(&args, what).await;
     }
 
     // Release builds abort on panic; restore the terminal first so a crash

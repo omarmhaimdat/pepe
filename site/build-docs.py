@@ -46,6 +46,7 @@ GROUPS = [
         ("ci", "CI and Docker"),
         ("webhooks", "Webhooks"),
         ("agents", "Agents and scripts"),
+        ("serve", "pepe serve"),
     ]),
     ("Reference", [("config", "Config files"), ("reference", "Command reference"), ("benchmarks", "Benchmarks")]),
 ]
@@ -69,6 +70,7 @@ TITLES = {
     "ci": "pepe in CI · GitHub Action, Docker and --fail-if thresholds",
     "webhooks": "pepe webhooks · load-test results in Slack, Discord and Teams",
     "agents": "pepe for agents and scripts · MCP server and guardrails",
+    "serve": "pepe serve · load tests over HTTP, with workers and schedules",
     "config": "pepe.toml and pepe's config files · every key, with examples",
     "reference": "pepe command reference · every flag and subcommand",
     "benchmarks": "Benchmarks · pepe against wrk, oha, vegeta and k6",
@@ -77,7 +79,7 @@ TITLES = {
 COMMANDS = {
     "load-test": "pepe URL", "dashboard": "pepe URL", "ping": "pepe ping", "ramp": "pepe ramp",
     "api": "pepe api", "flow": "pepe flow", "replay": "pepe replay", "logs": "pepe logs",
-    "compare": "pepe compare", "agents": "pepe mcp", "config": "pepe.toml", "reference": "pepe --help",
+    "compare": "pepe compare", "agents": "pepe mcp", "serve": "pepe serve", "config": "pepe.toml", "reference": "pepe --help",
 }
 HOME = "https://pepe.mhaimdat.com/"
 OG_IMAGE = HOME + "img/og.png"

@@ -449,6 +449,37 @@ impl Histogram {
         self.count += 1;
     }
 
+    /// `count` values of `value` at once: a histogram put together again
+    /// from its buckets, as a report keeps them
+    pub fn record_n(&mut self, value: u64, count: u64) {
+        if count == 0 {
+            return;
+        }
+        let index = Self::index(value);
+        if index >= self.counts.len() {
+            self.counts.resize(index + 1, 0);
+        }
+        self.counts[index] += count;
+        if self.count == 0 || value < self.min {
+            self.min = value;
+        }
+        self.max = self.max.max(value);
+        self.count += count;
+    }
+
+    /// The exact smallest and largest values recorded
+    pub fn extremes(&self) -> (u64, u64) {
+        (self.min, self.max)
+    }
+
+    /// Put back the exact ends a histogram rebuilt from its buckets lost
+    pub fn set_extremes(&mut self, min: u64, max: u64) {
+        if self.count > 0 {
+            self.min = min;
+            self.max = max;
+        }
+    }
+
     /// Empty the histogram but keep its allocation for reuse
     pub fn clear(&mut self) {
         self.counts.fill(0);

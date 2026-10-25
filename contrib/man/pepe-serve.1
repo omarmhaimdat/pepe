@@ -1,0 +1,22 @@
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.TH pepe-serve 1  pepe "User Commands"
+.SH NAME
+pepe\-serve \- Serve pepe over HTTP: start, watch, steer and compare runs from a script, an agent or a browser; loopback and a token by default
+.SH SYNOPSIS
+\fBpepe serve\fR [\fB\-\-listen\fR] [\fB\-\-token\-file\fR] [\fB\-\-max\-runs\fR] [\fB\-h\fR|\fB\-\-help\fR] 
+.SH DESCRIPTION
+Serve pepe over HTTP: start, watch, steer and compare runs from a script, an agent or a browser; loopback and a token by default
+.SH OPTIONS
+.TP
+\fB\-\-listen\fR \fI<ADDR>\fR
+Where to listen: 127.0.0.1:7878 by default. Any address but loopback needs \-\-allow\-host and the \-\-max\-requests, \-\-max\-rate and \-\-max\-concurrency caps
+.TP
+\fB\-\-token\-file\fR \fI<FILE>\fR
+The tokens that may call the API, a line each: `name token`, or the token alone. Without one, a token is made and printed
+.TP
+\fB\-\-max\-runs\fR \fI<N>\fR [default: 1]
+Runs going at once, on this machine and the workers together
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Print help

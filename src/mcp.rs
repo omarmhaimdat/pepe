@@ -344,7 +344,7 @@ fn required<'a>(args: &'a Value, key: &str) -> Result<&'a str, String> {
 }
 
 /// The request and load flags the load-testing tools share
-fn load_flags(argv: &mut Vec<String>, args: &Value) {
+pub(crate) fn load_flags(argv: &mut Vec<String>, args: &Value) {
     flag(argv, args, "requests", "-n");
     flag(argv, args, "duration", "-z");
     flag(argv, args, "concurrency", "-c");

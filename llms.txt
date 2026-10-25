@@ -14,6 +14,7 @@ As an MCP server: `pepe mcp` serves the modes as tools over stdio (`run`, `ping`
 
 - [Overview](https://pepe.mhaimdat.com/docs/index.html): what pepe does, a page per mode
 - [Agents and scripts](https://pepe.mhaimdat.com/docs/agents.html): the rules, the guardrails, what to read in each report
+- [pepe serve](https://pepe.mhaimdat.com/docs/serve.html): pepe over HTTP: start, watch (Server-Sent Events), steer and compare runs with a token, saved tests and schedules, and `pepe worker` machines taking shares of one run, under every guardrail
 - [Load testing](https://pepe.mhaimdat.com/docs/load-test.html): every option of `pepe URL`, warm-up, arrival rate, threads, the config file, a curl command, and `--otlp`: where the server's time went, from its OpenTelemetry spans
 - [Ping](https://pepe.mhaimdat.com/docs/ping.html): `pepe ping`, each phase of a request, the findings, `--once`, `--slo`
 - [Ramp](https://pepe.mhaimdat.com/docs/ramp.html): `pepe ramp`, the level that held and the capacity estimate

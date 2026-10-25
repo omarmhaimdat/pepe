@@ -41,8 +41,14 @@ pub fn parse(line: &str) -> Option<Said> {
 
 /// The commands for this run, when `pepe slack serve` started it; none
 /// otherwise, and stdin is left alone
+/// Set (to the run's id) by whatever started this run and steers it over
+/// its stdin: `pepe serve` and its workers
+pub const STEER_ENV: &str = "PEPE_STEER";
+
 pub fn listen() -> Option<mpsc::UnboundedReceiver<Said>> {
-    std::env::var(crate::slack::RUN_ENV).ok()?;
+    std::env::var(crate::slack::RUN_ENV)
+        .or_else(|_| std::env::var(STEER_ENV))
+        .ok()?;
     let (tx, rx) = mpsc::unbounded_channel();
     std::thread::Builder::new()
         .name("pepe-control".into())
