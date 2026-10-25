@@ -37,7 +37,20 @@ pub struct Metrics {
     dns_lookup_sum: Duration,
     dns_samples: u64,
     server_timing: ServerTimings,
+    /// `--rate`: requests sent on a schedule, and those that started
+    /// `LATE` or more after their slot because the concurrency was all
+    /// busy
+    pub paced: u64,
+    pub late: u64,
+    /// How long after its slot each paced request started, and that plus
+    /// its latency: the time a user arriving on schedule would have waited
+    waited: Histogram,
+    response: Histogram,
 }
+
+/// A paced request this far behind its slot started late; less is the
+/// scheduler's own slack
+pub const LATE: Duration = Duration::from_millis(1);
 
 impl Metrics {
     pub fn record(&mut self, stat: &ResponseStats) {
@@ -82,6 +95,27 @@ impl Metrics {
         if let Some(timing) = &stat.server_timing {
             self.server_timing.record(timing);
         }
+        if let Some(waited) = stat.waited {
+            self.paced += 1;
+            if waited >= LATE {
+                self.late += 1;
+            }
+            let waited = waited.as_micros() as u64;
+            self.waited.record(waited);
+            self.response.record(us + waited);
+        }
+    }
+
+    /// `--rate`: how long after their slot paced requests started, at
+    /// percentile `q`
+    pub fn waited(&self, q: f64) -> Duration {
+        Duration::from_micros(self.waited.percentile(q))
+    }
+
+    /// `--rate`: the latency counted from each request's slot on the
+    /// schedule rather than from when it went out, at percentile `q`
+    pub fn response_time(&self, q: f64) -> Duration {
+        Duration::from_micros(self.response.percentile(q))
     }
 
     /// What the target's `Server-Timing` headers added up to
@@ -469,7 +503,18 @@ impl Histogram {
         if self.count == 0 {
             return 0;
         }
-        let rank = ((q.clamp(0.0, 100.0) / 100.0) * self.count as f64).ceil() as u64;
+        // The ends are known exactly, not as the middle of their bucket
+        if q <= 0.0 {
+            return self.min;
+        }
+        if q >= 100.0 {
+            return self.max;
+        }
+        // The value with q% of them at or under it. q × count is computed
+        // in floating point, where 99.9% of 1,000 is 999.0000000000001:
+        // taken up to a whole rank as it stands, that is the 1,000th
+        let exact = q / 100.0 * self.count as f64;
+        let rank = (exact - exact.abs() * 1e-12).ceil() as u64;
         let rank = rank.clamp(1, self.count);
         let mut seen = 0;
         for (index, &count) in self.counts.iter().enumerate() {
@@ -486,6 +531,34 @@ impl Histogram {
 mod tests {
     use super::*;
     use reqwest::StatusCode;
+
+    /// p99.9 of 1,000 is the 999th value, not the largest; the ends are
+    /// the exact extremes
+    #[test]
+    fn a_percentile_is_its_rank_exactly() {
+        let mut h = Histogram::default();
+        h.record(200_000);
+        for _ in 0..999 {
+            h.record(5_000);
+        }
+        assert!(h.percentile(99.9) < 6_000, "{}", h.percentile(99.9));
+        assert_eq!(h.percentile(100.0), 200_000);
+        for n in [2_000u64, 5_000, 10_000] {
+            let mut h = Histogram::default();
+            for _ in 0..n / 1_000 {
+                h.record(200_000);
+            }
+            for _ in 0..n - n / 1_000 {
+                h.record(5_000);
+            }
+            assert!(h.percentile(99.9) < 6_000, "n = {n}");
+        }
+        let mut h = Histogram::default();
+        for v in [21_530, 21_600, 30_017] {
+            h.record(v);
+        }
+        assert_eq!((h.percentile(0.0), h.percentile(100.0)), (21_530, 30_017));
+    }
 
     fn stat(ms: u64, status: Option<u16>, error: Option<ErrorKind>) -> ResponseStats {
         ResponseStats {

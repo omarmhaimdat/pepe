@@ -662,6 +662,8 @@ pub struct TargetStats {
     pub target: Target,
     pub points: Vec<Point>,
     pub recent: VecDeque<Sample>,
+    /// Samples recorded, of which `recent` holds the last
+    pub recorded: u64,
     pub sent: u64,
     pub answered: u64,
     pub timeouts: u64,
@@ -698,6 +700,7 @@ impl TargetStats {
             target,
             points: Vec::new(),
             recent: VecDeque::new(),
+            recorded: 0,
             sent: 0,
             answered: 0,
             timeouts: 0,
@@ -797,6 +800,7 @@ impl TargetStats {
         if let Some(body) = saved_body {
             self.last_body = Some(body);
         }
+        self.recorded += 1;
         self.recent.push_back(sample);
         while self.recent.len() > RECENT {
             self.recent.pop_front();
