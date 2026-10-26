@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<meta name="color-scheme" content="light dark">
+<title>pepe serve</title>
+<link rel="icon" href="/ui/img/pepe-icon.png">
+<link rel="preload" href="/ui/fonts/geist.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/ui/fonts/geist-mono.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/ui/app.css">
+<script src="/ui/app.js" defer></script>
+</head>
+<body>
+<header class="top" hidden>
+  <div class="wide">
+    <a class="brand" href="#/runs"><img src="/ui/img/pepe-icon.png" alt="">pepe <small>serve</small></a>
+    <nav aria-label="Pages">
+      <a href="#/runs" data-nav="runs">Runs</a>
+      <a href="#/new" data-nav="new">New run</a>
+      <a href="#/tests" data-nav="tests">Tests</a>
+      <a href="#/compare" data-nav="compare">Compare</a>
+      <a href="#/workers" data-nav="workers">Workers</a>
+    </nav>
+    <div class="right">
+      <span class="who"></span>
+      <button class="theme" type="button" title="Light or dark" aria-label="Light or dark">◐</button>
+    </div>
+  </div>
+</header>
+<div class="checker top-strip" hidden></div>
+<main class="wide" id="view"></main>
+<noscript><main class="wide"><p>This page needs JavaScript; the API works without it: <code>/api</code>.</p></main></noscript>
+</body>
+</html>

@@ -375,6 +375,10 @@ fn request_flags(argv: &mut Vec<String>, args: &Value) {
     flag(argv, args, "body", "-d");
     flag(argv, args, "proxy", "-p");
     switch(argv, args, "insecure", "-k");
+    switch(argv, args, "no_keepalive", "--disable-keepalive");
+    switch(argv, args, "no_redirects", "--disable-redirects");
+    switch(argv, args, "no_compression", "--disable-compression");
+    flag(argv, args, "user_agent", "--user-agent");
     switch(argv, args, "dry_run", "--dry-run");
     flags(argv, args, "webhook", "--webhook");
     flag(argv, args, "webhook_on", "--webhook-on");
@@ -539,6 +543,19 @@ pub fn tools() -> Vec<Value> {
             "insecure".into(),
             boolean("Accept invalid TLS certificates"),
         );
+        props.insert(
+            "no_keepalive".into(),
+            boolean("A new connection for every request"),
+        );
+        props.insert(
+            "no_redirects".into(),
+            boolean("Take a redirect as the answer rather than follow it"),
+        );
+        props.insert(
+            "no_compression".into(),
+            boolean("Don't ask for a compressed body"),
+        );
+        props.insert("user_agent".into(), string("The User-Agent to send"));
         props.insert(
             "dry_run".into(),
             boolean("Say what would be sent and send nothing"),
