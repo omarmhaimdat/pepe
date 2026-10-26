@@ -6,6 +6,107 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+## [0.57.0](https://github.com/omarmhaimdat/pepe/compare/v0.56.0...v0.57.0) - 2026-10-26
+
+### Added
+
+- *(serve)* pepe in a browser, every mode, in the front page's look ([#239](https://github.com/omarmhaimdat/pepe/pull/239))
+
+  #236 merged the server's API, but the browser page was pushed to its
+  branch after the merge, so none of it reached `master` or v0.56.0. This
+  brings those five commits onto `master`, unchanged: the diff against
+  `master` is exactly theirs.
+
+  ## What
+
+  `pepe serve` serves a page at `/`. The link the server prints opens it
+  already signed in.
+
+  - **Every mode runs from the browser, with all its options:**
+    - A load test, or a pasted curl command turned into one.
+    - OpenAPI: upload a spec, then pick its endpoints from a list.
+  - A flow written step by step in the browser, or an uploaded flow file.
+    - An access log uploaded and replayed against a base URL.
+    - Ping and ramp.
+  - For every mode: limits, timeout, threads, TLS, keep-alive, redirects,
+  compression, User-Agent, proxy, and values from a CSV.
+  - **The plan comes first:** each run's plan can be checked before
+  anything is sent.
+  - **A run, live:** its curves, its verdict as it forms, and pause,
+  resume, concurrency and stop. A finished run shows its mode's own
+  breakdown: per endpoint, flow step, replayed URL, ramp step or ping
+  target.
+  - **The other pages:** runs, saved tests and their history, schedules,
+  compare and workers.
+  - **The homepage's look:** cream and ink, square ink-outlined panels
+  with hard shadows, the lime and gold checker, headlines with a word
+  selected as in a terminal, the modes grid, and the light and dark
+  palettes with a toggle.
+  - **Phone width:** no page scrolls sideways.
+  - **Fonts:** Geist and Geist Mono (latin, variable from 400 to 600, 52
+  KB) are in the binary under the SIL Open Font License 1.1
+  (`src/serve/ui/fonts/OFL.txt`). The page always uses them and loads
+  nothing from elsewhere.
+
+  ## Safety
+
+  - **The token:**
+    - The page keeps it for the tab and removes it from the address bar.
+    - It's sent in a header.
+  - Live events are read through `fetch`, because `EventSource` can't send
+  a header.
+  - **Reports:** each opens as a plain link with a ticket for that run
+  alone that expires in 10 minutes (`POST /api/runs/ID/ticket`). A report
+  page runs no scripts.
+  - **Page policy:** scripts, calls and fonts come from this server only,
+  and the page can't be framed. A test checks the script never sets
+  markup, so nothing a target sends back becomes HTML.
+
+  The server gains what the page needs:
+
+  - **Uploads:** `PUT /api/files/NAME` into the project, up to 256 MB.
+  - **Helpers:** `GET /api/spec?file=` and `POST /api/curl`.
+  - **Run options:** `no_keepalive`, `no_redirects`, `no_compression` and
+  `user_agent`, for the MCP tools too.
+  - **`save` refused:** it is turned away over the API.
+
+  ## Checked
+
+  - **Every mode from the browser:** run from the page against a live
+  server, steering included. The pane checked phone and desktop widths and
+  both themes, the fonts were confirmed loaded and in use, and the console
+  was clean.
+  - **Tests:** 459 pass, clippy is clean with warnings as errors, and
+  rustfmt is clean.
+  - **Binary:** 9.05 → 9.23 MB with the page, its faces and the fonts.
+
+
+
+### Other
+
+- *(nix)* update flake.lock ([#237](https://github.com/omarmhaimdat/pepe/pull/237))
+
+  Automated changes by the
+  [update-flake-lock](https://github.com/DeterminateSystems/update-flake-lock)
+  GitHub Action.
+
+  ```
+  Flake lock file updates:
+
+  • Updated input 'nixpkgs':
+      'github:NixOS/nixpkgs/fe13242281a67641c0102cdb1087f0ebe586c7df?narHash=sha256-zp8ToDMnqZcu4o4IH9pdwXFXGp7yLm/M0dEnNWnyd7I%3D' (2026-10-15)
+    → 'github:NixOS/nixpkgs/3ec636362e1816bc2f0888fa0fa2c69f1bc9e504?narHash=sha256-rZLrzrC6i%2BjnTAlvPZHogKDulY7WWDEv9hJeHieO7Zw%3D' (2026-10-23)
+  ```
+
+  ### Running GitHub Actions on this PR
+
+  GitHub Actions will not run workflows on pull requests which are opened
+  by a GitHub Action.
+
+  **To run GitHub Actions workflows on this PR, close and re-open this
+  pull request.**
+
+
 ## [0.56.0](https://github.com/omarmhaimdat/pepe/compare/v0.55.2...v0.56.0) - 2026-10-26
 
 ### Added
