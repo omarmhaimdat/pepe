@@ -136,6 +136,47 @@ async function follow(id, onEvent, signal) {
   }
 }
 
+// ─── The look's small parts ──────────────────────────────────────────────
+
+// A page's head, as the front page writes one: a tag, a headline with a
+// word selected as in a terminal, a line under it, and what to do here
+function pagehead({ tag, before = '', sel, after = '', lede, right }) {
+  return h('div', { class: 'pagehead' },
+    tag ? h('span', { class: 'tag' }, tag) : null,
+    h('div', { class: 'row' },
+      h('h1', {}, before, sel ? selected(sel) : null, after),
+      right ? h('div', { class: 'actions' }, right) : null),
+    lede ? h('p', { class: 'lede' }, lede) : null);
+}
+const section = (text) => h('div', { class: 'section' }, text);
+// Words selected as in a terminal, the cursor at their end
+const selected = (text, blink) => h('span', { class: `sel${blink ? ' blink' : ''}` }, text, h('i', { class: 'cur', 'aria-hidden': 'true' }));
+const card = (title, ...kids) => h('div', { class: 'card' }, title ? h('h2', {}, title) : null, kids);
+const nums = (items) => h('div', { class: 'nums' }, items.map(([label, value, small]) => h('div', {}, h('small', {}, label), h('b', { class: small ? 'small' : '' }, value))));
+const field = (label, input, hint) => h('div', { class: 'field' }, h('label', {}, label, input), hint ? h('div', { class: 'hint' }, hint) : null);
+const command = (text) => h('pre', { class: 'cmd' }, h('span', { class: 'p' }, '$ '), text);
+function emptyState(faceName, title, text, action) {
+  return h('div', { class: 'card empty' }, face(faceName, ''), h('h3', {}, title), text ? h('p', {}, text) : null, action);
+}
+
+// Light or dark, as the reader picks; the page follows the system until then
+const THEME = 'pepe-serve-theme';
+function setTheme(theme) {
+  if (theme) document.documentElement.dataset.theme = theme;
+  else delete document.documentElement.dataset.theme;
+}
+function themeToggle() {
+  try { setTheme(localStorage.getItem(THEME)); } catch {}
+  document.querySelector('.theme').addEventListener('click', () => {
+    const dark = document.documentElement.dataset.theme
+      ? document.documentElement.dataset.theme === 'dark'
+      : matchMedia('(prefers-color-scheme: dark)').matches;
+    const next = dark ? 'light' : 'dark';
+    setTheme(next);
+    try { localStorage.setItem(THEME, next); } catch {}
+  });
+}
+
 // ─── The token ───────────────────────────────────────────────────────────
 
 function takeToken() {
@@ -155,10 +196,15 @@ function forget() {
   try { sessionStorage.removeItem(KEY); } catch {}
 }
 
+function chrome(on) {
+  document.querySelector('.top').hidden = !on;
+  document.querySelector('.top-strip').hidden = !on;
+}
+
 function gate(message) {
-  document.querySelector('.top').hidden = true;
-  const input = h('input', { type: 'password', placeholder: 'Token', autocomplete: 'off', 'aria-label': 'Token', required: true });
-  const said = h('p', { class: 'bad', role: 'alert' }, message || '');
+  chrome(false);
+  const input = h('input', { type: 'password', placeholder: 'paste the token', autocomplete: 'off', 'aria-label': 'Token', required: true });
+  const said = h('div', { class: 'said', role: 'alert' }, message || '');
   const form = h('form', {
     onsubmit: async (e) => {
       e.preventDefault();
@@ -172,11 +218,12 @@ function gate(message) {
         said.textContent = err.message;
       }
     },
-  }, input, h('button', { class: 'primary' }, 'Open'));
+  }, h('span', { class: 'p' }, '$'), input, h('button', { type: 'submit' }, 'Open'));
   view.replaceChildren(h('div', { class: 'gate' },
-    face('waiting', ''),
-    h('h1', {}, 'pepe serve'),
-    h('p', { class: 'sub' }, 'Paste the token pepe serve printed when it started, or open the link it printed.'),
+    face('waiting', 'mascot'),
+    h('span', { class: 'tag' }, 'pepe serve'),
+    h('h1', {}, 'Load-test it, ', selected('from here', true)),
+    h('p', { class: 'lede' }, 'Paste the token pepe serve printed when it started, or open the link it printed: it signs you in.'),
     form, said));
   input.focus();
 }
@@ -189,16 +236,18 @@ function route() {
   // A link with a token, opened in a page that was open already
   if (/[#?&]token=/.test(location.hash)) takeToken();
   if (!token) return gate();
-  document.querySelector('.top').hidden = false;
+  chrome(true);
   document.querySelector('.who').replaceChildren(
-    `token ••••${token.slice(-4)} · `,
-    h('a', { href: '#', onclick: (e) => { e.preventDefault(); forget(); gate(); } }, 'forget it'));
+    h('span', { class: 'who' }, `token ••••${token.slice(-4)} · `),
+    h('a', { href: '#', onclick: (e) => { e.preventDefault(); forget(); gate(); } }, 'sign out'));
   const [path, q] = location.hash.replace(/^#\/?/, '').split('?');
   const [name, ...rest] = path.split('/').map(decodeURIComponent);
   const query = Object.fromEntries(new URLSearchParams(q || ''));
-  for (const a of document.querySelectorAll('nav a')) a.classList.toggle('on', a.dataset.nav === (name === 'run' ? 'runs' : name === 'test' ? 'tests' : name));
+  const here = name === 'run' ? 'runs' : name === 'test' ? 'tests' : name || 'runs';
+  for (const a of document.querySelectorAll('nav a')) a.classList.toggle('on', a.dataset.nav === here);
   const views = { runs: viewRuns, run: viewRun, new: viewNew, tests: viewTests, test: viewTest, compare: viewCompare, workers: viewWorkers };
   view.replaceChildren();
+  window.scrollTo(0, 0);
   (views[name] || viewRuns)(rest, query).catch((e) => view.append(error(e)));
 }
 
@@ -209,35 +258,53 @@ function every(ms, fn) {
 
 // ─── Runs ────────────────────────────────────────────────────────────────
 
+// What a run is, in a few words: its test, or its mode and what it sends to
+function titleOf(meta) {
+  if (meta.test) return meta.test;
+  const last = meta.command.replace(/^pepe /, '').split(' ').at(-1);
+  const file = last.split('/').at(-1);
+  return { api: `OpenAPI · ${file}`, flow: `Flow · ${file}`, replay: `Replay · ${file}`, ping: `Ping · ${last}` }[meta.mode] || last;
+}
+
+const go = (id) => (location.hash = `#/run/${encodeURIComponent(id)}`);
+
 async function viewRuns() {
-  const title = h('div', {}, h('h1', {}, 'Runs'), h('p', { class: 'sub' }, ''));
+  const lede = h('p', { class: 'lede' }, '');
   const body = h('div', {});
-  view.append(title, body);
+  view.append(h('div', { class: 'pagehead' },
+    h('span', { class: 'tag' }, 'Runs'),
+    h('div', { class: 'row' },
+      h('h1', {}, 'What ran, and ', selected('how it went')),
+      h('div', { class: 'actions' }, h('a', { class: 'button go', href: '#/new' }, '+ New run'))),
+    lede), body);
   const draw = async () => {
     const data = await api('GET', '/runs?limit=100');
-    title.querySelector('.sub').textContent =
-      `${data.going} going, ${data.max_runs} at most at once · newest first`;
+    lede.textContent = data.going
+      ? `${data.going} going now, ${data.max_runs} at most at once. Newest first.`
+      : `Nothing going. ${data.max_runs} at most at once. Newest first.`;
     if (!data.runs.length) {
-      body.replaceChildren(h('div', { class: 'empty card' }, face('sleeping', ''), 'No runs yet.', h('p', {}, h('a', { class: 'button primary', href: '#/new' }, 'Start one'))));
+      body.replaceChildren(emptyState('sleeping', 'Nothing has run yet', 'A run started here, from a script or from a schedule shows up here, live.',
+        h('a', { class: 'button go', href: '#/new' }, 'Start the first one')));
       return;
     }
-    body.replaceChildren(h('div', { class: 'card' }, h('table', {},
-      h('thead', {}, h('tr', {}, h('th', {}, 'State'), h('th', {}, 'What'), h('th', { class: 'hide-narrow' }, 'Mode'), h('th', {}, 'Started'), h('th', { class: 'hide-narrow' }, 'By'))),
-      h('tbody', {}, data.runs.map((r) => h('tr', { class: 'link', tabindex: 0, onclick: () => (location.hash = `#/run/${encodeURIComponent(r.id)}`), onkeydown: (e) => e.key === 'Enter' && (location.hash = `#/run/${encodeURIComponent(r.id)}`) },
-        h('td', {}, pill(r.state, STATE[r.state])),
-        h('td', {}, h('strong', {}, titleOf(r)), ' ', h('span', { class: 'mono faint hide-narrow' }, r.command.replace(/^pepe /, '')), r.workers && r.workers.length ? h('div', { class: 'faint' }, `on ${r.workers.join(', ')}`) : null),
-        h('td', { class: 'hide-narrow' }, r.mode),
-        h('td', {}, when(r.started)),
-        h('td', { class: 'hide-narrow' }, r.by)))))));
-    return data.going > 0;
+    body.replaceChildren(h('div', { class: 'card' }, h('div', { class: 'table' }, h('table', {},
+      h('thead', {}, h('tr', {}, h('th', {}, 'State'), h('th', { style: 'width:100%' }, 'What'), h('th', { class: 'hide-narrow' }, 'Mode'), h('th', { class: 'hide-narrow' }, 'Started'), h('th', { class: 'hide-narrow' }, 'By'))),
+      h('tbody', {}, data.runs.map((r) => h('tr', { class: 'link', tabindex: 0, onclick: () => go(r.id), onkeydown: (e) => e.key === 'Enter' && go(r.id) },
+        h('td', {}, pill(r.state === 'running' ? 'live' : r.state, STATE[r.state])),
+        h('td', {}, h('span', { class: 'what' }, titleOf(r)), h('span', { class: 'sub clip hide-narrow', title: r.command }, r.command.replace(/^pepe /, '')),
+          r.workers && r.workers.length ? h('span', { class: 'sub' }, `shared out to ${r.workers.join(', ')}`) : null,
+          h('span', { class: 'sub only-narrow' }, when(r.started))),
+        h('td', { class: 'hide-narrow mono nowrap' }, r.mode),
+        h('td', { class: 'nowrap hide-narrow' }, when(r.started)),
+        h('td', { class: 'hide-narrow faint nowrap' }, r.by))))))));
   };
   await draw();
   every(2000, () => draw().catch(() => {}));
 }
 
 // A chart of series over time: [{ points: [[t, v]], cls, area }]
-function chart(series, format, height = 150) {
-  const W = 460, H = height, L = 52, R = 8, T = 8, B = 20;
+function chart(series, format, height = 170) {
+  const W = 460, H = height, L = 56, R = 8, T = 10, B = 22;
   const all = series.flatMap((x) => x.points);
   const t1 = Math.max(1, ...all.map((p) => p[0]));
   const top = Math.max(1e-9, ...all.map((p) => p[1])) * 1.15;
@@ -245,11 +312,12 @@ function chart(series, format, height = 150) {
   const y = (v) => T + (1 - v / top) * (H - T - B);
   const svg = s('svg', { class: 'chart', viewBox: `0 0 ${W} ${H}`, role: 'img' });
   for (const f of [0, 0.5, 1]) {
-    svg.append(s('line', { class: 'grid', x1: L, x2: W - R, y1: y(top * f / 1.15), y2: y(top * f / 1.15) }));
-    svg.append(s('text', { class: 'axis', x: L - 6, y: y(top * f / 1.15) + 3, 'text-anchor': 'end' }, format(top * f / 1.15)));
+    const v = (top * f) / 1.15;
+    svg.append(s('line', { class: 'grid', x1: L, x2: W - R, y1: y(v), y2: y(v) }));
+    svg.append(s('text', { class: 'axis', x: L - 8, y: y(v) + 3.5, 'text-anchor': 'end' }, format(v)));
   }
-  svg.append(s('text', { class: 'axis', x: L, y: H - 4 }, '0s'));
-  svg.append(s('text', { class: 'axis', x: W - R, y: H - 4, 'text-anchor': 'end' }, `${Math.round(t1)}s`));
+  svg.append(s('text', { class: 'axis', x: L, y: H - 5 }, '0s'));
+  svg.append(s('text', { class: 'axis', x: W - R, y: H - 5, 'text-anchor': 'end' }, `${Math.round(t1)}s`));
   for (const one of series) {
     if (!one.points.length) continue;
     const d = one.points.map((p, i) => `${i ? 'L' : 'M'}${x(p[0]).toFixed(1)},${y(p[1]).toFixed(1)}`).join('');
@@ -260,27 +328,18 @@ function chart(series, format, height = 150) {
 }
 
 const legend = (...items) => h('div', { class: 'legend' }, items.map(([cls, text]) => h('span', {}, h('span', { class: `sw ${cls}` }), text)));
-const kpi = (label, value) => h('div', { class: 'kpi' }, h('div', { class: 'l' }, label), h('div', { class: 'v' }, value));
-
-// What a run is, in a few words: its test, or its mode and what it sends to
-function titleOf(meta) {
-  if (meta.test) return meta.test;
-  const last = meta.command.replace(/^pepe /, '').split(' ').at(-1);
-  const file = last.split('/').at(-1);
-  return { api: `OpenAPI · ${file}`, flow: `Flow · ${file}`, replay: `Replay · ${file}`, ping: `Ping · ${last}` }[meta.mode] || last;
-}
 
 // What a report has besides its totals, by mode: a table each
 function parts(report) {
   const codes = (sc) => Object.entries(sc || {}).map(([c, n]) => `${c} ×${count(n)}`).join(' · ');
-  const table = (title, head, rows, note) => rows.length ? [h('h2', {}, title), h('div', { class: 'card' },
-    note ? h('p', { class: 'faint', style: 'margin-top:0' }, note) : null,
-    h('table', {}, h('thead', {}, h('tr', {}, head.map(([label, num, narrow]) => h('th', { class: `${num ? 'num' : ''} ${narrow ? 'hide-narrow' : ''}` }, label)))),
-      h('tbody', {}, rows.map((cells) => h('tr', {}, cells.map((c, i) => h('td', { class: `${head[i][1] ? 'num' : ''} ${head[i][2] ? 'hide-narrow' : ''}` }, c)))))))] : [];
+  const table = (title, head, rows, note) => rows.length ? [section(title), h('div', { class: 'card' },
+    note ? h('p', { class: 'faint mono', style: 'margin:0 0 14px;font-size:13px' }, note) : null,
+    h('div', { class: 'table' }, h('table', {}, h('thead', {}, h('tr', {}, head.map(([label, num, narrow]) => h('th', { class: `${num ? 'num' : ''} ${narrow ? 'hide-narrow' : ''}` }, label)))),
+      h('tbody', {}, rows.map((cells) => h('tr', {}, cells.map((c, i) => h('td', { class: `${head[i][1] ? 'num' : ''} ${head[i][2] ? 'hide-narrow' : ''}` }, c))))))))] : [];
   const usual = [['Requests', 1], ['Throughput', 1, 1], ['Median', 1], ['p99', 1], ['Failed', 1], ['Answers', 0, 1]];
-  const row = (x) => [count(x.requests), rate(x.requests_per_second), ms(x.median_ms), ms(x.p99_ms), count(x.failed_requests), codes(x.status_codes)];
+  const row = (x) => [count(x.requests), rate(x.requests_per_second), ms(x.median_ms), ms(x.p99_ms), count(x.failed_requests), h('span', { class: 'mono faint' }, codes(x.status_codes))];
   if (report.endpoints) return table('Endpoints', [['Endpoint'], ...usual], report.endpoints.map((e) => [h('span', { class: 'mono' }, e.endpoint), ...row(e)]));
-  if (report.flow) return table('Steps', [['Step'], ...usual], report.flow.steps.map((x) => [x.step, ...row(x)]),
+  if (report.flow) return table('Steps', [['Step'], ...usual], report.flow.steps.map((x) => [h('span', { class: 'what' }, x.step), ...row(x)]),
     `${count(report.flow.chains_started)} chains started, ${count(report.flow.chains_completed)} completed`);
   if (report.replay) {
     const r = report.replay;
@@ -289,7 +348,7 @@ function parts(report) {
   }
   if (report.steps && report.holds_concurrency !== undefined) {
     return table('Steps', [['At once', 1], ['Requests', 1], ['Throughput', 1], ['Median', 1], ['p99', 1], ['Errors', 1], ['', 0, 1]],
-      report.steps.map((x) => [x.concurrency, count(x.requests), rate(x.requests_per_second), ms(x.median_ms), ms(x.p99_ms), pct(x.error_rate_percent), x.note || '']));
+      report.steps.map((x) => [x.concurrency, count(x.requests), rate(x.requests_per_second), ms(x.median_ms), ms(x.p99_ms), pct(x.error_rate_percent), h('span', { class: 'faint' }, x.note || '')]));
   }
   if (report.targets) {
     return table('Targets', [['Target'], ['Sent', 1], ['Lost', 1], ['p50', 1], ['p99', 1], ['TLS days left', 1, 1]],
@@ -299,50 +358,59 @@ function parts(report) {
   return [];
 }
 
+const MODE_NAMES = { run: 'Load test', api: 'OpenAPI', flow: 'Flow', replay: 'Replay', ping: 'Ping', ramp: 'Ramp' };
+
 async function viewRun([id]) {
   const meta = await api('GET', `/runs/${encodeURIComponent(id)}`);
+  const going = meta.state === 'running';
   const facePic = face(FACE[meta.state] || 'sleeping');
-  const state = pill(meta.state, STATE[meta.state]);
-  const kpis = h('div', { class: 'kpis' });
-  const charts = h('div', { class: 'two' });
+  const badge = h('span', { class: `badge ${going ? 'going' : STATE[meta.state] || ''}` }, going ? 'live' : meta.state);
+  const numbers = h('div', {});
+  const charts = h('div', { class: 'charts' });
   const feed = h('ul', { class: 'feed' });
   const verdict = h('div', {});
   const breakdown = h('div', {});
   const workers = h('div', {});
-  const steer = h('div', { class: 'actions' });
+  const steer = h('div', { class: 'steer' });
+  const url = meta.command.replace(/^pepe /, '').split(' ').at(-1);
   view.append(
-    h('div', { class: 'head' }, facePic, h('div', {},
-      h('h1', {}, titleOf(meta)),
-      h('div', { class: 'actions' }, state, h('span', { class: 'mono faint' }, meta.command)))),
-    steer, kpis, h('div', { class: 'card' }, charts), workers, verdict, breakdown,
-    h('h2', {}, 'As it went'), h('div', { class: 'card' }, feed));
+    h('div', { class: 'runhead' }, facePic, h('div', { style: 'min-width:0' },
+      h('span', { class: 'tag' }, `${MODE_NAMES[meta.mode] || meta.mode} · ${when(meta.started)} · by ${meta.by}`),
+      h('h1', {}, titleOf(meta)))),
+    command(meta.command.replace(/^pepe /, 'pepe ')),
+    h('div', { style: 'height:22px' }),
+    steer, numbers,
+    h('div', { class: 'panel' }, h('header', {}, h('span', { class: 'what' }, `pepe ${meta.mode === 'run' ? '' : meta.mode}`.trim()), h('span', { class: 'url' }, url), badge), charts),
+    workers, verdict, breakdown,
+    section('As it went'), h('div', { class: 'card' }, feed));
 
   const points = { rps: [], p50: [], p99: [] };
   let paused = false;
   const draw = () => {
     charts.replaceChildren(...[
-      meta.mode === 'ping' ? null : h('div', {}, h('h2', { style: 'margin-top:0' }, 'Requests a second'), chart([{ points: points.rps, cls: 'ember', area: true }], (v) => rate(v).replace('/s', ''))),
-      h('div', {}, h('h2', { style: 'margin-top:0' }, 'Latency'), chart([{ points: points.p50, cls: 'violet' }, { points: points.p99, cls: 'bad' }], ms), legend(['violet', 'p50'], ['bad', 'p99']))].filter(Boolean));
+      meta.mode === 'ping' ? null : h('div', {}, h('h3', {}, 'Requests a second'), chart([{ points: points.rps, cls: 'ember', area: true }], (v) => rate(v).replace('/s', ''))),
+      h('div', {}, h('h3', {}, 'Latency'), chart([{ points: points.p50, cls: 'violet' }, { points: points.p99, cls: 'bad' }], ms), legend(['violet', 'p50'], ['bad', 'p99']))].filter(Boolean));
+    if (meta.mode === 'ping') charts.style.gridTemplateColumns = '1fr';
   };
   draw();
 
-  const showSteer = (going) => {
+  const showSteer = (on) => {
     steer.replaceChildren();
-    if (!going) return;
+    if (!on) return;
     const say = async (what, body) => {
       try { await api('POST', `/runs/${encodeURIComponent(id)}/${what}`, body); } catch (e) { steer.append(error(e)); }
     };
     if (meta.mode !== 'ping') {
-      const n = h('input', { type: 'number', min: 1, style: 'width:90px', 'aria-label': 'Concurrency', placeholder: 'at once' });
+      const n = h('input', { type: 'number', min: 1, 'aria-label': 'Concurrency', placeholder: 'at once' });
       steer.append(
-        h('button', { onclick: () => say(paused ? 'resume' : 'pause') }, paused ? 'Resume' : 'Pause'),
+        h('button', { class: 'primary', onclick: () => say(paused ? 'resume' : 'pause') }, paused ? '▶ Resume' : '❚❚ Pause'),
         n, h('button', { onclick: () => n.value && say('concurrency', { n: Number(n.value) }) }, 'Set concurrency'));
     }
-    steer.append(h('button', { class: 'danger', onclick: () => say('stop') }, 'Stop'));
+    steer.append(h('button', { class: 'danger', onclick: () => say('stop') }, '■ Stop'));
   };
-  showSteer(meta.state === 'running');
+  showSteer(going);
 
-  const line = (cls, text) => feed.prepend(h('li', { class: 'finding' }, h('span', { class: `d ${cls}` }), text));
+  const line = (cls, text) => feed.prepend(h('li', {}, h('span', { class: `d ${cls}` }), h('span', {}, text)));
   const progress = (e) => {
     const t = e.elapsed_s ?? e.at_s ?? 0;
     if (e.targets) {
@@ -350,17 +418,17 @@ async function viewRun([id]) {
       const first = e.targets[0] || {};
       points.p50.push([t, first.p50_ms || 0]);
       points.p99.push([t, first.p99_ms || 0]);
-      kpis.replaceChildren(kpi('Sent', count(first.sent)), kpi('Answered', count(first.answered)), kpi('Last', ms(first.last_ms)), kpi('p50', ms(first.p50_ms)), kpi('p99', ms(first.p99_ms)));
+      numbers.replaceChildren(nums([['Sent', count(first.sent)], ['Answered', count(first.answered)], ['Last', ms(first.last_ms)], ['p50', ms(first.p50_ms)], ['p99', ms(first.p99_ms)]]));
     } else {
       // A rate over the first few milliseconds says nothing yet
       if (t >= 0.5) points.rps.push([t, e.requests_per_second || 0]);
       points.p50.push([t, e.p50_ms || 0]);
       points.p99.push([t, e.p99_ms || 0]);
-      kpis.replaceChildren(kpi('Requests', count(e.requests)), kpi('Throughput', rate(e.requests_per_second)), kpi('p50', ms(e.p50_ms)), kpi('p99', ms(e.p99_ms)), kpi('Failed', count(e.failed)));
+      numbers.replaceChildren(nums([['Requests', count(e.requests)], ['Throughput', rate(e.requests_per_second)], ['p50', ms(e.p50_ms)], ['p99', ms(e.p99_ms)], ['Failed', count(e.failed)]]));
       if (e.workers) {
-        workers.replaceChildren(h('h2', {}, 'Workers'), h('div', { class: 'card' }, h('table', {},
+        workers.replaceChildren(section('Workers'), h('div', { class: 'card' }, h('table', {},
           h('thead', {}, h('tr', {}, h('th', {}, 'Worker'), h('th', { class: 'num' }, 'Requests'), h('th', { class: 'num' }, 'Throughput'), h('th', { class: 'num' }, 'p99'))),
-          h('tbody', {}, Object.entries(e.workers).map(([name, w]) => h('tr', {}, h('td', {}, name), h('td', { class: 'num' }, count(w.requests)), h('td', { class: 'num' }, rate(w.requests_per_second)), h('td', { class: 'num' }, ms(w.p99_ms))))))));
+          h('tbody', {}, Object.entries(e.workers).map(([name, w]) => h('tr', {}, h('td', { class: 'what' }, name), h('td', { class: 'num' }, count(w.requests)), h('td', { class: 'num' }, rate(w.requests_per_second)), h('td', { class: 'num' }, ms(w.p99_ms))))))));
       }
     }
     draw();
@@ -369,14 +437,15 @@ async function viewRun([id]) {
   const controller = new AbortController();
   leaving.push(() => controller.abort());
   follow(id, (type, e) => {
-    if (type === 'start') line('note', e.worker ? `${e.worker} started its share` : `Started: ${e.load || e.target || ''}`);
+    if (type === 'start') line('note', e.worker ? `${e.worker} started its share` : `started · ${e.load || e.target || ''}`);
     else if (type === 'progress') progress(e);
     else if (type === 'anomaly') line('warn', e.text);
-    else if (type === 'steered') { paused = e.paused; showSteer(true); line('note', `${e.what}${e.concurrency ? ` (${e.concurrency} at once)` : ''}`); }
-    else if (type === 'worker_done') line(e.exit === 0 ? 'good' : 'bad', `${e.worker} ended its share${e.error ? `: ${e.error}` : ''}`);
+    else if (type === 'steered') { paused = e.paused; showSteer(true); line('note', `${e.what}${e.concurrency ? ` · ${e.concurrency} at once` : ''}`); }
+    else if (type === 'worker_done') line(e.exit === 0 ? 'good' : 'bad', `${e.worker} ended its share${e.error ? ` · ${e.error}` : ''}`);
     else if (type === 'report') showReport(e.report);
     else if (type === 'end') {
-      state.replaceWith(pill(e.state, STATE[e.state]));
+      badge.className = `badge ${STATE[e.state] || ''}`;
+      badge.textContent = e.state;
       showSteer(false);
       if (e.error) verdict.append(error(e.error));
       if (e.state !== 'done' && e.state !== 'stopped') facePic.src = `/ui/img/pepe-${FACE[e.state] || 'sleeping'}.png`;
@@ -392,17 +461,16 @@ async function viewRun([id]) {
     const sum = report.summary;
     if (sum) {
       const failed = sum.total_requests ? (100 * sum.failed_requests) / sum.total_requests : 0;
-      kpis.replaceChildren(kpi('Requests', count(sum.total_requests)), kpi('Throughput', rate(sum.requests_per_second)), kpi('p50', ms(sum.latency.median_ms)), kpi('p99', ms(sum.latency.p99_ms)), kpi('Failed', pct(failed)));
+      numbers.replaceChildren(nums([['Requests', count(sum.total_requests)], ['Throughput', rate(sum.requests_per_second)], ['p50', ms(sum.latency.median_ms)], ['p99', ms(sum.latency.p99_ms)], ['Failed', pct(failed)]]));
     }
     if (report.steps && report.holds_concurrency !== undefined) {
       // A ramp: what held, and where it stopped keeping up
       const cap = report.capacity;
-      kpis.replaceChildren(kpi('Requests', count(report.requests)), kpi('Held', report.holds_concurrency ? `${report.holds_concurrency} at once` : '—'),
-        kpi('Capacity', cap ? `${rate(cap.requests_per_second)}${cap.extrapolated ? ' (read past the ramp)' : ''}` : 'not reached'),
-        kpi('Failed', count(report.failed_requests)));
+      numbers.replaceChildren(nums([['Requests', count(report.requests)], ['Held', report.holds_concurrency ? `${report.holds_concurrency} at once` : '—', true],
+        ['Capacity', cap ? `${rate(cap.requests_per_second)}${cap.extrapolated ? '*' : ''}` : 'not reached', !cap], ['Failed', count(report.failed_requests)]]));
     }
     if (report.targets) {
-      kpis.replaceChildren(...report.targets.map((t) => kpi(t.target || t.name, `${ms(t.latency_ms && t.latency_ms.p50)} · ${pct(100 * (t.loss ?? 0))} lost`)));
+      numbers.replaceChildren(nums(report.targets.map((t) => [t.target || t.name, `${ms(t.latency_ms && t.latency_ms.p50)} · ${pct(100 * (t.loss ?? 0))} lost`, true])));
     }
     breakdown.replaceChildren(...parts(report));
     const findings = (report.verdict && report.verdict.findings) || report.findings || (report.targets || []).flatMap((t) => t.findings || []);
@@ -414,14 +482,16 @@ async function viewRun([id]) {
         class: `button${primary ? ' primary' : ''}`, target: '_blank', rel: 'noopener noreferrer',
         href: `/api/runs/${encodeURIComponent(id)}/report?format=${format}&ticket=${encodeURIComponent(ticket)}`,
       }, text);
-      links.replaceChildren(
-        ...[meta.mode !== 'ping' ? link('html', 'Full report', true) : null, link('md', 'Markdown'), link('json', 'JSON')].filter(Boolean));
+      links.replaceChildren(...[meta.mode !== 'ping' ? link('html', 'Full report ↗', true) : null, link('md', 'Markdown ↗'), link('json', 'JSON ↗')].filter(Boolean));
     }).catch((e) => links.replaceChildren(error(e)));
-    verdict.replaceChildren(h('h2', {}, 'Verdict'), h('div', { class: 'card' },
-      level ? h('p', {}, pill(level, LEVEL[level])) : null,
-      h('ul', {}, findings.map((f) => h('li', { class: 'finding' }, h('span', { class: `d ${LEVEL[String(f.level).toLowerCase()] || 'note'}` }),
-        f.text ?? [f.title, f.detail].filter(Boolean).join(': ')))),
-      h('div', { class: 'actions', style: 'margin-top:14px' },
+    const words = { healthy: 'Healthy', degraded: 'Degraded', failing: 'Failing' };
+    verdict.replaceChildren(section('Verdict'), h('div', { class: 'card' },
+      level ? h('div', { class: 'verdict-head' }, pill(level, LEVEL[level]), h('strong', {}, words[level] || level)) : null,
+      h('ul', { class: 'findings' }, findings.map((f) => {
+        const cls = LEVEL[String(f.level).toLowerCase()] || 'note';
+        return h('li', { class: cls === 'good' ? 'good' : cls === 'bad' ? 'bad' : '' }, h('span', { class: `d ${cls}` }), h('span', {}, f.text ?? [f.title, f.detail].filter(Boolean).join(': ')));
+      })),
+      h('div', { class: 'actions', style: 'margin-top:18px' },
         links,
         meta.mode === 'run' ? h('a', { class: 'button', href: `#/compare?after=${encodeURIComponent(id)}` }, 'Compare with…') : null)));
   }
@@ -429,14 +499,14 @@ async function viewRun([id]) {
 
 // ─── A new run ───────────────────────────────────────────────────────────
 
-// What each mode is, as the tabs say it
+// What each mode is, as the front page names them
 const MODES = [
-  ['run', 'Load test', 'One URL, at a concurrency or a rate'],
-  ['api', 'OpenAPI', 'Every endpoint of a spec, or the ones picked'],
-  ['flow', 'Flow', 'Steps in order, each fed by the last'],
-  ['replay', 'Replay', 'An access log\'s URLs, in their proportions'],
-  ['ping', 'Ping', 'A request now and then, split by phase'],
-  ['ramp', 'Ramp', 'More at once, step by step, to find the capacity'],
+  ['run', 'pepe URL', 'Load test', 'One URL, at a concurrency or a rate'],
+  ['api', 'pepe api', 'OpenAPI', 'Every endpoint of a spec, or the ones picked'],
+  ['flow', 'pepe flow', 'Flow', 'Steps in order, each fed by the last'],
+  ['replay', 'pepe replay', 'Replay', 'An access log\'s URLs, in their proportions'],
+  ['ping', 'pepe ping', 'Ping', 'A request now and then, split by phase'],
+  ['ramp', 'pepe ramp', 'Ramp', 'More at once, step by step, to the capacity'],
 ];
 
 // A file in the project the run can name: one uploaded here, chosen from
@@ -466,7 +536,7 @@ function filePicker(label, accept, hint, onChosen) {
     } catch (e) { said.textContent = e.message; said.className = 'hint bad'; }
   });
   select.addEventListener('change', () => onChosen && onChosen(select.value));
-  const field = h('div', { class: 'field' }, h('label', {}, label), h('div', { class: 'actions' }, select, upload), said);
+  const field = h('div', { class: 'field' }, h('label', {}, label), h('div', { class: 'actions', style: 'margin-top:6px' }, select, upload), said);
   field.value = () => select.value || undefined;
   field.set = (path) => load(path);
   return field;
@@ -494,12 +564,12 @@ function flowEditor() {
       expect: h('input', { type: 'number', placeholder: 'any 2xx', value: seed.expect || '' }),
       capture: h('textarea', { placeholder: 'token = json:$.token\nsession = header:Set-Cookie' }),
     };
-    const card = h('div', { class: 'card step' },
-      h('div', { class: 'actions', style: 'justify-content:space-between' }, h('strong', {}, `Step ${steps.length + 1}`),
-        h('button', { type: 'button', class: 'danger', onclick: () => { steps.splice(steps.indexOf(f), 1); card.remove(); } }, 'Remove')),
+    const card = h('div', { class: 'step' },
+      h('span', { class: 'n' }, `STEP ${steps.length + 1}`),
+      h('div', { class: 'actions' }, h('button', { type: 'button', class: 'danger', onclick: () => { steps.splice(steps.indexOf(f), 1); card.remove(); } }, 'Remove')),
       h('div', { class: 'fields' }, field('Name', f.name), field('Method', f.method), field('Expect', f.expect)),
-      field('URL', f.url, '{{holes}} are filled from the values below, the CSV and earlier captures'),
-      h('div', { class: 'two' }, field('Headers, one a line', f.headers), field('Body', f.body)),
+      field('URL', f.url, '{{holes}} are filled from the values above, the CSV and earlier captures'),
+      h('div', { class: 'fields' }, field('Headers, one a line', f.headers), field('Body', f.body)),
       field('Capture, one a line', f.capture, 'name = json:$.path · header:Name · regex:(…) · body'));
     steps.push(f);
     list.append(card);
@@ -539,12 +609,10 @@ function flowEditor() {
   };
   const el = h('div', {},
     field('Values every chain starts with, one a line', vars, 'name = value; a CSV below gives each chain a row of its own'),
-    list, h('button', { type: 'button', onclick: () => add() }, 'Add a step'));
+    list, h('button', { type: 'button', onclick: () => add() }, '+ Add a step'));
   el.write = write;
   return el;
 }
-
-const field = (label, input, hint) => h('div', { class: 'field' }, h('label', {}, label, input), hint ? h('div', { class: 'hint' }, hint) : null);
 
 async function viewNew(_, query) {
   const [workersData, testData] = await Promise.all([
@@ -558,8 +626,8 @@ async function viewNew(_, query) {
   const num = (input) => (input.value === '' ? undefined : Number(input.value));
   const str = (input) => input.value.trim() || undefined;
   const check = (label, hint) => {
-    const box = h('input', { type: 'checkbox', style: 'width:auto' });
-    const el = h('label', { style: 'display:flex;gap:8px;align-items:baseline;color:inherit;font-size:14px;margin:6px 0' }, box, h('span', {}, label, hint ? h('span', { class: 'hint', style: 'display:block' }, hint) : null));
+    const box = h('input', { type: 'checkbox' });
+    const el = h('label', { class: 'check' }, box, h('span', {}, label, hint ? h('span', { class: 'hint' }, hint) : null));
     el.box = box;
     return el;
   };
@@ -585,24 +653,20 @@ async function viewNew(_, query) {
     noKeepalive: check('A new connection for every request'),
     noRedirects: check('Take a redirect as the answer', 'rather than follow it'),
     noCompression: check('Don\'t ask for a compressed body'),
-    // Ping
     every: inp({ placeholder: '1s' }),
     slo: inp({ placeholder: 'total=500,ttfb=200' }),
     keepAlive: check('Keep the connection', 'as a browser would: DNS, connect and TLS only in the first'),
     allIps: check('Every address the name resolves to'),
     tcp: check('TCP connect only', 'host:port targets'),
-    // Ramp
     from: inp({ type: 'number', min: 1, placeholder: '1' }),
     to: inp({ type: 'number', min: 1, placeholder: '100' }),
     step: inp({ type: 'number', min: 1, placeholder: '10' }),
     stepFor: inp({ placeholder: '5s' }),
     until: h('textarea', { placeholder: 'p99 > 500ms\nerrors > 1%' }),
-    // API
     server: inp({ placeholder: 'the spec\'s own' }),
     auth: h('textarea', { placeholder: 'bearer=TOKEN\napiKey=KEY' }),
     set: h('textarea', { placeholder: 'id=1,2,3' }),
     includeWrites: check('Include POST, PUT, PATCH and DELETE', 'off: only reads are sent'),
-    // Replay
     baseUrl: inp({ type: 'url', placeholder: 'https://staging.example.com' }),
   };
   f.headers.value = (c.headers || []).join('\n');
@@ -625,7 +689,7 @@ async function viewNew(_, query) {
       f.insecure.box.checked = !!args.insecure;
       f.noKeepalive.box.checked = !!args.no_keepalive;
       f.noRedirects.box.checked = !!args.no_redirects;
-      curlSaid.append(h('div', { class: 'hint good' }, 'Filled in from the command.'), ...notes.map((n) => h('div', { class: 'hint warn' }, n)));
+      curlSaid.append(h('div', { class: 'hint good' }, '✓ Filled in from the command.'), ...notes.map((n) => h('div', { class: 'hint warn' }, n)));
     } catch (e) { curlSaid.append(error(e)); }
   };
 
@@ -638,64 +702,70 @@ async function viewNew(_, query) {
     if (!path) return;
     try {
       const spec = await api('GET', `/spec?file=${encodeURIComponent(path)}`);
-      const boxes = spec.operations.map((o) => {
-        const box = h('input', { type: 'checkbox', style: 'width:auto', checked: o.method === 'GET' });
+      const rows = spec.operations.map((o) => {
+        const box = h('input', { type: 'checkbox', checked: o.method === 'GET', 'aria-label': `${o.method} ${o.path}` });
         specOps.push([box, `${o.method} ${o.path}`]);
-        return h('tr', {}, h('td', {}, box), h('td', { class: 'mono' }, o.method), h('td', { class: 'mono' }, o.path), h('td', { class: 'hide-narrow faint' }, o.tag), h('td', { class: 'hide-narrow' }, o.summary));
+        return h('tr', { class: 'link', onclick: (e) => { if (e.target !== box) box.checked = !box.checked; } },
+          h('td', { style: 'width:28px' }, box), h('td', { class: 'mono', style: 'width:72px' }, h('b', {}, o.method)), h('td', { class: 'mono' }, o.path), h('td', { class: 'hide-narrow faint' }, o.tag), h('td', { class: 'hide-narrow' }, o.summary));
       });
       const all = (on) => specOps.forEach(([b]) => (b.checked = on));
       opsBox.append(
-        h('p', {}, h('strong', {}, spec.title || 'The spec'), ` ${spec.version || ''} · ${spec.base_url || 'no server named'} · ${spec.operations.length} operations`),
-        h('div', { class: 'actions' }, h('button', { type: 'button', onclick: () => all(true) }, 'All'), h('button', { type: 'button', onclick: () => all(false) }, 'None'),
-          h('button', { type: 'button', onclick: () => specOps.forEach(([b, k]) => (b.checked = k.startsWith('GET '))) }, 'Reads only')),
-        h('table', { style: 'margin-top:8px' }, h('tbody', {}, boxes)),
-        h('div', {}, spec.auth.length ? h('p', { class: 'hint' }, `It asks for auth: ${spec.auth.join(', ')}. Give it below as name=value.`) : null));
+        h('div', { class: 'plan', style: 'margin:4px 0 16px' }, h('b', {}, spec.title || 'The spec'), ` ${spec.version || ''}`, h('br'),
+          h('span', { class: 'k' }, `${spec.base_url || 'no server named'} · ${spec.operations.length} operations`)),
+        h('div', { class: 'actions', style: 'margin-bottom:12px' }, h('button', { type: 'button', class: 'quiet', onclick: () => all(true) }, 'All'), h('button', { type: 'button', class: 'quiet', onclick: () => all(false) }, 'None'),
+          h('button', { type: 'button', class: 'quiet', onclick: () => specOps.forEach(([b, k]) => (b.checked = k.startsWith('GET '))) }, 'Reads only')),
+        h('div', { class: 'table', style: 'margin-bottom:16px' }, h('table', {}, h('tbody', {}, rows))),
+        spec.auth.length ? h('p', { class: 'hint' }, `It asks for auth: ${spec.auth.join(', ')}. Give it below as name=value.`) : h('span'));
     } catch (e) { opsBox.append(error(e)); }
   };
   const specFile = filePicker('The spec', '.json,.yaml,.yml', 'An OpenAPI 3 or Swagger 2 file, JSON or YAML', showSpec);
-  const flowFile = filePicker('A flow file', '.toml', 'Or write the steps below');
+  const flowFile = filePicker('A flow file', '.toml', 'The steps as pepe flow reads them');
   const logFile = filePicker('The access log', '.log,.gz,.txt', 'nginx\'s or Apache\'s combined format, as it is (gzip too)');
   const varsFile = filePicker('Values from a CSV', '.csv', 'Each request (or chain) takes the next row: its first line names the {{holes}}');
   const flowSteps = flowEditor();
   let flowFrom = 'steps';
-  const flowSwitch = h('div', { class: 'actions' });
+  const flowSwitch = h('div', { class: 'actions', style: 'margin-bottom:18px' });
 
   const picks = workersData.workers.filter((w) => !w.busy).map((w) => {
-    const box = h('input', { type: 'checkbox', value: w.name, style: 'width:auto' });
-    return h('label', { style: 'display:inline-flex;gap:6px;margin-right:14px;color:inherit' }, box, w.name);
+    const box = h('input', { type: 'checkbox', value: w.name });
+    return h('label', { class: 'check', style: 'display:inline-flex;margin-right:18px' }, box, h('span', { class: 'mono' }, w.name));
   });
 
   // What each mode asks for
-  const card = (title, ...kids) => h('div', { class: 'card' }, h('h2', { style: 'margin-top:0' }, title), kids);
   const request = (withBody = true) => card('The request',
-    h('div', { class: 'fields' }, field('Method', f.method)),
-    h('div', { class: withBody ? 'two' : '' }, field('Headers, one a line', f.headers), withBody ? field('Body', f.body) : null));
+    h('div', { class: 'narrow' }, field('Method', f.method)),
+    h('div', { class: withBody ? 'fields' : '' }, field('Headers, one a line', f.headers), withBody ? field('Body', f.body) : null));
   const load = (unit = 'Requests') => card('How much',
     h('div', { class: 'fields' }, field(unit, f.requests), field('Or for', f.duration, '30s, 5m'), field('At once', f.concurrency), field('A second', f.rate, 'an arrival rate, as users arrive'), field('Warm-up', f.warmup, 'sent, not counted')),
-    picks.length && (mode === 'run') ? field('Share it out to', h('div', {}, picks), 'workers that joined and are free') : null);
-  const limits = (label = 'Fail if, one a line') => card('Limits', field(label, f.failIf, 'the run fails, exit 4, when one is crossed: p99 > 300ms, errors > 1%, rps < 500'));
-  const advanced = (withBody = true) => h('details', { class: 'card' }, h('summary', {}, 'More'),
-    h('div', { class: 'fields', style: 'margin-top:12px' }, field('Timeout, seconds', f.timeout), mode !== 'ping' && mode !== 'ramp' ? field('Threads', f.threads) : null, field('User-Agent', f.userAgent), field('Proxy', f.proxy, 'held to --allow-host like a target')),
-    f.insecure, mode !== 'ping' ? [f.noKeepalive, f.noRedirects, withBody ? f.noCompression : null] : null);
+    picks.length && mode === 'run' ? field('Share it out to', h('div', {}, picks), 'workers that joined and are free') : null);
+  const limits = () => card('Limits', field('Fail if, one a line', f.failIf, 'the run fails, exit 4, when one is crossed: p99 > 300ms, errors > 1%, rps < 500'));
+  const advanced = (withBody = true) => h('div', { class: 'card flat' }, h('details', {}, h('summary', {}, 'More options'),
+    h('div', { class: 'fields' }, field('Timeout, seconds', f.timeout), mode !== 'ping' && mode !== 'ramp' ? field('Threads', f.threads) : null, field('User-Agent', f.userAgent), field('Proxy', f.proxy, 'held to --allow-host like a target')),
+    f.insecure, mode !== 'ping' ? [f.noKeepalive, f.noRedirects, withBody ? f.noCompression : null] : null));
 
   const body = h('div', {});
+  const tabs = h('div', { class: 'modes', role: 'tablist' }, MODES.map(([m, cmd, label, about]) =>
+    h('button', { type: 'button', role: 'tab', 'data-mode': m, onclick: () => { mode = m; draw(); } }, h('code', {}, cmd), h('strong', {}, label), h('p', {}, about))));
   const draw = () => {
-    for (const a of tabs.querySelectorAll('button')) a.classList.toggle('on', a.dataset.mode === mode);
-    const about = MODES.find((m) => m[0] === mode)[2];
+    for (const a of tabs.querySelectorAll('button')) {
+      a.classList.toggle('on', a.dataset.mode === mode);
+      a.setAttribute('aria-selected', String(a.dataset.mode === mode));
+    }
     let parts;
     if (mode === 'run') {
       parts = [
-        card('Where', field('URL', f.url), h('details', {}, h('summary', {}, 'Or paste a curl command'), curl, h('div', { class: 'actions', style: 'margin-top:8px' }, h('button', { type: 'button', onclick: fromCurl }, 'Fill in from it')), curlSaid)),
+        card('Where', field('URL', f.url), h('details', {}, h('summary', {}, 'Or paste a curl command'), curl,
+          h('div', { class: 'actions', style: 'margin-top:10px' }, h('button', { type: 'button', onclick: fromCurl }, 'Fill in from it')), curlSaid)),
         request(), load(), limits(), card('Values', varsFile), advanced()];
     } else if (mode === 'api') {
       parts = [card('The spec', specFile, opsBox, h('div', { class: 'fields' }, field('Server', f.server, 'its URL instead of the spec\'s')), f.includeWrites,
-        h('div', { class: 'two' }, field('Auth, one a line', f.auth, 'scheme=value, as the spec names it'), field('Values, one a line', f.set, 'name=1,2,3: rotated through'))),
+        h('div', { class: 'fields', style: 'margin-top:14px' }, field('Auth, one a line', f.auth, 'scheme=value, as the spec names it'), field('Values, one a line', f.set, 'name=1,2,3: rotated through'))),
       request(), load(), limits(), advanced()];
     } else if (mode === 'flow') {
       flowSwitch.replaceChildren(
-        h('button', { type: 'button', class: flowFrom === 'steps' ? 'primary' : '', onclick: () => { flowFrom = 'steps'; draw(); } }, 'Write the steps'),
-        h('button', { type: 'button', class: flowFrom === 'file' ? 'primary' : '', onclick: () => { flowFrom = 'file'; draw(); } }, 'Use a flow file'));
-      parts = [card('The steps', flowSwitch, h('div', { style: 'margin-top:14px' }, flowFrom === 'file' ? flowFile : flowSteps)),
+        h('button', { type: 'button', class: flowFrom === 'steps' ? 'primary' : 'quiet', onclick: () => { flowFrom = 'steps'; draw(); } }, 'Write the steps'),
+        h('button', { type: 'button', class: flowFrom === 'file' ? 'primary' : 'quiet', onclick: () => { flowFrom = 'file'; draw(); } }, 'Use a flow file'));
+      parts = [card('The steps', flowSwitch, flowFrom === 'file' ? flowFile : flowSteps),
         load('Chains'), limits(), card('Values', varsFile), advanced()];
     } else if (mode === 'replay') {
       parts = [card('The log', logFile, field('Send to', f.baseUrl, 'the log\'s paths, on this server'), f.includeWrites), load(), limits(), advanced(false)];
@@ -708,10 +778,8 @@ async function viewNew(_, query) {
         card('The steps', h('div', { class: 'fields' }, field('From, at once', f.from), field('Up to', f.to), field('In steps of', f.step), field('Each step for', f.stepFor, '5s'))),
         card('Stop at', field('Until, one a line', f.until, 'the capacity is where one is crossed: p99 > 500ms')), request(), limits(), card('Values', varsFile), advanced()];
     }
-    body.replaceChildren(h('p', { class: 'sub' }, about), ...parts.flat().filter(Boolean));
+    body.replaceChildren(...parts.flat().filter(Boolean));
   };
-  const tabs = h('div', { class: 'tabs', role: 'tablist' }, MODES.map(([m, label]) =>
-    h('button', { type: 'button', role: 'tab', 'data-mode': m, onclick: () => { mode = m; draw(); } }, label)));
 
   // The run's arguments, as POST /api/runs takes them
   const args = async () => {
@@ -813,21 +881,25 @@ async function viewNew(_, query) {
     try {
       const { plan } = await api('POST', '/runs', { ...(await args()), dry_run: true });
       out.append(h('div', { class: 'plan' },
-        h('div', {}, h('strong', {}, 'Would send '), plan.load),
-        (plan.targets || []).slice(0, 12).map((t) => h('div', { class: 'mono' }, t)),
-        plan.more_targets ? h('div', { class: 'faint' }, `… and ${plan.more_targets} more`) : null,
-        (plan.settings || []).length ? h('div', { class: 'faint' }, plan.settings.join(' · ')) : null,
-        plan.guard ? h('div', { class: 'faint' }, `Held to ${plan.guard}`) : null,
+        h('div', {}, h('b', {}, 'Would send '), plan.load),
+        (plan.targets || []).slice(0, 12).map((t) => h('div', {}, h('span', { class: 'k' }, '→ '), t)),
+        plan.more_targets ? h('div', { class: 'k' }, `… and ${plan.more_targets} more`) : null,
+        (plan.settings || []).length ? h('div', { class: 'k' }, plan.settings.join(' · ')) : null,
+        plan.guard ? h('div', { class: 'k' }, `held to ${plan.guard}`) : null,
         (plan.notes || []).map((n) => h('div', { class: 'warn' }, n)),
-        h('div', { class: 'faint' }, 'Nothing sent yet.')));
+        h('div', { class: 'good', style: 'margin-top:6px' }, '✓ Nothing sent yet.')));
+      out.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     } catch (e) { out.append(error(e)); }
   };
   const start = async () => {
     out.replaceChildren();
     try {
       const run = await api('POST', '/runs', await args());
-      location.hash = `#/run/${encodeURIComponent(run.id)}`;
-    } catch (e) { out.append(error(e)); }
+      go(run.id);
+    } catch (e) {
+      out.append(error(e));
+      out.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
   };
   const save = async () => {
     out.replaceChildren();
@@ -848,16 +920,16 @@ async function viewNew(_, query) {
   };
 
   view.append(
-    h('h1', {}, query.test ? `Run ${query.test}` : 'New run'),
-    h('p', { class: 'sub' }, 'Checked against the server\'s guardrails before anything is sent.'),
+    query.test
+      ? pagehead({ tag: 'Edit a test', before: 'Run ', sel: query.test, lede: 'Change what it sends, check the plan, start it or save it again.' })
+      : pagehead({ tag: 'New run', before: 'Point it at something, ', sel: 'see where the time goes', lede: 'Pick a mode, say how much, and check the plan: it is held to the server\'s guardrails before anything is sent.' }),
     tabs,
     h('form', { onsubmit: (e) => { e.preventDefault(); start(); } },
-      body,
-      h('div', { class: 'actions sticky' },
-        h('button', { class: 'primary', type: 'submit' }, 'Start'),
+      body, out,
+      h('div', { class: 'bar' }, h('div', { class: 'actions' },
+        h('button', { class: 'go', type: 'submit' }, '▶ Start'),
         h('button', { type: 'button', onclick: plan }, 'Check the plan'),
-        h('button', { type: 'button', onclick: save }, 'Save as a test')),
-      out));
+        h('button', { type: 'button', class: 'quiet', onclick: save }, 'Save as a test')))));
   draw();
 }
 
@@ -867,47 +939,45 @@ async function viewTests() {
   const [data, sched] = await Promise.all([api('GET', '/tests'), api('GET', '/schedules')]);
   const out = h('div', {});
   const run = async (name) => {
-    try {
-      const r = await api('POST', '/runs', { test: name });
-      location.hash = `#/run/${encodeURIComponent(r.id)}`;
-    } catch (e) { out.replaceChildren(error(e)); }
+    try { go((await api('POST', '/runs', { test: name })).id); } catch (e) { out.replaceChildren(error(e)); }
   };
   const remove = async (name) => {
     if (!confirm(`Delete the test ${name}? Its recorded runs stay.`)) return;
     try { await api('DELETE', `/tests/${encodeURIComponent(name)}`); route(); } catch (e) { out.replaceChildren(error(e)); }
   };
-  view.append(h('h1', {}, 'Tests'), h('p', { class: 'sub' }, 'The project\'s saved tests, .pepe/tests/: the same as pepe --load NAME.'), out);
+  view.append(pagehead({ tag: 'Tests', before: 'Worked out once, ', sel: 'run again', lede: 'The project\'s saved tests, .pepe/tests/: the same files as pepe --load NAME, and their recorded runs.', right: h('a', { class: 'button go', href: '#/new' }, '+ New test') }), out);
   if (!data.tests.length) {
-    view.append(h('div', { class: 'empty card' }, face('sleeping', ''), 'No saved tests yet.', h('p', {}, h('a', { class: 'button primary', href: '#/new' }, 'Make one'))));
+    view.append(emptyState('sleeping', 'No saved tests yet', 'Set up a run, then Save as a test: it runs again from here, from a schedule, or as pepe --load NAME.',
+      h('a', { class: 'button go', href: '#/new' }, 'Make one')));
   } else {
-    view.append(h('div', { class: 'card' }, h('table', {},
-      h('thead', {}, h('tr', {}, h('th', {}, 'Test'), h('th', { class: 'hide-narrow' }, 'URL'), h('th', { class: 'num' }, 'Runs'), h('th', {}, ''))),
+    view.append(h('div', { class: 'card' }, h('div', { class: 'table' }, h('table', {},
+      h('thead', {}, h('tr', {}, h('th', {}, 'Test'), h('th', { class: 'hide-narrow' }, 'Sends to'), h('th', { class: 'num' }, 'Runs'), h('th', {}, ''))),
       h('tbody', {}, data.tests.map((t) => h('tr', {},
-        h('td', {}, h('a', { href: `#/test/${encodeURIComponent(t.name)}` }, t.name), t.error ? h('div', { class: 'bad' }, t.error) : null),
-        h('td', { class: 'mono hide-narrow' }, (t.config && t.config.url) || '—'),
+        h('td', {}, h('a', { class: 'what', href: `#/test/${encodeURIComponent(t.name)}` }, t.name), t.error ? h('span', { class: 'sub bad' }, t.error) : null),
+        h('td', { class: 'mono hide-narrow', style: 'font-size:13px' }, (t.config && t.config.url) || '—'),
         h('td', { class: 'num' }, t.runs),
         h('td', {}, h('div', { class: 'actions', style: 'justify-content:flex-end' },
-          h('button', { class: 'primary', onclick: () => run(t.name) }, 'Run'),
-          h('a', { class: 'button', href: `#/new?test=${encodeURIComponent(t.name)}` }, 'Edit'),
-          h('button', { class: 'danger', onclick: () => remove(t.name) }, 'Delete')))))))));
+          h('button', { class: 'primary', onclick: () => run(t.name) }, '▶ Run'),
+          h('a', { class: 'button quiet', href: `#/new?test=${encodeURIComponent(t.name)}` }, 'Edit'),
+          h('button', { class: 'danger', onclick: () => remove(t.name) }, 'Delete'))))))))));
   }
 
   // Schedules
   const which = h('select', { 'aria-label': 'Test' }, data.tests.map((t) => h('option', { value: t.name }, t.name)));
-  const often = h('input', { placeholder: '1h', 'aria-label': 'Every', style: 'max-width:120px' });
+  const often = h('input', { placeholder: '1h', 'aria-label': 'Every', style: 'width:110px' });
   const said = h('div', {});
-  view.append(h('h2', {}, 'Schedules'), h('div', { class: 'card' },
-    sched.schedules.length ? h('table', {},
+  view.append(section('Schedules'), h('div', { class: 'card' },
+    sched.schedules.length ? h('div', { class: 'table' }, h('table', {},
       h('thead', {}, h('tr', {}, h('th', {}, 'Test'), h('th', {}, 'Every'), h('th', { class: 'hide-narrow' }, 'Next'), h('th', {}, 'Last'), h('th', {}, ''))),
       h('tbody', {}, sched.schedules.map((x) => h('tr', {},
-        h('td', {}, x.test), h('td', {}, every_(x.every_s)),
+        h('td', { class: 'what' }, x.test), h('td', { class: 'mono' }, every_(x.every_s)),
         h('td', { class: 'hide-narrow' }, new Date(x.next_unix * 1000).toLocaleString()),
-        h('td', {}, x.last_run ? h('a', { href: `#/run/${encodeURIComponent(x.last_run)}` }, 'its run') : x.last_skipped ? h('span', { class: 'warn' }, `skipped: ${x.last_skipped}`) : '—'),
-        h('td', {}, h('button', { class: 'danger', onclick: async () => { await api('DELETE', `/schedules/${x.id}`); route(); } }, 'Remove')))))) : h('p', { class: 'faint' }, 'None.'),
-    data.tests.length ? h('form', { class: 'actions', style: 'margin-top:12px', onsubmit: async (e) => {
+        h('td', {}, x.last_run ? h('a', { href: `#/run/${encodeURIComponent(x.last_run)}` }, 'its run') : x.last_skipped ? h('span', { class: 'warn' }, `skipped: ${x.last_skipped}`) : h('span', { class: 'faint' }, 'not yet')),
+        h('td', {}, h('div', { class: 'actions', style: 'justify-content:flex-end' }, h('button', { class: 'danger', onclick: async () => { await api('DELETE', `/schedules/${x.id}`); route(); } }, 'Remove')))))))) : h('p', { class: 'faint', style: 'margin:0 0 4px' }, 'Nothing runs on its own yet.'),
+    data.tests.length ? h('form', { class: 'actions', style: 'margin-top:18px', onsubmit: async (e) => {
       e.preventDefault();
       try { await api('POST', '/schedules', { test: which.value, every: often.value.trim() }); route(); } catch (err) { said.replaceChildren(error(err)); }
-    } }, 'Run', which, 'every', often, h('button', { type: 'submit' }, 'Add')) : null, said));
+    } }, h('span', { class: 'mono faint' }, 'run'), which, h('span', { class: 'mono faint' }, 'every'), often, h('button', { type: 'submit' }, '+ Add')) : null, said));
 }
 
 function every_(seconds) {
@@ -921,70 +991,73 @@ async function viewTest([name]) {
   const data = await api('GET', `/tests/${encodeURIComponent(name)}/runs`);
   let before = data.runs[1] && data.runs[1].id;
   let after = data.runs[0] && data.runs[0].id;
-  const go = h('a', { class: 'button primary' }, 'Compare');
-  const setLink = () => go.setAttribute('href', `#/compare?before=${encodeURIComponent(before || '')}&after=${encodeURIComponent(after || '')}`);
+  const compare = h('a', { class: 'button primary' }, 'Compare the two');
+  const setLink = () => compare.setAttribute('href', `#/compare?before=${encodeURIComponent(before || '')}&after=${encodeURIComponent(after || '')}`);
   setLink();
-  view.append(
-    h('h1', {}, name),
-    h('p', { class: 'sub' }, `${data.runs.length} recorded run${data.runs.length === 1 ? '' : 's'}, newest first: the same as pepe history ${name}.`),
-    h('div', { class: 'actions' },
-      h('button', { class: 'primary', onclick: async () => { const r = await api('POST', '/runs', { test: name }); location.hash = `#/run/${encodeURIComponent(r.id)}`; } }, 'Run it now'),
-      h('a', { class: 'button', href: `#/new?test=${encodeURIComponent(name)}` }, 'Edit')));
+  view.append(pagehead({
+    tag: 'Test', sel: name,
+    lede: `${data.runs.length} recorded run${data.runs.length === 1 ? '' : 's'}, newest first: the same as pepe history ${name}.`,
+    right: [h('button', { class: 'go', onclick: async () => go((await api('POST', '/runs', { test: name })).id) }, '▶ Run it now'),
+      h('a', { class: 'button', href: `#/new?test=${encodeURIComponent(name)}` }, 'Edit')],
+  }));
   if (!data.runs.length) {
-    view.append(h('div', { class: 'empty card' }, face('sleeping', ''), 'Not run yet.'));
+    view.append(emptyState('sleeping', 'Not run yet', 'Its runs are kept here, to hold against each other.', null));
     return;
   }
-  view.append(h('div', { class: 'card' }, h('table', {},
+  view.append(h('div', { class: 'card' }, h('div', { class: 'table' }, h('table', {},
     h('thead', {}, h('tr', {}, h('th', {}, 'Before'), h('th', {}, 'After'), h('th', {}, 'When'), h('th', { class: 'num' }, 'Requests'), h('th', { class: 'num' }, 'p50'), h('th', { class: 'num' }, 'p99'), h('th', { class: 'num hide-narrow' }, 'Throughput'), h('th', { class: 'num hide-narrow' }, 'Failed'))),
     h('tbody', {}, data.runs.map((r) => {
       const sm = r.summary || {};
       return h('tr', {},
-        h('td', {}, h('input', { type: 'radio', name: 'before', style: 'width:auto', checked: r.id === before, 'aria-label': 'Before', onchange: () => { before = r.id; setLink(); } })),
-        h('td', {}, h('input', { type: 'radio', name: 'after', style: 'width:auto', checked: r.id === after, 'aria-label': 'After', onchange: () => { after = r.id; setLink(); } })),
+        h('td', {}, h('input', { type: 'radio', name: 'before', checked: r.id === before, 'aria-label': 'Before', onchange: () => { before = r.id; setLink(); } })),
+        h('td', {}, h('input', { type: 'radio', name: 'after', checked: r.id === after, 'aria-label': 'After', onchange: () => { after = r.id; setLink(); } })),
         h('td', {}, when(r.when)),
         h('td', { class: 'num' }, count(sm.requests)),
         h('td', { class: 'num' }, ms(sm.median_ms)),
         h('td', { class: 'num' }, ms(sm.p99_ms)),
         h('td', { class: 'num hide-narrow' }, rate(sm.requests_per_second)),
         h('td', { class: 'num hide-narrow' }, pct(sm.failed_percent)));
-    }))), h('div', { class: 'actions', style: 'margin-top:12px' }, go)));
+    })))), h('div', { class: 'actions', style: 'margin-top:18px' }, compare)));
 }
 
 // ─── Compare ─────────────────────────────────────────────────────────────
 
 async function viewCompare(_, query) {
   const runs = (await api('GET', '/runs?limit=100')).runs.filter((r) => r.state === 'done' || r.state === 'stopped');
-  const options = runs.map((r) => h('option', { value: r.id }, `${r.test || r.command.replace(/^pepe /, '')} · ${when(r.started)}`));
+  const options = runs.map((r) => h('option', { value: r.id }, `${titleOf(r)} · ${when(r.started)}`));
   const before = h('input', { list: 'runs', value: query.before || '', placeholder: 'a run, or NAME/WHEN', 'aria-label': 'Before' });
   const after = h('input', { list: 'runs', value: query.after || '', placeholder: 'a run, or NAME/WHEN', 'aria-label': 'After' });
   const out = h('div', {});
   view.append(
-    h('h1', {}, 'Compare'),
-    h('p', { class: 'sub' }, 'Two runs held against each other: what moved more than a run of that size wobbles on its own.'),
+    pagehead({ tag: 'Compare', before: 'Did it get ', sel: 'faster?', lede: 'Two runs held against each other: what moved more than a run of that size wobbles on its own.' }),
     h('datalist', { id: 'runs' }, options),
     h('form', { class: 'card', onsubmit: (e) => { e.preventDefault(); location.hash = `#/compare?before=${encodeURIComponent(before.value)}&after=${encodeURIComponent(after.value)}`; } },
-      h('div', { class: 'two' }, h('div', { class: 'field' }, h('label', {}, 'Before', before)), h('div', { class: 'field' }, h('label', {}, 'After', after))),
+      h('div', { class: 'fields' }, field('Before', before), field('After', after)),
       h('button', { class: 'primary', type: 'submit' }, 'Compare')),
     out);
   if (!query.before || !query.after) return;
   try {
     const c = await api('GET', `/compare?before=${encodeURIComponent(query.before)}&after=${encodeURIComponent(query.after)}&gate=1`);
     const cls = { faster: 'good', better: 'good', same: 'faint', slower: 'bad', worse: 'bad' }[c.verdict] || '';
-    out.append(h('div', { class: 'card' },
-      h('div', { class: 'actions' }, pill(c.verdict, cls), c.regression ? pill('regression', 'bad') : null),
-      h('table', { style: 'margin-top:12px' },
-        h('thead', {}, h('tr', {}, h('th', {}, 'What'), h('th', { class: 'num' }, 'Before'), h('th', { class: 'num' }, 'After'), h('th', { class: 'num' }, 'Change'), h('th', { class: 'num hide-narrow' }, 'Wobbles'))),
+    out.append(section('What moved'), h('div', { class: 'card' },
+      h('div', { class: 'verdict-head' }, pill(c.verdict, cls), c.regression ? pill('regression', 'bad') : null,
+        h('strong', {}, { faster: 'Faster', better: 'Better', same: 'About the same', slower: 'Slower', worse: 'Worse' }[c.verdict] || c.verdict)),
+      h('div', { class: 'table' }, h('table', {},
+        h('thead', {}, h('tr', {}, h('th', {}, 'What'), h('th', { class: 'num' }, 'Before'), h('th', { class: 'num' }, 'After'), h('th', { class: 'num' }, 'Change'), h('th', { class: 'num hide-narrow' }, 'Wobbles by'))),
         h('tbody', {}, (c.changes || []).map((x) => {
           const fmt = x.metric.endsWith('_ms') ? ms : x.metric.includes('per_second') ? rate : (v) => (+v).toLocaleString();
           const up = x.change_percent > 0;
           const bad = x.significant && (x.metric.endsWith('_ms') || x.metric.includes('failed') ? up : !up);
           return h('tr', {},
-            h('td', {}, x.metric.replace(/_ms$|_percent$/, '').replaceAll('_', ' ')),
+            h('td', { class: 'what' }, x.metric.replace(/_ms$|_percent$/, '').replaceAll('_', ' ')),
             h('td', { class: 'num' }, fmt(x.before)), h('td', { class: 'num' }, fmt(x.after)),
-            h('td', { class: `num ${x.significant ? (bad ? 'bad' : 'good') : 'faint'}` }, x.change_percent === null ? '—' : `${x.change_percent > 0 ? '+' : ''}${x.change_percent}%`),
+            h('td', { class: `num ${x.significant ? (bad ? 'bad' : 'good') : 'faint'}` }, h('b', {}, x.change_percent === null ? '—' : `${x.change_percent > 0 ? '+' : ''}${x.change_percent}%`)),
             h('td', { class: 'num faint hide-narrow' }, `±${x.noise_percent}%`));
-        }))),
-      h('ul', { style: 'margin-top:14px' }, (c.findings || []).map((f) => h('li', { class: 'finding' }, h('span', { class: `d ${LEVEL[String(f.level).toLowerCase()] || 'note'}` }), f.text)))));
+        })))),
+      h('ul', { class: 'findings', style: 'margin-top:18px' }, (c.findings || []).map((f) => {
+        const k = LEVEL[String(f.level).toLowerCase()] || 'note';
+        return h('li', { class: k === 'good' ? 'good' : k === 'bad' ? 'bad' : '' }, h('span', { class: `d ${k}` }), h('span', {}, f.text));
+      }))));
   } catch (e) { out.append(error(e)); }
 }
 
@@ -992,18 +1065,15 @@ async function viewCompare(_, query) {
 
 async function viewWorkers() {
   const data = await api('GET', '/workers');
-  view.append(h('h1', {}, 'Workers'), h('p', { class: 'sub' }, 'Machines that joined: a run can be shared out to them, each under its own guardrails.'));
-  view.append(h('div', { class: 'card' }, data.workers.length
-    ? h('table', {},
-      h('thead', {}, h('tr', {}, h('th', {}, 'Worker'), h('th', {}, 'pepe'), h('th', { class: 'hide-narrow' }, 'Held to'), h('th', {}, 'Joined'), h('th', {}, 'Busy with'))),
+  view.append(pagehead({ tag: 'Workers', before: 'More machines, ', sel: 'one run', lede: 'Machines that joined this server: a load test can be shared out to them, each under its own guardrails, and its numbers added up exactly.' }));
+  view.append(data.workers.length
+    ? h('div', { class: 'card' }, h('div', { class: 'table' }, h('table', {},
+      h('thead', {}, h('tr', {}, h('th', {}, 'Worker'), h('th', {}, 'pepe'), h('th', { class: 'hide-narrow' }, 'Held to'), h('th', {}, 'Joined'), h('th', {}, 'Now'))),
       h('tbody', {}, data.workers.map((w) => h('tr', {},
-        h('td', {}, h('strong', {}, w.name)), h('td', {}, w.pepe || '—'), h('td', { class: 'hide-narrow' }, w.guard || 'nothing of its own'),
-        h('td', {}, when(w.since)), h('td', {}, w.busy ? h('a', { href: `#/run/${encodeURIComponent(w.busy)}` }, 'a run') : h('span', { class: 'faint' }, 'free'))))))
-    : h('div', { class: 'empty' }, face('sleeping', ''), 'None has joined.')));
-  view.append(h('h2', {}, 'Join one'), h('div', { class: 'card' },
-    h('p', { style: 'margin-top:0' }, 'On the other machine, with a token from this server\'s token file:'),
-    h('pre', { class: 'mono plan', style: 'white-space:pre-wrap;margin:0' },
-      `pepe --allow-host HOST worker --join ${location.origin} --name NAME --token-file token`)));
+        h('td', { class: 'what mono' }, w.name), h('td', { class: 'mono' }, w.pepe || '—'), h('td', { class: 'hide-narrow faint' }, w.guard || 'nothing of its own'),
+        h('td', {}, when(w.since)), h('td', {}, w.busy ? h('a', { href: `#/run/${encodeURIComponent(w.busy)}` }, pill('busy', 'going')) : pill('free', 'faint'))))))))
+    : emptyState('sleeping', 'No worker has joined', 'Start one on another machine, with a token from this server\'s token file.', null));
+  view.append(section('Join one'), command(`pepe --allow-host HOST worker --join ${location.origin} --name NAME --token-file token`));
   every(3000, async () => {
     const now = await api('GET', '/workers').catch(() => null);
     if (now && JSON.stringify(now) !== JSON.stringify(data)) route();
@@ -1012,6 +1082,7 @@ async function viewWorkers() {
 
 // ─── Go ──────────────────────────────────────────────────────────────────
 
+themeToggle();
 takeToken();
 window.addEventListener('hashchange', route);
 route();
