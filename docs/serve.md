@@ -13,6 +13,23 @@ curl -H "Authorization: Bearer $TOKEN" localhost:7878/api/runs \
      -d '{"url": "http://127.0.0.1:8080/health", "requests": 5000, "concurrency": 20}'
 ```
 
+## The page
+
+`http://127.0.0.1:7878/` is pepe in a browser, every mode of it: a load
+test (or a curl command pasted in), an OpenAPI spec uploaded and its
+endpoints picked, a flow written step by step, an access log replayed, a
+ping, a ramp, each with its options (headers, body, limits, timeout,
+threads, TLS, keep-alive, redirects, a proxy, values from a CSV) and its
+plan checked before it starts. A run is live (its curves, its verdict as
+it forms, pause, resume, concurrency and stop) and ends with what its
+mode has to say: each endpoint, step, URL, ramp step or target. The saved
+tests and their history, schedules, compare and the workers are there
+too. It is one page in the
+binary, no script from anywhere else. The link pepe serve prints opens it
+with the token, which the page keeps for the tab and takes out of the
+address bar; a report opens as a link of its own, with a ticket for that
+run alone that runs out in ten minutes.
+
 ## Safe to leave running
 
 - **Loopback by default.** `--listen` takes another address; any but
@@ -25,8 +42,8 @@ curl -H "Authorization: Bearer $TOKEN" localhost:7878/api/runs \
   start a run.
 - **The guardrails hold every run.** A request can't loosen them: its own
   guardrail keys only tighten, a value is never read as a flag, and what
-  reaches past them isn't taken (`webhook`, `slack`, `otlp`, a file
-  outside the project).
+  reaches past them isn't taken (`webhook`, `slack`, `otlp`, `save`, a
+  file outside the project).
 - **`--max-runs`** (1 by default): runs going at once, here and on the
   workers; past it, `429`.
 - **An audit log**: who did what, `.pepe/serve/audit.jsonl`.
@@ -46,6 +63,7 @@ or a saved test by name.
 | `GET /api/runs/ID` | How it stands, and its report once it has one |
 | `GET /api/runs/ID/events` | The run live, as Server-Sent Events: `start`, `progress` a second, `anomaly`, `steered`, `report`, `end`. `Last-Event-ID` (or `?after=`) goes on from there |
 | `GET /api/runs/ID/report` | The report: `?format=json` (the default), `html`, `md`, `txt` or `csv` |
+| `POST /api/runs/ID/ticket` | A ticket that opens the run's report as a plain link (`?ticket=…`), and nothing else, for ten minutes |
 | `POST /api/runs/ID/pause` · `/resume` · `/stop` | Steers it; a ping can be stopped |
 | `POST /api/runs/ID/concurrency` `{"n": 40}` | Held to `--max-concurrency` |
 
@@ -73,6 +91,15 @@ run, server or not.
 
 Runs started from the server and from the command line are the same
 files: `pepe history NAME` lists both.
+
+## Files and helpers
+
+| Call | Does |
+| --- | --- |
+| `PUT /api/files/NAME` | Keeps the body (up to 256 MB) as `.pepe/serve/files/NAME`, a file a run can name: a spec, a log, a flow, a CSV |
+| `GET /api/files` · `DELETE /api/files/NAME` | |
+| `GET /api/spec?file=PATH` | A spec in the project: its title, servers, tags, auth and every operation, to pick from |
+| `POST /api/curl` `{"command": "curl …"}` | The request a curl command is, as a run's arguments, and what of it pepe can't honour |
 
 ## Schedules
 
