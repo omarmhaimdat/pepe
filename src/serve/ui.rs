@@ -98,8 +98,13 @@ mod tests {
         assert_eq!(serve("/elsewhere").status(), StatusCode::NOT_FOUND);
         // The fonts are the real thing, and the page's style names them
         assert!(GEIST.starts_with(b"wOF2") && GEIST_MONO.starts_with(b"wOF2"));
-        assert!(STYLE.contains("/ui/fonts/geist.woff2") && STYLE.contains("/ui/fonts/geist-mono.woff2"));
-        assert_eq!(serve("/ui/fonts/geist.woff2").headers()["content-type"], "font/woff2");
+        assert!(
+            STYLE.contains("/ui/fonts/geist.woff2") && STYLE.contains("/ui/fonts/geist-mono.woff2")
+        );
+        assert_eq!(
+            serve("/ui/fonts/geist.woff2").headers()["content-type"],
+            "font/woff2"
+        );
     }
 
     /// Nothing the page shows is made into markup: what a run or a target
