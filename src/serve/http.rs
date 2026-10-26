@@ -69,7 +69,7 @@ pub fn who<'a>(request: &Request<Incoming>, tokens: &'a [(String, String)]) -> O
         .map(|(name, _)| name.as_str())
 }
 
-fn same(a: &[u8], b: &[u8]) -> bool {
+pub fn same(a: &[u8], b: &[u8]) -> bool {
     if a.len() != b.len() {
         return false;
     }

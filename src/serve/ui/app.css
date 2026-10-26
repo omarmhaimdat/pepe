@@ -1,0 +1,97 @@
+/* pepe serve's page: the report page's colours and type (src/html.rs), so
+   a run looks the same here and in its report */
+:root{--ground:#fffaf5;--surface:#ffffff;--tile:#fbf1e8;--text:#2a1d17;--label:#7d6a5e;--line:#eadfd6;--ember:#e8702a;--violet:#6b62d6;--teal:#14866a;--good:#2e8a3a;--warn:#b7791f;--bad:#d1334f;--faint:#a99a90;--focus:#e8702a55}
+@media (prefers-color-scheme:dark){:root{--ground:#140f0d;--surface:#1d1613;--tile:#261d19;--text:#f3e8de;--label:#9c8a7e;--line:#33271f;--ember:#ff8a3d;--violet:#9d95ff;--teal:#4fd1a8;--good:#9ccf6a;--warn:#f0cf5a;--bad:#ff5a6e;--faint:#6e5f56;--focus:#ff8a3d66}}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html{background:var(--ground)}
+body{margin:0;color:var(--text);font:15px/1.55 ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+a{color:var(--ember)}
+code,.mono{font:12.5px ui-monospace,SFMono-Regular,Menlo,monospace}
+code{background:var(--tile);padding:1px 5px;border-radius:5px;overflow-wrap:anywhere}
+
+/* The bar on top */
+.top{display:flex;align-items:center;gap:20px;padding:12px 24px;border-bottom:1px solid var(--line);background:var(--surface);position:sticky;top:0;z-index:2;flex-wrap:wrap}
+.brand{display:flex;align-items:center;gap:10px;font-weight:600;text-decoration:none;color:var(--text)}
+.brand img{width:28px;height:28px;border-radius:7px;image-rendering:pixelated}
+nav{display:flex;gap:4px;flex-wrap:wrap}
+nav a{color:var(--label);text-decoration:none;padding:6px 12px;border-radius:8px;font-size:14px}
+nav a:hover{background:var(--tile);color:var(--text)}
+nav a.on{background:var(--tile);color:var(--text);font-weight:600}
+.top .who{margin-left:auto;font-size:12.5px;color:var(--label)}
+
+main{max-width:980px;margin:28px auto;padding:0 24px 48px}
+h1{font-size:22px;line-height:1.25;margin:0 0 4px;font-weight:600;overflow-wrap:anywhere}
+h2{font-size:13px;font-weight:600;letter-spacing:.02em;color:var(--label);margin:28px 0 10px;text-transform:uppercase}
+.sub{color:var(--label);margin:0 0 18px;font-size:14px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:20px 22px;margin:14px 0}
+.empty{color:var(--label);padding:28px 0;text-align:center}
+.empty img{width:72px;height:72px;image-rendering:pixelated;display:block;margin:0 auto 10px;border-radius:14px}
+
+/* Controls */
+button,.button{font:inherit;font-size:14px;border:1px solid var(--line);background:var(--surface);color:var(--text);border-radius:9px;padding:7px 14px;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;gap:6px}
+button:hover,.button:hover{background:var(--tile)}
+button.primary{background:var(--ember);border-color:var(--ember);color:#fff;font-weight:600}
+button.primary:hover{filter:brightness(1.06)}
+button.danger{color:var(--bad)}
+button:disabled{opacity:.5;cursor:default}
+button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible,a:focus-visible{outline:3px solid var(--focus);outline-offset:1px}
+.actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.actions select,.actions input{width:auto}
+input,select,textarea{font:inherit;font-size:14px;color:var(--text);background:var(--ground);border:1px solid var(--line);border-radius:9px;padding:7px 10px;width:100%}
+textarea{font:12.5px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;min-height:72px;resize:vertical}
+label{display:block;font-size:12.5px;color:var(--label);margin:0 0 4px}
+.field{margin:0 0 14px}
+.fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:0 14px}
+.hint{font-size:12px;color:var(--faint);margin-top:3px}
+
+/* Numbers */
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin:14px 0}
+.kpi{background:var(--tile);border-radius:10px;padding:10px 14px}
+.kpi .l{font-size:12px;color:var(--label)}
+.kpi .v{font-size:22px;font-weight:600;font-variant-numeric:tabular-nums}
+.pill{font-size:12px;font-weight:600;padding:2px 10px;border-radius:999px;border:1px solid currentColor;white-space:nowrap}
+.good{color:var(--good)}.warn{color:var(--warn)}.bad{color:var(--bad)}.faint{color:var(--faint)}.ember{color:var(--ember)}
+.going{color:var(--ember)}
+
+table{width:100%;border-collapse:collapse;font-size:13.5px;font-variant-numeric:tabular-nums}
+th{color:var(--label);font-weight:500;text-align:left;padding:7px 8px;border-bottom:1px solid var(--line);white-space:nowrap}
+td{padding:8px;border-bottom:1px solid var(--line);vertical-align:middle;overflow-wrap:anywhere}
+tr.link{cursor:pointer}tr.link:hover td{background:var(--tile)}
+td.num,th.num{text-align:right}
+
+/* The live run */
+.head{display:flex;gap:16px;align-items:center}
+.face{width:64px;height:64px;border-radius:14px;image-rendering:pixelated;flex:none}
+.chart{width:100%;height:auto;display:block}
+.grid{stroke:var(--line);stroke-width:1}
+.axis{fill:var(--label);font:10.5px ui-monospace,Menlo,monospace}
+.line{fill:none;stroke-width:2;stroke-linejoin:round}
+.line.ember{stroke:var(--ember)}.line.violet{stroke:var(--violet)}.line.bad{stroke:var(--bad)}.line.teal{stroke:var(--teal)}
+.area{stroke:none;opacity:.14}.area.ember{fill:var(--ember)}
+.legend{display:flex;gap:16px;flex-wrap:wrap;font-size:12px;color:var(--label);margin:6px 0 0}
+.sw{width:10px;height:10px;border-radius:3px;display:inline-block;margin-right:6px;vertical-align:-1px}
+.sw.ember{background:var(--ember)}.sw.violet{background:var(--violet)}.sw.bad{background:var(--bad)}.sw.teal{background:var(--teal)}
+.two{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px}
+.feed{max-height:220px;overflow:auto;font-size:13px}
+.feed li{margin:4px 0;list-style:none}
+ul{margin:0;padding:0}
+.finding{display:flex;gap:8px;align-items:baseline;margin:5px 0;font-size:14px;list-style:none}
+.d{width:9px;height:9px;border-radius:50%;display:inline-block;flex:none}
+.d.good{background:var(--good)}.d.warn{background:var(--warn)}.d.bad{background:var(--bad)}.d.note{background:var(--faint)}
+.plan{background:var(--tile);border-radius:10px;padding:12px 14px;font-size:13.5px}
+.plan div{margin:2px 0}
+.error{color:var(--bad);background:color-mix(in srgb,var(--bad) 10%,transparent);border-radius:10px;padding:10px 14px;margin:10px 0;white-space:pre-wrap}
+
+/* The token */
+.gate{max-width:440px;margin:12vh auto;text-align:center}
+.gate img{width:96px;height:96px;image-rendering:pixelated;border-radius:18px}
+.gate form{display:flex;gap:8px;margin-top:16px}
+
+@media (max-width:720px){
+  .top{padding:10px 16px;gap:10px}
+  main{padding:0 16px 40px;margin-top:18px}
+  .two{grid-template-columns:1fr}
+  .card{padding:16px}
+  .hide-narrow{display:none}
+}

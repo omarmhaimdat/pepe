@@ -31,6 +31,10 @@ static STARTING: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 
 pub async fn handle(server: Arc<Server>, request: Request<Incoming>) -> Reply {
     let path = request.uri().path().to_string();
+    // The page: no token to load it; it asks for one before it calls the API
+    if request.method() == Method::GET && !path.starts_with("/api") {
+        return super::ui::serve(&path);
+    }
     if path == "/api/health" || path == "/api" || path == "/api/" {
         return http::ok(&json!({
             "pepe": env!("CARGO_PKG_VERSION"),
@@ -41,6 +45,12 @@ pub async fn handle(server: Arc<Server>, request: Request<Incoming>) -> Reply {
     let Some(rest) = path.strip_prefix("/api/") else {
         return http::not_found();
     };
+    // A report opened by its ticket, as a plain link from the page
+    if request.method() == Method::GET {
+        if let Some(reply) = by_ticket(&server, &request, rest) {
+            return reply;
+        }
+    }
     let Some(who) = http::who(&request, &server.tokens).map(str::to_string) else {
         let mut reply = http::error(
             StatusCode::UNAUTHORIZED,
@@ -100,6 +110,13 @@ pub async fn handle(server: Arc<Server>, request: Request<Incoming>) -> Reply {
             report(&server, id, &format)
         }
         (&Method::GET, ["runs", id, "report.html"]) => report(&server, id, "html"),
+        (&Method::POST, ["runs", id, "ticket"]) => match find(&server, id) {
+            Some(_) => http::ok(&json!({
+                "ticket": server.ticket(id),
+                "expires_in_s": super::TICKET_LIFE.as_secs(),
+            })),
+            None => http::not_found(),
+        },
         (&Method::POST, ["runs", id, action @ ("pause" | "resume" | "stop")]) => {
             steer(&server, &who, id, action)
         }
@@ -162,6 +179,39 @@ pub async fn handle(server: Arc<Server>, request: Request<Incoming>) -> Reply {
         }
         _ => http::not_found(),
     }
+}
+
+/// `GET /api/runs/ID/report?ticket=…`: a run's report without the token,
+/// for a ticket made for that run; None when the request is anything else
+fn by_ticket(server: &Server, request: &Request<Incoming>, rest: &str) -> Option<Reply> {
+    let query = http::query(request);
+    let ticket = query.iter().find(|(k, _)| k == "ticket").map(|(_, v)| v)?;
+    let parts: Vec<&str> = rest.trim_end_matches('/').split('/').collect();
+    let (id, html) = match parts.as_slice() {
+        ["runs", id, "report"] => (*id, false),
+        ["runs", id, "report.html"] => (*id, true),
+        _ => {
+            return Some(http::error(
+                StatusCode::UNAUTHORIZED,
+                "a ticket opens a run's report, nothing else",
+            ))
+        }
+    };
+    if !server.ticket_opens(ticket, id) {
+        return Some(http::error(
+            StatusCode::UNAUTHORIZED,
+            "the ticket is for another run, or it ran out: open the report from the page again",
+        ));
+    }
+    let format = match html {
+        true => "html".to_string(),
+        false => query
+            .iter()
+            .find(|(k, _)| k == "format")
+            .map(|(_, v)| v.clone())
+            .unwrap_or_else(|| "json".into()),
+    };
+    Some(report(server, id, &format))
 }
 
 fn find(server: &Server, id: &str) -> Option<Arc<runs::Run>> {
@@ -438,7 +488,8 @@ fn report(server: &Server, id: &str, format: &str) -> Reply {
     let (format, content_type) = match format {
         "json" => (Format::Json, "application/json"),
         "html" => (Format::Html, "text/html; charset=utf-8"),
-        "md" | "markdown" => (Format::Markdown, "text/markdown; charset=utf-8"),
+        // Plain text, so a browser shows it rather than download it
+        "md" | "markdown" => (Format::Markdown, "text/plain; charset=utf-8"),
         "txt" | "text" => (Format::Text, "text/plain; charset=utf-8"),
         "csv" => (Format::Csv, "text/csv; charset=utf-8"),
         _ => {
@@ -458,7 +509,20 @@ fn report(server: &Server, id: &str, format: &str) -> Reply {
         report,
         ..Default::default()
     };
-    http::text(StatusCode::OK, content_type, render(format, &snap))
+    let mut reply = http::text(StatusCode::OK, content_type, render(format, &snap));
+    // A report is a page of its own: its styles and its face inline, never
+    // a script
+    reply.headers_mut().insert(
+        "content-security-policy",
+        "default-src 'none'; style-src 'unsafe-inline'; img-src data:; frame-ancestors 'none'"
+            .parse()
+            .expect("a header"),
+    );
+    reply.headers_mut().insert(
+        "x-content-type-options",
+        "nosniff".parse().expect("a header"),
+    );
+    reply
 }
 
 fn list_tests(server: &Server) -> Reply {

@@ -1,6 +1,6 @@
 # `pepe serve`: pepe as a server
 
-Status: the API is built, all three phases (docs/serve.md); the web UI is still to come · 2026-10-25
+Status: built, the API in all three phases and the page (docs/serve.md) · 2026-10-26
 
 pepe today is a command: a person at a terminal, a CI job, or an agent
 through `pepe mcp`. `pepe serve` makes the same binary a self-hosted

@@ -13,6 +13,17 @@ curl -H "Authorization: Bearer $TOKEN" localhost:7878/api/runs \
      -d '{"url": "http://127.0.0.1:8080/health", "requests": 5000, "concurrency": 20}'
 ```
 
+## The page
+
+`http://127.0.0.1:7878/` is pepe in a browser: the runs, a new run with
+its plan checked before it starts, a run live (its curves, its verdict as
+it forms, pause, resume, concurrency and stop), the saved tests and their
+history, schedules, compare, and the workers. It is one page in the
+binary, no script from anywhere else. The link pepe serve prints opens it
+with the token, which the page keeps for the tab and takes out of the
+address bar; a report opens as a link of its own, with a ticket for that
+run alone that runs out in ten minutes.
+
 ## Safe to leave running
 
 - **Loopback by default.** `--listen` takes another address; any but
@@ -46,6 +57,7 @@ or a saved test by name.
 | `GET /api/runs/ID` | How it stands, and its report once it has one |
 | `GET /api/runs/ID/events` | The run live, as Server-Sent Events: `start`, `progress` a second, `anomaly`, `steered`, `report`, `end`. `Last-Event-ID` (or `?after=`) goes on from there |
 | `GET /api/runs/ID/report` | The report: `?format=json` (the default), `html`, `md`, `txt` or `csv` |
+| `POST /api/runs/ID/ticket` | A ticket that opens the run's report as a plain link (`?ticket=…`), and nothing else, for ten minutes |
 | `POST /api/runs/ID/pause` · `/resume` · `/stop` | Steers it; a ping can be stopped |
 | `POST /api/runs/ID/concurrency` `{"n": 40}` | Held to `--max-concurrency` |
 

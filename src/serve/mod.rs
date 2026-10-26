@@ -13,6 +13,7 @@ mod http;
 mod merge;
 mod runs;
 mod schedule;
+mod ui;
 pub mod worker;
 mod workers;
 
@@ -48,6 +49,7 @@ pub struct Server {
     started: AtomicU64,
     workers: workers::Workers,
     schedules: schedule::Schedules,
+    tickets: Tickets,
     audit: Mutex<Option<std::fs::File>>,
 }
 
@@ -71,6 +73,47 @@ impl Server {
                 let _ = writeln!(file, "{line}");
             }
         }
+    }
+}
+
+/// How long a report's ticket opens it
+pub const TICKET_LIFE: std::time::Duration = std::time::Duration::from_secs(600);
+
+/// Short-lived tickets that open one run's reports as a plain link, which
+/// can't carry the token in a header: the ticket, the run, and until when
+#[derive(Default)]
+struct Tickets(Mutex<Vec<(String, String, std::time::Instant)>>);
+
+impl Tickets {
+    /// A ticket that opens `run`'s reports for `life`, and nothing else
+    fn issue(&self, run: &str, life: std::time::Duration) -> String {
+        let ticket = new_token();
+        if let Ok(mut tickets) = self.0.lock() {
+            let now = std::time::Instant::now();
+            tickets.retain(|(_, _, until)| *until > now);
+            tickets.push((ticket.clone(), run.to_string(), now + life));
+        }
+        ticket
+    }
+
+    /// Whether `ticket` opens `run`'s reports now
+    fn opens(&self, ticket: &str, run: &str) -> bool {
+        let now = std::time::Instant::now();
+        self.0.lock().is_ok_and(|tickets| {
+            tickets.iter().any(|(t, r, until)| {
+                *until > now && r == run && http::same(t.as_bytes(), ticket.as_bytes())
+            })
+        })
+    }
+}
+
+impl Server {
+    fn ticket(&self, run: &str) -> String {
+        self.tickets.issue(run, TICKET_LIFE)
+    }
+
+    fn ticket_opens(&self, ticket: &str, run: &str) -> bool {
+        self.tickets.opens(ticket, run)
     }
 }
 
@@ -195,6 +238,7 @@ pub async fn serve(cli: &Cli, args: &ServeArgs) -> Result<(), Box<dyn std::error
         exe: std::env::current_exe()?,
         started: AtomicU64::new(0),
         workers: workers::Workers::default(),
+        tickets: Tickets::default(),
         audit: Mutex::new(audit),
     });
     eprintln!(
@@ -207,9 +251,12 @@ pub async fn serve(cli: &Cli, args: &ServeArgs) -> Result<(), Box<dyn std::error
     if let Some(guard) = crate::guard::Guard::of(cli).describe() {
         eprintln!("  guard  {guard}");
     }
-    if let Some(token) = made {
+    if let Some(token) = &made {
+        eprintln!("  page   http://{bound}/#token={token}");
         // stdout, alone, so a script can take it
         println!("{token}");
+    } else {
+        eprintln!("  page   http://{bound}/");
     }
     server.audit("server", "start", json!({ "listen": bound.to_string() }));
     tokio::spawn(schedule::tick(server.clone()));
@@ -255,6 +302,18 @@ mod tests {
         assert!(read_tokens("\n# none\n").is_err());
         assert_eq!(new_token().len(), 48);
         assert_ne!(new_token(), new_token());
+    }
+
+    /// A ticket opens its run's reports, for a while, and no other run's
+    #[test]
+    fn a_ticket_opens_one_runs_reports_for_a_while() {
+        let tickets = Tickets::default();
+        let t = tickets.issue("run-1", std::time::Duration::from_secs(60));
+        assert!(tickets.opens(&t, "run-1"));
+        assert!(!tickets.opens(&t, "run-2"));
+        assert!(!tickets.opens("nope", "run-1"));
+        let gone = tickets.issue("run-1", std::time::Duration::ZERO);
+        assert!(!tickets.opens(&gone, "run-1"), "run out");
     }
 
     /// On loopback the server needs nothing; anywhere else, every guardrail
