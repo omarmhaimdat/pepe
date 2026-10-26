@@ -6,6 +6,136 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+## [0.56.0](https://github.com/omarmhaimdat/pepe/compare/v0.55.2...v0.56.0) - 2026-10-26
+
+### Added
+
+- *(serve)* pepe over HTTP, with workers and schedules ([#236](https://github.com/omarmhaimdat/pepe/pull/236))
+
+  Stacked on #235, which brings the guardrails and the numbers onto
+  `master`. Retarget this to `master` once that merges, rather than
+  merging it into `fix/guardrails`.
+
+  This is the API from all three phases of the design
+  (`docs/design/serve.md`). The web UI isn't in it. The docs are
+  `docs/serve.md`, also built into the docs site.
+
+  ## What
+
+  - **`pepe serve`.** Every run is a child `pepe`, under the server's
+  guardrails, the project's `pepe.toml` and the machine's settings. pepe's
+  own `--dry-run` checks each request first, so the guardrails decide
+  exactly as they do on the command line.
+  - **Same arguments as MCP.** A request takes the MCP tools' arguments,
+  so a value is never read as a flag.
+  - **Not taken over the API:** `webhook`, `slack`, `otlp`, `svg`, and
+  files outside the project.
+  - **Locked down by default:**
+    - It listens on loopback only.
+  - A token is required, either made and printed, or read with its names
+  from `--token-file`.
+  - Off loopback, it refuses to start without `--allow-host` and all three
+  caps.
+  - `--max-runs` (default 1) and an audit log in
+  `.pepe/serve/audit.jsonl`.
+  - **Runs:**
+    - Start one, or `dry_run` for the plan.
+    - List runs, and read one's state and report.
+    - Watch it live as Server-Sent Events, resumable from `Last-Event-ID`.
+    - Get its report as `json`, `html`, `md`, `txt` or `csv`.
+  - Pause, resume, stop, and change concurrency. A ping can be stopped and
+  still gives its report.
+  - **Tests:** list, read, save (as JSON keys or TOML), delete, their
+  recorded runs (shared with `pepe history`), `compare` with an optional
+  gate, and the report schemas.
+  - **Schedules:** a saved test every so often, at most once a minute. A
+  schedule that comes due while the server is full is skipped and says so.
+  - **Workers:**
+  - **Joining:** `pepe worker --join URL --name eu-1` dials out over a
+  WebSocket, so it works from behind NAT. `src/ws.rs` gains the server
+  side.
+  - **Splitting:** `"workers": "all"` or a list of names shares the count,
+  concurrency and rate among them.
+    - **Guardrails:** each worker runs its share under its own guardrails.
+  - **Merging:** each share returns its report with the latency histogram
+  whole (hidden `--histogram`), and the server adds them bucket by bucket,
+  so the merged p99 is exact.
+  - **`--events FILE`:** any run as JSON lines (start, progress each
+  second, anomalies, steering, the report last). It hooks into the
+  existing webhook calls, so every mode has it, with a ping progress line
+  of its own.
+
+  ## Checked end to end
+
+  Against the benchmark server, with a server in a scratch project, two
+  workers and a `pepe.toml` allowing only 127.0.0.1:
+
+  | | |
+  | --- | --- |
+  | No token, wrong token | 401 |
+  | `localhost` under `allow-host = ["127.0.0.1"]` | 422, "localhost isn't
+  an allowed host" |
+  | `webhook` in a request; `"file": "/etc/passwd"` | 400 each |
+  | `--listen 0.0.0.0` with no `max-rate` | refuses to start, naming
+  `--max-rate` |
+  | A 3 s run at 200/s | 600 requests; events: start, progress ×4, report,
+  end; `Last-Event-ID: 3` resumes at 4 |
+  | Pause, resume, concurrency 2, stop | each a `steered` event; the
+  report says interrupted |
+  | A third run under `--max-runs 2` | 429 |
+  | A ping, then pause; then stop | 409 "can be stopped, not steered";
+  then stopped with its report |
+  | A test saved as JSON, run twice, compared | both recorded under
+  `.pepe/runs/`, compare says `same` |
+  | 40,000 requests at 8 on `"workers": "all"` | 20,000 each; merged 158k
+  req/s, `exact_percentiles: true` |
+  | `-c 8` on a worker started with `--max-concurrency 4` | its share
+  refused by its own guardrail |
+  | A worker killed mid-run | the run ends on the other share, failing,
+  naming the one that left |
+  | A schedule every 60 s | it ran as `schedule:s1` |
+
+  455 tests pass and clippy is clean. New tests cover tokens, the
+  off-loopback rule, events, merging (two shares whose p99 only the merged
+  histogram gets right, checked against the run schema), schedules, the
+  handshake key (the RFC's example), splitting, and the join URL.
+
+  ## Costs and limits
+
+  - **Binary size:** 8.38 → 9.05 MB (+8%), for hyper's server, its body
+  types and this code.
+  - **Distributed runs** are plain runs only, for now (a URL, or a saved
+  test of one); the other modes run on the server.
+  - **Orphaned shares:** a worker's process killed outright leaves its
+  share's child running to the end of its count or time. Every run is
+  bounded, so it can't run forever.
+
+
+
+### Fixed
+
+- the guardrails and the numbers, onto master ([#235](https://github.com/omarmhaimdat/pepe/pull/235))
+
+  #233 (guardrails) and #234 (numbers) were merged into their stacked
+  bases (`perf/generator` and `fix/guardrails`), not into `master`, so
+  neither is in `master` or a release yet. This brings both onto `master`,
+  with master merged in. Both were already reviewed in their own PRs.
+
+  It also carries one fix to #233:
+
+  - **The MCP `run` tool sent nothing.** #233 put a `--` before a tool
+  call's URL, so a value starting with a dash couldn't be read as a flag.
+  But after a `--`, a plain run reads a curl command (`--curl -- curl …`),
+  so the URL went there and the run had nothing to send.
+  - **The fix:** what isn't a flag goes as it is now, and one that starts
+  with a dash is refused. A new test parses each tool's command the way
+  pepe will.
+  - **Checked through `pepe mcp`:** the `run` tool sends its 50 requests,
+  and a target of `--allow-host=127.0.0.1` is refused.
+
+  442 tests pass, clippy is clean.
+
+
 ## [0.55.2](https://github.com/omarmhaimdat/pepe/compare/v0.55.1...v0.55.2) - 2026-10-24
 
 ### Performance
