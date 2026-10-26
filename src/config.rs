@@ -180,6 +180,29 @@ pub struct ApiConfig {
     pub include_writes: Option<bool>,
 }
 
+/// Hold a run to the guardrails of each of `files`: the lowest cap of any
+/// of them and of the command line, and a host only if every file that
+/// names hosts allows it as well as the command line. A flag can tighten
+/// a file's guardrail, never loosen it.
+pub fn hold(cli: &mut Cli, files: &[Config]) {
+    fn lower<T: PartialOrd + Copy>(a: Option<T>, b: Option<T>) -> Option<T> {
+        match (a, b) {
+            (Some(a), Some(b)) => Some(if b < a { b } else { a }),
+            (a, b) => a.or(b),
+        }
+    }
+    for file in files {
+        cli.max_requests = lower(cli.max_requests, file.max_requests);
+        cli.max_rate = lower(cli.max_rate, file.max_rate);
+        cli.max_concurrency = lower(cli.max_concurrency, file.max_concurrency);
+        if let Some(hosts) = file.allow_host.as_ref().filter(|h| !h.is_empty()) {
+            if !cli.held_hosts.contains(hosts) {
+                cli.held_hosts.push(hosts.clone());
+            }
+        }
+    }
+}
+
 /// The config to read: the one `--config` names, which has to exist, or
 /// `pepe.toml` in the current directory, which may not
 pub fn load(named: Option<&Path>) -> Result<Option<(PathBuf, Config)>, String> {
@@ -368,20 +391,12 @@ impl Config {
         if cli.snapshot.is_none() {
             cli.snapshot = self.snapshot.clone();
         }
-        // The guardrails: the file's hold unless the command line names
-        // its own; a cap in the file can't be loosened by leaving it out
+        // The guardrails: the file's hold, and the command line can only
+        // tighten them (see `hold`)
         if let (Some(hosts), true) = (&self.allow_host, cli.allow_host.is_empty()) {
             cli.allow_host = hosts.clone();
         }
-        if cli.max_requests.is_none() {
-            cli.max_requests = self.max_requests;
-        }
-        if cli.max_rate.is_none() {
-            cli.max_rate = self.max_rate;
-        }
-        if cli.max_concurrency.is_none() {
-            cli.max_concurrency = self.max_concurrency;
-        }
+        hold(cli, std::slice::from_ref(self));
         // Flags can only be switched on from the command line, so an "on"
         // there always wins, and "off" in the file can't undo it
         cli.insecure |= self.insecure.unwrap_or(false);
@@ -915,6 +930,35 @@ mod tests {
         test.over(&machine).apply(&mut cli, &matches);
         assert!(cli.command.is_none());
         assert_eq!(cli.concurrency, 8);
+    }
+
+    /// Every file's guardrails hold, whichever filled in the run, and a
+    /// flag can only tighten them
+    #[test]
+    fn the_lowest_cap_and_every_host_list_hold() {
+        let machine = parse("max-requests = 100\nallow-host = [\"localhost\"]\n").unwrap();
+        let local = parse("max-rate = 5\nallow-host = [\"127.0.0.1\", \"localhost\"]\n").unwrap();
+        let (mut cli, _) = parse_argv(&[
+            "pepe",
+            "--max-requests",
+            "1000",
+            "--max-rate",
+            "2",
+            "https://example.com/",
+        ]);
+        hold(&mut cli, &[machine, local]);
+        assert_eq!(
+            cli.max_requests,
+            Some(100),
+            "the flag can't raise the machine's"
+        );
+        assert_eq!(cli.max_rate, Some(2.0), "but it can lower the file's");
+        let guard = crate::guard::Guard::of(&cli);
+        assert!(guard.check_host("localhost").is_ok());
+        assert!(
+            guard.check_host("127.0.0.1").is_err(),
+            "the machine doesn't allow it"
+        );
     }
 
     #[test]

@@ -203,6 +203,9 @@ pub struct Settings {
     pub compression: bool,
     /// Speak HTTP/1.1 even when the server offers HTTP/2 through ALPN
     pub http1: bool,
+    /// `--allow-host`, every place's list (see `guard::Guard`): a
+    /// redirect is followed only to a host each allows
+    pub allowed_hosts: Vec<Vec<String>>,
 }
 
 /// Where a target's pings go
@@ -659,6 +662,8 @@ pub struct TargetStats {
     pub target: Target,
     pub points: Vec<Point>,
     pub recent: VecDeque<Sample>,
+    /// Samples recorded, of which `recent` holds the last
+    pub recorded: u64,
     pub sent: u64,
     pub answered: u64,
     pub timeouts: u64,
@@ -695,6 +700,7 @@ impl TargetStats {
             target,
             points: Vec::new(),
             recent: VecDeque::new(),
+            recorded: 0,
             sent: 0,
             answered: 0,
             timeouts: 0,
@@ -794,6 +800,7 @@ impl TargetStats {
         if let Some(body) = saved_body {
             self.last_body = Some(body);
         }
+        self.recorded += 1;
         self.recent.push_back(sample);
         while self.recent.len() > RECENT {
             self.recent.pop_front();
@@ -1084,7 +1091,7 @@ impl Pinger {
         sample: &mut Sample,
         saved: &mut Option<Vec<u8>>,
     ) -> Result<(), String> {
-        let settings = self.shared.settings.clone();
+        let mut settings = self.shared.settings.clone();
         match self.target.kind.clone() {
             Kind::Cmd(command) => run_command(&command, sample).await,
             Kind::Tcp {
@@ -1137,6 +1144,11 @@ impl Pinger {
                     let next = url
                         .join(&location)
                         .map_err(|e| format!("redirect to {location:?}: {e}"))?;
+                    crate::guard::refuse_host(
+                        &settings.allowed_hosts,
+                        next.host_str().unwrap_or_default(),
+                    )
+                    .map_err(|why| format!("redirect refused: {why}"))?;
                     sample.hops.push(Hop {
                         url: url.to_string(),
                         status,
@@ -1147,11 +1159,20 @@ impl Pinger {
                         method = Method::GET;
                         body = Bytes::new();
                     }
-                    // A kept connection is to the last host
+                    // A kept connection is to the last host, and the
+                    // credentials were for it too
                     if next.host_str() != url.host_str()
                         || next.port_or_known_default() != url.port_or_known_default()
                     {
                         self.kept = None;
+                        for name in [
+                            reqwest::header::AUTHORIZATION,
+                            reqwest::header::COOKIE,
+                            reqwest::header::PROXY_AUTHORIZATION,
+                            reqwest::header::WWW_AUTHENTICATE,
+                        ] {
+                            settings.headers.remove(name);
+                        }
                     }
                     url = next;
                     sample.answered = false;
@@ -1705,6 +1726,7 @@ async fn via_proxy(
             proxy: settings.proxy.clone(),
             user_agent: settings.user_agent.clone(),
             idle_connections: 1,
+            allowed_hosts: settings.allowed_hosts.clone(),
         },
     )
     .map_err(|e| e.to_string())?;
@@ -2415,6 +2437,7 @@ mod tests {
             duration: None,
             compression: false,
             http1: false,
+            allowed_hosts: Vec::new(),
         }
     }
 

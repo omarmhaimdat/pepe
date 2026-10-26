@@ -160,6 +160,34 @@ pub struct JsonSummary {
     /// response body seen for it; left out when nothing failed
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub failures: Vec<FailureCause>,
+    /// `--rate`: how far the requests kept to the schedule. `latency` is
+    /// timed from when each request went out; a request that couldn't go
+    /// out on its slot, every unit of concurrency being busy, kept a user
+    /// waiting for longer, which `response_time_ms` counts.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub schedule: Option<Schedule>,
+}
+
+#[derive(Serialize, Clone)]
+pub struct Schedule {
+    /// Requests sent on the schedule
+    pub paced_requests: u64,
+    /// Those that started a millisecond or more after their slot
+    pub late_requests: u64,
+    pub late_percent: f64,
+    /// How long after their slot the requests started
+    pub wait_ms: Spread,
+    /// Each request's latency counted from its slot: what a user arriving
+    /// on schedule saw
+    pub response_time_ms: Spread,
+}
+
+#[derive(Serialize, Clone)]
+pub struct Spread {
+    pub median: f64,
+    pub p90: f64,
+    pub p99: f64,
+    pub max: f64,
 }
 
 #[derive(Serialize, Clone)]
@@ -258,7 +286,25 @@ pub struct LatencyStats {
     /// Where the time went: opening connections, waiting for the headers,
     /// and reading the body
     pub phases: Phases,
+    /// The latency at each of `QUANTILES`, for `pepe compare` to tell
+    /// how far a percentile can wander in a run of this size
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub quantiles_ms: Vec<Quantile>,
 }
+
+/// A point of the latency's distribution: `q` percent of the requests
+/// took `ms` or less
+#[derive(Serialize, Clone, Copy)]
+pub struct Quantile {
+    pub q: f64,
+    pub ms: f64,
+}
+
+/// Where the distribution is kept: finer where the tail is
+pub const QUANTILES: [f64; 17] = [
+    1.0, 5.0, 10.0, 25.0, 40.0, 50.0, 60.0, 75.0, 80.0, 90.0, 95.0, 97.0, 98.0, 99.0, 99.5, 99.8,
+    99.9,
+];
 
 #[derive(Serialize, Clone)]
 pub struct Phases {
@@ -539,10 +585,33 @@ impl JsonReport {
                         download: PhaseStats::of(metrics.phase(Phase::Download)),
                         dns_lookup_avg_ms: ms(metrics.avg_dns_lookup()),
                     },
+                    quantiles_ms: QUANTILES
+                        .iter()
+                        .map(|&q| Quantile {
+                            q,
+                            ms: ms(metrics.percentile(q)),
+                        })
+                        .collect(),
                 },
                 // Sorted, so output is stable between runs
                 status_codes: metrics.status_codes.iter().map(|(k, v)| (*k, *v)).collect(),
                 server_timing: server_timing_stats(metrics),
+                schedule: (metrics.paced > 0).then(|| {
+                    let spread = |at: &dyn Fn(f64) -> Duration| Spread {
+                        median: ms(at(50.0)),
+                        p90: ms(at(90.0)),
+                        p99: ms(at(99.0)),
+                        max: ms(at(100.0)),
+                    };
+                    Schedule {
+                        paced_requests: metrics.paced,
+                        late_requests: metrics.late,
+                        late_percent: (metrics.late as f64 / metrics.paced as f64 * 1000.0).round()
+                            / 10.0,
+                        wait_ms: spread(&|q| metrics.waited(q)),
+                        response_time_ms: spread(&|q| metrics.response_time(q)),
+                    }
+                }),
                 slowest_requests: Vec::new(),
                 anomalies: Vec::new(),
                 failures: metrics

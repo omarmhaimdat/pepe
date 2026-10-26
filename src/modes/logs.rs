@@ -26,9 +26,13 @@ pub(crate) async fn run_logs(
         crate::webhook::Event::parse_list(on)
             .unwrap_or_else(|e| fail(format!("--webhook-on: {e}")));
     }
-    let hooks = args.hooks();
+    let mut hooks = args.hooks();
     if let Err(e) = crate::webhook::check(&hooks) {
         fail(format!("--webhook: {e}"));
+    }
+    // A dry run posts nothing, a webhook included
+    if args.dry_run {
+        hooks.clear();
     }
     let since = what
         .since

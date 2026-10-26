@@ -21,6 +21,17 @@ const FAILURE_POINTS: f64 = 0.5;
 /// 2,000-request runs sat ±25% apart and that of 20,000-request runs ±1%,
 /// while the median stayed within ±1%
 const SPREAD: f64 = 6.0;
+/// A latency moves by this much between runs on its own, whatever its
+/// size: the scheduler's jitter, which is all there is to a change in a
+/// median of a tenth of a millisecond over loopback
+const JITTER_MS: f64 = 0.025;
+/// How many standard deviations of a percentile's rank its interval
+/// spans each way: the value of a run's p99 lies between those of ranks
+/// 99% ± 3σ almost always
+const RANKS: f64 = 3.0;
+/// A run's throughput, as the seconds of its timeline spread: this many
+/// standard errors each way
+const RATE_SPREAD: f64 = 3.0;
 /// A capacity estimate is a curve fit; it moves this much between ramps
 const CAPACITY_FLOOR: f64 = 0.10;
 
@@ -185,6 +196,13 @@ pub struct Side {
     /// `--otlp`: the operations of the service's spans
     #[serde(skip)]
     operations: Vec<Operation>,
+    /// The latency's distribution as the report has it: (share, ms) from
+    /// the minimum at 0 to the maximum at 1
+    #[serde(skip)]
+    grid: Vec<(f64, f64)>,
+    /// Requests a second, second by second, from the timeline
+    #[serde(skip)]
+    rates: Vec<f64>,
 }
 
 /// An operation of a run's spans, as its report has it
@@ -310,6 +328,8 @@ impl Side {
             cv: if avg > 0.0 { jitter / avg / 1.13 } else { 0.0 },
             main_failure,
             operations: Vec::new(),
+            grid: Vec::new(),
+            rates: Vec::new(),
         })
     }
 
@@ -360,6 +380,16 @@ impl Side {
             download_ms: None,
             cv: if avg > 0.0 { sd / avg } else { 0.0 },
             main_failure,
+            grid: latency.map(run_grid).unwrap_or_default(),
+            rates: doc
+                .get("timeline")
+                .and_then(Value::as_array)
+                .map(|t| {
+                    t.iter()
+                        .filter_map(|s| num(s, "requests_per_second"))
+                        .collect()
+                })
+                .unwrap_or_default(),
             operations: doc
                 .pointer("/spans/operations")
                 .and_then(Value::as_array)
@@ -412,16 +442,103 @@ impl Side {
             cv: 0.0,
             main_failure: None,
             operations: Vec::new(),
+            grid: Vec::new(),
+            rates: Vec::new(),
         }
     }
 
     /// How much a percentile at `quantile` wobbles between runs of this
-    /// size, relative: the latency's own spread, divided by the square root
-    /// of how many requests sit past that quantile, scaled as measured
+    /// size, relative. With the distribution in the report: half the gap
+    /// between the latencies at the ranks `RANKS` standard deviations
+    /// either side of it, which follows the shape of the latency where
+    /// that percentile is (a tail past p99 widens the p99's, a flat
+    /// middle keeps the median's tight). Without one, the latency's own
+    /// spread over the square root of the requests past it, scaled as
+    /// measured.
     fn noise(&self, quantile: f64) -> f64 {
-        let n = (self.requests as f64 * (1.0 - quantile).max(0.005)).max(1.0);
+        let n = self.requests as f64;
+        if self.grid.len() >= 4 && n >= 1.0 {
+            let at = self.value_at(quantile);
+            if at > 0.0 {
+                let sigma = (quantile * (1.0 - quantile) / n).sqrt();
+                let low = self.value_at((quantile - RANKS * sigma).max(0.0));
+                let high = self.value_at((quantile + RANKS * sigma).min(1.0));
+                return (high - low) / 2.0 / at;
+            }
+        }
+        let n = (n * (1.0 - quantile).max(0.005)).max(1.0);
         SPREAD * self.cv / n.sqrt()
     }
+
+    /// The latency at `share` of the requests, read off the distribution
+    /// in a straight line between the points it has
+    fn value_at(&self, share: f64) -> f64 {
+        let grid = &self.grid;
+        let after = grid.partition_point(|&(q, _)| q < share);
+        match after {
+            0 => grid[0].1,
+            i if i >= grid.len() => grid[grid.len() - 1].1,
+            i => {
+                let ((q0, v0), (q1, v1)) = (grid[i - 1], grid[i]);
+                if q1 <= q0 {
+                    v1
+                } else {
+                    v0 + (v1 - v0) * (share - q0) / (q1 - q0)
+                }
+            }
+        }
+    }
+
+    /// How much the mean latency wobbles between runs of this size,
+    /// relative: `RANKS` standard errors of it
+    fn mean_noise(&self) -> f64 {
+        RANKS * self.cv / (self.requests.max(1) as f64).sqrt()
+    }
+
+    /// How much the throughput wobbles: the seconds of the run spread
+    /// about their mean, over the square root of how many there are.
+    /// None with too few seconds to say.
+    fn rate_noise(&self) -> Option<f64> {
+        // The first and the last second are partial
+        let full = self.rates.get(1..self.rates.len().saturating_sub(1))?;
+        if full.len() < 3 {
+            return None;
+        }
+        let k = full.len() as f64;
+        let mean = full.iter().sum::<f64>() / k;
+        if mean <= 0.0 {
+            return None;
+        }
+        let var = full.iter().map(|r| (r - mean).powi(2)).sum::<f64>() / (k - 1.0);
+        Some(RATE_SPREAD * var.sqrt() / mean / k.sqrt())
+    }
+}
+
+/// A run's latency distribution from its report: the minimum, the
+/// percentiles it names, `quantiles_ms` when it has them, the maximum
+fn run_grid(latency: &Value) -> Vec<(f64, f64)> {
+    let num = |key: &str| latency.get(key).and_then(Value::as_f64);
+    let mut grid: Vec<(f64, f64)> = [
+        (0.0, "min_ms"),
+        (0.5, "median_ms"),
+        (0.9, "p90_ms"),
+        (0.95, "p95_ms"),
+        (0.99, "p99_ms"),
+        (1.0, "max_ms"),
+    ]
+    .iter()
+    .filter_map(|&(q, key)| Some((q, num(key)?)))
+    .collect();
+    if let Some(points) = latency.get("quantiles_ms").and_then(Value::as_array) {
+        grid.extend(
+            points
+                .iter()
+                .filter_map(|p| Some((p.get("q")?.as_f64()? / 100.0, p.get("ms")?.as_f64()?))),
+        );
+    }
+    grid.sort_by(|a, b| a.0.total_cmp(&b.0));
+    grid.dedup_by(|a, b| a.0 == b.0);
+    grid
 }
 
 /// Hold `after` against `before`
@@ -558,17 +675,24 @@ pub fn compare(before: &Side, after: &Side) -> Comparison {
             ),
         ));
     };
-    let latency_noise = |q: f64| {
+    // Relative, and never under what the machine's own jitter moves a
+    // latency this small by
+    let latency_noise = |q: f64, a: Option<f64>, b: Option<f64>| {
+        let least = match (a, b) {
+            (Some(a), Some(b)) if a.min(b) > 0.0 => JITTER_MS / a.min(b),
+            _ => 0.0,
+        };
         (before.noise(q).powi(2) + after.noise(q).powi(2))
             .sqrt()
             .max(FLOOR)
+            .max(least)
     };
     speed(
         "p99_ms",
         "p99",
         before.p99_ms,
         after.p99_ms,
-        latency_noise(0.99),
+        latency_noise(0.99, before.p99_ms, after.p99_ms),
         true,
         &ms,
     );
@@ -577,7 +701,7 @@ pub fn compare(before: &Side, after: &Side) -> Comparison {
         "Median",
         before.median_ms,
         after.median_ms,
-        latency_noise(0.5),
+        latency_noise(0.5, before.median_ms, after.median_ms),
         true,
         &ms,
     );
@@ -600,16 +724,22 @@ pub fn compare(before: &Side, after: &Side) -> Comparison {
             after.download_ms,
         ),
     ] {
-        speed(metric, what, a, b, latency_noise(0.5), true, &ms);
+        speed(metric, what, a, b, latency_noise(0.5, a, b), true, &ms);
     }
-    // With fixed concurrency the rate follows the median, and wobbles as
-    // much as it does
+    // The rate's own wobble, second to second, when both timelines have
+    // enough seconds; else, with fixed concurrency it follows the mean
+    // latency, whose standard error is the spread over √n
+    let rate_noise = match (before.rate_noise(), after.rate_noise()) {
+        (Some(a), Some(b)) => (a.powi(2) + b.powi(2)).sqrt(),
+        _ => (before.mean_noise().powi(2) + after.mean_noise().powi(2)).sqrt(),
+    }
+    .max(FLOOR);
     speed(
         "requests_per_second",
         "Throughput",
         before.requests_per_second,
         after.requests_per_second,
-        latency_noise(0.5),
+        rate_noise,
         false,
         &rate,
     );
@@ -663,7 +793,7 @@ pub fn compare(before: &Side, after: &Side) -> Comparison {
 
     // Inside the service: which operation moved, when both runs have spans.
     // They name what changed; the verdict stays with what pepe measured.
-    let operations = operation_changes(before, after, latency_noise(0.5));
+    let operations = operation_changes(before, after, latency_noise(0.5, None, None));
     for change in operations.iter().filter(|c| c.significant).take(3) {
         let label = match &change.service {
             Some(service) => format!("{service}: {}", change.name),
@@ -1126,6 +1256,64 @@ mod tests {
         assert!(compare(&before, &run(5000, 0, 8.0, 12.0, 1.0, 2000.0))
             .operations
             .is_empty());
+    }
+
+    /// A report as a run writes it, of a service that answers most
+    /// requests in `fast` ms and the rest (`slow_share`) in `slow` ms
+    fn two_speeds(requests: u64, fast: f64, slow: f64, slow_share: f64, rps: f64) -> Side {
+        let at = |q: f64| {
+            if q <= 100.0 * (1.0 - slow_share) {
+                fast
+            } else {
+                slow
+            }
+        };
+        let quantiles: Vec<_> = crate::json_report::QUANTILES
+            .iter()
+            .map(|&q| serde_json::json!({ "q": q, "ms": at(q) }))
+            .collect();
+        let mean = fast * (1.0 - slow_share) + slow * slow_share;
+        let sd = (slow - fast) * (slow_share * (1.0 - slow_share)).sqrt();
+        let doc = serde_json::json!({
+            "target": { "method": "GET", "url": "http://x.io/", "concurrency": 20 },
+            "summary": {
+                "total_requests": requests,
+                "failed_requests": 0,
+                "requests_per_second": rps,
+                "latency": { "min_ms": fast * 0.9, "max_ms": slow * 1.2, "avg_ms": mean,
+                             "std_dev_ms": sd, "median_ms": at(50.0), "p90_ms": at(90.0),
+                             "p95_ms": at(95.0), "p99_ms": at(99.0), "quantiles_ms": quantiles },
+                "failures": []
+            }
+        });
+        Side::of_run("run.json".into(), &doc, &doc["summary"])
+    }
+
+    /// On a service with two speeds, the whole run's spread is larger
+    /// than its mean; taken as the noise, it hid a p99 that went from
+    /// 200 to 500ms and a throughput that halved. The noise is read off
+    /// the distribution where each percentile is instead.
+    #[test]
+    fn a_two_speed_service_still_shows_its_regression() {
+        let a = two_speeds(2000, 10.0, 200.0, 0.1, 615.0);
+        let b = two_speeds(2000, 10.0, 500.0, 0.1, 295.0);
+        let c = compare(&a, &b);
+        assert_eq!(c.verdict, Outcome::Slower, "{:#?}", c.changes);
+        assert!(c.regression);
+        let p99 = c.changes.iter().find(|c| c.metric == "p99_ms").unwrap();
+        assert!(p99.significant && p99.noise_percent < 20.0, "{p99:?}");
+        let rate = c
+            .changes
+            .iter()
+            .find(|c| c.metric == "requests_per_second")
+            .unwrap();
+        assert!(rate.significant, "{rate:?}");
+
+        // The same service again, a little different, is the same
+        let again = two_speeds(2000, 10.3, 206.0, 0.1, 600.0);
+        let c = compare(&a, &again);
+        assert_eq!(c.verdict, Outcome::Same, "{:#?}", c.changes);
+        assert!(!c.regression);
     }
 
     #[test]

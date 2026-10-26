@@ -85,7 +85,7 @@ jq '.summary.latency.p99_ms' results.json
 | Section | What it holds |
 | --- | --- |
 | `target` | What was tested and with what load: `mode` (run, ramp, api, flow, replay), `method`, `url`, `concurrency` |
-| `summary` | The counts, `duration_ms`, `requests_per_second`, `data_transfer_bytes`, `latency` with its percentiles and `phases`, `status_codes`, and, when there is something to say, `server_timing`, `slowest_requests`, `anomalies` and `failures` by cause with the first body of each |
+| `summary` | The counts, `duration_ms`, `requests_per_second`, `data_transfer_bytes`, `latency` with its percentiles, `quantiles_ms` (the distribution, finer in the tail, which `pepe compare` reads its noise from) and `phases`, `status_codes`, and, when there is something to say, `server_timing`, `slowest_requests`, `anomalies` and `failures` by cause with the first body of each. Under `--rate`, `schedule`: `paced_requests`, `late_requests` (started a millisecond or more after their slot, every connection being busy), `late_percent`, `wait_ms` and `response_time_ms` (the latency counted from the slot, each `median`, `p90`, `p99`, `max`) |
 | `verdict` | What the dashboard would have said: `level` (healthy, degraded, failing) and `findings`, each with a level and its text, including where the time went |
 | `generator` | pepe's own load: `threads`, `peak_busy_percent` (near 100, pepe was the limit), `warmup_s`, `warmup_requests`, `rate_per_second`, `rate_missed` |
 | `timeline` | One point per minute over the whole run, for runs over a minute |

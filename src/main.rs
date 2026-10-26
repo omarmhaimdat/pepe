@@ -142,20 +142,35 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         Some(name) => store::Store::local().load(name).map(Some),
         None => config::load(args.config.as_deref()),
     };
-    match loaded {
-        Ok(Some((path, file))) => {
-            if args.load.is_some() {
-                file.pick_mode(&mut args);
-            }
-            file.over(&defaults).apply(&mut args, &matches);
-            args.config_loaded = Some(path);
-        }
-        Ok(None) => defaults.apply(&mut args, &matches),
-        Err(e) => {
+    // The guardrails of `./pepe.toml` hold whatever else is loaded: a
+    // saved test or a `--config` file can't step out of them
+    let local = match (&args.load, &args.config) {
+        (None, None) => Ok(None),
+        _ => config::load(None),
+    };
+    let (loaded, local) = match (loaded, local) {
+        (Ok(loaded), Ok(local)) => (loaded, local.map(|(_, file)| file)),
+        (Err(e), _) | (_, Err(e)) => {
             eprintln!("error: {e}");
             std::process::exit(1);
         }
+    };
+    let mut holding = vec![defaults.clone()];
+    holding.extend(local);
+    match loaded {
+        Some((path, file)) => {
+            if args.load.is_some() {
+                file.pick_mode(&mut args);
+            }
+            holding.push(file.clone());
+            file.over(&defaults).apply(&mut args, &matches);
+            args.config_loaded = Some(path);
+        }
+        None => defaults.apply(&mut args, &matches),
     }
+    // Every file's caps and hosts, whichever of them filled in the run
+    config::hold(&mut args, &holding);
+    guard::hold(guard::Guard::of(&args));
     if let Some(path) = args.write_config.take() {
         if let Err(e) = config::write(&path, &args) {
             eprintln!("error: {e}");
@@ -286,9 +301,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     if let Some(cli::Command::Replay(what)) = args.command.clone() {
+        // A flag that doesn't make sense is a usage error, as clap's own are
         if let Err(e) = args.validate() {
             eprintln!("{}", e);
-            std::process::exit(1);
+            std::process::exit(2);
         }
         return modes::replay::run_replay(&args, &what).await;
     }
@@ -296,9 +312,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         return modes::logs::run_logs(&args, &what).await;
     }
     if let Some(cli::Command::Ping(what)) = args.command.clone() {
+        // A flag that doesn't make sense is a usage error, as clap's own are
         if let Err(e) = args.validate() {
             eprintln!("{}", e);
-            std::process::exit(1);
+            std::process::exit(2);
         }
         return modes::ping::run_ping(&args, &what, &matches).await;
     }
@@ -306,9 +323,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         return modes::compare::run_compare(&args, &what);
     }
     if let Some(cli::Command::Flow(what)) = args.command.clone() {
+        // A flag that doesn't make sense is a usage error, as clap's own are
         if let Err(e) = args.validate() {
             eprintln!("{}", e);
-            std::process::exit(1);
+            std::process::exit(2);
         }
         return modes::flow::run_flow(&args, &what).await;
     }
@@ -323,9 +341,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
             return modes::run::run_screens(&args, true).await;
         }
+        // A flag that doesn't make sense is a usage error, as clap's own are
         if let Err(e) = args.validate() {
             eprintln!("{}", e);
-            std::process::exit(1);
+            std::process::exit(2);
         }
         return modes::api::run_api(&args, &api).await;
     }
@@ -354,9 +373,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // With nothing to run yet, the setup screen does the checking instead
     if !nothing_to_run {
+        // A flag that doesn't make sense is a usage error, as clap's own are
         if let Err(e) = args.validate() {
             eprintln!("{}", e);
-            std::process::exit(1);
+            std::process::exit(2);
         }
     }
 
@@ -370,7 +390,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             .and_then(|_| match &ramp {
                 Some(ramp) => RampPlan::from_args(ramp)
                     .map_err(|e| e.to_string())
-                    .and_then(|plan| guard.check_ramp(plan.peak())),
+                    .and_then(|plan| guard.check_ramp(plan.peak()))
+                    .and_then(|_| guard.check_proxy(&args)),
                 None => guard.check_run(&args),
             });
         if let Err(e) = checked {

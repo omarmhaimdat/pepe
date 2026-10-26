@@ -97,6 +97,7 @@ pub(crate) async fn run_ping(
         duration: args.run_duration(),
         compression: !args.disable_compression,
         http1: what.http1,
+        allowed_hosts: crate::guard::Guard::of(args).hosts,
     };
     let targets = crate::ping::targets(crate::ping::Words {
         words: &what.targets,
@@ -125,7 +126,10 @@ pub(crate) async fn run_ping(
             fail(e);
         }
     }
-    if let Err(e) = guard.check_ping(targets.len(), every, count, args.run_duration()) {
+    if let Err(e) = guard
+        .check_ping(targets.len(), every, count, args.run_duration())
+        .and_then(|_| guard.check_proxy(args))
+    {
         fail(e);
     }
     if args.dry_run {
@@ -216,7 +220,8 @@ pub(crate) async fn run_ping(
         if csv {
             println!("{}", crate::ping::CSV_HEADER);
         }
-        let mut printed: Vec<usize> = vec![0; shared.lock().targets.len()];
+        // Samples of each target printed so far, out of all it recorded
+        let mut printed: Vec<u64> = vec![0; shared.lock().targets.len()];
         let mut pump = tokio::time::interval(std::time::Duration::from_millis(50));
         let bell = what.bell;
         loop {
@@ -230,10 +235,12 @@ pub(crate) async fn run_ping(
             let mut state = shared.lock();
             let mut lines = Vec::new();
             for (index, t) in state.targets.iter().enumerate() {
-                let seen = t.recent.len();
-                let dropped = (t.sent as usize).saturating_sub(seen);
-                let from = printed[index].saturating_sub(dropped).min(seen);
-                for sample in t.recent.iter().skip(from) {
+                // What came since the last tick, of what `recent` still
+                // holds. Counted in samples recorded, not pings sent: a
+                // ping still in flight has no sample yet
+                let held = t.recent.len() as u64;
+                let new = t.recorded.saturating_sub(printed[index]).min(held);
+                for sample in t.recent.iter().skip((held - new) as usize) {
                     let line = if jsonl {
                         crate::ping::sample_json(sample, &t.target).to_string()
                     } else if csv {
@@ -245,7 +252,7 @@ pub(crate) async fn run_ping(
                     };
                     lines.push((sample.at, line));
                 }
-                printed[index] = seen + dropped;
+                printed[index] = t.recorded;
             }
             let rang = std::mem::take(&mut state.bells);
             let done = state.done || shared.stopped();

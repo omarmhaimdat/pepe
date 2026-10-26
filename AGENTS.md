@@ -32,15 +32,18 @@ reason on stderr.
 
 | Flag | Holds |
 | --- | --- |
-| `--allow-host .example.com` | Every target's host must be `example.com` or under it; `api.example.com` is that host exactly; repeat for more. A flow step whose host comes from a capture, and a ping of a command (`--cmd`), are refused under it. |
-| `--max-requests 5000` | `-n` must be under it; `-z` needs a `--rate` that bounds it; a ping needs `-n` or `-z`; a ramp is refused (it has no bound). |
+| `--allow-host .example.com` | Every target's host must be `example.com` or under it; `api.example.com` is that host exactly; repeat for more. Every redirect hop is checked too, and a `-p` proxy. A flow step whose host comes from a capture, and a ping of a command (`--cmd`), are refused under it. |
+| `--max-requests 5000` | `-n` must be under it, times a flow's steps; `-z` needs a `--rate` that bounds it; a `--warmup` counts too, and needs a `--rate`; a ping needs `-n` or `-z`; a ramp is refused (it has no bound). |
 | `--max-rate 500` | `--rate` must be under it, and must be given: without it a run sends as fast as the target answers. A ping's targets over its interval count. |
-| `--max-concurrency 64` | `-c` and a ramp's top step must be under it. |
+| `--max-concurrency 64` | `-c` and a ramp's top step must be under it, and so must a change made while the run goes (keys, Slack). |
 | `--dry-run` | Says what would be sent, to where and how much (secrets in headers masked), and sends nothing; `--json` gives it as JSON with `"sent": 0`. Use it before the real call when the URL came from input. |
 
 `~/.config/pepe/settings.toml` (the settings page, F2 on a screen) holds
-the same keys under `[defaults]` for every run on the machine, under any
-`pepe.toml`; of two caps, the lower holds.
+the same keys under `[defaults]` for every run on the machine. Every
+place that sets them holds at once: the settings, `./pepe.toml` (even
+under `--load` or `--config`) and the command line. Of their caps the
+lowest holds, and a host must be allowed by every list that names
+hosts, so a flag can tighten a file's guardrails but never loosen them.
 
 ```toml
 # pepe.toml, next to the code: holds for every run in that directory
@@ -87,7 +90,10 @@ cause, `anomalies`. Read `generator.peak_busy_percent`: near 100, pepe
 rather than the target was the limit, so add `--threads auto` and run
 again. `--rate` is an open loop (arrivals at that rate, as users
 arrive); without it the run is a closed loop that finds the most the
-target can do.
+target can do. Under `--rate`, `latency` is timed from when each request
+went out; `summary.schedule` says how many started late because every
+connection was busy (`late_requests`) and `response_time_ms`, the latency
+counted from each request's slot, which is what a user on schedule saw.
 
 ## Find the capacity
 

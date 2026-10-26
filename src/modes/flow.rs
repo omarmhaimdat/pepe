@@ -59,7 +59,7 @@ pub(crate) async fn run_flow(
             }
         }
     }
-    if let Err(e) = guard.check_run(args) {
+    if let Err(e) = guard.check_flow(args, flow.steps.len()) {
         eprintln!("error: {e}");
         std::process::exit(2);
     }
