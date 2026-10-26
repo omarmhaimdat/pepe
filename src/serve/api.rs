@@ -65,7 +65,7 @@ pub async fn handle(server: Arc<Server>, request: Request<Incoming>) -> Reply {
                 Ok(view) => http::json(StatusCode::ACCEPTED, &view),
                 Err((status, why)) => http::error(status, why),
             },
-            Err(reply) => reply,
+            Err(reply) => *reply,
         },
         (&Method::GET, ["runs", id]) => match find(&server, id) {
             Some(run) => http::ok(&run.view(true)),
@@ -108,7 +108,7 @@ pub async fn handle(server: Arc<Server>, request: Request<Incoming>) -> Reply {
                 Some(n) => steer(&server, &who, id, &format!("concurrency {n}")),
                 None => http::error(StatusCode::BAD_REQUEST, "{\"n\": 40}: how many at once"),
             },
-            Err(reply) => reply,
+            Err(reply) => *reply,
         },
         (&Method::GET, ["tests"]) => list_tests(&server),
         (&Method::GET, ["tests", name]) => get_test(&server, name),
@@ -116,7 +116,7 @@ pub async fn handle(server: Arc<Server>, request: Request<Incoming>) -> Reply {
             let name = name.to_string();
             match http::body(request).await {
                 Ok(body) => put_test(&server, &who, &name, &body),
-                Err(reply) => reply,
+                Err(reply) => *reply,
             }
         }
         (&Method::DELETE, ["tests", name]) => delete_test(&server, &who, name),
@@ -150,7 +150,7 @@ pub async fn handle(server: Arc<Server>, request: Request<Incoming>) -> Reply {
         (&Method::GET, ["schedules"]) => http::ok(&json!({ "schedules": server.schedules.list() })),
         (&Method::POST, ["schedules"]) => match http::body(request).await {
             Ok(body) => add_schedule(&server, &who, &body),
-            Err(reply) => reply,
+            Err(reply) => *reply,
         },
         (&Method::DELETE, ["schedules", id]) => {
             if server.schedules.remove(id) {

@@ -76,25 +76,30 @@ fn same(a: &[u8], b: &[u8]) -> bool {
     a.iter().zip(b).fold(0u8, |acc, (x, y)| acc | (x ^ y)) == 0
 }
 
-/// The body, as JSON; an empty one is `{}`
-pub async fn body(request: Request<Incoming>) -> Result<Value, Reply> {
+/// The body, as JSON; an empty one is `{}`. Boxed, the error: a whole
+/// response is large to carry through every `?`
+pub async fn body(request: Request<Incoming>) -> Result<Value, Box<Reply>> {
     let bytes = read(request).await?;
     if bytes.iter().all(|b| b.is_ascii_whitespace()) {
         return Ok(json!({}));
     }
-    serde_json::from_slice(&bytes)
-        .map_err(|e| error(StatusCode::BAD_REQUEST, format!("the body isn't JSON: {e}")))
+    serde_json::from_slice(&bytes).map_err(|e| {
+        Box::new(error(
+            StatusCode::BAD_REQUEST,
+            format!("the body isn't JSON: {e}"),
+        ))
+    })
 }
 
 /// The body's bytes, up to `MOST`
-pub async fn read(request: Request<Incoming>) -> Result<Bytes, Reply> {
+pub async fn read(request: Request<Incoming>) -> Result<Bytes, Box<Reply>> {
     let limited = http_body_util::Limited::new(request.into_body(), MOST);
     match limited.collect().await {
         Ok(collected) => Ok(collected.to_bytes()),
-        Err(_) => Err(error(
+        Err(_) => Err(Box::new(error(
             StatusCode::PAYLOAD_TOO_LARGE,
             "the body is over 1 MB, or it broke off",
-        )),
+        ))),
     }
 }
 

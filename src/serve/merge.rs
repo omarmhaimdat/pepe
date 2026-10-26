@@ -200,7 +200,8 @@ pub fn reports(reports: &[(String, Value)], failed: &[String]) -> Value {
         }
     }
     let mut failures: Vec<(String, (u64, Option<String>))> = failures.into_iter().collect();
-    failures.sort_by(|a, b| b.1 .0.cmp(&a.1 .0));
+    // Most first
+    failures.sort_by_key(|(_, (count, _))| std::cmp::Reverse(*count));
     let interrupted = reports
         .iter()
         .any(|(_, r)| r.pointer("/summary/interrupted") == Some(&json!(true)));
