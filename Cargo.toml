@@ -32,6 +32,14 @@ webpki-roots = "1"
 # ALPN: hyper's own implementation, over the same rustls stream
 h2 = "0.4"
 http = "1"
+# `pepe serve` (src/serve/): hyper's own HTTP/1.1 server, already in the
+# tree under reqwest, and the body types it takes
+hyper = { version = "1", default-features = false, features = ["server", "http1"] }
+hyper-util = { version = "0.1", default-features = false, features = ["tokio"] }
+http-body-util = "0.1"
+# The WebSocket handshake's SHA-1, for `pepe serve`'s workers; the same
+# ring rustls uses
+ring = "0.17"
 # Finding the ends of lines and fields in logs (src/logs.rs); in the tree
 # already, under httparse's neighbours and regex-lite's
 memchr = "2"

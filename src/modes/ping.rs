@@ -254,6 +254,28 @@ pub(crate) async fn run_ping(
                 }
                 printed[index] = t.recorded;
             }
+            if crate::events::due() {
+                let us = |v: u64| (v as f64 / 10.0).round() / 100.0;
+                let targets: Vec<serde_json::Value> = state
+                    .targets
+                    .iter()
+                    .map(|t| {
+                        let w = t.whole();
+                        serde_json::json!({
+                            "name": t.target.name,
+                            "target": t.target.shown,
+                            "sent": w.sent,
+                            "answered": w.answered,
+                            "timeouts": w.timeouts,
+                            "last_ms": w.last.map(us),
+                            "p50_ms": us(w.p50),
+                            "p99_ms": us(w.p99),
+                            "jitter_ms": us(w.jitter),
+                        })
+                    })
+                    .collect();
+                crate::events::ping_progress(serde_json::Value::Array(targets));
+            }
             let rang = std::mem::take(&mut state.bells);
             let done = state.done || shared.stopped();
             drop(state);

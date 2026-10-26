@@ -195,6 +195,17 @@ up to date as the run goes, after `pepe slack connect`, or with
 a ping goes. `--snapshot soak.json` keeps a long run's report current on
 disk every minute.
 
+## As a server
+
+`pepe serve` (127.0.0.1:7878, a token printed on stdout) takes the same
+arguments as the MCP tools over HTTP: `POST /api/runs` with
+`Authorization: Bearer TOKEN` starts a run, `GET /api/runs/ID/events` is
+the run live (Server-Sent Events), `GET /api/runs/ID` its report. Tests,
+history, compare and schedules are there too, and `pepe worker --join`
+machines take shares of a run. Off loopback it needs every guardrail.
+`--events FILE` gives any run's lines without a server.
+https://pepe.mhaimdat.com/docs/serve.html
+
 ## As an MCP server
 
 `pepe mcp` serves the modes above as tools over stdio (`run`, `ping`,

@@ -20,6 +20,18 @@ pub struct Socket {
     io: Box<dyn Io>,
     /// Read and not yet taken
     buf: Vec<u8>,
+    /// A client masks what it sends; a server doesn't
+    client: bool,
+}
+
+/// What a server answers a handshake's `Sec-WebSocket-Key` with
+pub fn accept_key(key: &str) -> String {
+    const GUID: &str = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
+    let digest = ring::digest::digest(
+        &ring::digest::SHA1_FOR_LEGACY_USE_ONLY,
+        format!("{}{GUID}", key.trim()).as_bytes(),
+    );
+    base64(digest.as_ref())
 }
 
 /// Random bytes from the TLS provider's generator
@@ -50,6 +62,11 @@ pub fn base64(bytes: &[u8]) -> String {
 
 /// Open `url` (wss:// or ws://) and upgrade it
 pub async fn connect(url: &str) -> Result<Socket, String> {
+    connect_with(url, &[]).await
+}
+
+/// The same, with headers of its own on the handshake (a token)
+pub async fn connect_with(url: &str, headers: &[(&str, &str)]) -> Result<Socket, String> {
     let url = reqwest::Url::parse(url).map_err(|e| format!("{url}: {e}"))?;
     let tls = match url.scheme() {
         "wss" => true,
@@ -86,9 +103,16 @@ pub async fn connect(url: &str) -> Result<Socket, String> {
         None => url.path().to_string(),
     };
     let key = base64(&random::<16>());
+    let mut extra = String::new();
+    for (name, value) in headers {
+        // A header with a line break in it would be two
+        if !name.contains(['\r', '\n']) && !value.contains(['\r', '\n']) {
+            extra.push_str(&format!("{name}: {value}\r\n"));
+        }
+    }
     let request = format!(
         "GET {path} HTTP/1.1\r\nHost: {host}\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n\
-         Sec-WebSocket-Key: {key}\r\nSec-WebSocket-Version: 13\r\n\r\n"
+         Sec-WebSocket-Key: {key}\r\nSec-WebSocket-Version: 13\r\n{extra}\r\n"
     );
     io.write_all(request.as_bytes())
         .await
@@ -117,10 +141,20 @@ pub async fn connect(url: &str) -> Result<Socket, String> {
     Ok(Socket {
         io,
         buf: buf[end + 4..].to_vec(),
+        client: true,
     })
 }
 
 impl Socket {
+    /// The server's end of a connection already upgraded
+    pub fn server(io: impl AsyncRead + AsyncWrite + Unpin + Send + 'static) -> Socket {
+        Socket {
+            io: Box::new(io),
+            buf: Vec::new(),
+            client: false,
+        }
+    }
+
     async fn fill(&mut self, want: usize) -> Result<(), String> {
         while self.buf.len() < want {
             let mut chunk = [0u8; 8192];
@@ -174,21 +208,26 @@ impl Socket {
 
     async fn write(&mut self, opcode: u8, payload: &[u8]) -> Result<(), String> {
         let mut out = vec![0x80 | opcode];
-        // A client masks what it sends
+        // A client masks what it sends; a server doesn't
+        let mask = if self.client { 0x80 } else { 0 };
         match payload.len() {
-            n if n < 126 => out.push(0x80 | n as u8),
+            n if n < 126 => out.push(mask | n as u8),
             n if n <= u16::MAX as usize => {
-                out.push(0x80 | 126);
+                out.push(mask | 126);
                 out.extend_from_slice(&(n as u16).to_be_bytes());
             }
             n => {
-                out.push(0x80 | 127);
+                out.push(mask | 127);
                 out.extend_from_slice(&(n as u64).to_be_bytes());
             }
         }
-        let key = random::<4>();
-        out.extend_from_slice(&key);
-        out.extend(payload.iter().enumerate().map(|(i, b)| b ^ key[i % 4]));
+        if self.client {
+            let key = random::<4>();
+            out.extend_from_slice(&key);
+            out.extend(payload.iter().enumerate().map(|(i, b)| b ^ key[i % 4]));
+        } else {
+            out.extend_from_slice(payload);
+        }
         self.io.write_all(&out).await.map_err(|e| e.to_string())?;
         self.io.flush().await.map_err(|e| e.to_string())
     }
@@ -232,6 +271,15 @@ impl Socket {
 pub mod tests {
     use super::*;
     use tokio::net::TcpListener;
+
+    #[test]
+    fn a_server_accepts_a_key_as_the_rfc_has_it() {
+        // RFC 6455, section 1.3
+        assert_eq!(
+            accept_key("dGhlIHNhbXBsZSBub25jZQ=="),
+            "s3pPLMBiTxaQ9kYGzzhZRbK+xOo="
+        );
+    }
 
     #[test]
     fn base64_as_the_rfc_has_it() {

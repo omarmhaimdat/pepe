@@ -38,7 +38,7 @@
   <nav class="links"><a href="../">Install</a><a href="https://github.com/omarmhaimdat/pepe">GitHub</a><button type="button" class="theme" aria-label="Switch between light and dark">◐</button></nav>
 </header>
 <div class="shell">
-  <aside class="side" id="side"><div class="group">Start here</div><a href="index.html">Overview</a><a href="install.html">Install</a><div class="group">Modes</div><a href="load-test.html">Load testing</a><a href="dashboard.html">The dashboard</a><a href="ping.html">Ping</a><a href="ramp.html">Ramp</a><a href="api.html">OpenAPI</a><a href="flow.html">Flows</a><a href="replay.html">Replay</a><a href="logs.html">nginx logs</a><a href="compare.html">Compare</a><div class="group">Integrate</div><a href="output.html">Output and exit codes</a><a href="ci.html">CI and Docker</a><a href="webhooks.html">Webhooks</a><a href="agents.html">Agents and scripts</a><div class="group">Reference</div><a href="config.html">Config files</a><a href="reference.html" aria-current="page">Command reference</a><a href="benchmarks.html">Benchmarks</a></aside>
+  <aside class="side" id="side"><div class="group">Start here</div><a href="index.html">Overview</a><a href="install.html">Install</a><div class="group">Modes</div><a href="load-test.html">Load testing</a><a href="dashboard.html">The dashboard</a><a href="ping.html">Ping</a><a href="ramp.html">Ramp</a><a href="api.html">OpenAPI</a><a href="flow.html">Flows</a><a href="replay.html">Replay</a><a href="logs.html">nginx logs</a><a href="compare.html">Compare</a><div class="group">Integrate</div><a href="output.html">Output and exit codes</a><a href="ci.html">CI and Docker</a><a href="webhooks.html">Webhooks</a><a href="agents.html">Agents and scripts</a><a href="serve.html">pepe serve</a><div class="group">Reference</div><a href="config.html">Config files</a><a href="reference.html" aria-current="page">Command reference</a><a href="benchmarks.html">Benchmarks</a></aside>
   <main class="main">
     <article class="prose">
 <div class="kicker"><span>Reference</span><span>pepe --help</span></div>
@@ -62,6 +62,8 @@ Commands:
   logs         Read nginx logs: requests per second now, against each minute, hour and day
   schema       Print the JSON Schema of a report: run (the default), ramp, ping or compare
   mcp          Serve pepe&#x27;s modes as tools for an agent over stdio (the Model Context Protocol); the guardrail flags given here hold for every call
+  serve        Serve pepe over HTTP: start, watch, steer and compare runs from a script, an agent or a browser; loopback and a token by default
+  worker       Take a share of a `pepe serve`&#x27;s distributed runs from this machine, under its own guardrails
   self-update  Update pepe to the latest release, or say what&#x27;s new in it
   completions  Tab completion for your shell: print the script, or --install it
   slack        Connect pepe to Slack from here, so --slack keeps a message there up to date as a run goes
@@ -165,6 +167,9 @@ Options:
 
       --snapshot &lt;FILE&gt;
           Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run&#x27;s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run
+
+      --events &lt;FILE&gt;
+          Write the run as it goes to FILE (- for stdout), a JSON line at a time: start, progress a second, anomalies, steering, and the report last
 
       --allow-host &lt;HOST&gt;
           Refuse to send anywhere but these hosts: api.example.com exactly, or .example.com for it and its subdomains; repeat for more. Every target is checked before anything is sent
@@ -277,16 +282,8 @@ Options:
       --bell
           Ring the terminal bell when a ping fails or breaks the SLO
 
-  -h, --help
-          Print help
-
       --ymin &lt;MS&gt;
           The graph&#x27;s floor, in milliseconds
-
-  -n, --number &lt;NUMBER&gt;
-          Number of requests to perform
-          
-          [default: 100]
 
       --ymax &lt;MS&gt;
           The graph&#x27;s ceiling, in milliseconds; without it the graph fits what it shows
@@ -294,16 +291,21 @@ Options:
   -0
           Start the graph at zero (the same as --ymin 0)
 
-  -c, --concurrency &lt;CONCURRENCY&gt;
-          Number of concurrent requests at a time
+  -h, --help
+          Print help
+
+  -n, --number &lt;NUMBER&gt;
+          Number of requests to perform
           
-          [default: &quot;one per core&quot;]
+          [default: 100]
 
   -s, --simple-graphics
           Draw the graph with dots rather than braille, for terminals and fonts that lack it
 
-  -z, --duration &lt;DURATION&gt;
-          Duration of the test, e.g. 10s, 3m, 2h (mutually exclusive with -n)
+  -c, --concurrency &lt;CONCURRENCY&gt;
+          Number of concurrent requests at a time
+          
+          [default: &quot;one per core&quot;]
 
       --jsonl
           No screen: one JSON object per ping on stdout, as it happens
@@ -311,39 +313,42 @@ Options:
       --csv
           No screen: one CSV line per ping on stdout, under a header
 
+  -z, --duration &lt;DURATION&gt;
+          Duration of the test, e.g. 10s, 3m, 2h (mutually exclusive with -n)
+
+      --save &lt;FILE&gt;
+          Write the JSON report to this file when the run ends, whatever else is shown
+
   -m, --method &lt;METHOD&gt;
           HTTP method, e.g. GET, POST, PUT, DELETE
           
           [default: GET]
 
+      --show-body
+          Keep the first kilobyte of each body for the inspector
+
   -H, --headers &lt;HEADERS&gt;
           HTTP headers, e.g. -H &#x27;Accept: application/json&#x27;
 
-      --save &lt;FILE&gt;
-          Write the JSON report to this file when the run ends, whatever else is shown
+      --save-body &lt;FILE&gt;
+          Write the last body received to this file when the run ends
 
-      --show-body
-          Keep the first kilobyte of each body for the inspector
+      --http1
+          Speak HTTP/1.1 even when the server offers HTTP/2; without it a ping takes h2 when the server offers it through ALPN
 
   -t, --timeout &lt;TIMEOUT&gt;
           Time in seconds to wait for a response
           
           [default: 20]
 
-      --save-body &lt;FILE&gt;
-          Write the last body received to this file when the run ends
+      --once
+          One diagnosis and out: three quick pings, then the last one&#x27;s phases, what answered, and what to look at; no screen
 
       --warmup &lt;TIME&gt;
           Send for this long before measuring, e.g. 5s: connections open, caches fill and JITs settle without counting against the run
 
-      --http1
-          Speak HTTP/1.1 even when the server offers HTTP/2; without it a ping takes h2 when the server offers it through ALPN
-
       --threads &lt;N|auto&gt;
           Threads sending requests (default 1), or &quot;auto&quot; to add one whenever those sending are all busy. One sends 100k requests a second or more; the dashboard says when it is the limit
-
-      --once
-          One diagnosis and out: three quick pings, then the last one&#x27;s phases, what answered, and what to look at; no screen
 
       --rate &lt;PER_SECOND&gt;
           Start this many requests a second, spread evenly, instead of as many as the concurrency allows; -c is then the most in flight at once, and pepe says when it holds the rate back
@@ -392,6 +397,9 @@ Options:
 
       --snapshot &lt;FILE&gt;
           Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run&#x27;s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run
+
+      --events &lt;FILE&gt;
+          Write the run as it goes to FILE (- for stdout), a JSON line at a time: start, progress a second, anomalies, steering, and the report last
 
       --allow-host &lt;HOST&gt;
           Refuse to send anywhere but these hosts: api.example.com exactly, or .example.com for it and its subdomains; repeat for more. Every target is checked before anything is sent
@@ -547,6 +555,9 @@ Options:
       --snapshot &lt;FILE&gt;
           Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run&#x27;s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run
 
+      --events &lt;FILE&gt;
+          Write the run as it goes to FILE (- for stdout), a JSON line at a time: start, progress a second, anomalies, steering, and the report last
+
       --allow-host &lt;HOST&gt;
           Refuse to send anywhere but these hosts: api.example.com exactly, or .example.com for it and its subdomains; repeat for more. Every target is checked before anything is sent
 
@@ -686,6 +697,9 @@ Options:
 
       --snapshot &lt;FILE&gt;
           Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run&#x27;s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run
+
+      --events &lt;FILE&gt;
+          Write the run as it goes to FILE (- for stdout), a JSON line at a time: start, progress a second, anomalies, steering, and the report last
 
       --allow-host &lt;HOST&gt;
           Refuse to send anywhere but these hosts: api.example.com exactly, or .example.com for it and its subdomains; repeat for more. Every target is checked before anything is sent
@@ -842,6 +856,9 @@ Options:
       --snapshot &lt;FILE&gt;
           Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run&#x27;s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run
 
+      --events &lt;FILE&gt;
+          Write the run as it goes to FILE (- for stdout), a JSON line at a time: start, progress a second, anomalies, steering, and the report last
+
       --allow-host &lt;HOST&gt;
           Refuse to send anywhere but these hosts: api.example.com exactly, or .example.com for it and its subdomains; repeat for more. Every target is checked before anything is sent
 
@@ -972,6 +989,9 @@ Options:
 
       --snapshot &lt;FILE&gt;
           Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run&#x27;s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run
+
+      --events &lt;FILE&gt;
+          Write the run as it goes to FILE (- for stdout), a JSON line at a time: start, progress a second, anomalies, steering, and the report last
 
       --allow-host &lt;HOST&gt;
           Refuse to send anywhere but these hosts: api.example.com exactly, or .example.com for it and its subdomains; repeat for more. Every target is checked before anything is sent
@@ -1114,6 +1134,9 @@ Options:
 
       --snapshot &lt;FILE&gt;
           Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run&#x27;s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run
+
+      --events &lt;FILE&gt;
+          Write the run as it goes to FILE (- for stdout), a JSON line at a time: start, progress a second, anomalies, steering, and the report last
 
       --allow-host &lt;HOST&gt;
           Refuse to send anywhere but these hosts: api.example.com exactly, or .example.com for it and its subdomains; repeat for more. Every target is checked before anything is sent
@@ -1280,6 +1303,9 @@ Options:
       --snapshot &lt;FILE&gt;
           Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run&#x27;s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run
 
+      --events &lt;FILE&gt;
+          Write the run as it goes to FILE (- for stdout), a JSON line at a time: start, progress a second, anomalies, steering, and the report last
+
       --allow-host &lt;HOST&gt;
           Refuse to send anywhere but these hosts: api.example.com exactly, or .example.com for it and its subdomains; repeat for more. Every target is checked before anything is sent
 
@@ -1414,6 +1440,9 @@ Options:
       --snapshot &lt;FILE&gt;
           Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run&#x27;s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run
 
+      --events &lt;FILE&gt;
+          Write the run as it goes to FILE (- for stdout), a JSON line at a time: start, progress a second, anomalies, steering, and the report last
+
       --allow-host &lt;HOST&gt;
           Refuse to send anywhere but these hosts: api.example.com exactly, or .example.com for it and its subdomains; repeat for more. Every target is checked before anything is sent
 
@@ -1544,6 +1573,9 @@ Options:
 
       --snapshot &lt;FILE&gt;
           Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run&#x27;s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run
+
+      --events &lt;FILE&gt;
+          Write the run as it goes to FILE (- for stdout), a JSON line at a time: start, progress a second, anomalies, steering, and the report last
 
       --allow-host &lt;HOST&gt;
           Refuse to send anywhere but these hosts: api.example.com exactly, or .example.com for it and its subdomains; repeat for more. Every target is checked before anything is sent
@@ -1678,6 +1710,9 @@ Options:
       --snapshot &lt;FILE&gt;
           Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run&#x27;s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run
 
+      --events &lt;FILE&gt;
+          Write the run as it goes to FILE (- for stdout), a JSON line at a time: start, progress a second, anomalies, steering, and the report last
+
       --allow-host &lt;HOST&gt;
           Refuse to send anywhere but these hosts: api.example.com exactly, or .example.com for it and its subdomains; repeat for more. Every target is checked before anything is sent
 
@@ -1804,6 +1839,289 @@ Options:
 
       --snapshot &lt;FILE&gt;
           Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run&#x27;s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run
+
+      --events &lt;FILE&gt;
+          Write the run as it goes to FILE (- for stdout), a JSON line at a time: start, progress a second, anomalies, steering, and the report last
+
+      --allow-host &lt;HOST&gt;
+          Refuse to send anywhere but these hosts: api.example.com exactly, or .example.com for it and its subdomains; repeat for more. Every target is checked before anything is sent
+
+      --max-requests &lt;N&gt;
+          Refuse a run that would send more requests than this: -n above it, or -z without a --rate that bounds it
+
+      --max-rate &lt;PER_SECOND&gt;
+          Refuse a --rate above this, and a run with no --rate at all, which sends as fast as the target answers
+
+      --max-concurrency &lt;N&gt;
+          Refuse a concurrency above this
+
+      --dry-run
+          Say what would be sent, to where and how much, and send nothing; as JSON with --json
+
+      --fail-if &lt;CONDITION&gt;
+          End with exit code 4 when the run crosses this, for CI and scripts: &#x27;p99 &gt; 300ms&#x27;, &#x27;errors &gt; 1%&#x27;; repeat for more. The report is still printed. pepe logs takes &#x27;5xx &gt; 2%&#x27;, &#x27;4xx &gt; 20%&#x27; and &#x27;rate &lt; 5/s&#x27; too. (pepe ping has --slo for the same.)
+
+      --metrics &lt;ADDR&gt;
+          Serve the live numbers for Prometheus at http://ADDR/metrics while the run goes, e.g. :9100 or 127.0.0.1:9100, so a soak run or a long ping shows up in Grafana next to the server&#x27;s own
+
+  -i, --setup
+          Open the setup screen to review or change the settings before starting (it opens by itself when no URL is given)
+
+      --config &lt;FILE&gt;
+          Read settings from this file instead of ./pepe.toml; flags on the command line win over it
+
+      --write-config &lt;FILE&gt;
+          Write the settings as they stand to this file, as a pepe.toml, and exit
+
+      --load &lt;NAME&gt;
+          Run a test saved on the setup screen (ctrl-s): ./.pepe/tests/NAME.toml; flags on the command line win over it
+
+      --keep [&lt;NAME&gt;]
+          Keep the settings as they stand as a saved test, ./.pepe/tests/NAME.toml, then run. With --load and no NAME, the loaded test is updated in place; with another NAME, it&#x27;s copied
+
+      --record
+          Keep the run&#x27;s report under its saved test when it ends, as ./.pepe/runs/NAME/&lt;moment&gt;.json; the run has to be a saved test (--load NAME, or --keep NAME)</code></pre></figure>
+<h2 id="pepe-serve"><a href="#pepe-serve">pepe serve</a></h2>
+<figure class="code"><div class="bar"><span>text</span><button type="button" class="copy" aria-label="Copy">copy</button></div><pre><code>Serve pepe over HTTP: start, watch, steer and compare runs from a script, an agent or a browser; loopback and a token by default
+
+Usage: pepe serve [OPTIONS]
+
+Options:
+      --listen &lt;ADDR&gt;
+          Where to listen: 127.0.0.1:7878 by default. Any address but loopback needs --allow-host and the --max-requests, --max-rate and --max-concurrency caps
+
+      --token-file &lt;FILE&gt;
+          The tokens that may call the API, a line each: `name token`, or the token alone. Without one, a token is made and printed
+
+      --max-runs &lt;N&gt;
+          Runs going at once, on this machine and the workers together
+          
+          [default: 1]
+
+  -h, --help
+          Print help
+
+  -n, --number &lt;NUMBER&gt;
+          Number of requests to perform
+          
+          [default: 100]
+
+  -c, --concurrency &lt;CONCURRENCY&gt;
+          Number of concurrent requests at a time
+          
+          [default: &quot;one per core&quot;]
+
+  -z, --duration &lt;DURATION&gt;
+          Duration of the test, e.g. 10s, 3m, 2h (mutually exclusive with -n)
+
+  -m, --method &lt;METHOD&gt;
+          HTTP method, e.g. GET, POST, PUT, DELETE
+          
+          [default: GET]
+
+  -H, --headers &lt;HEADERS&gt;
+          HTTP headers, e.g. -H &#x27;Accept: application/json&#x27;
+
+  -t, --timeout &lt;TIMEOUT&gt;
+          Time in seconds to wait for a response
+          
+          [default: 20]
+
+      --warmup &lt;TIME&gt;
+          Send for this long before measuring, e.g. 5s: connections open, caches fill and JITs settle without counting against the run
+
+      --threads &lt;N|auto&gt;
+          Threads sending requests (default 1), or &quot;auto&quot; to add one whenever those sending are all busy. One sends 100k requests a second or more; the dashboard says when it is the limit
+
+      --rate &lt;PER_SECOND&gt;
+          Start this many requests a second, spread evenly, instead of as many as the concurrency allows; -c is then the most in flight at once, and pepe says when it holds the rate back
+
+  -d, --body &lt;BODY&gt;
+          HTTP request body
+
+  -u, --user-agent &lt;USER_AGENT&gt;
+          User-Agent string, default is pepe/{version}
+
+  -p, --proxy &lt;PROXY&gt;
+          Proxy server URL: http://user:pass@host:port or socks5://host:port
+
+  -k, --insecure
+          Accept invalid TLS certificates (self-signed, expired, wrong host)
+
+      --disable-compression
+          Disable HTTP compression, e.g. gzip
+
+      --disable-keepalive
+          Disable HTTP keepalive, e.g. Connection: close
+
+      --disable-redirects
+          Prevent http redirects
+
+      --json
+          Output results in JSON format
+
+      --trace-header &lt;NAME&gt;
+          Response header holding the request id to show for the slowest requests and in the inspector, so they can be found in the server&#x27;s logs; without it, X-Request-Id, traceparent, CF-Ray, X-Amzn-Trace-Id and other common ones are looked for
+
+      --vars &lt;FILE&gt;
+          Fill the {{holes}} in the URL, headers and body from this CSV file, whose first line names them: each request takes the next row, and the rows go round again. In a flow, each chain starts with the next row&#x27;s values
+
+      --webhook &lt;URL&gt;
+          Send the run&#x27;s verdict to this URL when it ends: a Slack, Discord, Teams or Google Chat webhook gets a message laid out for it, anything else the JSON report; repeat for more. ${NAME} is taken from the environment. A [[webhook]] table in pepe.toml says more
+
+      --webhook-on &lt;EVENTS&gt;
+          When the --webhook URLs are sent: start, progress, anomaly, end, fail (the end when a --fail-if was crossed), comma-separated; end by default
+
+      --slack[=&lt;CHANNEL&gt;]
+          Keep a Slack message up to date as the run goes: posted at the start, edited with the numbers, anomalies in its thread, the verdict at the end. --slack alone posts in the channel `pepe slack connect` kept; --slack=#channel elsewhere
+
+      --export &lt;FILE&gt;
+          Write the report to FILE as well, in the format its extension says: .html a self-contained page (curves, thresholds, the last run), .json the report, .md a summary for a PR, .txt what pepe prints, .csv the run&#x27;s numbers a row a second; repeat for more
+
+      --snapshot &lt;FILE&gt;
+          Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run&#x27;s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run
+
+      --events &lt;FILE&gt;
+          Write the run as it goes to FILE (- for stdout), a JSON line at a time: start, progress a second, anomalies, steering, and the report last
+
+      --allow-host &lt;HOST&gt;
+          Refuse to send anywhere but these hosts: api.example.com exactly, or .example.com for it and its subdomains; repeat for more. Every target is checked before anything is sent
+
+      --max-requests &lt;N&gt;
+          Refuse a run that would send more requests than this: -n above it, or -z without a --rate that bounds it
+
+      --max-rate &lt;PER_SECOND&gt;
+          Refuse a --rate above this, and a run with no --rate at all, which sends as fast as the target answers
+
+      --max-concurrency &lt;N&gt;
+          Refuse a concurrency above this
+
+      --dry-run
+          Say what would be sent, to where and how much, and send nothing; as JSON with --json
+
+      --fail-if &lt;CONDITION&gt;
+          End with exit code 4 when the run crosses this, for CI and scripts: &#x27;p99 &gt; 300ms&#x27;, &#x27;errors &gt; 1%&#x27;; repeat for more. The report is still printed. pepe logs takes &#x27;5xx &gt; 2%&#x27;, &#x27;4xx &gt; 20%&#x27; and &#x27;rate &lt; 5/s&#x27; too. (pepe ping has --slo for the same.)
+
+      --metrics &lt;ADDR&gt;
+          Serve the live numbers for Prometheus at http://ADDR/metrics while the run goes, e.g. :9100 or 127.0.0.1:9100, so a soak run or a long ping shows up in Grafana next to the server&#x27;s own
+
+  -i, --setup
+          Open the setup screen to review or change the settings before starting (it opens by itself when no URL is given)
+
+      --config &lt;FILE&gt;
+          Read settings from this file instead of ./pepe.toml; flags on the command line win over it
+
+      --write-config &lt;FILE&gt;
+          Write the settings as they stand to this file, as a pepe.toml, and exit
+
+      --load &lt;NAME&gt;
+          Run a test saved on the setup screen (ctrl-s): ./.pepe/tests/NAME.toml; flags on the command line win over it
+
+      --keep [&lt;NAME&gt;]
+          Keep the settings as they stand as a saved test, ./.pepe/tests/NAME.toml, then run. With --load and no NAME, the loaded test is updated in place; with another NAME, it&#x27;s copied
+
+      --record
+          Keep the run&#x27;s report under its saved test when it ends, as ./.pepe/runs/NAME/&lt;moment&gt;.json; the run has to be a saved test (--load NAME, or --keep NAME)</code></pre></figure>
+<h2 id="pepe-worker"><a href="#pepe-worker">pepe worker</a></h2>
+<figure class="code"><div class="bar"><span>text</span><button type="button" class="copy" aria-label="Copy">copy</button></div><pre><code>Take a share of a `pepe serve`&#x27;s distributed runs from this machine, under its own guardrails
+
+Usage: pepe worker [OPTIONS] --join &lt;URL&gt;
+
+Options:
+      --join &lt;URL&gt;
+          The `pepe serve` to join: http://host:7878
+
+      --name &lt;NAME&gt;
+          What the server calls this worker: the host name by default
+
+      --token-file &lt;FILE&gt;
+          A file with the token to join with (the server&#x27;s token file takes it); else $PEPE_TOKEN
+
+  -h, --help
+          Print help
+
+  -n, --number &lt;NUMBER&gt;
+          Number of requests to perform
+          
+          [default: 100]
+
+  -c, --concurrency &lt;CONCURRENCY&gt;
+          Number of concurrent requests at a time
+          
+          [default: &quot;one per core&quot;]
+
+  -z, --duration &lt;DURATION&gt;
+          Duration of the test, e.g. 10s, 3m, 2h (mutually exclusive with -n)
+
+  -m, --method &lt;METHOD&gt;
+          HTTP method, e.g. GET, POST, PUT, DELETE
+          
+          [default: GET]
+
+  -H, --headers &lt;HEADERS&gt;
+          HTTP headers, e.g. -H &#x27;Accept: application/json&#x27;
+
+  -t, --timeout &lt;TIMEOUT&gt;
+          Time in seconds to wait for a response
+          
+          [default: 20]
+
+      --warmup &lt;TIME&gt;
+          Send for this long before measuring, e.g. 5s: connections open, caches fill and JITs settle without counting against the run
+
+      --threads &lt;N|auto&gt;
+          Threads sending requests (default 1), or &quot;auto&quot; to add one whenever those sending are all busy. One sends 100k requests a second or more; the dashboard says when it is the limit
+
+      --rate &lt;PER_SECOND&gt;
+          Start this many requests a second, spread evenly, instead of as many as the concurrency allows; -c is then the most in flight at once, and pepe says when it holds the rate back
+
+  -d, --body &lt;BODY&gt;
+          HTTP request body
+
+  -u, --user-agent &lt;USER_AGENT&gt;
+          User-Agent string, default is pepe/{version}
+
+  -p, --proxy &lt;PROXY&gt;
+          Proxy server URL: http://user:pass@host:port or socks5://host:port
+
+  -k, --insecure
+          Accept invalid TLS certificates (self-signed, expired, wrong host)
+
+      --disable-compression
+          Disable HTTP compression, e.g. gzip
+
+      --disable-keepalive
+          Disable HTTP keepalive, e.g. Connection: close
+
+      --disable-redirects
+          Prevent http redirects
+
+      --json
+          Output results in JSON format
+
+      --trace-header &lt;NAME&gt;
+          Response header holding the request id to show for the slowest requests and in the inspector, so they can be found in the server&#x27;s logs; without it, X-Request-Id, traceparent, CF-Ray, X-Amzn-Trace-Id and other common ones are looked for
+
+      --vars &lt;FILE&gt;
+          Fill the {{holes}} in the URL, headers and body from this CSV file, whose first line names them: each request takes the next row, and the rows go round again. In a flow, each chain starts with the next row&#x27;s values
+
+      --webhook &lt;URL&gt;
+          Send the run&#x27;s verdict to this URL when it ends: a Slack, Discord, Teams or Google Chat webhook gets a message laid out for it, anything else the JSON report; repeat for more. ${NAME} is taken from the environment. A [[webhook]] table in pepe.toml says more
+
+      --webhook-on &lt;EVENTS&gt;
+          When the --webhook URLs are sent: start, progress, anomaly, end, fail (the end when a --fail-if was crossed), comma-separated; end by default
+
+      --slack[=&lt;CHANNEL&gt;]
+          Keep a Slack message up to date as the run goes: posted at the start, edited with the numbers, anomalies in its thread, the verdict at the end. --slack alone posts in the channel `pepe slack connect` kept; --slack=#channel elsewhere
+
+      --export &lt;FILE&gt;
+          Write the report to FILE as well, in the format its extension says: .html a self-contained page (curves, thresholds, the last run), .json the report, .md a summary for a PR, .txt what pepe prints, .csv the run&#x27;s numbers a row a second; repeat for more
+
+      --snapshot &lt;FILE&gt;
+          Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run&#x27;s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run
+
+      --events &lt;FILE&gt;
+          Write the run as it goes to FILE (- for stdout), a JSON line at a time: start, progress a second, anomalies, steering, and the report last
 
       --allow-host &lt;HOST&gt;
           Refuse to send anywhere but these hosts: api.example.com exactly, or .example.com for it and its subdomains; repeat for more. Every target is checked before anything is sent
@@ -1937,6 +2255,9 @@ Options:
 
       --snapshot &lt;FILE&gt;
           Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run&#x27;s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run
+
+      --events &lt;FILE&gt;
+          Write the run as it goes to FILE (- for stdout), a JSON line at a time: start, progress a second, anomalies, steering, and the report last
 
       --allow-host &lt;HOST&gt;
           Refuse to send anywhere but these hosts: api.example.com exactly, or .example.com for it and its subdomains; repeat for more. Every target is checked before anything is sent
@@ -2077,6 +2398,9 @@ Options:
       --snapshot &lt;FILE&gt;
           Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run&#x27;s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run
 
+      --events &lt;FILE&gt;
+          Write the run as it goes to FILE (- for stdout), a JSON line at a time: start, progress a second, anomalies, steering, and the report last
+
       --allow-host &lt;HOST&gt;
           Refuse to send anywhere but these hosts: api.example.com exactly, or .example.com for it and its subdomains; repeat for more. Every target is checked before anything is sent
 
@@ -2210,6 +2534,9 @@ Options:
 
       --snapshot &lt;FILE&gt;
           Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run&#x27;s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run
+
+      --events &lt;FILE&gt;
+          Write the run as it goes to FILE (- for stdout), a JSON line at a time: start, progress a second, anomalies, steering, and the report last
 
       --allow-host &lt;HOST&gt;
           Refuse to send anywhere but these hosts: api.example.com exactly, or .example.com for it and its subdomains; repeat for more. Every target is checked before anything is sent
@@ -2351,6 +2678,9 @@ Options:
       --snapshot &lt;FILE&gt;
           Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run&#x27;s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run
 
+      --events &lt;FILE&gt;
+          Write the run as it goes to FILE (- for stdout), a JSON line at a time: start, progress a second, anomalies, steering, and the report last
+
       --allow-host &lt;HOST&gt;
           Refuse to send anywhere but these hosts: api.example.com exactly, or .example.com for it and its subdomains; repeat for more. Every target is checked before anything is sent
 
@@ -2393,7 +2723,7 @@ Options:
     <nav class="turn"><a class="prev" href="config.html"><small>Previous</small>Config files</a><a class="next" href="benchmarks.html"><small>Next</small>Benchmarks</a></nav>
     <p class="edit"><a href="https://github.com/omarmhaimdat/pepe/edit/master/docs/reference.md">Edit this page on GitHub</a></p>
   </main>
-  <aside class="toc"><div class="label">On this page</div><a href="#pepe" class="h2">pepe</a><a href="#pepe-ping" class="h2">pepe ping</a><a href="#pepe-ramp" class="h2">pepe ramp</a><a href="#pepe-compare" class="h2">pepe compare</a><a href="#pepe-api" class="h2">pepe api</a><a href="#pepe-flow" class="h2">pepe flow</a><a href="#pepe-replay" class="h2">pepe replay</a><a href="#pepe-logs" class="h2">pepe logs</a><a href="#pepe-rerun" class="h2">pepe rerun</a><a href="#pepe-history" class="h2">pepe history</a><a href="#pepe-schema" class="h2">pepe schema</a><a href="#pepe-mcp" class="h2">pepe mcp</a><a href="#pepe-self-update" class="h2">pepe self-update</a><a href="#pepe-completions" class="h2">pepe completions</a><a href="#pepe-slack" class="h2">pepe slack</a><a href="#pepe-export" class="h2">pepe export</a></aside>
+  <aside class="toc"><div class="label">On this page</div><a href="#pepe" class="h2">pepe</a><a href="#pepe-ping" class="h2">pepe ping</a><a href="#pepe-ramp" class="h2">pepe ramp</a><a href="#pepe-compare" class="h2">pepe compare</a><a href="#pepe-api" class="h2">pepe api</a><a href="#pepe-flow" class="h2">pepe flow</a><a href="#pepe-replay" class="h2">pepe replay</a><a href="#pepe-logs" class="h2">pepe logs</a><a href="#pepe-rerun" class="h2">pepe rerun</a><a href="#pepe-history" class="h2">pepe history</a><a href="#pepe-schema" class="h2">pepe schema</a><a href="#pepe-mcp" class="h2">pepe mcp</a><a href="#pepe-serve" class="h2">pepe serve</a><a href="#pepe-worker" class="h2">pepe worker</a><a href="#pepe-self-update" class="h2">pepe self-update</a><a href="#pepe-completions" class="h2">pepe completions</a><a href="#pepe-slack" class="h2">pepe slack</a><a href="#pepe-export" class="h2">pepe export</a></aside>
 </div>
 <script src="docs.js" defer></script>
 </body>

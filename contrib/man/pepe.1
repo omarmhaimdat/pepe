@@ -8,7 +8,7 @@ pepe \- HTTP load generator
 .ie \n(.g .ds Aq \(aq
 .el .ds Aq '
 .SH SYNOPSIS
-\fBpepe\fR [\fB\-h\fR|\fB\-\-help\fR] [\fB\-n\fR|\fB\-\-number\fR] [\fB\-c\fR|\fB\-\-concurrency\fR] [\fB\-z\fR|\fB\-\-duration\fR] [\fB\-\-curl\fR] [\fB\-m\fR|\fB\-\-method\fR] [\fB\-H\fR|\fB\-\-headers\fR] [\fB\-t\fR|\fB\-\-timeout\fR] [\fB\-\-warmup\fR] [\fB\-\-threads\fR] [\fB\-\-rate\fR] [\fB\-d\fR|\fB\-\-body\fR] [\fB\-u\fR|\fB\-\-user\-agent\fR] [\fB\-p\fR|\fB\-\-proxy\fR] [\fB\-k\fR|\fB\-\-insecure\fR] [\fB\-\-disable\-compression\fR] [\fB\-\-disable\-keepalive\fR] [\fB\-\-disable\-redirects\fR] [\fB\-\-json\fR] [\fB\-\-trace\-header\fR] [\fB\-\-vars\fR] [\fB\-\-webhook\fR] [\fB\-\-webhook\-on\fR] [\fB\-\-slack\fR] [\fB\-\-export\fR] [\fB\-\-snapshot\fR] [\fB\-\-allow\-host\fR] [\fB\-\-max\-requests\fR] [\fB\-\-max\-rate\fR] [\fB\-\-max\-concurrency\fR] [\fB\-\-dry\-run\fR] [\fB\-\-fail\-if\fR] [\fB\-\-metrics\fR] [\fB\-\-otlp\fR] [\fB\-i\fR|\fB\-\-setup\fR] [\fB\-\-config\fR] [\fB\-\-write\-config\fR] [\fB\-\-load\fR] [\fB\-\-keep\fR] [\fB\-\-record\fR] [\fB\-V\fR|\fB\-\-version\fR] [\fIURL\fR] [\fIARGS\fR] [\fIsubcommands\fR]
+\fBpepe\fR [\fB\-h\fR|\fB\-\-help\fR] [\fB\-n\fR|\fB\-\-number\fR] [\fB\-c\fR|\fB\-\-concurrency\fR] [\fB\-z\fR|\fB\-\-duration\fR] [\fB\-\-curl\fR] [\fB\-m\fR|\fB\-\-method\fR] [\fB\-H\fR|\fB\-\-headers\fR] [\fB\-t\fR|\fB\-\-timeout\fR] [\fB\-\-warmup\fR] [\fB\-\-threads\fR] [\fB\-\-rate\fR] [\fB\-d\fR|\fB\-\-body\fR] [\fB\-u\fR|\fB\-\-user\-agent\fR] [\fB\-p\fR|\fB\-\-proxy\fR] [\fB\-k\fR|\fB\-\-insecure\fR] [\fB\-\-disable\-compression\fR] [\fB\-\-disable\-keepalive\fR] [\fB\-\-disable\-redirects\fR] [\fB\-\-json\fR] [\fB\-\-trace\-header\fR] [\fB\-\-vars\fR] [\fB\-\-webhook\fR] [\fB\-\-webhook\-on\fR] [\fB\-\-slack\fR] [\fB\-\-export\fR] [\fB\-\-snapshot\fR] [\fB\-\-events\fR] [\fB\-\-allow\-host\fR] [\fB\-\-max\-requests\fR] [\fB\-\-max\-rate\fR] [\fB\-\-max\-concurrency\fR] [\fB\-\-dry\-run\fR] [\fB\-\-fail\-if\fR] [\fB\-\-metrics\fR] [\fB\-\-otlp\fR] [\fB\-i\fR|\fB\-\-setup\fR] [\fB\-\-config\fR] [\fB\-\-write\-config\fR] [\fB\-\-load\fR] [\fB\-\-keep\fR] [\fB\-\-record\fR] [\fB\-V\fR|\fB\-\-version\fR] [\fIURL\fR] [\fIARGS\fR] [\fIsubcommands\fR]
 .ie \n(.g .ds Aq \(aq
 .el .ds Aq '
 .SH DESCRIPTION
@@ -94,6 +94,9 @@ Write the report to FILE as well, in the format its extension says: .html a self
 .TP
 \fB\-\-snapshot\fR \fI<FILE>\fR
 Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run\*(Aqs numbers survive a crash or a lost terminal; it has a minute\-by\-minute timeline of the whole run
+.TP
+\fB\-\-events\fR \fI<FILE>\fR
+Write the run as it goes to FILE (\- for stdout), a JSON line at a time: start, progress a second, anomalies, steering, and the report last
 .TP
 \fB\-\-allow\-host\fR \fI<HOST>\fR
 Refuse to send anywhere but these hosts: api.example.com exactly, or .example.com for it and its subdomains; repeat for more. Every target is checked before anything is sent
@@ -181,6 +184,12 @@ Print the JSON Schema of a report: run (the default), ramp, ping or compare
 .TP
 pepe\-mcp(1)
 Serve pepe\*(Aqs modes as tools for an agent over stdio (the Model Context Protocol); the guardrail flags given here hold for every call
+.TP
+pepe\-serve(1)
+Serve pepe over HTTP: start, watch, steer and compare runs from a script, an agent or a browser; loopback and a token by default
+.TP
+pepe\-worker(1)
+Take a share of a `pepe serve`\*(Aqs distributed runs from this machine, under its own guardrails
 .TP
 pepe\-self\-update(1)
 Update pepe to the latest release, or say what\*(Aqs new in it

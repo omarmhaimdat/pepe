@@ -1,0 +1,22 @@
+.ie \n(.g .ds Aq \(aq
+.el .ds Aq '
+.TH pepe-worker 1  pepe "User Commands"
+.SH NAME
+pepe\-worker \- Take a share of a `pepe serve`\*(Aqs distributed runs from this machine, under its own guardrails
+.SH SYNOPSIS
+\fBpepe worker\fR [\fB\-\-name\fR] [\fB\-\-token\-file\fR] [\fB\-h\fR|\fB\-\-help\fR] <\fB\-\-join\fR> 
+.SH DESCRIPTION
+Take a share of a `pepe serve`\*(Aqs distributed runs from this machine, under its own guardrails
+.SH OPTIONS
+.TP
+\fB\-\-join\fR \fI<URL>\fR
+The `pepe serve` to join: http://host:7878
+.TP
+\fB\-\-name\fR \fI<NAME>\fR
+What the server calls this worker: the host name by default
+.TP
+\fB\-\-token\-file\fR \fI<FILE>\fR
+A file with the token to join with (the server\*(Aqs token file takes it); else $PEPE_TOKEN
+.TP
+\fB\-h\fR, \fB\-\-help\fR
+Print help

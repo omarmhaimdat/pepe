@@ -39,6 +39,7 @@ _pepe() {
 '--slack=[Keep a Slack message up to date as the run goes\: posted at the start, edited with the numbers, anomalies in its thread, the verdict at the end. --slack alone posts in the channel \`pepe slack connect\` kept; --slack=#channel elsewhere]::CHANNEL:_default' \
 '*--export=[Write the report to FILE as well, in the format its extension says\: .html a self-contained page (curves, thresholds, the last run), .json the report, .md a summary for a PR, .txt what pepe prints, .csv the run'\''s numbers a row a second; repeat for more]:FILE:_files' \
 '--snapshot=[Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run'\''s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run]:FILE:_files' \
+'--events=[Write the run as it goes to FILE (- for stdout), a JSON line at a time\: start, progress a second, anomalies, steering, and the report last]:FILE:_files' \
 '*--allow-host=[Refuse to send anywhere but these hosts\: api.example.com exactly, or .example.com for it and its subdomains; repeat for more. Every target is checked before anything is sent]:HOST:_default' \
 '--max-requests=[Refuse a run that would send more requests than this\: -n above it, or -z without a --rate that bounds it]:N:_default' \
 '--max-rate=[Refuse a --rate above this, and a run with no --rate at all, which sends as fast as the target answers]:PER_SECOND:_default' \
@@ -63,6 +64,7 @@ _pepe() {
 '--disable-keepalive[Disable HTTP keepalive, e.g. Connection\: close]' \
 '--disable-redirects[Prevent http redirects]' \
 '--json[Output results in JSON format]' \
+'--histogram[The report keeps the latency'\''s histogram whole (\`summary.latency.histogram_us\`), for a server to add workers'\'' reports up exactly]' \
 '--dry-run[Say what would be sent, to where and how much, and send nothing; as JSON with --json]' \
 '-i[Open the setup screen to review or change the settings before starting (it opens by itself when no URL is given)]' \
 '--setup[Open the setup screen to review or change the settings before starting (it opens by itself when no URL is given)]' \
@@ -119,6 +121,7 @@ fail\:"A failure"))' \
 '--slack=[Keep a Slack message up to date as the run goes\: posted at the start, edited with the numbers, anomalies in its thread, the verdict at the end. --slack alone posts in the channel \`pepe slack connect\` kept; --slack=#channel elsewhere]::CHANNEL:_default' \
 '*--export=[Write the report to FILE as well, in the format its extension says\: .html a self-contained page (curves, thresholds, the last run), .json the report, .md a summary for a PR, .txt what pepe prints, .csv the run'\''s numbers a row a second; repeat for more]:FILE:_files' \
 '--snapshot=[Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run'\''s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run]:FILE:_files' \
+'--events=[Write the run as it goes to FILE (- for stdout), a JSON line at a time\: start, progress a second, anomalies, steering, and the report last]:FILE:_files' \
 '*--allow-host=[Refuse to send anywhere but these hosts\: api.example.com exactly, or .example.com for it and its subdomains; repeat for more. Every target is checked before anything is sent]:HOST:_default' \
 '--max-requests=[Refuse a run that would send more requests than this\: -n above it, or -z without a --rate that bounds it]:N:_default' \
 '--max-rate=[Refuse a --rate above this, and a run with no --rate at all, which sends as fast as the target answers]:PER_SECOND:_default' \
@@ -156,6 +159,7 @@ fail\:"A failure"))' \
 '--disable-keepalive[Disable HTTP keepalive, e.g. Connection\: close]' \
 '--disable-redirects[Prevent http redirects]' \
 '--json[Output results in JSON format]' \
+'--histogram[The report keeps the latency'\''s histogram whole (\`summary.latency.histogram_us\`), for a server to add workers'\'' reports up exactly]' \
 '--dry-run[Say what would be sent, to where and how much, and send nothing; as JSON with --json]' \
 '-i[Open the setup screen to review or change the settings before starting (it opens by itself when no URL is given)]' \
 '--setup[Open the setup screen to review or change the settings before starting (it opens by itself when no URL is given)]' \
@@ -194,6 +198,7 @@ _arguments "${_arguments_options[@]}" : \
 '--slack=[Keep a Slack message up to date as the run goes\: posted at the start, edited with the numbers, anomalies in its thread, the verdict at the end. --slack alone posts in the channel \`pepe slack connect\` kept; --slack=#channel elsewhere]::CHANNEL:_default' \
 '*--export=[Write the report to FILE as well, in the format its extension says\: .html a self-contained page (curves, thresholds, the last run), .json the report, .md a summary for a PR, .txt what pepe prints, .csv the run'\''s numbers a row a second; repeat for more]:FILE:_files' \
 '--snapshot=[Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run'\''s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run]:FILE:_files' \
+'--events=[Write the run as it goes to FILE (- for stdout), a JSON line at a time\: start, progress a second, anomalies, steering, and the report last]:FILE:_files' \
 '*--allow-host=[Refuse to send anywhere but these hosts\: api.example.com exactly, or .example.com for it and its subdomains; repeat for more. Every target is checked before anything is sent]:HOST:_default' \
 '--max-requests=[Refuse a run that would send more requests than this\: -n above it, or -z without a --rate that bounds it]:N:_default' \
 '--max-rate=[Refuse a --rate above this, and a run with no --rate at all, which sends as fast as the target answers]:PER_SECOND:_default' \
@@ -216,6 +221,7 @@ _arguments "${_arguments_options[@]}" : \
 '--disable-keepalive[Disable HTTP keepalive, e.g. Connection\: close]' \
 '--disable-redirects[Prevent http redirects]' \
 '--json[Output results in JSON format]' \
+'--histogram[The report keeps the latency'\''s histogram whole (\`summary.latency.histogram_us\`), for a server to add workers'\'' reports up exactly]' \
 '--dry-run[Say what would be sent, to where and how much, and send nothing; as JSON with --json]' \
 '-i[Open the setup screen to review or change the settings before starting (it opens by itself when no URL is given)]' \
 '--setup[Open the setup screen to review or change the settings before starting (it opens by itself when no URL is given)]' \
@@ -250,6 +256,7 @@ _arguments "${_arguments_options[@]}" : \
 '--slack=[Keep a Slack message up to date as the run goes\: posted at the start, edited with the numbers, anomalies in its thread, the verdict at the end. --slack alone posts in the channel \`pepe slack connect\` kept; --slack=#channel elsewhere]::CHANNEL:_default' \
 '*--export=[Write the report to FILE as well, in the format its extension says\: .html a self-contained page (curves, thresholds, the last run), .json the report, .md a summary for a PR, .txt what pepe prints, .csv the run'\''s numbers a row a second; repeat for more]:FILE:_files' \
 '--snapshot=[Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run'\''s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run]:FILE:_files' \
+'--events=[Write the run as it goes to FILE (- for stdout), a JSON line at a time\: start, progress a second, anomalies, steering, and the report last]:FILE:_files' \
 '*--allow-host=[Refuse to send anywhere but these hosts\: api.example.com exactly, or .example.com for it and its subdomains; repeat for more. Every target is checked before anything is sent]:HOST:_default' \
 '--max-requests=[Refuse a run that would send more requests than this\: -n above it, or -z without a --rate that bounds it]:N:_default' \
 '--max-rate=[Refuse a --rate above this, and a run with no --rate at all, which sends as fast as the target answers]:PER_SECOND:_default' \
@@ -273,6 +280,7 @@ _arguments "${_arguments_options[@]}" : \
 '--disable-keepalive[Disable HTTP keepalive, e.g. Connection\: close]' \
 '--disable-redirects[Prevent http redirects]' \
 '--json[Output results in JSON format]' \
+'--histogram[The report keeps the latency'\''s histogram whole (\`summary.latency.histogram_us\`), for a server to add workers'\'' reports up exactly]' \
 '--dry-run[Say what would be sent, to where and how much, and send nothing; as JSON with --json]' \
 '-i[Open the setup screen to review or change the settings before starting (it opens by itself when no URL is given)]' \
 '--setup[Open the setup screen to review or change the settings before starting (it opens by itself when no URL is given)]' \
@@ -307,6 +315,7 @@ _arguments "${_arguments_options[@]}" : \
 '--slack=[Keep a Slack message up to date as the run goes\: posted at the start, edited with the numbers, anomalies in its thread, the verdict at the end. --slack alone posts in the channel \`pepe slack connect\` kept; --slack=#channel elsewhere]::CHANNEL:_default' \
 '*--export=[Write the report to FILE as well, in the format its extension says\: .html a self-contained page (curves, thresholds, the last run), .json the report, .md a summary for a PR, .txt what pepe prints, .csv the run'\''s numbers a row a second; repeat for more]:FILE:_files' \
 '--snapshot=[Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run'\''s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run]:FILE:_files' \
+'--events=[Write the run as it goes to FILE (- for stdout), a JSON line at a time\: start, progress a second, anomalies, steering, and the report last]:FILE:_files' \
 '*--allow-host=[Refuse to send anywhere but these hosts\: api.example.com exactly, or .example.com for it and its subdomains; repeat for more. Every target is checked before anything is sent]:HOST:_default' \
 '--max-requests=[Refuse a run that would send more requests than this\: -n above it, or -z without a --rate that bounds it]:N:_default' \
 '--max-rate=[Refuse a --rate above this, and a run with no --rate at all, which sends as fast as the target answers]:PER_SECOND:_default' \
@@ -330,6 +339,7 @@ _arguments "${_arguments_options[@]}" : \
 '--disable-keepalive[Disable HTTP keepalive, e.g. Connection\: close]' \
 '--disable-redirects[Prevent http redirects]' \
 '--json[Output results in JSON format]' \
+'--histogram[The report keeps the latency'\''s histogram whole (\`summary.latency.histogram_us\`), for a server to add workers'\'' reports up exactly]' \
 '--dry-run[Say what would be sent, to where and how much, and send nothing; as JSON with --json]' \
 '-i[Open the setup screen to review or change the settings before starting (it opens by itself when no URL is given)]' \
 '--setup[Open the setup screen to review or change the settings before starting (it opens by itself when no URL is given)]' \
@@ -363,6 +373,7 @@ _arguments "${_arguments_options[@]}" : \
 '--slack=[Keep a Slack message up to date as the run goes\: posted at the start, edited with the numbers, anomalies in its thread, the verdict at the end. --slack alone posts in the channel \`pepe slack connect\` kept; --slack=#channel elsewhere]::CHANNEL:_default' \
 '*--export=[Write the report to FILE as well, in the format its extension says\: .html a self-contained page (curves, thresholds, the last run), .json the report, .md a summary for a PR, .txt what pepe prints, .csv the run'\''s numbers a row a second; repeat for more]:FILE:_files' \
 '--snapshot=[Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run'\''s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run]:FILE:_files' \
+'--events=[Write the run as it goes to FILE (- for stdout), a JSON line at a time\: start, progress a second, anomalies, steering, and the report last]:FILE:_files' \
 '*--allow-host=[Refuse to send anywhere but these hosts\: api.example.com exactly, or .example.com for it and its subdomains; repeat for more. Every target is checked before anything is sent]:HOST:_default' \
 '--max-requests=[Refuse a run that would send more requests than this\: -n above it, or -z without a --rate that bounds it]:N:_default' \
 '--max-rate=[Refuse a --rate above this, and a run with no --rate at all, which sends as fast as the target answers]:PER_SECOND:_default' \
@@ -385,6 +396,7 @@ _arguments "${_arguments_options[@]}" : \
 '--disable-keepalive[Disable HTTP keepalive, e.g. Connection\: close]' \
 '--disable-redirects[Prevent http redirects]' \
 '--json[Output results in JSON format]' \
+'--histogram[The report keeps the latency'\''s histogram whole (\`summary.latency.histogram_us\`), for a server to add workers'\'' reports up exactly]' \
 '--dry-run[Say what would be sent, to where and how much, and send nothing; as JSON with --json]' \
 '-i[Open the setup screen to review or change the settings before starting (it opens by itself when no URL is given)]' \
 '--setup[Open the setup screen to review or change the settings before starting (it opens by itself when no URL is given)]' \
@@ -424,6 +436,7 @@ _arguments "${_arguments_options[@]}" : \
 '--slack=[Keep a Slack message up to date as the run goes\: posted at the start, edited with the numbers, anomalies in its thread, the verdict at the end. --slack alone posts in the channel \`pepe slack connect\` kept; --slack=#channel elsewhere]::CHANNEL:_default' \
 '*--export=[Write the report to FILE as well, in the format its extension says\: .html a self-contained page (curves, thresholds, the last run), .json the report, .md a summary for a PR, .txt what pepe prints, .csv the run'\''s numbers a row a second; repeat for more]:FILE:_files' \
 '--snapshot=[Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run'\''s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run]:FILE:_files' \
+'--events=[Write the run as it goes to FILE (- for stdout), a JSON line at a time\: start, progress a second, anomalies, steering, and the report last]:FILE:_files' \
 '*--allow-host=[Refuse to send anywhere but these hosts\: api.example.com exactly, or .example.com for it and its subdomains; repeat for more. Every target is checked before anything is sent]:HOST:_default' \
 '--max-requests=[Refuse a run that would send more requests than this\: -n above it, or -z without a --rate that bounds it]:N:_default' \
 '--max-rate=[Refuse a --rate above this, and a run with no --rate at all, which sends as fast as the target answers]:PER_SECOND:_default' \
@@ -448,6 +461,7 @@ _arguments "${_arguments_options[@]}" : \
 '--disable-keepalive[Disable HTTP keepalive, e.g. Connection\: close]' \
 '--disable-redirects[Prevent http redirects]' \
 '--json[Output results in JSON format]' \
+'--histogram[The report keeps the latency'\''s histogram whole (\`summary.latency.histogram_us\`), for a server to add workers'\'' reports up exactly]' \
 '--dry-run[Say what would be sent, to where and how much, and send nothing; as JSON with --json]' \
 '-i[Open the setup screen to review or change the settings before starting (it opens by itself when no URL is given)]' \
 '--setup[Open the setup screen to review or change the settings before starting (it opens by itself when no URL is given)]' \
@@ -481,6 +495,7 @@ _arguments "${_arguments_options[@]}" : \
 '--slack=[Keep a Slack message up to date as the run goes\: posted at the start, edited with the numbers, anomalies in its thread, the verdict at the end. --slack alone posts in the channel \`pepe slack connect\` kept; --slack=#channel elsewhere]::CHANNEL:_default' \
 '*--export=[Write the report to FILE as well, in the format its extension says\: .html a self-contained page (curves, thresholds, the last run), .json the report, .md a summary for a PR, .txt what pepe prints, .csv the run'\''s numbers a row a second; repeat for more]:FILE:_files' \
 '--snapshot=[Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run'\''s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run]:FILE:_files' \
+'--events=[Write the run as it goes to FILE (- for stdout), a JSON line at a time\: start, progress a second, anomalies, steering, and the report last]:FILE:_files' \
 '*--allow-host=[Refuse to send anywhere but these hosts\: api.example.com exactly, or .example.com for it and its subdomains; repeat for more. Every target is checked before anything is sent]:HOST:_default' \
 '--max-requests=[Refuse a run that would send more requests than this\: -n above it, or -z without a --rate that bounds it]:N:_default' \
 '--max-rate=[Refuse a --rate above this, and a run with no --rate at all, which sends as fast as the target answers]:PER_SECOND:_default' \
@@ -503,6 +518,7 @@ _arguments "${_arguments_options[@]}" : \
 '--disable-keepalive[Disable HTTP keepalive, e.g. Connection\: close]' \
 '--disable-redirects[Prevent http redirects]' \
 '--json[Output results in JSON format]' \
+'--histogram[The report keeps the latency'\''s histogram whole (\`summary.latency.histogram_us\`), for a server to add workers'\'' reports up exactly]' \
 '--dry-run[Say what would be sent, to where and how much, and send nothing; as JSON with --json]' \
 '-i[Open the setup screen to review or change the settings before starting (it opens by itself when no URL is given)]' \
 '--setup[Open the setup screen to review or change the settings before starting (it opens by itself when no URL is given)]' \
@@ -538,6 +554,7 @@ _arguments "${_arguments_options[@]}" : \
 '--slack=[Keep a Slack message up to date as the run goes\: posted at the start, edited with the numbers, anomalies in its thread, the verdict at the end. --slack alone posts in the channel \`pepe slack connect\` kept; --slack=#channel elsewhere]::CHANNEL:_default' \
 '*--export=[Write the report to FILE as well, in the format its extension says\: .html a self-contained page (curves, thresholds, the last run), .json the report, .md a summary for a PR, .txt what pepe prints, .csv the run'\''s numbers a row a second; repeat for more]:FILE:_files' \
 '--snapshot=[Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run'\''s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run]:FILE:_files' \
+'--events=[Write the run as it goes to FILE (- for stdout), a JSON line at a time\: start, progress a second, anomalies, steering, and the report last]:FILE:_files' \
 '*--allow-host=[Refuse to send anywhere but these hosts\: api.example.com exactly, or .example.com for it and its subdomains; repeat for more. Every target is checked before anything is sent]:HOST:_default' \
 '--max-requests=[Refuse a run that would send more requests than this\: -n above it, or -z without a --rate that bounds it]:N:_default' \
 '--max-rate=[Refuse a --rate above this, and a run with no --rate at all, which sends as fast as the target answers]:PER_SECOND:_default' \
@@ -561,6 +578,7 @@ _arguments "${_arguments_options[@]}" : \
 '--disable-keepalive[Disable HTTP keepalive, e.g. Connection\: close]' \
 '--disable-redirects[Prevent http redirects]' \
 '--json[Output results in JSON format]' \
+'--histogram[The report keeps the latency'\''s histogram whole (\`summary.latency.histogram_us\`), for a server to add workers'\'' reports up exactly]' \
 '--dry-run[Say what would be sent, to where and how much, and send nothing; as JSON with --json]' \
 '-i[Open the setup screen to review or change the settings before starting (it opens by itself when no URL is given)]' \
 '--setup[Open the setup screen to review or change the settings before starting (it opens by itself when no URL is given)]' \
@@ -602,6 +620,7 @@ _arguments "${_arguments_options[@]}" : \
 '--slack=[Keep a Slack message up to date as the run goes\: posted at the start, edited with the numbers, anomalies in its thread, the verdict at the end. --slack alone posts in the channel \`pepe slack connect\` kept; --slack=#channel elsewhere]::CHANNEL:_default' \
 '*--export=[Write the report to FILE as well, in the format its extension says\: .html a self-contained page (curves, thresholds, the last run), .json the report, .md a summary for a PR, .txt what pepe prints, .csv the run'\''s numbers a row a second; repeat for more]:FILE:_files' \
 '--snapshot=[Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run'\''s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run]:FILE:_files' \
+'--events=[Write the run as it goes to FILE (- for stdout), a JSON line at a time\: start, progress a second, anomalies, steering, and the report last]:FILE:_files' \
 '*--allow-host=[Refuse to send anywhere but these hosts\: api.example.com exactly, or .example.com for it and its subdomains; repeat for more. Every target is checked before anything is sent]:HOST:_default' \
 '--max-requests=[Refuse a run that would send more requests than this\: -n above it, or -z without a --rate that bounds it]:N:_default' \
 '--max-rate=[Refuse a --rate above this, and a run with no --rate at all, which sends as fast as the target answers]:PER_SECOND:_default' \
@@ -626,6 +645,7 @@ _arguments "${_arguments_options[@]}" : \
 '--disable-keepalive[Disable HTTP keepalive, e.g. Connection\: close]' \
 '--disable-redirects[Prevent http redirects]' \
 '--json[Output results in JSON format]' \
+'--histogram[The report keeps the latency'\''s histogram whole (\`summary.latency.histogram_us\`), for a server to add workers'\'' reports up exactly]' \
 '--dry-run[Say what would be sent, to where and how much, and send nothing; as JSON with --json]' \
 '-i[Open the setup screen to review or change the settings before starting (it opens by itself when no URL is given)]' \
 '--setup[Open the setup screen to review or change the settings before starting (it opens by itself when no URL is given)]' \
@@ -659,6 +679,7 @@ _arguments "${_arguments_options[@]}" : \
 '--slack=[Keep a Slack message up to date as the run goes\: posted at the start, edited with the numbers, anomalies in its thread, the verdict at the end. --slack alone posts in the channel \`pepe slack connect\` kept; --slack=#channel elsewhere]::CHANNEL:_default' \
 '*--export=[Write the report to FILE as well, in the format its extension says\: .html a self-contained page (curves, thresholds, the last run), .json the report, .md a summary for a PR, .txt what pepe prints, .csv the run'\''s numbers a row a second; repeat for more]:FILE:_files' \
 '--snapshot=[Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run'\''s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run]:FILE:_files' \
+'--events=[Write the run as it goes to FILE (- for stdout), a JSON line at a time\: start, progress a second, anomalies, steering, and the report last]:FILE:_files' \
 '*--allow-host=[Refuse to send anywhere but these hosts\: api.example.com exactly, or .example.com for it and its subdomains; repeat for more. Every target is checked before anything is sent]:HOST:_default' \
 '--max-requests=[Refuse a run that would send more requests than this\: -n above it, or -z without a --rate that bounds it]:N:_default' \
 '--max-rate=[Refuse a --rate above this, and a run with no --rate at all, which sends as fast as the target answers]:PER_SECOND:_default' \
@@ -681,6 +702,7 @@ _arguments "${_arguments_options[@]}" : \
 '--disable-keepalive[Disable HTTP keepalive, e.g. Connection\: close]' \
 '--disable-redirects[Prevent http redirects]' \
 '--json[Output results in JSON format]' \
+'--histogram[The report keeps the latency'\''s histogram whole (\`summary.latency.histogram_us\`), for a server to add workers'\'' reports up exactly]' \
 '--dry-run[Say what would be sent, to where and how much, and send nothing; as JSON with --json]' \
 '-i[Open the setup screen to review or change the settings before starting (it opens by itself when no URL is given)]' \
 '--setup[Open the setup screen to review or change the settings before starting (it opens by itself when no URL is given)]' \
@@ -714,6 +736,7 @@ _arguments "${_arguments_options[@]}" : \
 '--slack=[Keep a Slack message up to date as the run goes\: posted at the start, edited with the numbers, anomalies in its thread, the verdict at the end. --slack alone posts in the channel \`pepe slack connect\` kept; --slack=#channel elsewhere]::CHANNEL:_default' \
 '*--export=[Write the report to FILE as well, in the format its extension says\: .html a self-contained page (curves, thresholds, the last run), .json the report, .md a summary for a PR, .txt what pepe prints, .csv the run'\''s numbers a row a second; repeat for more]:FILE:_files' \
 '--snapshot=[Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run'\''s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run]:FILE:_files' \
+'--events=[Write the run as it goes to FILE (- for stdout), a JSON line at a time\: start, progress a second, anomalies, steering, and the report last]:FILE:_files' \
 '*--allow-host=[Refuse to send anywhere but these hosts\: api.example.com exactly, or .example.com for it and its subdomains; repeat for more. Every target is checked before anything is sent]:HOST:_default' \
 '--max-requests=[Refuse a run that would send more requests than this\: -n above it, or -z without a --rate that bounds it]:N:_default' \
 '--max-rate=[Refuse a --rate above this, and a run with no --rate at all, which sends as fast as the target answers]:PER_SECOND:_default' \
@@ -736,6 +759,125 @@ _arguments "${_arguments_options[@]}" : \
 '--disable-keepalive[Disable HTTP keepalive, e.g. Connection\: close]' \
 '--disable-redirects[Prevent http redirects]' \
 '--json[Output results in JSON format]' \
+'--histogram[The report keeps the latency'\''s histogram whole (\`summary.latency.histogram_us\`), for a server to add workers'\'' reports up exactly]' \
+'--dry-run[Say what would be sent, to where and how much, and send nothing; as JSON with --json]' \
+'-i[Open the setup screen to review or change the settings before starting (it opens by itself when no URL is given)]' \
+'--setup[Open the setup screen to review or change the settings before starting (it opens by itself when no URL is given)]' \
+'--record[Keep the run'\''s report under its saved test when it ends, as ./.pepe/runs/NAME/<moment>.json; the run has to be a saved test (--load NAME, or --keep NAME)]' \
+&& ret=0
+;;
+(serve)
+_arguments "${_arguments_options[@]}" : \
+'--listen=[Where to listen\: 127.0.0.1\:7878 by default. Any address but loopback needs --allow-host and the --max-requests, --max-rate and --max-concurrency caps]:ADDR:_default' \
+'--token-file=[The tokens that may call the API, a line each\: \`name token\`, or the token alone. Without one, a token is made and printed]:FILE:_files' \
+'--max-runs=[Runs going at once, on this machine and the workers together]:N:_default' \
+'-n+[Number of requests to perform]:NUMBER:_default' \
+'--number=[Number of requests to perform]:NUMBER:_default' \
+'-z+[Duration of the test, e.g. 10s, 3m, 2h (mutually exclusive with -n)]:DURATION:_default' \
+'--duration=[Duration of the test, e.g. 10s, 3m, 2h (mutually exclusive with -n)]:DURATION:_default' \
+'-m+[HTTP method, e.g. GET, POST, PUT, DELETE]:METHOD:_default' \
+'--method=[HTTP method, e.g. GET, POST, PUT, DELETE]:METHOD:_default' \
+'*-H+[HTTP headers, e.g. -H '\''Accept\: application/json'\'']:HEADERS:_default' \
+'*--headers=[HTTP headers, e.g. -H '\''Accept\: application/json'\'']:HEADERS:_default' \
+'-t+[Time in seconds to wait for a response]:TIMEOUT:_default' \
+'--timeout=[Time in seconds to wait for a response]:TIMEOUT:_default' \
+'--warmup=[Send for this long before measuring, e.g. 5s\: connections open, caches fill and JITs settle without counting against the run]:TIME:_default' \
+'--threads=[Threads sending requests (default 1), or "auto" to add one whenever those sending are all busy. One sends 100k requests a second or more; the dashboard says when it is the limit]:N|auto:_default' \
+'--rate=[Start this many requests a second, spread evenly, instead of as many as the concurrency allows; -c is then the most in flight at once, and pepe says when it holds the rate back]:PER_SECOND:_default' \
+'-d+[HTTP request body]:BODY:_default' \
+'--body=[HTTP request body]:BODY:_default' \
+'-p+[Proxy server URL\: http\://user\:pass@host\:port or socks5\://host\:port]:PROXY:_default' \
+'--proxy=[Proxy server URL\: http\://user\:pass@host\:port or socks5\://host\:port]:PROXY:_default' \
+'--trace-header=[Response header holding the request id to show for the slowest requests and in the inspector, so they can be found in the server'\''s logs; without it, X-Request-Id, traceparent, CF-Ray, X-Amzn-Trace-Id and other common ones are looked for]:NAME:_default' \
+'--vars=[Fill the {{holes}} in the URL, headers and body from this CSV file, whose first line names them\: each request takes the next row, and the rows go round again. In a flow, each chain starts with the next row'\''s values]:FILE:_files' \
+'*--webhook=[Send the run'\''s verdict to this URL when it ends\: a Slack, Discord, Teams or Google Chat webhook gets a message laid out for it, anything else the JSON report; repeat for more. \${NAME} is taken from the environment. A \[\[webhook\]\] table in pepe.toml says more]:URL:_default' \
+'--webhook-on=[When the --webhook URLs are sent\: start, progress, anomaly, end, fail (the end when a --fail-if was crossed), comma-separated; end by default]:EVENTS:_default' \
+'--slack=[Keep a Slack message up to date as the run goes\: posted at the start, edited with the numbers, anomalies in its thread, the verdict at the end. --slack alone posts in the channel \`pepe slack connect\` kept; --slack=#channel elsewhere]::CHANNEL:_default' \
+'*--export=[Write the report to FILE as well, in the format its extension says\: .html a self-contained page (curves, thresholds, the last run), .json the report, .md a summary for a PR, .txt what pepe prints, .csv the run'\''s numbers a row a second; repeat for more]:FILE:_files' \
+'--snapshot=[Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run'\''s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run]:FILE:_files' \
+'--events=[Write the run as it goes to FILE (- for stdout), a JSON line at a time\: start, progress a second, anomalies, steering, and the report last]:FILE:_files' \
+'*--allow-host=[Refuse to send anywhere but these hosts\: api.example.com exactly, or .example.com for it and its subdomains; repeat for more. Every target is checked before anything is sent]:HOST:_default' \
+'--max-requests=[Refuse a run that would send more requests than this\: -n above it, or -z without a --rate that bounds it]:N:_default' \
+'--max-rate=[Refuse a --rate above this, and a run with no --rate at all, which sends as fast as the target answers]:PER_SECOND:_default' \
+'--max-concurrency=[Refuse a concurrency above this]:N:_default' \
+'*--fail-if=[End with exit code 4 when the run crosses this, for CI and scripts\: '\''p99 > 300ms'\'', '\''errors > 1%'\''; repeat for more. The report is still printed. pepe logs takes '\''5xx > 2%'\'', '\''4xx > 20%'\'' and '\''rate < 5/s'\'' too. (pepe ping has --slo for the same.)]:CONDITION:_default' \
+'--metrics=[Serve the live numbers for Prometheus at http\://ADDR/metrics while the run goes, e.g. \:9100 or 127.0.0.1\:9100, so a soak run or a long ping shows up in Grafana next to the server'\''s own]:ADDR:_default' \
+'--config=[Read settings from this file instead of ./pepe.toml; flags on the command line win over it]:FILE:_files' \
+'--write-config=[Write the settings as they stand to this file, as a pepe.toml, and exit]:FILE:_files' \
+'(--config)--load=[Run a test saved on the setup screen (ctrl-s)\: ./.pepe/tests/NAME.toml; flags on the command line win over it]:NAME:_default' \
+'--keep=[Keep the settings as they stand as a saved test, ./.pepe/tests/NAME.toml, then run. With --load and no NAME, the loaded test is updated in place; with another NAME, it'\''s copied]::NAME:_default' \
+'-c+[Number of concurrent requests at a time]:CONCURRENCY:_default' \
+'--concurrency=[Number of concurrent requests at a time]:CONCURRENCY:_default' \
+'-u+[User-Agent string, default is pepe/{version}]:USER_AGENT:_default' \
+'--user-agent=[User-Agent string, default is pepe/{version}]:USER_AGENT:_default' \
+'-h[Print help]' \
+'--help[Print help]' \
+'-k[Accept invalid TLS certificates (self-signed, expired, wrong host)]' \
+'--insecure[Accept invalid TLS certificates (self-signed, expired, wrong host)]' \
+'--disable-compression[Disable HTTP compression, e.g. gzip]' \
+'--disable-keepalive[Disable HTTP keepalive, e.g. Connection\: close]' \
+'--disable-redirects[Prevent http redirects]' \
+'--json[Output results in JSON format]' \
+'--histogram[The report keeps the latency'\''s histogram whole (\`summary.latency.histogram_us\`), for a server to add workers'\'' reports up exactly]' \
+'--dry-run[Say what would be sent, to where and how much, and send nothing; as JSON with --json]' \
+'-i[Open the setup screen to review or change the settings before starting (it opens by itself when no URL is given)]' \
+'--setup[Open the setup screen to review or change the settings before starting (it opens by itself when no URL is given)]' \
+'--record[Keep the run'\''s report under its saved test when it ends, as ./.pepe/runs/NAME/<moment>.json; the run has to be a saved test (--load NAME, or --keep NAME)]' \
+&& ret=0
+;;
+(worker)
+_arguments "${_arguments_options[@]}" : \
+'--join=[The \`pepe serve\` to join\: http\://host\:7878]:URL:_default' \
+'--name=[What the server calls this worker\: the host name by default]:NAME:_default' \
+'--token-file=[A file with the token to join with (the server'\''s token file takes it); else \$PEPE_TOKEN]:FILE:_files' \
+'-n+[Number of requests to perform]:NUMBER:_default' \
+'--number=[Number of requests to perform]:NUMBER:_default' \
+'-z+[Duration of the test, e.g. 10s, 3m, 2h (mutually exclusive with -n)]:DURATION:_default' \
+'--duration=[Duration of the test, e.g. 10s, 3m, 2h (mutually exclusive with -n)]:DURATION:_default' \
+'-m+[HTTP method, e.g. GET, POST, PUT, DELETE]:METHOD:_default' \
+'--method=[HTTP method, e.g. GET, POST, PUT, DELETE]:METHOD:_default' \
+'*-H+[HTTP headers, e.g. -H '\''Accept\: application/json'\'']:HEADERS:_default' \
+'*--headers=[HTTP headers, e.g. -H '\''Accept\: application/json'\'']:HEADERS:_default' \
+'-t+[Time in seconds to wait for a response]:TIMEOUT:_default' \
+'--timeout=[Time in seconds to wait for a response]:TIMEOUT:_default' \
+'--warmup=[Send for this long before measuring, e.g. 5s\: connections open, caches fill and JITs settle without counting against the run]:TIME:_default' \
+'--threads=[Threads sending requests (default 1), or "auto" to add one whenever those sending are all busy. One sends 100k requests a second or more; the dashboard says when it is the limit]:N|auto:_default' \
+'--rate=[Start this many requests a second, spread evenly, instead of as many as the concurrency allows; -c is then the most in flight at once, and pepe says when it holds the rate back]:PER_SECOND:_default' \
+'-d+[HTTP request body]:BODY:_default' \
+'--body=[HTTP request body]:BODY:_default' \
+'-p+[Proxy server URL\: http\://user\:pass@host\:port or socks5\://host\:port]:PROXY:_default' \
+'--proxy=[Proxy server URL\: http\://user\:pass@host\:port or socks5\://host\:port]:PROXY:_default' \
+'--trace-header=[Response header holding the request id to show for the slowest requests and in the inspector, so they can be found in the server'\''s logs; without it, X-Request-Id, traceparent, CF-Ray, X-Amzn-Trace-Id and other common ones are looked for]:NAME:_default' \
+'--vars=[Fill the {{holes}} in the URL, headers and body from this CSV file, whose first line names them\: each request takes the next row, and the rows go round again. In a flow, each chain starts with the next row'\''s values]:FILE:_files' \
+'*--webhook=[Send the run'\''s verdict to this URL when it ends\: a Slack, Discord, Teams or Google Chat webhook gets a message laid out for it, anything else the JSON report; repeat for more. \${NAME} is taken from the environment. A \[\[webhook\]\] table in pepe.toml says more]:URL:_default' \
+'--webhook-on=[When the --webhook URLs are sent\: start, progress, anomaly, end, fail (the end when a --fail-if was crossed), comma-separated; end by default]:EVENTS:_default' \
+'--slack=[Keep a Slack message up to date as the run goes\: posted at the start, edited with the numbers, anomalies in its thread, the verdict at the end. --slack alone posts in the channel \`pepe slack connect\` kept; --slack=#channel elsewhere]::CHANNEL:_default' \
+'*--export=[Write the report to FILE as well, in the format its extension says\: .html a self-contained page (curves, thresholds, the last run), .json the report, .md a summary for a PR, .txt what pepe prints, .csv the run'\''s numbers a row a second; repeat for more]:FILE:_files' \
+'--snapshot=[Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run'\''s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run]:FILE:_files' \
+'--events=[Write the run as it goes to FILE (- for stdout), a JSON line at a time\: start, progress a second, anomalies, steering, and the report last]:FILE:_files' \
+'*--allow-host=[Refuse to send anywhere but these hosts\: api.example.com exactly, or .example.com for it and its subdomains; repeat for more. Every target is checked before anything is sent]:HOST:_default' \
+'--max-requests=[Refuse a run that would send more requests than this\: -n above it, or -z without a --rate that bounds it]:N:_default' \
+'--max-rate=[Refuse a --rate above this, and a run with no --rate at all, which sends as fast as the target answers]:PER_SECOND:_default' \
+'--max-concurrency=[Refuse a concurrency above this]:N:_default' \
+'*--fail-if=[End with exit code 4 when the run crosses this, for CI and scripts\: '\''p99 > 300ms'\'', '\''errors > 1%'\''; repeat for more. The report is still printed. pepe logs takes '\''5xx > 2%'\'', '\''4xx > 20%'\'' and '\''rate < 5/s'\'' too. (pepe ping has --slo for the same.)]:CONDITION:_default' \
+'--metrics=[Serve the live numbers for Prometheus at http\://ADDR/metrics while the run goes, e.g. \:9100 or 127.0.0.1\:9100, so a soak run or a long ping shows up in Grafana next to the server'\''s own]:ADDR:_default' \
+'--config=[Read settings from this file instead of ./pepe.toml; flags on the command line win over it]:FILE:_files' \
+'--write-config=[Write the settings as they stand to this file, as a pepe.toml, and exit]:FILE:_files' \
+'(--config)--load=[Run a test saved on the setup screen (ctrl-s)\: ./.pepe/tests/NAME.toml; flags on the command line win over it]:NAME:_default' \
+'--keep=[Keep the settings as they stand as a saved test, ./.pepe/tests/NAME.toml, then run. With --load and no NAME, the loaded test is updated in place; with another NAME, it'\''s copied]::NAME:_default' \
+'-c+[Number of concurrent requests at a time]:CONCURRENCY:_default' \
+'--concurrency=[Number of concurrent requests at a time]:CONCURRENCY:_default' \
+'-u+[User-Agent string, default is pepe/{version}]:USER_AGENT:_default' \
+'--user-agent=[User-Agent string, default is pepe/{version}]:USER_AGENT:_default' \
+'-h[Print help]' \
+'--help[Print help]' \
+'-k[Accept invalid TLS certificates (self-signed, expired, wrong host)]' \
+'--insecure[Accept invalid TLS certificates (self-signed, expired, wrong host)]' \
+'--disable-compression[Disable HTTP compression, e.g. gzip]' \
+'--disable-keepalive[Disable HTTP keepalive, e.g. Connection\: close]' \
+'--disable-redirects[Prevent http redirects]' \
+'--json[Output results in JSON format]' \
+'--histogram[The report keeps the latency'\''s histogram whole (\`summary.latency.histogram_us\`), for a server to add workers'\'' reports up exactly]' \
 '--dry-run[Say what would be sent, to where and how much, and send nothing; as JSON with --json]' \
 '-i[Open the setup screen to review or change the settings before starting (it opens by itself when no URL is given)]' \
 '--setup[Open the setup screen to review or change the settings before starting (it opens by itself when no URL is given)]' \
@@ -768,6 +910,7 @@ _arguments "${_arguments_options[@]}" : \
 '--slack=[Keep a Slack message up to date as the run goes\: posted at the start, edited with the numbers, anomalies in its thread, the verdict at the end. --slack alone posts in the channel \`pepe slack connect\` kept; --slack=#channel elsewhere]::CHANNEL:_default' \
 '*--export=[Write the report to FILE as well, in the format its extension says\: .html a self-contained page (curves, thresholds, the last run), .json the report, .md a summary for a PR, .txt what pepe prints, .csv the run'\''s numbers a row a second; repeat for more]:FILE:_files' \
 '--snapshot=[Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run'\''s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run]:FILE:_files' \
+'--events=[Write the run as it goes to FILE (- for stdout), a JSON line at a time\: start, progress a second, anomalies, steering, and the report last]:FILE:_files' \
 '*--allow-host=[Refuse to send anywhere but these hosts\: api.example.com exactly, or .example.com for it and its subdomains; repeat for more. Every target is checked before anything is sent]:HOST:_default' \
 '--max-requests=[Refuse a run that would send more requests than this\: -n above it, or -z without a --rate that bounds it]:N:_default' \
 '--max-rate=[Refuse a --rate above this, and a run with no --rate at all, which sends as fast as the target answers]:PER_SECOND:_default' \
@@ -792,6 +935,7 @@ _arguments "${_arguments_options[@]}" : \
 '--disable-keepalive[Disable HTTP keepalive, e.g. Connection\: close]' \
 '--disable-redirects[Prevent http redirects]' \
 '--json[Output results in JSON format]' \
+'--histogram[The report keeps the latency'\''s histogram whole (\`summary.latency.histogram_us\`), for a server to add workers'\'' reports up exactly]' \
 '--dry-run[Say what would be sent, to where and how much, and send nothing; as JSON with --json]' \
 '-i[Open the setup screen to review or change the settings before starting (it opens by itself when no URL is given)]' \
 '--setup[Open the setup screen to review or change the settings before starting (it opens by itself when no URL is given)]' \
@@ -824,6 +968,7 @@ _arguments "${_arguments_options[@]}" : \
 '--slack=[Keep a Slack message up to date as the run goes\: posted at the start, edited with the numbers, anomalies in its thread, the verdict at the end. --slack alone posts in the channel \`pepe slack connect\` kept; --slack=#channel elsewhere]::CHANNEL:_default' \
 '*--export=[Write the report to FILE as well, in the format its extension says\: .html a self-contained page (curves, thresholds, the last run), .json the report, .md a summary for a PR, .txt what pepe prints, .csv the run'\''s numbers a row a second; repeat for more]:FILE:_files' \
 '--snapshot=[Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run'\''s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run]:FILE:_files' \
+'--events=[Write the run as it goes to FILE (- for stdout), a JSON line at a time\: start, progress a second, anomalies, steering, and the report last]:FILE:_files' \
 '*--allow-host=[Refuse to send anywhere but these hosts\: api.example.com exactly, or .example.com for it and its subdomains; repeat for more. Every target is checked before anything is sent]:HOST:_default' \
 '--max-requests=[Refuse a run that would send more requests than this\: -n above it, or -z without a --rate that bounds it]:N:_default' \
 '--max-rate=[Refuse a --rate above this, and a run with no --rate at all, which sends as fast as the target answers]:PER_SECOND:_default' \
@@ -848,6 +993,7 @@ _arguments "${_arguments_options[@]}" : \
 '--disable-keepalive[Disable HTTP keepalive, e.g. Connection\: close]' \
 '--disable-redirects[Prevent http redirects]' \
 '--json[Output results in JSON format]' \
+'--histogram[The report keeps the latency'\''s histogram whole (\`summary.latency.histogram_us\`), for a server to add workers'\'' reports up exactly]' \
 '-i[Open the setup screen to review or change the settings before starting (it opens by itself when no URL is given)]' \
 '--setup[Open the setup screen to review or change the settings before starting (it opens by itself when no URL is given)]' \
 '--record[Keep the run'\''s report under its saved test when it ends, as ./.pepe/runs/NAME/<moment>.json; the run has to be a saved test (--load NAME, or --keep NAME)]' \
@@ -880,6 +1026,7 @@ _arguments "${_arguments_options[@]}" : \
 '--slack=[Keep a Slack message up to date as the run goes\: posted at the start, edited with the numbers, anomalies in its thread, the verdict at the end. --slack alone posts in the channel \`pepe slack connect\` kept; --slack=#channel elsewhere]::CHANNEL:_default' \
 '*--export=[Write the report to FILE as well, in the format its extension says\: .html a self-contained page (curves, thresholds, the last run), .json the report, .md a summary for a PR, .txt what pepe prints, .csv the run'\''s numbers a row a second; repeat for more]:FILE:_files' \
 '--snapshot=[Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run'\''s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run]:FILE:_files' \
+'--events=[Write the run as it goes to FILE (- for stdout), a JSON line at a time\: start, progress a second, anomalies, steering, and the report last]:FILE:_files' \
 '*--allow-host=[Refuse to send anywhere but these hosts\: api.example.com exactly, or .example.com for it and its subdomains; repeat for more. Every target is checked before anything is sent]:HOST:_default' \
 '--max-requests=[Refuse a run that would send more requests than this\: -n above it, or -z without a --rate that bounds it]:N:_default' \
 '--max-rate=[Refuse a --rate above this, and a run with no --rate at all, which sends as fast as the target answers]:PER_SECOND:_default' \
@@ -902,6 +1049,7 @@ _arguments "${_arguments_options[@]}" : \
 '--disable-keepalive[Disable HTTP keepalive, e.g. Connection\: close]' \
 '--disable-redirects[Prevent http redirects]' \
 '--json[Output results in JSON format]' \
+'--histogram[The report keeps the latency'\''s histogram whole (\`summary.latency.histogram_us\`), for a server to add workers'\'' reports up exactly]' \
 '--dry-run[Say what would be sent, to where and how much, and send nothing; as JSON with --json]' \
 '-i[Open the setup screen to review or change the settings before starting (it opens by itself when no URL is given)]' \
 '--setup[Open the setup screen to review or change the settings before starting (it opens by itself when no URL is given)]' \
@@ -944,6 +1092,7 @@ _arguments "${_arguments_options[@]}" : \
 '--slack=[Keep a Slack message up to date as the run goes\: posted at the start, edited with the numbers, anomalies in its thread, the verdict at the end. --slack alone posts in the channel \`pepe slack connect\` kept; --slack=#channel elsewhere]::CHANNEL:_default' \
 '*--export=[Write the report to FILE as well, in the format its extension says\: .html a self-contained page (curves, thresholds, the last run), .json the report, .md a summary for a PR, .txt what pepe prints, .csv the run'\''s numbers a row a second; repeat for more]:FILE:_files' \
 '--snapshot=[Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run'\''s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run]:FILE:_files' \
+'--events=[Write the run as it goes to FILE (- for stdout), a JSON line at a time\: start, progress a second, anomalies, steering, and the report last]:FILE:_files' \
 '*--allow-host=[Refuse to send anywhere but these hosts\: api.example.com exactly, or .example.com for it and its subdomains; repeat for more. Every target is checked before anything is sent]:HOST:_default' \
 '--max-requests=[Refuse a run that would send more requests than this\: -n above it, or -z without a --rate that bounds it]:N:_default' \
 '--max-rate=[Refuse a --rate above this, and a run with no --rate at all, which sends as fast as the target answers]:PER_SECOND:_default' \
@@ -966,6 +1115,7 @@ _arguments "${_arguments_options[@]}" : \
 '--disable-keepalive[Disable HTTP keepalive, e.g. Connection\: close]' \
 '--disable-redirects[Prevent http redirects]' \
 '--json[Output results in JSON format]' \
+'--histogram[The report keeps the latency'\''s histogram whole (\`summary.latency.histogram_us\`), for a server to add workers'\'' reports up exactly]' \
 '--dry-run[Say what would be sent, to where and how much, and send nothing; as JSON with --json]' \
 '-i[Open the setup screen to review or change the settings before starting (it opens by itself when no URL is given)]' \
 '--setup[Open the setup screen to review or change the settings before starting (it opens by itself when no URL is given)]' \
@@ -998,6 +1148,7 @@ _arguments "${_arguments_options[@]}" : \
 '--slack=[Keep a Slack message up to date as the run goes\: posted at the start, edited with the numbers, anomalies in its thread, the verdict at the end. --slack alone posts in the channel \`pepe slack connect\` kept; --slack=#channel elsewhere]::CHANNEL:_default' \
 '*--export=[Write the report to FILE as well, in the format its extension says\: .html a self-contained page (curves, thresholds, the last run), .json the report, .md a summary for a PR, .txt what pepe prints, .csv the run'\''s numbers a row a second; repeat for more]:FILE:_files' \
 '--snapshot=[Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run'\''s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run]:FILE:_files' \
+'--events=[Write the run as it goes to FILE (- for stdout), a JSON line at a time\: start, progress a second, anomalies, steering, and the report last]:FILE:_files' \
 '*--allow-host=[Refuse to send anywhere but these hosts\: api.example.com exactly, or .example.com for it and its subdomains; repeat for more. Every target is checked before anything is sent]:HOST:_default' \
 '--max-requests=[Refuse a run that would send more requests than this\: -n above it, or -z without a --rate that bounds it]:N:_default' \
 '--max-rate=[Refuse a --rate above this, and a run with no --rate at all, which sends as fast as the target answers]:PER_SECOND:_default' \
@@ -1020,6 +1171,7 @@ _arguments "${_arguments_options[@]}" : \
 '--disable-keepalive[Disable HTTP keepalive, e.g. Connection\: close]' \
 '--disable-redirects[Prevent http redirects]' \
 '--json[Output results in JSON format]' \
+'--histogram[The report keeps the latency'\''s histogram whole (\`summary.latency.histogram_us\`), for a server to add workers'\'' reports up exactly]' \
 '--dry-run[Say what would be sent, to where and how much, and send nothing; as JSON with --json]' \
 '-i[Open the setup screen to review or change the settings before starting (it opens by itself when no URL is given)]' \
 '--setup[Open the setup screen to review or change the settings before starting (it opens by itself when no URL is given)]' \
@@ -1052,6 +1204,7 @@ _arguments "${_arguments_options[@]}" : \
 '--slack=[Keep a Slack message up to date as the run goes\: posted at the start, edited with the numbers, anomalies in its thread, the verdict at the end. --slack alone posts in the channel \`pepe slack connect\` kept; --slack=#channel elsewhere]::CHANNEL:_default' \
 '*--export=[Write the report to FILE as well, in the format its extension says\: .html a self-contained page (curves, thresholds, the last run), .json the report, .md a summary for a PR, .txt what pepe prints, .csv the run'\''s numbers a row a second; repeat for more]:FILE:_files' \
 '--snapshot=[Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run'\''s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run]:FILE:_files' \
+'--events=[Write the run as it goes to FILE (- for stdout), a JSON line at a time\: start, progress a second, anomalies, steering, and the report last]:FILE:_files' \
 '*--allow-host=[Refuse to send anywhere but these hosts\: api.example.com exactly, or .example.com for it and its subdomains; repeat for more. Every target is checked before anything is sent]:HOST:_default' \
 '--max-requests=[Refuse a run that would send more requests than this\: -n above it, or -z without a --rate that bounds it]:N:_default' \
 '--max-rate=[Refuse a --rate above this, and a run with no --rate at all, which sends as fast as the target answers]:PER_SECOND:_default' \
@@ -1074,6 +1227,7 @@ _arguments "${_arguments_options[@]}" : \
 '--disable-keepalive[Disable HTTP keepalive, e.g. Connection\: close]' \
 '--disable-redirects[Prevent http redirects]' \
 '--json[Output results in JSON format]' \
+'--histogram[The report keeps the latency'\''s histogram whole (\`summary.latency.histogram_us\`), for a server to add workers'\'' reports up exactly]' \
 '--dry-run[Say what would be sent, to where and how much, and send nothing; as JSON with --json]' \
 '-i[Open the setup screen to review or change the settings before starting (it opens by itself when no URL is given)]' \
 '--setup[Open the setup screen to review or change the settings before starting (it opens by itself when no URL is given)]' \
@@ -1107,6 +1261,7 @@ _arguments "${_arguments_options[@]}" : \
 '--slack=[Keep a Slack message up to date as the run goes\: posted at the start, edited with the numbers, anomalies in its thread, the verdict at the end. --slack alone posts in the channel \`pepe slack connect\` kept; --slack=#channel elsewhere]::CHANNEL:_default' \
 '*--export=[Write the report to FILE as well, in the format its extension says\: .html a self-contained page (curves, thresholds, the last run), .json the report, .md a summary for a PR, .txt what pepe prints, .csv the run'\''s numbers a row a second; repeat for more]:FILE:_files' \
 '--snapshot=[Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run'\''s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run]:FILE:_files' \
+'--events=[Write the run as it goes to FILE (- for stdout), a JSON line at a time\: start, progress a second, anomalies, steering, and the report last]:FILE:_files' \
 '*--allow-host=[Refuse to send anywhere but these hosts\: api.example.com exactly, or .example.com for it and its subdomains; repeat for more. Every target is checked before anything is sent]:HOST:_default' \
 '--max-requests=[Refuse a run that would send more requests than this\: -n above it, or -z without a --rate that bounds it]:N:_default' \
 '--max-rate=[Refuse a --rate above this, and a run with no --rate at all, which sends as fast as the target answers]:PER_SECOND:_default' \
@@ -1129,6 +1284,7 @@ _arguments "${_arguments_options[@]}" : \
 '--disable-keepalive[Disable HTTP keepalive, e.g. Connection\: close]' \
 '--disable-redirects[Prevent http redirects]' \
 '--json[Output results in JSON format]' \
+'--histogram[The report keeps the latency'\''s histogram whole (\`summary.latency.histogram_us\`), for a server to add workers'\'' reports up exactly]' \
 '--dry-run[Say what would be sent, to where and how much, and send nothing; as JSON with --json]' \
 '-i[Open the setup screen to review or change the settings before starting (it opens by itself when no URL is given)]' \
 '--setup[Open the setup screen to review or change the settings before starting (it opens by itself when no URL is given)]' \
@@ -1161,6 +1317,7 @@ _arguments "${_arguments_options[@]}" : \
 '--slack=[Keep a Slack message up to date as the run goes\: posted at the start, edited with the numbers, anomalies in its thread, the verdict at the end. --slack alone posts in the channel \`pepe slack connect\` kept; --slack=#channel elsewhere]::CHANNEL:_default' \
 '*--export=[Write the report to FILE as well, in the format its extension says\: .html a self-contained page (curves, thresholds, the last run), .json the report, .md a summary for a PR, .txt what pepe prints, .csv the run'\''s numbers a row a second; repeat for more]:FILE:_files' \
 '--snapshot=[Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run'\''s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run]:FILE:_files' \
+'--events=[Write the run as it goes to FILE (- for stdout), a JSON line at a time\: start, progress a second, anomalies, steering, and the report last]:FILE:_files' \
 '*--allow-host=[Refuse to send anywhere but these hosts\: api.example.com exactly, or .example.com for it and its subdomains; repeat for more. Every target is checked before anything is sent]:HOST:_default' \
 '--max-requests=[Refuse a run that would send more requests than this\: -n above it, or -z without a --rate that bounds it]:N:_default' \
 '--max-rate=[Refuse a --rate above this, and a run with no --rate at all, which sends as fast as the target answers]:PER_SECOND:_default' \
@@ -1183,6 +1340,7 @@ _arguments "${_arguments_options[@]}" : \
 '--disable-keepalive[Disable HTTP keepalive, e.g. Connection\: close]' \
 '--disable-redirects[Prevent http redirects]' \
 '--json[Output results in JSON format]' \
+'--histogram[The report keeps the latency'\''s histogram whole (\`summary.latency.histogram_us\`), for a server to add workers'\'' reports up exactly]' \
 '--dry-run[Say what would be sent, to where and how much, and send nothing; as JSON with --json]' \
 '-i[Open the setup screen to review or change the settings before starting (it opens by itself when no URL is given)]' \
 '--setup[Open the setup screen to review or change the settings before starting (it opens by itself when no URL is given)]' \
@@ -1216,6 +1374,7 @@ _arguments "${_arguments_options[@]}" : \
 '--slack=[Keep a Slack message up to date as the run goes\: posted at the start, edited with the numbers, anomalies in its thread, the verdict at the end. --slack alone posts in the channel \`pepe slack connect\` kept; --slack=#channel elsewhere]::CHANNEL:_default' \
 '*--export=[Write the report to FILE as well, in the format its extension says\: .html a self-contained page (curves, thresholds, the last run), .json the report, .md a summary for a PR, .txt what pepe prints, .csv the run'\''s numbers a row a second; repeat for more]:FILE:_files' \
 '--snapshot=[Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run'\''s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run]:FILE:_files' \
+'--events=[Write the run as it goes to FILE (- for stdout), a JSON line at a time\: start, progress a second, anomalies, steering, and the report last]:FILE:_files' \
 '*--allow-host=[Refuse to send anywhere but these hosts\: api.example.com exactly, or .example.com for it and its subdomains; repeat for more. Every target is checked before anything is sent]:HOST:_default' \
 '--max-requests=[Refuse a run that would send more requests than this\: -n above it, or -z without a --rate that bounds it]:N:_default' \
 '--max-rate=[Refuse a --rate above this, and a run with no --rate at all, which sends as fast as the target answers]:PER_SECOND:_default' \
@@ -1238,6 +1397,7 @@ _arguments "${_arguments_options[@]}" : \
 '--disable-keepalive[Disable HTTP keepalive, e.g. Connection\: close]' \
 '--disable-redirects[Prevent http redirects]' \
 '--json[Output results in JSON format]' \
+'--histogram[The report keeps the latency'\''s histogram whole (\`summary.latency.histogram_us\`), for a server to add workers'\'' reports up exactly]' \
 '--dry-run[Say what would be sent, to where and how much, and send nothing; as JSON with --json]' \
 '-i[Open the setup screen to review or change the settings before starting (it opens by itself when no URL is given)]' \
 '--setup[Open the setup screen to review or change the settings before starting (it opens by itself when no URL is given)]' \
@@ -1270,6 +1430,7 @@ _arguments "${_arguments_options[@]}" : \
 '--slack=[Keep a Slack message up to date as the run goes\: posted at the start, edited with the numbers, anomalies in its thread, the verdict at the end. --slack alone posts in the channel \`pepe slack connect\` kept; --slack=#channel elsewhere]::CHANNEL:_default' \
 '*--export=[Write the report to FILE as well, in the format its extension says\: .html a self-contained page (curves, thresholds, the last run), .json the report, .md a summary for a PR, .txt what pepe prints, .csv the run'\''s numbers a row a second; repeat for more]:FILE:_files' \
 '--snapshot=[Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run'\''s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run]:FILE:_files' \
+'--events=[Write the run as it goes to FILE (- for stdout), a JSON line at a time\: start, progress a second, anomalies, steering, and the report last]:FILE:_files' \
 '*--allow-host=[Refuse to send anywhere but these hosts\: api.example.com exactly, or .example.com for it and its subdomains; repeat for more. Every target is checked before anything is sent]:HOST:_default' \
 '--max-requests=[Refuse a run that would send more requests than this\: -n above it, or -z without a --rate that bounds it]:N:_default' \
 '--max-rate=[Refuse a --rate above this, and a run with no --rate at all, which sends as fast as the target answers]:PER_SECOND:_default' \
@@ -1292,6 +1453,7 @@ _arguments "${_arguments_options[@]}" : \
 '--disable-keepalive[Disable HTTP keepalive, e.g. Connection\: close]' \
 '--disable-redirects[Prevent http redirects]' \
 '--json[Output results in JSON format]' \
+'--histogram[The report keeps the latency'\''s histogram whole (\`summary.latency.histogram_us\`), for a server to add workers'\'' reports up exactly]' \
 '--dry-run[Say what would be sent, to where and how much, and send nothing; as JSON with --json]' \
 '-i[Open the setup screen to review or change the settings before starting (it opens by itself when no URL is given)]' \
 '--setup[Open the setup screen to review or change the settings before starting (it opens by itself when no URL is given)]' \
@@ -1379,6 +1541,7 @@ _arguments "${_arguments_options[@]}" : \
 '--slack=[Keep a Slack message up to date as the run goes\: posted at the start, edited with the numbers, anomalies in its thread, the verdict at the end. --slack alone posts in the channel \`pepe slack connect\` kept; --slack=#channel elsewhere]::CHANNEL:_default' \
 '*--export=[Write the report to FILE as well, in the format its extension says\: .html a self-contained page (curves, thresholds, the last run), .json the report, .md a summary for a PR, .txt what pepe prints, .csv the run'\''s numbers a row a second; repeat for more]:FILE:_files' \
 '--snapshot=[Write the JSON report so far to this file every minute while the run goes, and once more when it ends, so a long run'\''s numbers survive a crash or a lost terminal; it has a minute-by-minute timeline of the whole run]:FILE:_files' \
+'--events=[Write the run as it goes to FILE (- for stdout), a JSON line at a time\: start, progress a second, anomalies, steering, and the report last]:FILE:_files' \
 '*--allow-host=[Refuse to send anywhere but these hosts\: api.example.com exactly, or .example.com for it and its subdomains; repeat for more. Every target is checked before anything is sent]:HOST:_default' \
 '--max-requests=[Refuse a run that would send more requests than this\: -n above it, or -z without a --rate that bounds it]:N:_default' \
 '--max-rate=[Refuse a --rate above this, and a run with no --rate at all, which sends as fast as the target answers]:PER_SECOND:_default' \
@@ -1402,6 +1565,7 @@ _arguments "${_arguments_options[@]}" : \
 '--disable-keepalive[Disable HTTP keepalive, e.g. Connection\: close]' \
 '--disable-redirects[Prevent http redirects]' \
 '--json[Output results in JSON format]' \
+'--histogram[The report keeps the latency'\''s histogram whole (\`summary.latency.histogram_us\`), for a server to add workers'\'' reports up exactly]' \
 '--dry-run[Say what would be sent, to where and how much, and send nothing; as JSON with --json]' \
 '-i[Open the setup screen to review or change the settings before starting (it opens by itself when no URL is given)]' \
 '--setup[Open the setup screen to review or change the settings before starting (it opens by itself when no URL is given)]' \
@@ -1462,6 +1626,14 @@ _arguments "${_arguments_options[@]}" : \
 && ret=0
 ;;
 (mcp)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(serve)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(worker)
 _arguments "${_arguments_options[@]}" : \
 && ret=0
 ;;
@@ -1548,6 +1720,8 @@ _pepe_commands() {
 'logs:Read nginx logs\: requests per second now, against each minute, hour and day' \
 'schema:Print the JSON Schema of a report\: run (the default), ramp, ping or compare' \
 'mcp:Serve pepe'\''s modes as tools for an agent over stdio (the Model Context Protocol); the guardrail flags given here hold for every call' \
+'serve:Serve pepe over HTTP\: start, watch, steer and compare runs from a script, an agent or a browser; loopback and a token by default' \
+'worker:Take a share of a \`pepe serve\`'\''s distributed runs from this machine, under its own guardrails' \
 'self-update:Update pepe to the latest release, or say what'\''s new in it' \
 'completions:Tab completion for your shell\: print the script, or --install it' \
 'slack:Connect pepe to Slack from here, so --slack keeps a message there up to date as a run goes' \
@@ -1595,6 +1769,8 @@ _pepe__subcmd__help_commands() {
 'logs:Read nginx logs\: requests per second now, against each minute, hour and day' \
 'schema:Print the JSON Schema of a report\: run (the default), ramp, ping or compare' \
 'mcp:Serve pepe'\''s modes as tools for an agent over stdio (the Model Context Protocol); the guardrail flags given here hold for every call' \
+'serve:Serve pepe over HTTP\: start, watch, steer and compare runs from a script, an agent or a browser; loopback and a token by default' \
+'worker:Take a share of a \`pepe serve\`'\''s distributed runs from this machine, under its own guardrails' \
 'self-update:Update pepe to the latest release, or say what'\''s new in it' \
 'completions:Tab completion for your shell\: print the script, or --install it' \
 'slack:Connect pepe to Slack from here, so --slack keeps a message there up to date as a run goes' \
@@ -1678,6 +1854,11 @@ _pepe__subcmd__help__subcmd__self-update_commands() {
     local commands; commands=()
     _describe -t commands 'pepe help self-update commands' commands "$@"
 }
+(( $+functions[_pepe__subcmd__help__subcmd__serve_commands] )) ||
+_pepe__subcmd__help__subcmd__serve_commands() {
+    local commands; commands=()
+    _describe -t commands 'pepe help serve commands' commands "$@"
+}
 (( $+functions[_pepe__subcmd__help__subcmd__slack_commands] )) ||
 _pepe__subcmd__help__subcmd__slack_commands() {
     local commands; commands=(
@@ -1726,6 +1907,11 @@ _pepe__subcmd__help__subcmd__slack__subcmd__test_commands() {
     local commands; commands=()
     _describe -t commands 'pepe help slack test commands' commands "$@"
 }
+(( $+functions[_pepe__subcmd__help__subcmd__worker_commands] )) ||
+_pepe__subcmd__help__subcmd__worker_commands() {
+    local commands; commands=()
+    _describe -t commands 'pepe help worker commands' commands "$@"
+}
 (( $+functions[_pepe__subcmd__history_commands] )) ||
 _pepe__subcmd__history_commands() {
     local commands; commands=()
@@ -1770,6 +1956,11 @@ _pepe__subcmd__schema_commands() {
 _pepe__subcmd__self-update_commands() {
     local commands; commands=()
     _describe -t commands 'pepe self-update commands' commands "$@"
+}
+(( $+functions[_pepe__subcmd__serve_commands] )) ||
+_pepe__subcmd__serve_commands() {
+    local commands; commands=()
+    _describe -t commands 'pepe serve commands' commands "$@"
 }
 (( $+functions[_pepe__subcmd__slack_commands] )) ||
 _pepe__subcmd__slack_commands() {
@@ -1873,6 +2064,11 @@ _pepe__subcmd__slack__subcmd__status_commands() {
 _pepe__subcmd__slack__subcmd__test_commands() {
     local commands; commands=()
     _describe -t commands 'pepe slack test commands' commands "$@"
+}
+(( $+functions[_pepe__subcmd__worker_commands] )) ||
+_pepe__subcmd__worker_commands() {
+    local commands; commands=()
+    _describe -t commands 'pepe worker commands' commands "$@"
 }
 
 if [ "$funcstack[1]" = "_pepe" ]; then

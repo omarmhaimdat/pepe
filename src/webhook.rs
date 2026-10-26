@@ -1475,6 +1475,7 @@ pub fn check(hooks: &[Webhook]) -> Result<(), String> {
 /// The run starts: its hooks are opened and those on `start` sent. With no
 /// hooks nothing is kept, and every call below does nothing.
 pub fn begin(run: Run, hooks: &[Webhook]) {
+    crate::events::start(&run);
     let hooks = edited().unwrap_or_else(|| hooks.to_vec());
     if let Ok(mut last) = LAST.lock() {
         *last = Some((hooks.clone(), run.clone()));
@@ -1541,6 +1542,7 @@ static STEERED: Mutex<Option<(bool, usize, Option<String>)>> = Mutex::new(None);
 static NUDGE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
 pub fn steered(paused: bool, concurrency: usize, by: Option<&str>, what: &str) {
+    crate::events::steered(paused, concurrency, what);
     let note = match by {
         Some(by) => format!("<@{by}> {what}"),
         None => what.to_string(),
@@ -1553,10 +1555,23 @@ pub fn steered(paused: bool, concurrency: usize, by: Option<&str>, what: &str) {
 
 /// The numbers so far, to the hooks whose interval has passed
 pub fn progress(numbers: impl FnOnce() -> Progress) {
-    if !progress_due() {
+    // `--events` takes the same numbers, a second apart
+    let events = crate::events::due();
+    let hooks = progress_due();
+    if !hooks && !events {
         return;
     }
     let mut numbers = numbers();
+    if let Some((paused, concurrency, _)) = STEERED.lock().ok().and_then(|s| s.clone()) {
+        numbers.paused = paused;
+        numbers.concurrency = Some(concurrency);
+    }
+    if events {
+        crate::events::progress(&numbers);
+    }
+    if !hooks {
+        return;
+    }
     if let Some((paused, concurrency, note)) = STEERED.lock().ok().and_then(|s| s.clone()) {
         numbers.paused = paused;
         numbers.concurrency = Some(concurrency);
@@ -1587,6 +1602,7 @@ pub fn progress(numbers: impl FnOnce() -> Progress) {
 /// takes it into its list of what changed, at once, rather than as a
 /// reply of its own; the other hooks on `anomaly` get a message.
 pub fn anomaly(kind: &str, text: &str) {
+    crate::events::anomaly(kind, text);
     let Ok(mut state) = STATE.lock() else { return };
     let Some(state) = state.as_mut() else { return };
     state.changes.push(layout::change_line(Some(kind), text));
@@ -1607,6 +1623,7 @@ pub fn anomaly(kind: &str, text: &str) {
 /// `fail` when `crossed` says why it failed. The messages go out in the
 /// background; `flush` waits for them.
 pub fn end(report: &Value, ending: &Ending) {
+    crate::events::report(report);
     GOING.store(false, std::sync::atomic::Ordering::Relaxed);
     let Ok(mut state) = STATE.lock() else { return };
     let Some(mut state) = state.take() else {

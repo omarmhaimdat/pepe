@@ -152,6 +152,18 @@ pub struct Cli {
     #[arg(long, global = true, value_name = "FILE")]
     pub snapshot: Option<std::path::PathBuf>,
 
+    /// Write the run as it goes to FILE (- for stdout), a JSON line at a
+    /// time: start, progress a second, anomalies, steering, and the
+    /// report last
+    #[arg(long, global = true, value_name = "FILE")]
+    pub events: Option<std::path::PathBuf>,
+
+    /// The report keeps the latency's histogram whole
+    /// (`summary.latency.histogram_us`), for a server to add workers'
+    /// reports up exactly
+    #[arg(long, global = true, hide = true)]
+    pub histogram: bool,
+
     /// Refuse to send anywhere but these hosts: api.example.com exactly,
     /// or .example.com for it and its subdomains; repeat for more. Every
     /// target is checked before anything is sent.
@@ -308,6 +320,10 @@ pub enum Command {
     Schema(SchemaArgs),
     /// Serve pepe's modes as tools for an agent over stdio (the Model Context Protocol); the guardrail flags given here hold for every call
     Mcp(McpArgs),
+    /// Serve pepe over HTTP: start, watch, steer and compare runs from a script, an agent or a browser; loopback and a token by default
+    Serve(ServeArgs),
+    /// Take a share of a `pepe serve`'s distributed runs from this machine, under its own guardrails
+    Worker(WorkerArgs),
     /// Update pepe to the latest release, or say what's new in it
     SelfUpdate(SelfUpdateArgs),
     /// Tab completion for your shell: print the script, or --install it
@@ -373,6 +389,40 @@ pub enum SlackCommand {
 
 #[derive(clap::Args, Debug, Clone, PartialEq, Default)]
 pub struct McpArgs {}
+
+#[derive(clap::Args, Debug, Clone, PartialEq, Default)]
+pub struct ServeArgs {
+    /// Where to listen: 127.0.0.1:7878 by default. Any address but
+    /// loopback needs --allow-host and the --max-requests, --max-rate and
+    /// --max-concurrency caps
+    #[arg(long, value_name = "ADDR")]
+    pub listen: Option<String>,
+
+    /// The tokens that may call the API, a line each: `name token`, or the
+    /// token alone. Without one, a token is made and printed
+    #[arg(long, value_name = "FILE")]
+    pub token_file: Option<std::path::PathBuf>,
+
+    /// Runs going at once, on this machine and the workers together
+    #[arg(long, default_value_t = 1, value_name = "N")]
+    pub max_runs: usize,
+}
+
+#[derive(clap::Args, Debug, Clone, PartialEq, Default)]
+pub struct WorkerArgs {
+    /// The `pepe serve` to join: http://host:7878
+    #[arg(long, value_name = "URL")]
+    pub join: String,
+
+    /// What the server calls this worker: the host name by default
+    #[arg(long, value_name = "NAME")]
+    pub name: Option<String>,
+
+    /// A file with the token to join with (the server's token file takes
+    /// it); else $PEPE_TOKEN
+    #[arg(long, value_name = "FILE")]
+    pub token_file: Option<std::path::PathBuf>,
+}
 
 #[derive(clap::Args, Debug, Clone, PartialEq, Default)]
 pub struct SchemaArgs {
