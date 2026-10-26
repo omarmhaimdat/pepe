@@ -83,6 +83,16 @@ ul{margin:0;padding:0}
 .plan div{margin:2px 0}
 .error{color:var(--bad);background:color-mix(in srgb,var(--bad) 10%,transparent);border-radius:10px;padding:10px 14px;margin:10px 0;white-space:pre-wrap}
 
+/* The modes */
+.tabs{display:flex;gap:6px;flex-wrap:wrap;margin:6px 0 4px}
+.tabs button{border-radius:999px}
+.tabs button.on{background:var(--ember);border-color:var(--ember);color:#fff;font-weight:600}
+details>summary{cursor:pointer;color:var(--label);font-size:14px}
+details[open]>summary{margin-bottom:6px}
+.card.step{background:var(--ground);margin:10px 0}
+.sticky{position:sticky;bottom:0;background:var(--ground);padding:12px 0;border-top:1px solid var(--line);margin-top:14px;z-index:1}
+form .card h2{margin-top:0}
+
 /* The token */
 .gate{max-width:440px;margin:12vh auto;text-align:center}
 .gate img{width:96px;height:96px;image-rendering:pixelated;border-radius:18px}

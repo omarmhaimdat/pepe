@@ -20,7 +20,7 @@ use super::Server;
 
 /// What a request may not set: the server's own flags and its
 /// `pepe.toml` do
-const NOT_HERE: [&str; 5] = ["webhook", "webhook_on", "slack", "otlp", "svg"];
+const NOT_HERE: [&str; 6] = ["webhook", "webhook_on", "slack", "otlp", "svg", "save"];
 /// What names a file: it has to be in the project
 const PATHS: [&str; 5] = ["spec", "file", "log", "vars", "files"];
 const MODES: [&str; 6] = ["run", "ping", "ramp", "api", "flow", "replay"];
@@ -160,6 +160,17 @@ pub async fn handle(server: Arc<Server>, request: Request<Incoming>) -> Reply {
                 ),
             }
         }
+        (&Method::GET, ["files"]) => list_files(&server),
+        (&Method::PUT, ["files", name]) => {
+            let name = name.to_string();
+            put_file(&server, &who, &name, request).await
+        }
+        (&Method::DELETE, ["files", name]) => delete_file(&server, &who, name),
+        (&Method::POST, ["curl"]) => match http::body(request).await {
+            Ok(body) => from_curl(&body),
+            Err(reply) => *reply,
+        },
+        (&Method::GET, ["spec"]) => spec(&server, &request).await,
         (&Method::GET, ["workers"]) => http::ok(&json!({ "workers": server.workers.list() })),
         (&Method::GET, ["workers", "connect"]) => {
             super::workers::connect(server.clone(), request, &who)
@@ -707,6 +718,166 @@ async fn compare(server: &Server, request: &Request<Incoming>) -> Reply {
     }
 }
 
+/// Where the page's uploads go: in the project, so a run may name them
+const FILES: &str = "files";
+/// The most an upload may be: a day of an access log, a large spec
+const FILE_MOST: usize = 256 * 1024 * 1024;
+
+fn files_dir(server: &Server) -> std::path::PathBuf {
+    server.dir.join(FILES)
+}
+
+/// A file's path as a run names it: from the project's directory
+fn project_path(server: &Server, path: &Path) -> String {
+    path.strip_prefix(&server.root)
+        .unwrap_or(path)
+        .display()
+        .to_string()
+}
+
+fn list_files(server: &Server) -> Reply {
+    let mut files: Vec<Value> = std::fs::read_dir(files_dir(server))
+        .map(|entries| {
+            entries
+                .flatten()
+                .filter(|e| e.path().is_file())
+                .map(|e| {
+                    let path = e.path();
+                    json!({
+                        "name": e.file_name().to_string_lossy(),
+                        "path": project_path(server, &path),
+                        "bytes": e.metadata().map(|m| m.len()).unwrap_or(0),
+                    })
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    files.sort_by(|a, b| a["name"].as_str().cmp(&b["name"].as_str()));
+    http::ok(&json!({ "files": files }))
+}
+
+/// `PUT /api/files/NAME`: the body, as it is, kept as a file a run can
+/// name (a spec, a log, a flow, values)
+async fn put_file(server: &Server, who: &str, name: &str, request: Request<Incoming>) -> Reply {
+    if crate::store::validate_name(name).is_err() {
+        return http::error(
+            StatusCode::BAD_REQUEST,
+            "a file's name is letters, digits, . - and _",
+        );
+    }
+    let bytes = match http::read_up_to(request, FILE_MOST).await {
+        Ok(bytes) => bytes,
+        Err(reply) => return *reply,
+    };
+    let dir = files_dir(server);
+    if let Err(e) = std::fs::create_dir_all(&dir) {
+        return http::error(StatusCode::INTERNAL_SERVER_ERROR, e.to_string());
+    }
+    let path = dir.join(name);
+    if let Err(e) = std::fs::write(&path, &bytes) {
+        return http::error(StatusCode::INTERNAL_SERVER_ERROR, e.to_string());
+    }
+    server.audit(
+        who,
+        "file_saved",
+        json!({ "name": name, "bytes": bytes.len() }),
+    );
+    http::json(
+        StatusCode::CREATED,
+        &json!({ "name": name, "path": project_path(server, &path), "bytes": bytes.len() }),
+    )
+}
+
+fn delete_file(server: &Server, who: &str, name: &str) -> Reply {
+    if crate::store::validate_name(name).is_err() {
+        return http::not_found();
+    }
+    match std::fs::remove_file(files_dir(server).join(name)) {
+        Ok(()) => {
+            server.audit(who, "file_deleted", json!({ "name": name }));
+            http::ok(&json!({ "name": name, "deleted": true }))
+        }
+        Err(_) => http::not_found(),
+    }
+}
+
+/// `POST /api/curl {"command": "curl …"}`: the request a curl command
+/// is, as a run's arguments, and what of it pepe can't honour
+fn from_curl(body: &Value) -> Reply {
+    let Some(command) = body["command"].as_str() else {
+        return http::error(StatusCode::BAD_REQUEST, "{\"command\": \"curl …\"}");
+    };
+    match crate::curl::parse_command(command) {
+        Ok(c) => {
+            let mut args = json!({
+                "url": c.url,
+                "method": c.method,
+                "headers": c.headers,
+            });
+            if let Some(body) = &c.body {
+                args["body"] = json!(String::from_utf8_lossy(body));
+            }
+            if let Some(ua) = &c.user_agent {
+                args["user_agent"] = json!(ua);
+            }
+            if let Some(t) = c.timeout_secs {
+                args["timeout"] = json!(t);
+            }
+            if c.insecure {
+                args["insecure"] = json!(true);
+            }
+            if c.no_keepalive {
+                args["no_keepalive"] = json!(true);
+            }
+            if !c.follow_redirects {
+                args["no_redirects"] = json!(true);
+            }
+            if let Some(proxy) = &c.proxy {
+                args["proxy"] = json!(proxy);
+            }
+            http::ok(&json!({ "args": args, "notes": c.notes }))
+        }
+        Err(e) => http::error(StatusCode::BAD_REQUEST, e),
+    }
+}
+
+/// `GET /api/spec?file=PATH`: an OpenAPI spec in the project, as the page
+/// picks from it: its servers, tags, auth and every operation
+async fn spec(server: &Server, request: &Request<Incoming>) -> Reply {
+    let Some(file) = http::query(request)
+        .into_iter()
+        .find(|(k, _)| k == "file")
+        .map(|(_, v)| v)
+    else {
+        return http::error(StatusCode::BAD_REQUEST, "?file=PATH: a spec in the project");
+    };
+    if let Err(e) = in_project(server, &file) {
+        return http::error(StatusCode::BAD_REQUEST, e);
+    }
+    let path = server.root.join(&file);
+    let doc = match crate::openapi::load(&path.display().to_string()).await {
+        Ok(doc) => doc,
+        Err(e) => return http::error(StatusCode::BAD_REQUEST, e),
+    };
+    match crate::openapi::Spec::parse(&doc, None, None) {
+        Ok(spec) => http::ok(&json!({
+            "title": spec.title,
+            "version": spec.version,
+            "base_url": spec.base_url,
+            "auth": spec.auth.iter().map(|a| a.name.clone()).collect::<Vec<_>>(),
+            "tags": spec.tags.iter().map(|(name, about)| json!({"name": name, "about": about})).collect::<Vec<_>>(),
+            "operations": spec.operations.iter().map(|o| json!({
+                "method": o.method,
+                "path": o.path,
+                "tag": o.tag,
+                "summary": o.summary,
+                "params": o.params.iter().map(|p| p.name.clone()).collect::<Vec<_>>(),
+            })).collect::<Vec<_>>(),
+        })),
+        Err(e) => http::error(StatusCode::BAD_REQUEST, e),
+    }
+}
+
 fn add_schedule(server: &Server, who: &str, body: &Value) -> Reply {
     let Some(test) = body["test"].as_str() else {
         return http::error(
@@ -736,6 +907,43 @@ fn add_schedule(server: &Server, who: &str, body: &Value) -> Reply {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A curl command becomes a run's arguments, and what curl does by
+    /// default that pepe doesn't (not following redirects) is said
+    #[test]
+    fn a_curl_command_becomes_a_runs_arguments() {
+        use http_body_util::BodyExt;
+        let reply = from_curl(
+            &json!({"command": "curl -X POST https://api.test/orders -H 'Authorization: Bearer t' -d '{\"id\": 1}' -k --max-time 5"}),
+        );
+        assert_eq!(reply.status(), StatusCode::OK);
+        let body = futures::executor::block_on(reply.into_body().collect())
+            .unwrap()
+            .to_bytes();
+        let v: Value = serde_json::from_slice(&body).unwrap();
+        let args = &v["args"];
+        assert_eq!(args["url"], "https://api.test/orders");
+        assert_eq!(args["method"], "POST");
+        assert_eq!(args["body"], "{\"id\": 1}");
+        assert_eq!(args["timeout"], 5);
+        assert_eq!(args["insecure"], true);
+        assert_eq!(args["no_redirects"], true);
+        assert!(args["headers"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|h| h == "Authorization: Bearer t"));
+        // What becomes the run is checked as any run is: the MCP tool's
+        let argv = crate::mcp::command_for("run", args).unwrap();
+        assert!(
+            argv.contains(&"--disable-redirects".to_string()) && argv.contains(&"-k".to_string()),
+            "{argv:?}"
+        );
+        assert_eq!(
+            from_curl(&json!({"command": "curl 'https://api.test/ unclosed"})).status(),
+            StatusCode::BAD_REQUEST
+        );
+    }
 
     #[test]
     fn counts_split_evenly_the_larger_first() {

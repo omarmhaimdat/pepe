@@ -93,12 +93,20 @@ pub async fn body(request: Request<Incoming>) -> Result<Value, Box<Reply>> {
 
 /// The body's bytes, up to `MOST`
 pub async fn read(request: Request<Incoming>) -> Result<Bytes, Box<Reply>> {
-    let limited = http_body_util::Limited::new(request.into_body(), MOST);
+    read_up_to(request, MOST).await
+}
+
+/// The body's bytes, up to `most`
+pub async fn read_up_to(request: Request<Incoming>, most: usize) -> Result<Bytes, Box<Reply>> {
+    let limited = http_body_util::Limited::new(request.into_body(), most);
     match limited.collect().await {
         Ok(collected) => Ok(collected.to_bytes()),
         Err(_) => Err(Box::new(error(
             StatusCode::PAYLOAD_TOO_LARGE,
-            "the body is over 1 MB, or it broke off",
+            format!(
+                "the body is over {} MB, or it broke off",
+                most / (1024 * 1024)
+            ),
         ))),
     }
 }
