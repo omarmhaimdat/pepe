@@ -1,3 +1,8 @@
+/* Geist and Geist Mono, latin, variable from 400 to 600, served by pepe
+   itself (src/serve/ui/fonts, under the SIL Open Font License 1.1) */
+@font-face { font-family: "Geist"; font-style: normal; font-weight: 400 600; font-display: swap; src: url("/ui/fonts/geist.woff2") format("woff2"); }
+@font-face { font-family: "Geist Mono"; font-style: normal; font-weight: 400 600; font-display: swap; src: url("/ui/fonts/geist-mono.woff2") format("woff2"); }
+
 /* pepe serve's page, in the front page's language (site/index.html): the
    pepper's cream and ink, its colours in bands, square edges, an ink
    outline and a hard shadow, and a word selected as in a terminal. */
