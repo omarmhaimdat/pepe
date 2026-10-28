@@ -120,10 +120,13 @@ pub fn progress(p: &Progress) {
             "p95_ms": ms(p.p95),
             "p99_ms": ms(p.p99),
             "bytes": p.bytes,
+            "ttfb_ms": (p.wait_ms * 1000.0).round() / 1000.0,
+            "read_ms": (p.read_ms * 1000.0).round() / 1000.0,
             "paused": p.paused,
             "concurrency": p.concurrency,
             "failures": p.failures.iter().map(|(cause, count)| json!({"cause": cause, "count": count})).collect::<Vec<_>>(),
             "anomalies": p.anomalies,
+            "second": p.second,
         }),
     );
 }

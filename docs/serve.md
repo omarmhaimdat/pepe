@@ -22,9 +22,18 @@ ping, a ramp, each with its options (headers, body, limits, timeout,
 threads, TLS, keep-alive, redirects, a proxy, values from a CSV) and its
 plan checked before it starts. A run is live (its curves, its verdict as
 it forms, pause, resume, concurrency and stop) and ends with what its
-mode has to say: each endpoint, step, URL, ramp step or target. The saved
-tests and their history, schedules, compare and the workers are there
-too. It is one page in the
+mode has to say. It reads as k6's dashboard does: an overview of tiles
+and charts a second at a time (request rate and errors, p50/p90/p99,
+data received, concurrency, with the anomalies marked), the run's
+`--fail-if` limits held or crossed, a timings tab (the latency's whole
+distribution, each percentile, where the time went, an open loop's
+schedule), a summary of every trend and counter (status codes, failures
+with their bodies, the slowest requests, Server-Timing, spans, whether
+pepe itself was the limit), and each endpoint, step, URL, ramp step or
+target. The runs list has each run's numbers; a saved test, its trend
+run after run; compare, the two latency curves over each other. The
+saved tests and their history, schedules, compare and the workers are
+there too. It is one page in the
 binary, no script from anywhere else. The link pepe serve prints opens it
 with the token, which the page keeps for the tab and takes out of the
 address bar; a report opens as a link of its own, with a ticket for that
@@ -59,9 +68,9 @@ or a saved test by name.
 | --- | --- |
 | `POST /api/runs` | Starts one: `{"url": …, "requests": 1000}`, `{"mode": "ping", "targets": […]}`, `{"test": "checkout"}` (recorded with the test's runs). `202` and its id |
 | `POST /api/runs` with `"dry_run": true` | The plan, nothing sent |
-| `GET /api/runs` | Recent runs, and how many are going |
+| `GET /api/runs` | Recent runs, and how many are going; each ended one with its `glance`: verdict, requests, req/s, p50, p99, failed % |
 | `GET /api/runs/ID` | How it stands, and its report once it has one |
-| `GET /api/runs/ID/events` | The run live, as Server-Sent Events: `start`, `progress` a second, `anomaly`, `steered`, `report`, `end`. `Last-Event-ID` (or `?after=`) goes on from there |
+| `GET /api/runs/ID/events` | The run live, as Server-Sent Events: `start`, `progress` a second (the run so far, and a load test's last second on its own as `second`), `anomaly`, `steered`, `report`, `end`. `Last-Event-ID` (or `?after=`) goes on from there |
 | `GET /api/runs/ID/report` | The report: `?format=json` (the default), `html`, `md`, `txt` or `csv` |
 | `POST /api/runs/ID/ticket` | A ticket that opens the run's report as a plain link (`?ticket=…`), and nothing else, for ten minutes |
 | `POST /api/runs/ID/pause` · `/resume` · `/stop` | Steers it; a ping can be stopped |

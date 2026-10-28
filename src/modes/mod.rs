@@ -472,6 +472,7 @@ pub(crate) fn hook_progress(
         wait_ms: median_ms(metrics.phase(metrics::Phase::FirstByte)),
         read_ms: median_ms(metrics.phase(metrics::Phase::Download)),
         first_body,
+        second: timeline.and_then(|t| t.samples().back().map(Into::into)),
         ..crate::webhook::Progress::default()
     }
 }
