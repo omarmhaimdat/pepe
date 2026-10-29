@@ -6,6 +6,50 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+## [0.58.0](https://github.com/omarmhaimdat/pepe/compare/v0.57.0...v0.58.0) - 2026-10-29
+
+### Added
+
+- *(serve)* the page as k6's dashboard, with every number a report has ([#242](https://github.com/omarmhaimdat/pepe/pull/242))
+
+  The browser page of `pepe serve`, rebuilt after k6's web dashboard, with
+  everything the reports carry.
+
+  **A run, in tabs**
+  - **Overview**: tiles with sparklines (request rate, p95, failed,
+  received, concurrency, time); live charts a second at a time with a
+  crosshair tooltip: rate and errors, p50/p90/p99, data received,
+  concurrency, anomalies marked; `--fail-if` limits shown held or crossed,
+  like k6 thresholds.
+  - **Timings**: the whole latency distribution (log scale, p50/p95/p99
+  marked), latency by percentile with the tail spread out, phase bars
+  (DNS, connect, first byte, body), an open loop's schedule (waited,
+  response time).
+  - **Summary**: k6-style trend table (avg, min, med, max, p90, p95, p99)
+  and counters (count, rate, share); status codes; failures with their
+  first body; slowest requests; Server-Timing; spans; generator load
+  (whether pepe was the limit).
+  - **Endpoints / Steps / URLs / Ramp / Targets** by mode, with bars; the
+  ramp's capacity curve; each ping target's phases, connection and TLS.
+
+  **Elsewhere**
+  - Runs: tiles (healthy / degraded / failing), the last runs as colored
+  squares, mode chips and a text filter, and each run's req/s, p50, p99,
+  failed %, duration.
+  - A saved test: p50/p99 and throughput trends run after run.
+  - Compare: each change as a bar against its noise band, and both runs'
+  percentile curves overlaid.
+
+  **Server side** (nothing per request)
+  - `meta.glance`: a run's report in a few numbers, kept when it ends
+  (backfilled for older runs), for the list.
+  - Progress events carry `second` (the last whole second's rate, errors,
+  p50/p90/p99, from the timeline already kept) and `ttfb_ms` / `read_ms`
+  (medians already computed).
+  - Served load tests pass `--histogram`, which only changes how the final
+  report is written.
+
+
 ## [0.57.0](https://github.com/omarmhaimdat/pepe/compare/v0.56.0...v0.57.0) - 2026-10-26
 
 ### Added
