@@ -506,6 +506,9 @@ pub struct Progress {
     pub first_body: Option<String>,
     /// What changed so far, a line each, oldest first
     pub changes: Vec<String>,
+    /// The last whole second on its own: its rate, errors and percentiles,
+    /// when the mode keeps a timeline
+    pub second: Option<crate::json_report::TimelinePoint>,
 }
 
 /// How a run ended, beyond its report

@@ -43,6 +43,9 @@ pub struct Meta {
     /// The workers it was shared out to; none for a run on this machine
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub workers: Vec<String>,
+    /// Its report in a few numbers, once it has one, for a list of runs
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub glance: Option<Value>,
 }
 
 /// How a run that is going is steered
@@ -197,6 +200,14 @@ pub fn load_past(dir: &Path) -> HashMap<String, Arc<Run>> {
             meta.error = Some("the server stopped while it was going".into());
             let _ = write_json(&path.join("meta.json"), &json!(meta));
         }
+        // Runs from before the glance was kept get theirs from the report
+        if meta.glance.is_none() && meta.state != "running" {
+            meta.glance = std::fs::read_to_string(path.join("report.json"))
+                .ok()
+                .and_then(|text| serde_json::from_str::<Value>(&text).ok())
+                .as_ref()
+                .and_then(glance);
+        }
         out.insert(
             meta.id.clone(),
             Arc::new(Run {
@@ -339,6 +350,7 @@ fn meta_for(
         error: None,
         command: shown(argv),
         workers: Vec::new(),
+        glance: None,
     }
 }
 
@@ -374,6 +386,8 @@ pub fn start_local(
     let mut command = tokio::process::Command::new(&server.exe);
     command
         .args(&server.guard)
+        // The latency's distribution whole, for the page to draw
+        .args((mode == "run").then_some("--histogram"))
         .arg("--events")
         .arg(run.events_path())
         .args(&argv)
@@ -440,9 +454,82 @@ pub fn start_local(
             if meta.state == "failed" && !stderr.is_empty() {
                 meta.error = Some(refusal(&stderr));
             }
+            meta.glance = report.as_ref().and_then(glance);
         });
     });
     Ok(run)
+}
+
+/// A report in a few numbers: its verdict, how much it sent, how fast and
+/// how it went, whatever its mode
+pub fn glance(report: &Value) -> Option<Value> {
+    let f = |v: &Value| v.as_f64();
+    let rank = |level: &str| {
+        ["healthy", "degraded", "failing"]
+            .iter()
+            .position(|l| *l == level)
+    };
+    let worst = |findings: &Value| {
+        findings
+            .as_array()?
+            .iter()
+            .filter_map(|x| x["level"].as_str())
+            .max_by_key(|l| rank(l))
+            .map(str::to_string)
+    };
+    if let Some(sum) = report.get("summary").filter(|s| s.is_object()) {
+        let total = f(&sum["total_requests"]).unwrap_or(0.0);
+        let failed = f(&sum["failed_requests"]).unwrap_or(0.0);
+        return Some(json!({
+            "level": report.pointer("/verdict/level"),
+            "requests": total,
+            "requests_per_second": sum["requests_per_second"],
+            "p50_ms": sum.pointer("/latency/median_ms"),
+            "p99_ms": sum.pointer("/latency/p99_ms"),
+            "failed_percent": if total > 0.0 { 100.0 * failed / total } else { 0.0 },
+            "seconds": f(&sum["duration_ms"]).map(|d| d / 1000.0),
+        }));
+    }
+    if report.get("holds_concurrency").is_some() {
+        let total = f(&report["requests"]).unwrap_or(0.0);
+        let failed = f(&report["failed_requests"]).unwrap_or(0.0);
+        let top = report["steps"].as_array().and_then(|s| {
+            s.iter()
+                .filter_map(|x| f(&x["requests_per_second"]))
+                .reduce(f64::max)
+        });
+        return Some(json!({
+            "level": worst(&report["findings"]),
+            "requests": total,
+            "requests_per_second": report.pointer("/capacity/requests_per_second").cloned().unwrap_or(json!(top)),
+            "holds_concurrency": report["holds_concurrency"],
+            "failed_percent": if total > 0.0 { 100.0 * failed / total } else { 0.0 },
+            "seconds": report["seconds"],
+        }));
+    }
+    let targets = report["targets"].as_array()?;
+    let first = targets.first()?;
+    let sent: f64 = targets.iter().filter_map(|t| f(&t["sent"])).sum();
+    let lost: f64 = targets.iter().filter_map(|t| f(&t["lost"])).sum();
+    let level = targets
+        .iter()
+        .filter_map(|t| t["findings"].as_array())
+        .flatten()
+        .filter_map(|x| x["level"].as_str())
+        .map(|l| match l {
+            "bad" => "failing",
+            "warn" => "degraded",
+            _ => "healthy",
+        })
+        .max_by_key(|l| rank(l));
+    Some(json!({
+        "level": level,
+        "requests": sent,
+        "p50_ms": first.pointer("/latency_ms/p50"),
+        "p99_ms": first.pointer("/latency_ms/p99"),
+        "failed_percent": if sent > 0.0 { 100.0 * lost / sent } else { 0.0 },
+        "seconds": report["elapsed_s"],
+    }))
 }
 
 /// The report in a run's events: its last `report` line
@@ -623,6 +710,7 @@ impl Run {
             if !failed.is_empty() {
                 meta.error = Some(failed.join("; "));
             }
+            meta.glance = merged.as_ref().and_then(glance);
         });
         if let Ok(mut log) = self.log.lock() {
             *log = None;
@@ -706,6 +794,41 @@ mod tests {
         assert!(!text.contains("s3cret"), "{text}");
         assert!(text.contains("-HAuthorization: ••••"), "{text}");
         assert!(text.contains("-HAccept: */*"), "{text}");
+    }
+
+    #[test]
+    fn a_glance_reads_every_modes_report() {
+        let run = json!({
+            "summary": {"total_requests": 200, "failed_requests": 2, "requests_per_second": 50.0,
+                        "duration_ms": 4000.0, "latency": {"median_ms": 1.5, "p99_ms": 9.0}},
+            "verdict": {"level": "degraded"}
+        });
+        let g = glance(&run).unwrap();
+        assert_eq!(g["level"], "degraded");
+        assert_eq!(g["failed_percent"], 1.0);
+        assert_eq!(g["p99_ms"], 9.0);
+        assert_eq!(g["seconds"], 4.0);
+
+        let ramp = json!({
+            "holds_concurrency": 20, "capacity": null, "requests": 1000, "failed_requests": 0,
+            "seconds": 30.0, "steps": [{"requests_per_second": 90.0}, {"requests_per_second": 120.0}],
+            "findings": [{"level": "healthy"}, {"level": "failing"}, {"level": "degraded"}]
+        });
+        let g = glance(&ramp).unwrap();
+        assert_eq!(g["level"], "failing");
+        assert_eq!(
+            g["requests_per_second"], 120.0,
+            "the top step without a capacity"
+        );
+
+        let ping = json!({
+            "elapsed_s": 5.0,
+            "targets": [{"sent": 10, "lost": 1, "latency_ms": {"p50": 2.0, "p99": 3.0}, "findings": [{"level": "warn"}]}]
+        });
+        let g = glance(&ping).unwrap();
+        assert_eq!(g["level"], "degraded");
+        assert_eq!(g["failed_percent"], 10.0);
+        assert!(glance(&json!({"schema_version": 1})).is_none());
     }
 
     #[test]
