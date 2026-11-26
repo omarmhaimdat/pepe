@@ -24,7 +24,7 @@ const S = {
   secs: new Float64Array(RING * 4), head: 0, count: 0,
   h: null, title: '', findings: [], limits: [], statuses: {}, top: [],
   causes: { faults: 0, rows: [] }, allCauses: null, paths: null, slots: {}, held: null,
-  log: [], logMax: 2000, passed: 0, lastLine: 0, viewers: 0,
+  log: [], logMax: 2000, passed: 0, lastLine: 0, logGen: 0, viewers: 0,
   wire: { bytes: 0, events: 0, since: performance.now(), rate: 0 },
   online: false,
 };
@@ -133,14 +133,15 @@ function wants() {
   if (UI.tab === 'errors') ask('causes', '/api/causes', 1950, v => { S.allCauses = v; UI.dirty.add('causes'); });
   if (UI.tab === 'traffic') ask('slots:' + UI.grain, '/api/slots?grain=' + UI.grain, UI.grain === 'minute' ? 4950 : 29950, v => { S.slots[UI.grain] = v; UI.dirty.add('slots'); });
   // The lines, only while they are in view: the server reads them from the logs only then
-  if (UI.tab === 'log') ask('lines', '/api/lines?' + new URLSearchParams({ after: S.lastLine, kind: UI.logk, q: UI.logq, path: UI.heldPath || '' }), 950, takeLines);
+  if (UI.tab === 'log') { const asked = S.logGen; ask('lines', '/api/lines?' + new URLSearchParams({ after: S.lastLine, kind: UI.logk, q: UI.logq, path: UI.heldPath || '' }), 950, v => { if (asked === S.logGen) takeLines(v); }); }
   if (UI.heldPath) ask('held', '/api/path?path=' + encodeURIComponent(UI.heldPath), 950, v => { if (v.path === UI.heldPath) { S.held = v; UI.dirty.add('held'); } });
 }
 setInterval(wants, 250);
 
 const filterless = () => UI.logk === 'all' && !UI.logq && !UI.heldPath;
 // The filters are the server's too: a new one asks again from the start
-function refilter() { S.log = []; S.lastLine = 0; S.passed = 0; delete asking.lines; drawLog(true); wants(); }
+// (an answer to the filter before is let go: it is counted by S.logGen)
+function refilter() { S.logGen++; S.log = []; S.lastLine = 0; S.passed = 0; delete asking.lines; drawLog(true); wants(); }
 // The lines after the last one held; a gap in their numbers is lines that went by
 function takeLines(v) {
   if (v.last < S.lastLine) { S.log = []; S.lastLine = 0; S.passed = 0; } // a reader started again
@@ -445,7 +446,7 @@ function pick(tab) {
 function hold(path) {
   UI.heldPath = path; S.held = null; delete asking.held;
   UI.dirty.add('held');
-  if (UI.tab === 'log') refilter(); else { S.log = []; S.lastLine = 0; S.passed = 0; wants(); }
+  if (UI.tab === 'log') refilter(); else { S.logGen++; S.log = []; S.lastLine = 0; S.passed = 0; wants(); }
   schedule();
 }
 $('[data-tabs]').addEventListener('click', e => { const b = e.target.closest('[data-tab]'); if (b) pick(b.dataset.tab); });

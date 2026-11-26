@@ -147,8 +147,9 @@ impl Hub {
         every.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
         loop {
             every.tick().await;
-            if self.viewers.load(Ordering::Relaxed) > 0 {
-                self.tick();
+            if self.viewers.load(Ordering::Relaxed) > 0 || self.lines_wanted() {
+                let hub = self.clone();
+                let _ = tokio::task::spawn_blocking(move || hub.tick()).await;
             }
         }
     }
@@ -197,6 +198,9 @@ impl Hub {
         }
         // Seconds: the ones said again are put right in place
         let seconds_moved = board.seconds.back() != taken.seconds.last();
+        // New lines move the tick, so an answer kept for the one before
+        // isn't given for them
+        let lines_moved = !taken.lines.is_empty();
         for second in taken.seconds {
             let newest = board.seconds.back().map(|s| s[0]);
             if newest.is_none_or(|t| t < second[0]) {
@@ -215,7 +219,7 @@ impl Hub {
         while board.lines.len() > LINES {
             board.lines.pop_front();
         }
-        if changed.is_empty() && !seconds_moved && tick > 1 {
+        if changed.is_empty() && !seconds_moved && !lines_moved && tick > 1 {
             drop(board);
             self.note(started, locked);
             return;
@@ -314,9 +318,10 @@ impl Hub {
         (Bytes::from(out), board.tick)
     }
 
-    /// A part built when asked for, at most once a tick
+    /// A part built when asked for, at most once a second: by the wall's
+    /// second, not the board's tick, which stands still with nobody watching
     fn on_demand(&self, key: String, build: impl FnOnce(&Stats, Clock) -> Value) -> Arc<Answer> {
-        let tick = self.board().tick;
+        let tick = logs::wall() as u64;
         if let Some((at, answer)) = self
             .asked
             .lock()
@@ -808,6 +813,15 @@ async fn answer(hub: Arc<Hub>, request: Request<Incoming>) -> Reply {
         .and_then(|v| v.to_str().ok())
         .is_some_and(|v| v.split(',').any(|e| e.trim().starts_with("gzip")));
     let query = http::query(&request);
+    // What follows takes the reader's lock, and may tick: off the runtime's
+    // threads, so a page asking doesn't hold up the others
+    tokio::task::spawn_blocking(move || route(hub, &path, &query, gzip))
+        .await
+        .unwrap_or_else(|_| http::error(StatusCode::INTERNAL_SERVER_ERROR, "the answer failed"))
+}
+
+/// An API call, with the token checked
+fn route(hub: Arc<Hub>, path: &str, query: &[(String, String)], gzip: bool) -> Reply {
     let get = |name: &str| {
         query
             .iter()
@@ -815,7 +829,7 @@ async fn answer(hub: Arc<Hub>, request: Request<Incoming>) -> Reply {
             .map(|(_, v)| v.as_str())
     };
     let window = hub.window;
-    match path.as_str() {
+    match path {
         "/api/stream" => stream(hub),
         "/api/lines" => {
             let after = get("after").and_then(|a| a.parse().ok()).unwrap_or(0);
