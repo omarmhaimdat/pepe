@@ -1,0 +1,9 @@
+phase,rate,seconds,cpu_ms_per_s,rss_mb,viewers,bytes_per_viewer_per_s,tick_us,locked_us,ticks
+nobody,400,30,1.0,14,0,0,0,0,0
+one,400,30,1.7,14,1,1998,859,799,34
+ten,400,30,1.7,14,10,1976,989,935,68
+one on the log tab,400,30,2.0,16,1,7347,1304,1221,103
+nobody,4000,30,3.0,17,0,0,0,0,0
+one,4000,30,4.3,14,1,1860,836,781,34
+ten,4000,30,4.7,13,10,1613,708,655,68
+one on the log tab,4000,30,4.7,15,1,6719,528,493,103

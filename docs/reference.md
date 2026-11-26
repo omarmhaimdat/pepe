@@ -1209,6 +1209,9 @@ Options:
       --until <TIME>
           Leave out what is newer than this, e.g. 1h for up to an hour ago; with --since, a stretch in the past. A log read up to a time in the past isn't followed
 
+      --serve [<ADDR>]
+          Serve the screen as a web page, live, at ADDR (127.0.0.1:7880 when none is given): the link printed carries the token that opens it. Without a terminal the logs are followed until stopped
+
   -h, --help
           Print help
 

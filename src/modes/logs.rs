@@ -93,6 +93,13 @@ pub(crate) async fn run_logs(
     // A log that is piped in has stdin; the screen needs it for its keys,
     // so the pipe is put aside and the terminal takes its place
     let mut screen = !args.json && stdout().is_terminal();
+    let serving = what.serve.is_some();
+    if serving && args.json {
+        fail(
+            "--serve shows the logs as a page while they are followed; --json reads them once"
+                .into(),
+        );
+    }
     let mut aside = None;
     if screen && files.is_empty() {
         aside = crate::logs::piped_aside();
@@ -103,7 +110,7 @@ pub(crate) async fn run_logs(
     // once and for the chart to have something in it. A log nobody is
     // writing has no now, and is read whole.
     let mut since = since;
-    if screen && since.is_none() && until.is_none() && !what.all && !files.is_empty() {
+    if (screen || serving) && since.is_none() && until.is_none() && !what.all && !files.is_empty() {
         let wall = crate::logs::wall();
         if crate::logs::being_written(&files, &parser, wall) {
             since = Some(wall - window.max(crate::logs::LOOKBACK));
@@ -114,7 +121,7 @@ pub(crate) async fn run_logs(
         piped: aside,
         parser,
         since,
-        follow: screen,
+        follow: screen || serving,
         exact_paths: what.exact_paths,
         filter,
     };
@@ -138,7 +145,7 @@ pub(crate) async fn run_logs(
         concurrency: 0,
         ..hook_run(args)
     };
-    if !screen {
+    if !screen && !serving {
         job.follow = false;
         let shared = crate::logs::Shared::default();
         crate::logs::read(&job, &shared);
@@ -186,7 +193,65 @@ pub(crate) async fn run_logs(
         return Ok(());
     }
     let check = update::Check::start();
+    // --serve: bound before anything is read, so a taken port says so at once
+    let listener = match &what.serve {
+        Some(spec) => Some(
+            crate::serve::logs::listen(spec)
+                .await
+                .unwrap_or_else(|e| fail(e)),
+        ),
+        None => None,
+    };
     let shared = crate::logs::start(job.clone());
+    if let Some(listener) = listener {
+        let token = crate::serve::new_token();
+        let addr = listener.local_addr()?;
+        let hub = crate::serve::logs::Hub::new(
+            shared.clone(),
+            job.parser.clone(),
+            job.exact_paths,
+            name.clone(),
+            window,
+            conditions.clone(),
+            token.clone(),
+        );
+        tokio::spawn(crate::serve::logs::serve(hub, listener));
+        let link = crate::serve::logs::link(addr, &token);
+        eprintln!("pepe logs · {name}");
+        eprintln!("  page   {link}");
+        // The screen is about to take the terminal, and the link with it:
+        // the page is opened rather than left for the user to find
+        if screen && !crate::slack::open_browser(&link) {
+            eprintln!("  (open the link above; the screen starts in 3 seconds)");
+            tokio::time::sleep(std::time::Duration::from_secs(3)).await;
+        }
+    }
+    if !screen {
+        // Followed until stopped, the page the only thing shown
+        let _ = tokio::signal::ctrl_c().await;
+        shared.stop();
+        let stats = shared.lock();
+        let wall = crate::logs::wall();
+        let clock = stats.clock(wall);
+        let findings = crate::logs_verdict::findings(&stats, clock, window);
+        let checks: Vec<crate::webhook::Check> = conditions
+            .iter()
+            .map(|c| c.check(&stats, clock, window, crate::logs_verdict::Scope::Window))
+            .collect();
+        print!(
+            "{}",
+            with_verdict(
+                crate::logs::report(&stats, &name, wall, window, what.rows),
+                &findings,
+                &checks
+            )
+        );
+        drop(stats);
+        if checks.iter().any(|c| !c.held) {
+            std::process::exit(4);
+        }
+        return Ok(());
+    }
     // --metrics: the page is rendered again every second while it follows
     if exporter::address().is_some() {
         let shared = shared.clone();

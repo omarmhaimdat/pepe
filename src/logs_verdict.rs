@@ -5,7 +5,9 @@
 use std::time::Duration;
 
 use crate::diagnose::Level;
-use crate::logs::{percent, rate, time_of_day, typical, versus, Clock, Coarse, Grain, Row, Stats};
+use crate::logs::{
+    percent, rate, time_of_day, typical, versus, Clock, Coarse, Counted, Counts, Grain, Row, Stats,
+};
 use crate::ui::format;
 use crate::webhook::Check;
 
@@ -152,47 +154,47 @@ pub fn level(findings: &[Finding]) -> &'static str {
 
 /// The minute rows the last `window` seconds fall in, each with the part
 /// of it that is in the window
-fn in_window(rows: &[Row], clock: Clock, window: i64) -> Vec<(f64, &Row)> {
+fn in_window<R: Counted>(rows: &[R], clock: Clock, window: i64) -> Vec<(f64, &R)> {
     let end = clock.now + i64::from(clock.offset) + 1;
     let start = end - window;
     rows.iter()
-        .filter(|row| row.start + 60 > start && row.start < end)
+        .filter(|row| row.start() + 60 > start && row.start() < end)
         .map(|row| {
-            let to = (row.start + 60).min(end);
-            let part = (to - row.start.max(start)) as f64 / (to - row.start).max(1) as f64;
+            let to = (row.start() + 60).min(end);
+            let part = (to - row.start().max(start)) as f64 / (to - row.start()).max(1) as f64;
             (part, row)
         })
         .collect()
 }
 
 /// The whole minutes before the window: what is usual
-fn before_window(rows: &[Row], clock: Clock, window: i64) -> Vec<Row> {
+fn before_window<R: Counted + Copy>(rows: &[R], clock: Clock, window: i64) -> Vec<R> {
     let start = clock.now + i64::from(clock.offset) + 1 - window;
     rows.iter()
-        .filter(|row| !row.partial && row.start + 60 <= start)
+        .filter(|row| !row.partial() && row.start() + 60 <= start)
         .copied()
         .collect()
 }
 
 /// (5xx, 4xx, requests) of rows, each counted for `part` of it
-fn shares<'a>(rows: impl Iterator<Item = (f64, &'a Row)>) -> (f64, f64, f64) {
+fn shares<'a, R: Counted + 'a>(rows: impl Iterator<Item = (f64, &'a R)>) -> (f64, f64, f64) {
     rows.fold((0.0, 0.0, 0.0), |(c5, c4, n), (part, row)| {
         (
-            c5 + row.slot.c5xx as f64 * part,
-            c4 + row.slot.c4xx as f64 * part,
-            n + row.slot.requests as f64 * part,
+            c5 + row.c5xx() as f64 * part,
+            c4 + row.c4xx() as f64 * part,
+            n + row.requests() as f64 * part,
         )
     })
 }
 
 /// Where a run of minutes, newest first, each passing `failing`, began
-fn since(rows: &[Row], failing: impl Fn(&Row) -> bool) -> Option<i64> {
+fn since<R: Counted>(rows: &[R], failing: impl Fn(&R) -> bool) -> Option<i64> {
     let mut start = None;
     for row in rows.iter().rev() {
-        if row.slot.requests == 0 || !failing(row) {
+        if row.requests() == 0 || !failing(row) {
             break;
         }
-        start = Some(row.start);
+        start = Some(row.start());
     }
     start
 }
@@ -300,7 +302,7 @@ pub fn findings(stats: &Stats, clock: Clock, window: i64) -> Vec<Finding> {
     let mut grew: Option<(f64, &str)> = None;
     for path in &looked {
         let theirs = stats.path_now(clock, window, path);
-        let rows = stats.path_rows(Grain::Minute, clock, path);
+        let rows = stats.path_counts(Grain::Minute, clock, path);
         let before = before_window(&rows, clock, window);
         let (b5, b4, bn) = shares(before.iter().map(|r| (1.0, r)));
         // What it grew by, against its usual minute
@@ -313,13 +315,10 @@ pub fn findings(stats: &Stats, clock: Clock, window: i64) -> Vec<Finding> {
         // Its mean time now against before
         let windowed = in_window(&rows, clock, window);
         let (tn, ts) = windowed.iter().fold((0.0, 0.0), |(n, t), (part, row)| {
-            (
-                n + row.slot.timed as f64 * part,
-                t + row.slot.time_us as f64 * part,
-            )
+            (n + row.timed as f64 * part, t + row.time_us as f64 * part)
         });
         let (bt, bts) = before.iter().fold((0.0, 0.0), |(n, t), row| {
-            (n + row.slot.timed as f64, t + row.slot.time_us as f64)
+            (n + row.timed as f64, t + row.time_us as f64)
         });
         if tn >= ENOUGH as f64 && bt >= ENOUGH as f64 {
             let (mean_now, mean_before) = (ts / tn, bts / bt);
@@ -356,8 +355,8 @@ pub fn findings(stats: &Stats, clock: Clock, window: i64) -> Vec<Finding> {
             refused_paths.push((level, s4, usual4, path.to_string(), rows));
         }
     }
-    let by_share = |a: &(Level, f64, Option<f64>, String, Vec<Row>),
-                    b: &(Level, f64, Option<f64>, String, Vec<Row>)| {
+    let by_share = |a: &(Level, f64, Option<f64>, String, Vec<Counts>),
+                    b: &(Level, f64, Option<f64>, String, Vec<Counts>)| {
         b.0.cmp(&a.0).then(b.1.total_cmp(&a.1))
     };
     failing_paths.sort_by(by_share);
@@ -375,10 +374,10 @@ pub fn findings(stats: &Stats, clock: Clock, window: i64) -> Vec<Finding> {
             };
             let started = since(&rows, |row| {
                 let n = match class {
-                    5 => row.slot.c5xx,
-                    _ => row.slot.c4xx,
+                    5 => row.c5xx,
+                    _ => row.c4xx,
                 };
-                n as f64 / row.slot.requests.max(1) as f64 >= threshold
+                n as f64 / row.requests.max(1) as f64 >= threshold
             });
             let codes: Vec<String> = stats
                 .paths

@@ -592,6 +592,7 @@ Register-ArgumentCompleter -Native -CommandName 'pepe' -ScriptBlock {
             [CompletionResult]::new('--status', '--status', [CompletionResultType]::ParameterName, 'Count only the requests that answered these: 404, 5xx, 4xx,503; repeat for more. Error log lines are still counted')
             [CompletionResult]::new('--host', '--host', [CompletionResultType]::ParameterName, 'Count only the requests to these hosts (the log''s $host): shop.test exactly, .example.com for it and every host under it; repeat for more')
             [CompletionResult]::new('--until', '--until', [CompletionResultType]::ParameterName, 'Leave out what is newer than this, e.g. 1h for up to an hour ago; with --since, a stretch in the past. A log read up to a time in the past isn''t followed')
+            [CompletionResult]::new('--serve', '--serve', [CompletionResultType]::ParameterName, 'Serve the screen as a web page, live, at ADDR (127.0.0.1:7880 when none is given): the link printed carries the token that opens it. Without a terminal the logs are followed until stopped')
             [CompletionResult]::new('-n', '-n', [CompletionResultType]::ParameterName, 'Number of requests to perform')
             [CompletionResult]::new('--number', '--number', [CompletionResultType]::ParameterName, 'Number of requests to perform')
             [CompletionResult]::new('-z', '-z', [CompletionResultType]::ParameterName, 'Duration of the test, e.g. 10s, 3m, 2h (mutually exclusive with -n)')

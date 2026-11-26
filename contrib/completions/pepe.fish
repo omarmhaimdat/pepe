@@ -459,6 +459,7 @@ complete -c pepe -n "__fish_pepe_using_subcommand logs" -l path -d 'Count only t
 complete -c pepe -n "__fish_pepe_using_subcommand logs" -l status -d 'Count only the requests that answered these: 404, 5xx, 4xx,503; repeat for more. Error log lines are still counted' -r
 complete -c pepe -n "__fish_pepe_using_subcommand logs" -l host -d 'Count only the requests to these hosts (the log\'s $host): shop.test exactly, .example.com for it and every host under it; repeat for more' -r
 complete -c pepe -n "__fish_pepe_using_subcommand logs" -l until -d 'Leave out what is newer than this, e.g. 1h for up to an hour ago; with --since, a stretch in the past. A log read up to a time in the past isn\'t followed' -r
+complete -c pepe -n "__fish_pepe_using_subcommand logs" -l serve -d 'Serve the screen as a web page, live, at ADDR (127.0.0.1:7880 when none is given): the link printed carries the token that opens it. Without a terminal the logs are followed until stopped' -r
 complete -c pepe -n "__fish_pepe_using_subcommand logs" -s n -l number -d 'Number of requests to perform' -r
 complete -c pepe -n "__fish_pepe_using_subcommand logs" -s z -l duration -d 'Duration of the test, e.g. 10s, 3m, 2h (mutually exclusive with -n)' -r
 complete -c pepe -n "__fish_pepe_using_subcommand logs" -s m -l method -d 'HTTP method, e.g. GET, POST, PUT, DELETE' -r

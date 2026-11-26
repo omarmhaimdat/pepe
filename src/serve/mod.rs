@@ -10,6 +10,7 @@
 
 mod api;
 mod http;
+pub mod logs;
 mod merge;
 mod runs;
 mod schedule;
@@ -118,7 +119,7 @@ impl Server {
 }
 
 /// Make a token: 24 random bytes, hex
-fn new_token() -> String {
+pub(crate) fn new_token() -> String {
     let mut bytes = [0u8; 24];
     let provider = tokio_rustls::rustls::crypto::ring::default_provider();
     let _ = provider.secure_random.fill(&mut bytes);
