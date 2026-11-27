@@ -6,6 +6,1201 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+## [0.58.2](https://github.com/omarmhaimdat/pepe/compare/v0.58.1...v0.58.2) - 2026-11-27
+
+### Fixed
+
+- *(deps)* bump the cargo-minor-patch group across 1 directory with 8 updates ([#252](https://github.com/omarmhaimdat/pepe/pull/252))
+
+  Bumps the cargo-minor-patch group with 8 updates in the / directory:
+
+  | Package | From | To |
+  | --- | --- | --- |
+  | [clap](https://github.com/clap-rs/clap) | `4.6.7` | `4.6.9` |
+  | [webpki-roots](https://github.com/rustls/webpki-roots) | `1.0.11` |
+  `1.0.12` |
+  | [hyper](https://github.com/hyperium/hyper) | `1.12.0` | `1.13.0` |
+  | [bytes](https://github.com/tokio-rs/bytes) | `1.12.1` | `1.12.2` |
+  | [toml](https://github.com/toml-rs/toml) | `1.1.8+spec-1.1.0` |
+  `1.2.2+spec-1.1.0` |
+  | [flate2](https://github.com/rust-lang/flate2-rs) | `1.1.10` | `1.1.11`
+  |
+  | [clap_complete](https://github.com/clap-rs/clap) | `4.6.11` | `4.6.12`
+  |
+  | [clap_mangen](https://github.com/clap-rs/clap) | `0.3.3` | `0.3.4` |
+
+
+  Updates `clap` from 4.6.7 to 4.6.9
+  <details>
+  <summary>Release notes</summary>
+  <p><em>Sourced from <a
+  href="https://github.com/clap-rs/clap/releases">clap's
+  releases</a>.</em></p>
+  <blockquote>
+  <h2>v4.6.9</h2>
+  <h2>[4.6.9] - 2026-11-20</h2>
+  <h3>Fixes</h3>
+  <ul>
+  <li><em>(derive)</em> Avoid <code>unused_result</code></li>
+  </ul>
+  </blockquote>
+  </details>
+  <details>
+  <summary>Changelog</summary>
+  <p><em>Sourced from <a
+  href="https://github.com/clap-rs/clap/blob/main/CHANGELOG.md">clap's
+  changelog</a>.</em></p>
+  <blockquote>
+  <h2>[4.6.9] - 2026-11-20</h2>
+  <h3>Fixes</h3>
+  <ul>
+  <li><em>(derive)</em> Avoid <code>unused_result</code></li>
+  </ul>
+  <h2>[4.6.8] - 2026-11-16</h2>
+  <h3>Performance</h3>
+  <ul>
+  <li><em>(derive)</em> Reudce stack usage in <code>dev</code>
+  profile</li>
+  </ul>
+  </blockquote>
+  </details>
+  <details>
+  <summary>Commits</summary>
+  <ul>
+  <li><a
+  href="https://github.com/clap-rs/clap/commit/715b812f3b72ebca1d5ce257e0495e1e76aea56f"><code>715b812</code></a>
+  chore: Release</li>
+  <li><a
+  href="https://github.com/clap-rs/clap/commit/89e6e9b59c6209c5d9817c7d113ad7ad7f6d6907"><code>89e6e9b</code></a>
+  docs: Update changelog</li>
+  <li><a
+  href="https://github.com/clap-rs/clap/commit/3918cb4db643ffdfb3c8206d241d70acf6d5c5de"><code>3918cb4</code></a>
+  Merge pull request <a
+  href="https://redirect.github.com/clap-rs/clap/issues/6468">#6468</a>
+  from sjh9714/fix-bash-posix-fn-name</li>
+  <li><a
+  href="https://github.com/clap-rs/clap/commit/526c81906357cae595259d46cea2fd4675489331"><code>526c819</code></a>
+  Merge pull request <a
+  href="https://redirect.github.com/clap-rs/clap/issues/6469">#6469</a>
+  from latent-9/docs/fix-derive-reference-link</li>
+  <li><a
+  href="https://github.com/clap-rs/clap/commit/b2bd685a8e809df2049f5cf6777641d8f86aeef6"><code>b2bd685</code></a>
+  docs(clap_derive): Fix derive reference link</li>
+  <li><a
+  href="https://github.com/clap-rs/clap/commit/ecee8a4f862b1b97ce2c7db5bf806cfe394a55f6"><code>ecee8a4</code></a>
+  fix(complete): Name the function after fn_name</li>
+  <li><a
+  href="https://github.com/clap-rs/clap/commit/6dd2e5a0802d84226afd63c427fc09940fa837d4"><code>6dd2e5a</code></a>
+  test(complete): Show POSIX bash will not source</li>
+  <li><a
+  href="https://github.com/clap-rs/clap/commit/4684d7abc545cef1d78708864cfe8c7668ed49c1"><code>4684d7a</code></a>
+  chore: Release</li>
+  <li><a
+  href="https://github.com/clap-rs/clap/commit/51d50ad3ae341f987f26115d6a6719cf76cc78f4"><code>51d50ad</code></a>
+  docs: Update changelog</li>
+  <li><a
+  href="https://github.com/clap-rs/clap/commit/3bc36222053a49936ea67e8616d1584a75c811b0"><code>3bc3622</code></a>
+  Merge pull request <a
+  href="https://redirect.github.com/clap-rs/clap/issues/6457">#6457</a>
+  from bl4ck4t/master</li>
+  <li>Additional commits viewable in <a
+  href="https://github.com/clap-rs/clap/compare/clap_complete-v4.6.7...clap_complete-v4.6.9">compare
+  view</a></li>
+  </ul>
+  </details>
+  <br />
+
+  Updates `webpki-roots` from 1.0.11 to 1.0.12
+  <details>
+  <summary>Release notes</summary>
+  <p><em>Sourced from <a
+  href="https://github.com/rustls/webpki-roots/releases">webpki-roots's
+  releases</a>.</em></p>
+  <blockquote>
+  <h2>1.0.12</h2>
+  <ul>
+  <li>
+  <p>Remove &quot;Buypass Class 2 Root CA&quot; and &quot;Buypass Class 3
+  Root CA&quot;. Reference: <a
+  href="https://bugzilla.mozilla.org/show_bug.cgi?id=2085917">https://bugzilla.mozilla.org/show_bug.cgi?id=2085917</a></p>
+  </li>
+  <li>
+  <p>Remove &quot;DigiCert Trusted Root G4&quot;, &quot;QuoVadis Root CA 1
+  G3&quot; and &quot;QuoVadis Root CA 3 G3&quot; (as they are now trusted
+  only for email). Reference: <a
+  href="https://bugzilla.mozilla.org/show_bug.cgi?id=2088266">https://bugzilla.mozilla.org/show_bug.cgi?id=2088266</a></p>
+  </li>
+  <li>
+  <p>Remove &quot;Certigna Root CA&quot;. Reference: <a
+  href="https://bugzilla.mozilla.org/show_bug.cgi?id=2085928">https://bugzilla.mozilla.org/show_bug.cgi?id=2085928</a></p>
+  </li>
+  </ul>
+  <h2>What's Changed</h2>
+  <ul>
+  <li>ccadb: skip empty included subtrees by <a
+  href="https://github.com/djc"><code>@​djc</code></a> in <a
+  href="https://redirect.github.com/rustls/webpki-roots/pull/138">rustls/webpki-roots#138</a></li>
+  <li>1.0.12: track roots removed upstream by <a
+  href="https://github.com/ctz"><code>@​ctz</code></a> in <a
+  href="https://redirect.github.com/rustls/webpki-roots/pull/139">rustls/webpki-roots#139</a></li>
+  </ul>
+  <p><strong>Full Changelog</strong>: <a
+  href="https://github.com/rustls/webpki-roots/compare/v/1.0.11...v/1.0.12">https://github.com/rustls/webpki-roots/compare/v/1.0.11...v/1.0.12</a></p>
+  </blockquote>
+  </details>
+  <details>
+  <summary>Commits</summary>
+  <ul>
+  <li><a
+  href="https://github.com/rustls/webpki-roots/commit/b5d2438fce188490ae60193c187a3b0b02f61d54"><code>b5d2438</code></a>
+  1.0.12: track roots removed upstream</li>
+  <li><a
+  href="https://github.com/rustls/webpki-roots/commit/190e6f315317ce1b4e5dfd2bc3201a02e51f5271"><code>190e6f3</code></a>
+  ccadb: bump version to 0.2.3</li>
+  <li><a
+  href="https://github.com/rustls/webpki-roots/commit/acf073fd3202f8ca5674d72b35c31ec93d9e04ef"><code>acf073f</code></a>
+  ccadb: skip empty included subtrees</li>
+  <li>See full diff in <a
+  href="https://github.com/rustls/webpki-roots/compare/v/1.0.11...v/1.0.12">compare
+  view</a></li>
+  </ul>
+  </details>
+  <br />
+
+  Updates `hyper` from 1.12.0 to 1.13.0
+  <details>
+  <summary>Release notes</summary>
+  <p><em>Sourced from <a
+  href="https://github.com/hyperium/hyper/releases">hyper's
+  releases</a>.</em></p>
+  <blockquote>
+  <h2>v1.13.0</h2>
+  <h2>Features</h2>
+  <ul>
+  <li><strong>http2:</strong> add an executor getter for server and client
+  (<a
+  href="https://redirect.github.com/hyperium/hyper/issues/4250">#4250</a>)
+  (<a
+  href="https://github.com/hyperium/hyper/commit/b638fc0de351987f3eaffa2bdabd393c8679a9e8">b638fc0d</a>)</li>
+  </ul>
+  <h2>Bug Fixes</h2>
+  <ul>
+  <li><strong>client:</strong> fail parked h2 request with connection
+  error on close (<a
+  href="https://redirect.github.com/hyperium/hyper/issues/4275">#4275</a>)
+  (<a
+  href="https://github.com/hyperium/hyper/commit/dea9acb5344e0e34bb9196f5493464db68edd24a">dea9acb5</a>,
+  closes <a
+  href="https://redirect.github.com/hyperium/hyper/issues/4269">#4269</a>)</li>
+  <li><strong>http1:</strong>
+  <ul>
+  <li>preserve streaming bodies when coercing HTTP/2 requests (<a
+  href="https://redirect.github.com/hyperium/hyper/issues/4236">#4236</a>)
+  (<a
+  href="https://github.com/hyperium/hyper/commit/21da6a59db9a90631302e7b173c106b723b9065f">21da6a59</a>)</li>
+  <li>prevent <code>SendRequest</code> from reporting ready while a
+  request is pending (<a
+  href="https://redirect.github.com/hyperium/hyper/issues/4247">#4247</a>)
+  (<a
+  href="https://github.com/hyperium/hyper/commit/47c725c459ede66e68ad705f7da9a901abbbdc17">47c725c4</a>,
+  closes <a
+  href="https://redirect.github.com/hyperium/hyper/issues/4246">#4246</a>)</li>
+  <li>avoid adding connection-close to 101 responses (<a
+  href="https://redirect.github.com/hyperium/hyper/issues/4248">#4248</a>)
+  (<a
+  href="https://github.com/hyperium/hyper/commit/ac3f9501de373388fb9914e285134cfec2283bd8">ac3f9501</a>,
+  closes <a
+  href="https://redirect.github.com/hyperium/hyper/issues/4244">#4244</a>)</li>
+  <li>error when final body chunk is shorter than content-length (<a
+  href="https://redirect.github.com/hyperium/hyper/issues/4270">#4270</a>)
+  (<a
+  href="https://github.com/hyperium/hyper/commit/750620646ba0777daa45be3d82bd1704dcf470b8">75062064</a>)</li>
+  <li>drop Content-Length when a response also has Transfer-Encoding (<a
+  href="https://redirect.github.com/hyperium/hyper/issues/4264">#4264</a>)
+  (<a
+  href="https://github.com/hyperium/hyper/commit/378f8479b8b703d098b46de1cec9ea648f12ea69">378f8479</a>,
+  closes <a
+  href="https://redirect.github.com/hyperium/hyper/issues/4263">#4263</a>)</li>
+  <li>drain in-flight requests before dispatcher shutdown (<a
+  href="https://redirect.github.com/hyperium/hyper/issues/4222">#4222</a>)
+  (<a
+  href="https://github.com/hyperium/hyper/commit/97fff93e53f9e6a993f2d6a25d50883b7b8752a7">97fff93e</a>,
+  closes <a
+  href="https://redirect.github.com/hyperium/hyper/issues/4202">#4202</a>)</li>
+  </ul>
+  </li>
+  <li><strong>http2:</strong>
+  <ul>
+  <li>report zero body size hint for HEAD responses (<a
+  href="https://redirect.github.com/hyperium/hyper/issues/4237">#4237</a>)
+  (<a
+  href="https://github.com/hyperium/hyper/commit/4e1c0fbb9db68936c952c481321d96f536568283">4e1c0fbb</a>)</li>
+  <li>prevent requests from hanging during concurrent connection shutdown
+  race (<a
+  href="https://redirect.github.com/hyperium/hyper/issues/4242">#4242</a>)
+  (<a
+  href="https://github.com/hyperium/hyper/commit/5634b91d607ba1b781699765b22f16fd6ec1c8b7">5634b91d</a>)</li>
+  <li>strip all headers named in every Connection header (<a
+  href="https://redirect.github.com/hyperium/hyper/issues/4271">#4271</a>)
+  (<a
+  href="https://github.com/hyperium/hyper/commit/a44e32a7f85a1f98e34307ae17985c0bc1349a03">a44e32a7</a>)</li>
+  <li>keep connection open after rejecting CONNECT (<a
+  href="https://redirect.github.com/hyperium/hyper/issues/4235">#4235</a>)
+  (<a
+  href="https://github.com/hyperium/hyper/commit/88520c3eaea391f8ba49591a84f8439998b76191">88520c3e</a>)</li>
+  </ul>
+  </li>
+  </ul>
+  <h2>All the PRs</h2>
+  <ul>
+  <li>docs(contrib): minor improvements to HIP-0001 by <a
+  href="https://github.com/seanmonstar"><code>@​seanmonstar</code></a> in
+  <a
+  href="https://redirect.github.com/hyperium/hyper/pull/4227">hyperium/hyper#4227</a></li>
+  <li>fix(http1): drain client dispatch receiver on connection shutdown by
+  <a href="https://github.com/akasakariko"><code>@​akasakariko</code></a>
+  in <a
+  href="https://redirect.github.com/hyperium/hyper/pull/4222">hyperium/hyper#4222</a></li>
+  <li>chore(ci): check that PR descriptions assert that the words are
+  human by <a
+  href="https://github.com/seanmonstar"><code>@​seanmonstar</code></a> in
+  <a
+  href="https://redirect.github.com/hyperium/hyper/pull/4229">hyperium/hyper#4229</a></li>
+  <li>style(proto): enforce clippy:let_unit_value by <a
+  href="https://github.com/cratelyn"><code>@​cratelyn</code></a> in <a
+  href="https://redirect.github.com/hyperium/hyper/pull/4231">hyperium/hyper#4231</a></li>
+  <li>style(lib): enforce clippy::redundant_closure_for_method_calls by <a
+  href="https://github.com/trivikr"><code>@​trivikr</code></a> in <a
+  href="https://redirect.github.com/hyperium/hyper/pull/4251">hyperium/hyper#4251</a></li>
+  <li>style(lib): enforce clippy::trivially_copy_pass_by_ref by <a
+  href="https://github.com/trivikr"><code>@​trivikr</code></a> in <a
+  href="https://redirect.github.com/hyperium/hyper/pull/4252">hyperium/hyper#4252</a></li>
+  <li>style(lib): enforce clippy::unnested_or_patterns by <a
+  href="https://github.com/trivikr"><code>@​trivikr</code></a> in <a
+  href="https://redirect.github.com/hyperium/hyper/pull/4256">hyperium/hyper#4256</a></li>
+  <li>fix(ci): deny warnings in 'features' step by <a
+  href="https://github.com/cratelyn"><code>@​cratelyn</code></a> in <a
+  href="https://redirect.github.com/hyperium/hyper/pull/4253">hyperium/hyper#4253</a></li>
+  <li>feat(http2): add an executor getter for server and client by <a
+  href="https://github.com/robertream"><code>@​robertream</code></a> in <a
+  href="https://redirect.github.com/hyperium/hyper/pull/4250">hyperium/hyper#4250</a></li>
+  <li>fix(http1): drop Content-Length when a response also has
+  Transfer-Encoding by <a
+  href="https://github.com/kevin9327"><code>@​kevin9327</code></a> in <a
+  href="https://redirect.github.com/hyperium/hyper/pull/4264">hyperium/hyper#4264</a></li>
+  <li>fix(http2): keep connection open after rejecting CONNECT by <a
+  href="https://github.com/shuvroroy"><code>@​shuvroroy</code></a> in <a
+  href="https://redirect.github.com/hyperium/hyper/pull/4235">hyperium/hyper#4235</a></li>
+  <li>chore(github): add human authorship checkbox to issue templates by
+  <a href="https://github.com/seanmonstar"><code>@​seanmonstar</code></a>
+  in <a
+  href="https://redirect.github.com/hyperium/hyper/pull/4267">hyperium/hyper#4267</a></li>
+  <li>fix(http2): strip headers named in every Connection header by <a
+  href="https://github.com/patrick-immometrica"><code>@​patrick-immometrica</code></a>
+  in <a
+  href="https://redirect.github.com/hyperium/hyper/pull/4271">hyperium/hyper#4271</a></li>
+  <li>perf(http1): read chunk framing bytes without split_to by <a
+  href="https://github.com/patrick-immometrica"><code>@​patrick-immometrica</code></a>
+  in <a
+  href="https://redirect.github.com/hyperium/hyper/pull/4272">hyperium/hyper#4272</a></li>
+  <li>fix(http1): error when final body chunk is shorter than
+  content-length by <a
+  href="https://github.com/patrick-immometrica"><code>@​patrick-immometrica</code></a>
+  in <a
+  href="https://redirect.github.com/hyperium/hyper/pull/4270">hyperium/hyper#4270</a></li>
+  <li>fix(client): fail parked h2 request with connection error on close
+  by <a href="https://github.com/bunnysayzz"><code>@​bunnysayzz</code></a>
+  in <a
+  href="https://redirect.github.com/hyperium/hyper/pull/4275">hyperium/hyper#4275</a></li>
+  <li>fix(http1): avoid adding close to switching protocols responses by
+  <a href="https://github.com/akasakariko"><code>@​akasakariko</code></a>
+  in <a
+  href="https://redirect.github.com/hyperium/hyper/pull/4248">hyperium/hyper#4248</a></li>
+  <li>fix(http1): grant dispatch readiness once per request by <a
+  href="https://github.com/akasakariko"><code>@​akasakariko</code></a> in
+  <a
+  href="https://redirect.github.com/hyperium/hyper/pull/4247">hyperium/hyper#4247</a></li>
+  <li>fix(http2): fix race, drain client dispatch reciever by <a
+  href="https://github.com/mingley"><code>@​mingley</code></a> in <a
+  href="https://redirect.github.com/hyperium/hyper/pull/4242">hyperium/hyper#4242</a></li>
+  <li>test(http2): test for http2 connection shutdown race of pending reqs
+  by <a
+  href="https://github.com/seanmonstar"><code>@​seanmonstar</code></a> in
+  <a
+  href="https://redirect.github.com/hyperium/hyper/pull/4276">hyperium/hyper#4276</a></li>
+  <li>fix(http2): report zero body size for HEAD responses by <a
+  href="https://github.com/shuvroroy"><code>@​shuvroroy</code></a> in <a
+  href="https://redirect.github.com/hyperium/hyper/pull/4237">hyperium/hyper#4237</a></li>
+  <li>fix(http1): preserve streaming bodies when coercing HTTP/2 requests
+  by <a href="https://github.com/shuvroroy"><code>@​shuvroroy</code></a>
+  in <a
+  href="https://redirect.github.com/hyperium/hyper/pull/4236">hyperium/hyper#4236</a></li>
+  <li>refactor(http1): reject bare LF in trailers by <a
+  href="https://github.com/seanmonstar"><code>@​seanmonstar</code></a> in
+  <a
+  href="https://redirect.github.com/hyperium/hyper/pull/4282">hyperium/hyper#4282</a></li>
+  <li>style(body,proto): enforce clippy::rest_pattern_accessible_field by
+  <a href="https://github.com/cratelyn"><code>@​cratelyn</code></a> in <a
+  href="https://redirect.github.com/hyperium/hyper/pull/4230">hyperium/hyper#4230</a></li>
+  <li>chore(examples): update pretty-env-logger by <a
+  href="https://github.com/seanmonstar"><code>@​seanmonstar</code></a> in
+  <a
+  href="https://redirect.github.com/hyperium/hyper/pull/4283">hyperium/hyper#4283</a></li>
+  <li>Prepare v1.13.0 by <a
+  href="https://github.com/seanmonstar"><code>@​seanmonstar</code></a> in
+  <a
+  href="https://redirect.github.com/hyperium/hyper/pull/4284">hyperium/hyper#4284</a></li>
+  </ul>
+  <h2>New Contributors</h2>
+  <!-- raw HTML omitted -->
+  </blockquote>
+  <p>... (truncated)</p>
+  </details>
+  <details>
+  <summary>Changelog</summary>
+  <p><em>Sourced from <a
+  href="https://github.com/hyperium/hyper/blob/master/CHANGELOG.md">hyper's
+  changelog</a>.</em></p>
+  <blockquote>
+  <h2>v1.13.0 (2026-11-23)</h2>
+  <h4>Bug Fixes</h4>
+  <ul>
+  <li><strong>client:</strong> fail parked h2 request with connection
+  error on close (<a
+  href="https://redirect.github.com/hyperium/hyper/issues/4275">#4275</a>)
+  (<a
+  href="https://github.com/hyperium/hyper/commit/dea9acb5344e0e34bb9196f5493464db68edd24a">dea9acb5</a>,
+  closes <a
+  href="https://redirect.github.com/hyperium/hyper/issues/4269">#4269</a>)</li>
+  <li><strong>http1:</strong>
+  <ul>
+  <li>preserve streaming bodies when coercing HTTP/2 requests (<a
+  href="https://redirect.github.com/hyperium/hyper/issues/4236">#4236</a>)
+  (<a
+  href="https://github.com/hyperium/hyper/commit/21da6a59db9a90631302e7b173c106b723b9065f">21da6a59</a>)</li>
+  <li>prevent <code>SendRequest</code> from reporting ready while a
+  request is pending (<a
+  href="https://redirect.github.com/hyperium/hyper/issues/4247">#4247</a>)
+  (<a
+  href="https://github.com/hyperium/hyper/commit/47c725c459ede66e68ad705f7da9a901abbbdc17">47c725c4</a>,
+  closes <a
+  href="https://redirect.github.com/hyperium/hyper/issues/4246">#4246</a>)</li>
+  <li>avoid adding connection-close to 101 responses (<a
+  href="https://redirect.github.com/hyperium/hyper/issues/4248">#4248</a>)
+  (<a
+  href="https://github.com/hyperium/hyper/commit/ac3f9501de373388fb9914e285134cfec2283bd8">ac3f9501</a>,
+  closes <a
+  href="https://redirect.github.com/hyperium/hyper/issues/4244">#4244</a>)</li>
+  <li>error when final body chunk is shorter than content-length (<a
+  href="https://redirect.github.com/hyperium/hyper/issues/4270">#4270</a>)
+  (<a
+  href="https://github.com/hyperium/hyper/commit/750620646ba0777daa45be3d82bd1704dcf470b8">75062064</a>)</li>
+  <li>drop Content-Length when a response also has Transfer-Encoding (<a
+  href="https://redirect.github.com/hyperium/hyper/issues/4264">#4264</a>)
+  (<a
+  href="https://github.com/hyperium/hyper/commit/378f8479b8b703d098b46de1cec9ea648f12ea69">378f8479</a>,
+  closes <a
+  href="https://redirect.github.com/hyperium/hyper/issues/4263">#4263</a>)</li>
+  <li>drain in-flight requests before dispatcher shutdown (<a
+  href="https://redirect.github.com/hyperium/hyper/issues/4222">#4222</a>)
+  (<a
+  href="https://github.com/hyperium/hyper/commit/97fff93e53f9e6a993f2d6a25d50883b7b8752a7">97fff93e</a>,
+  closes <a
+  href="https://redirect.github.com/hyperium/hyper/issues/4202">#4202</a>)</li>
+  </ul>
+  </li>
+  <li><strong>http2:</strong>
+  <ul>
+  <li>report zero body size hint for HEAD responses (<a
+  href="https://redirect.github.com/hyperium/hyper/issues/4237">#4237</a>)
+  (<a
+  href="https://github.com/hyperium/hyper/commit/4e1c0fbb9db68936c952c481321d96f536568283">4e1c0fbb</a>)</li>
+  <li>prevent requests from hanging during concurrent connection shutdown
+  race (<a
+  href="https://redirect.github.com/hyperium/hyper/issues/4242">#4242</a>)
+  (<a
+  href="https://github.com/hyperium/hyper/commit/5634b91d607ba1b781699765b22f16fd6ec1c8b7">5634b91d</a>)</li>
+  <li>strip all headers named in every Connection header (<a
+  href="https://redirect.github.com/hyperium/hyper/issues/4271">#4271</a>)
+  (<a
+  href="https://github.com/hyperium/hyper/commit/a44e32a7f85a1f98e34307ae17985c0bc1349a03">a44e32a7</a>)</li>
+  <li>keep connection open after rejecting CONNECT (<a
+  href="https://redirect.github.com/hyperium/hyper/issues/4235">#4235</a>)
+  (<a
+  href="https://github.com/hyperium/hyper/commit/88520c3eaea391f8ba49591a84f8439998b76191">88520c3e</a>)</li>
+  </ul>
+  </li>
+  </ul>
+  <h4>Features</h4>
+  <ul>
+  <li><strong>http2:</strong> add an executor getter for server and client
+  (<a
+  href="https://redirect.github.com/hyperium/hyper/issues/4250">#4250</a>)
+  (<a
+  href="https://github.com/hyperium/hyper/commit/b638fc0de351987f3eaffa2bdabd393c8679a9e8">b638fc0d</a>)</li>
+  </ul>
+  </blockquote>
+  </details>
+  <details>
+  <summary>Commits</summary>
+  <ul>
+  <li><a
+  href="https://github.com/hyperium/hyper/commit/55247767429fb29753f724b467869aa6203db532"><code>5524776</code></a>
+  v1.13.0</li>
+  <li><a
+  href="https://github.com/hyperium/hyper/commit/abf6cdc549e577a194a518bc7caa093e7a3633d2"><code>abf6cdc</code></a>
+  chore(examples): update pretty-env-logger (<a
+  href="https://redirect.github.com/hyperium/hyper/issues/4283">#4283</a>)</li>
+  <li><a
+  href="https://github.com/hyperium/hyper/commit/b28916668d438f6600b75aed848e62ed252003e4"><code>b289166</code></a>
+  style(body,proto): enforce clippy::rest_pattern_accessible_field (<a
+  href="https://redirect.github.com/hyperium/hyper/issues/4230">#4230</a>)</li>
+  <li><a
+  href="https://github.com/hyperium/hyper/commit/32e7d3fc18682441b34964b94372da3fff91851f"><code>32e7d3f</code></a>
+  refactor(http1): reject bare LF in trailers (<a
+  href="https://redirect.github.com/hyperium/hyper/issues/4282">#4282</a>)</li>
+  <li><a
+  href="https://github.com/hyperium/hyper/commit/21da6a59db9a90631302e7b173c106b723b9065f"><code>21da6a5</code></a>
+  fix(http1): preserve streaming bodies when coercing HTTP/2 requests (<a
+  href="https://redirect.github.com/hyperium/hyper/issues/4236">#4236</a>)</li>
+  <li><a
+  href="https://github.com/hyperium/hyper/commit/4e1c0fbb9db68936c952c481321d96f536568283"><code>4e1c0fb</code></a>
+  fix(http2): report zero body size hint for HEAD responses (<a
+  href="https://redirect.github.com/hyperium/hyper/issues/4237">#4237</a>)</li>
+  <li><a
+  href="https://github.com/hyperium/hyper/commit/6b7673f9f04f8938fef1158cf87d78c6bfeabafe"><code>6b7673f</code></a>
+  test(http2): test for http2 connection shutdown race of pending reqs (<a
+  href="https://redirect.github.com/hyperium/hyper/issues/4276">#4276</a>)</li>
+  <li><a
+  href="https://github.com/hyperium/hyper/commit/5634b91d607ba1b781699765b22f16fd6ec1c8b7"><code>5634b91</code></a>
+  fix(http2): prevent requests from hanging during concurrent connection
+  shutdo...</li>
+  <li><a
+  href="https://github.com/hyperium/hyper/commit/47c725c459ede66e68ad705f7da9a901abbbdc17"><code>47c725c</code></a>
+  fix(http1): prevent <code>SendRequest</code> from reporting ready while
+  a request is pen...</li>
+  <li><a
+  href="https://github.com/hyperium/hyper/commit/ac3f9501de373388fb9914e285134cfec2283bd8"><code>ac3f950</code></a>
+  fix(http1): avoid adding connection-close to 101 responses (<a
+  href="https://redirect.github.com/hyperium/hyper/issues/4248">#4248</a>)</li>
+  <li>Additional commits viewable in <a
+  href="https://github.com/hyperium/hyper/compare/v1.12.0...v1.13.0">compare
+  view</a></li>
+  </ul>
+  </details>
+  <br />
+
+  Updates `bytes` from 1.12.1 to 1.12.2
+  <details>
+  <summary>Release notes</summary>
+  <p><em>Sourced from <a
+  href="https://github.com/tokio-rs/bytes/releases">bytes's
+  releases</a>.</em></p>
+  <blockquote>
+  <h2>Bytes v1.12.2</h2>
+  <h1>1.12.2 (November 17th, 2026)</h1>
+  <h3>Fixed</h3>
+  <ul>
+  <li>Fix sign extension in <code>try_get_int</code> and
+  <code>try_get_int_le</code> (<a
+  href="https://redirect.github.com/tokio-rs/bytes/issues/839">#839</a>)</li>
+  <li>Release shared reference when truncating <code>Bytes</code> to zero
+  length (<a
+  href="https://redirect.github.com/tokio-rs/bytes/issues/842">#842</a>)</li>
+  <li>Preserve buffer order in <code>Chain::chunks_vectored</code> (<a
+  href="https://redirect.github.com/tokio-rs/bytes/issues/872">#872</a>)</li>
+  </ul>
+  <h3>Changed</h3>
+  <ul>
+  <li>Inline <code>BytesMut::put_slice</code> (<a
+  href="https://redirect.github.com/tokio-rs/bytes/issues/860">#860</a>)</li>
+  <li>Optimize <code>BytesMut::put</code> cold reuse path (<a
+  href="https://redirect.github.com/tokio-rs/bytes/issues/866">#866</a>)</li>
+  <li>Only reserve in <code>BytesMut::put</code> if the source isn't
+  contiguous (<a
+  href="https://redirect.github.com/tokio-rs/bytes/issues/867">#867</a>)</li>
+  <li>Specialize <code>BytesMut::extend&lt;u8&gt;</code> when it is
+  <code>Vec</code>-backed (<a
+  href="https://redirect.github.com/tokio-rs/bytes/issues/829">#829</a>)</li>
+  <li>Inline <code>BytesMut</code>'s specialized <code>BufMut</code>
+  methods and add <code>put_u8</code> fast paths (<a
+  href="https://redirect.github.com/tokio-rs/bytes/issues/850">#850</a>)</li>
+  <li>Improve performance of <code>Writer::write_all</code> and
+  <code>BytesMut::put_bytes</code> (<a
+  href="https://redirect.github.com/tokio-rs/bytes/issues/871">#871</a>)</li>
+  <li>Assert <code>nbytes &lt;= 8</code> in <code>sign_extend</code> (<a
+  href="https://redirect.github.com/tokio-rs/bytes/issues/862">#862</a>)</li>
+  <li>Simplify shared alignment assertions (<a
+  href="https://redirect.github.com/tokio-rs/bytes/issues/841">#841</a>)</li>
+  <li>Raise minimum <code>serde</code> version to 1.0.70 (<a
+  href="https://redirect.github.com/tokio-rs/bytes/issues/863">#863</a>)</li>
+  </ul>
+  <h3>Documented</h3>
+  <ul>
+  <li>Correct the Panics section of <code>Bytes::slice_ref</code> (<a
+  href="https://redirect.github.com/tokio-rs/bytes/issues/873">#873</a>)</li>
+  </ul>
+  </blockquote>
+  </details>
+  <details>
+  <summary>Changelog</summary>
+  <p><em>Sourced from <a
+  href="https://github.com/tokio-rs/bytes/blob/master/CHANGELOG.md">bytes's
+  changelog</a>.</em></p>
+  <blockquote>
+  <h1>1.12.2 (November 17th, 2026)</h1>
+  <h3>Fixed</h3>
+  <ul>
+  <li>Fix sign extension in <code>try_get_int</code> and
+  <code>try_get_int_le</code> (<a
+  href="https://redirect.github.com/tokio-rs/bytes/issues/839">#839</a>)</li>
+  <li>Release shared reference when truncating <code>Bytes</code> to zero
+  length (<a
+  href="https://redirect.github.com/tokio-rs/bytes/issues/842">#842</a>)</li>
+  <li>Preserve buffer order in <code>Chain::chunks_vectored</code> (<a
+  href="https://redirect.github.com/tokio-rs/bytes/issues/872">#872</a>)</li>
+  </ul>
+  <h3>Changed</h3>
+  <ul>
+  <li>Inline <code>BytesMut::put_slice</code> (<a
+  href="https://redirect.github.com/tokio-rs/bytes/issues/860">#860</a>)</li>
+  <li>Optimize <code>BytesMut::put</code> cold reuse path (<a
+  href="https://redirect.github.com/tokio-rs/bytes/issues/866">#866</a>)</li>
+  <li>Only reserve in <code>BytesMut::put</code> if the source isn't
+  contiguous (<a
+  href="https://redirect.github.com/tokio-rs/bytes/issues/867">#867</a>)</li>
+  <li>Specialize <code>BytesMut::extend&lt;u8&gt;</code> when it is
+  <code>Vec</code>-backed (<a
+  href="https://redirect.github.com/tokio-rs/bytes/issues/829">#829</a>)</li>
+  <li>Inline <code>BytesMut</code>'s specialized <code>BufMut</code>
+  methods and add <code>put_u8</code> fast paths (<a
+  href="https://redirect.github.com/tokio-rs/bytes/issues/850">#850</a>)</li>
+  <li>Improve performance of <code>Writer::write_all</code> and
+  <code>BytesMut::put_bytes</code> (<a
+  href="https://redirect.github.com/tokio-rs/bytes/issues/871">#871</a>)</li>
+  <li>Assert <code>nbytes &lt;= 8</code> in <code>sign_extend</code> (<a
+  href="https://redirect.github.com/tokio-rs/bytes/issues/862">#862</a>)</li>
+  <li>Simplify shared alignment assertions (<a
+  href="https://redirect.github.com/tokio-rs/bytes/issues/841">#841</a>)</li>
+  <li>Raise minimum <code>serde</code> version to 1.0.70 (<a
+  href="https://redirect.github.com/tokio-rs/bytes/issues/863">#863</a>)</li>
+  </ul>
+  <h3>Documented</h3>
+  <ul>
+  <li>Correct the Panics section of <code>Bytes::slice_ref</code> (<a
+  href="https://redirect.github.com/tokio-rs/bytes/issues/873">#873</a>)</li>
+  </ul>
+  </blockquote>
+  </details>
+  <details>
+  <summary>Commits</summary>
+  <ul>
+  <li><a
+  href="https://github.com/tokio-rs/bytes/commit/67edc2b999d669eb4f471aff576e213dbcb58871"><code>67edc2b</code></a>
+  Release bytes v1.12.2 (<a
+  href="https://redirect.github.com/tokio-rs/bytes/issues/875">#875</a>)</li>
+  <li><a
+  href="https://github.com/tokio-rs/bytes/commit/4ddf0fc968f9a4f5a7a74ae2e3cf21491e8c13a7"><code>4ddf0fc</code></a>
+  Improve perfromance in some hotspots (updated) (<a
+  href="https://redirect.github.com/tokio-rs/bytes/issues/871">#871</a>)</li>
+  <li><a
+  href="https://github.com/tokio-rs/bytes/commit/847ea1b51a48da779fd4ce3d79583764243e5fc4"><code>847ea1b</code></a>
+  Preserve buffer order in Chain::chunks_vectored (updated) (<a
+  href="https://redirect.github.com/tokio-rs/bytes/issues/872">#872</a>)</li>
+  <li><a
+  href="https://github.com/tokio-rs/bytes/commit/ba7d140b4b1b5cd8122951de180070901d1ee2aa"><code>ba7d140</code></a>
+  docs: correct the Panics section on Bytes::slice_ref (<a
+  href="https://redirect.github.com/tokio-rs/bytes/issues/873">#873</a>)</li>
+  <li><a
+  href="https://github.com/tokio-rs/bytes/commit/f2cf483f13c9956a0f24ce2b7527f2318b0c8a2c"><code>f2cf483</code></a>
+  Assert nbytes &lt;= 8 in sign_extend (<a
+  href="https://redirect.github.com/tokio-rs/bytes/issues/832">#832</a>)
+  (<a
+  href="https://redirect.github.com/tokio-rs/bytes/issues/862">#862</a>)</li>
+  <li><a
+  href="https://github.com/tokio-rs/bytes/commit/b3562366c9598bfc1e5cf9ea6655acfcdd890ff7"><code>b356236</code></a>
+  Inline <code>BytesMut</code>'s specialized <code>BufMut</code> methods
+  and add <code>put_u8</code> fast paths ...</li>
+  <li><a
+  href="https://github.com/tokio-rs/bytes/commit/07f09985e9ebdda4a57b2cd5ce2281d4e503dcae"><code>07f0998</code></a>
+  test: cover excluded start bound in Bytes::slice (<a
+  href="https://redirect.github.com/tokio-rs/bytes/issues/864">#864</a>)</li>
+  <li><a
+  href="https://github.com/tokio-rs/bytes/commit/e0cdab7e085592d238730bcab01c943043d71600"><code>e0cdab7</code></a>
+  Specialize <code>BytesMut::extend\&lt;u8&gt;</code> when its Vec-backed
+  (<a
+  href="https://redirect.github.com/tokio-rs/bytes/issues/829">#829</a>)</li>
+  <li><a
+  href="https://github.com/tokio-rs/bytes/commit/78a325347d7e8377d60313f3b09a55715543fbb0"><code>78a3253</code></a>
+  Only call reserve if the src isn't contiguous (<a
+  href="https://redirect.github.com/tokio-rs/bytes/issues/867">#867</a>)</li>
+  <li><a
+  href="https://github.com/tokio-rs/bytes/commit/67791d982d9e271fb60d8dd27a18609a712ff8a0"><code>67791d9</code></a>
+  ci: update nightly to nightly-2026-11-08 (<a
+  href="https://redirect.github.com/tokio-rs/bytes/issues/869">#869</a>)</li>
+  <li>Additional commits viewable in <a
+  href="https://github.com/tokio-rs/bytes/compare/v1.12.1...v1.12.2">compare
+  view</a></li>
+  </ul>
+  </details>
+  <br />
+
+  Updates `toml` from 1.1.8+spec-1.1.0 to 1.2.2+spec-1.1.0
+  <details>
+  <summary>Commits</summary>
+  <ul>
+  <li><a
+  href="https://github.com/toml-rs/toml/commit/9270d2e74b9530b039977d292aecec77dc81e3c9"><code>9270d2e</code></a>
+  chore: Release</li>
+  <li><a
+  href="https://github.com/toml-rs/toml/commit/5d27901f021ba97ac69ebe94f12bfa8e65e89a87"><code>5d27901</code></a>
+  docs: Update changelog</li>
+  <li><a
+  href="https://github.com/toml-rs/toml/commit/20b0c03bc1f3544ed42590b70e3192d4f746d890"><code>20b0c03</code></a>
+  fix(parser): Handle a stack overflow on invalid TOML files (<a
+  href="https://redirect.github.com/toml-rs/toml/issues/1265">#1265</a>)</li>
+  <li><a
+  href="https://github.com/toml-rs/toml/commit/d0f72c331ffba3d76845d94ec4ae614a063f7ded"><code>d0f72c3</code></a>
+  fix(parser): Emit errors for closing delimiters of unexpected
+  containers</li>
+  <li><a
+  href="https://github.com/toml-rs/toml/commit/afac8e5a4821c60719a5e8d9279a975fc4c0b8d7"><code>afac8e5</code></a>
+  refactor(parser): Move close events to recovery callers</li>
+  <li><a
+  href="https://github.com/toml-rs/toml/commit/be5f194782c9c011c136a75d74542e13cf7bef06"><code>be5f194</code></a>
+  test(parser): Cover RecursionGuard</li>
+  <li><a
+  href="https://github.com/toml-rs/toml/commit/02d4d8d00d8786aedb019f9ed71e855e262b0536"><code>02d4d8d</code></a>
+  chore(deps): Update Rust Stable to v1.100 (<a
+  href="https://redirect.github.com/toml-rs/toml/issues/1263">#1263</a>)</li>
+  <li><a
+  href="https://github.com/toml-rs/toml/commit/563cb1a5d133e39d1008d4d4148ef35d3bba379f"><code>563cb1a</code></a>
+  chore: Release</li>
+  <li><a
+  href="https://github.com/toml-rs/toml/commit/4ad20a6a5a14643dc5e122e574e725fdb69761ee"><code>4ad20a6</code></a>
+  docs: Update changelog</li>
+  <li><a
+  href="https://github.com/toml-rs/toml/commit/f09854ac2891c329ed357473fb0cb048914d4b95"><code>f09854a</code></a>
+  perf(serde): Report size hints (<a
+  href="https://redirect.github.com/toml-rs/toml/issues/1262">#1262</a>)</li>
+  <li>Additional commits viewable in <a
+  href="https://github.com/toml-rs/toml/compare/toml-v1.1.8...toml-v1.2.2">compare
+  view</a></li>
+  </ul>
+  </details>
+  <br />
+
+  Updates `flate2` from 1.1.10 to 1.1.11
+  <details>
+  <summary>Release notes</summary>
+  <p><em>Sourced from <a
+  href="https://github.com/rust-lang/flate2-rs/releases">flate2's
+  releases</a>.</em></p>
+  <blockquote>
+  <h2>v1.1.11</h2>
+  <h3>Fixed</h3>
+  <ul>
+  <li>fixup! Complete sync flushes across output buffer boundaries (<a
+  href="https://redirect.github.com/rust-lang/flate2-rs/pull/581">#581</a>)</li>
+  <li>Separate gzip header reads from compressed data</li>
+  <li>Defer gzip input errors without losing read progress</li>
+  <li>Preserve gzip header progress on input read errors (<a
+  href="https://redirect.github.com/rust-lang/flate2-rs/pull/571">#571</a>)</li>
+  </ul>
+  <h3>Other</h3>
+  <ul>
+  <li>Merge pull request <a
+  href="https://redirect.github.com/rust-lang/flate2-rs/issues/582">#582</a>
+  from rust-lang/fix-lacking-buffer-drain</li>
+  <li>Merge pull request <a
+  href="https://redirect.github.com/rust-lang/flate2-rs/issues/574">#574</a>
+  from Sharadhi-v98/decompress-reset-window-bits</li>
+  <li>Merge pull request <a
+  href="https://redirect.github.com/rust-lang/flate2-rs/issues/577">#577</a>
+  from rust-lang/fix-loop</li>
+  <li>Setup trusted publishing for the flate2 crate</li>
+  <li>Complete sync flushes across output buffer boundaries (<a
+  href="https://redirect.github.com/rust-lang/flate2-rs/pull/581">#581</a>)</li>
+  <li>Fix &quot;can by extended&quot; typos in deflate and zlib write
+  docs</li>
+  <li>Merge pull request <a
+  href="https://redirect.github.com/rust-lang/flate2-rs/issues/579">#579</a>
+  from NUAAwqy/docs/fix-double-space</li>
+  <li>Fix double space in <code>read</code> module doc comment</li>
+  <li>Add missing preposition in README description</li>
+  <li>Cover decoder retries across the output buffer boundary</li>
+  <li>Drain output before refilling the buffer</li>
+  <li>Clarify partial-write buffering behavior</li>
+  <li>Avoid shifting buffered output on partial writes</li>
+  <li>Merge pull request <a
+  href="https://redirect.github.com/rust-lang/flate2-rs/issues/567">#567</a>
+  from ndossche/more-asserts</li>
+  <li>Merge pull request <a
+  href="https://redirect.github.com/rust-lang/flate2-rs/issues/566">#566</a>
+  from HDauven/reject-incomplete-write-decoder-streams</li>
+  <li>Fix encoder writes hanging after try_finish (<a
+  href="https://redirect.github.com/rust-lang/flate2-rs/pull/576">#576</a>)</li>
+  <li>Avoid panicking when dropping unfinished compressors</li>
+  <li>Merge pull request <a
+  href="https://redirect.github.com/rust-lang/flate2-rs/issues/565">#565</a>
+  from HDauven/zlib-rs-uninit-output</li>
+  <li>still allow resetting incomplete write decoders</li>
+  <li>Assert return result of reset calls</li>
+  <li>Reject incomplete streams in write decoders</li>
+  <li>Merge pull request <a
+  href="https://redirect.github.com/rust-lang/flate2-rs/issues/573">#573</a>
+  from NUAAwqy/taiyi/fix-gzip-read-error-header</li>
+  <li>review</li>
+  <li>Reject incomplete streams when finishing write-side decoders</li>
+  <li>Preserve window size and gzip mode across Decompress::reset</li>
+  <li>preserve runtime detection in backend examples (<a
+  href="https://redirect.github.com/rust-lang/flate2-rs/pull/570">#570</a>)</li>
+  <li>Make miniz_oxide dictionary clearing explicit on reset</li>
+  <li>Harden miniz_oxide decompressor reset</li>
+  <li>Deduplicate zlib-rs flush conversions</li>
+  <li>Use native zlib-rs uninitialized output</li>
+  </ul>
+  </blockquote>
+  </details>
+  <details>
+  <summary>Changelog</summary>
+  <p><em>Sourced from <a
+  href="https://github.com/rust-lang/flate2-rs/blob/main/CHANGELOG.md">flate2's
+  changelog</a>.</em></p>
+  <blockquote>
+  <h2><a
+  href="https://github.com/rust-lang/flate2-rs/compare/v1.1.10...v1.1.11">1.1.11</a>
+  - 2026-11-06</h2>
+  <h3>Fixed</h3>
+  <ul>
+  <li>fixup! Complete sync flushes across output buffer boundaries (<a
+  href="https://redirect.github.com/rust-lang/flate2-rs/pull/581">#581</a>)</li>
+  <li>Separate gzip header reads from compressed data</li>
+  <li>Defer gzip input errors without losing read progress</li>
+  <li>Preserve gzip header progress on input read errors (<a
+  href="https://redirect.github.com/rust-lang/flate2-rs/pull/571">#571</a>)</li>
+  </ul>
+  <h3>Other</h3>
+  <ul>
+  <li>Merge pull request <a
+  href="https://redirect.github.com/rust-lang/flate2-rs/issues/582">#582</a>
+  from rust-lang/fix-lacking-buffer-drain</li>
+  <li>Merge pull request <a
+  href="https://redirect.github.com/rust-lang/flate2-rs/issues/574">#574</a>
+  from Sharadhi-v98/decompress-reset-window-bits</li>
+  <li>Merge pull request <a
+  href="https://redirect.github.com/rust-lang/flate2-rs/issues/577">#577</a>
+  from rust-lang/fix-loop</li>
+  <li>Setup trusted publishing for the flate2 crate</li>
+  <li>Complete sync flushes across output buffer boundaries (<a
+  href="https://redirect.github.com/rust-lang/flate2-rs/pull/581">#581</a>)</li>
+  <li>Fix &quot;can by extended&quot; typos in deflate and zlib write
+  docs</li>
+  <li>Merge pull request <a
+  href="https://redirect.github.com/rust-lang/flate2-rs/issues/579">#579</a>
+  from NUAAwqy/docs/fix-double-space</li>
+  <li>Fix double space in <code>read</code> module doc comment</li>
+  <li>Add missing preposition in README description</li>
+  <li>Cover decoder retries across the output buffer boundary</li>
+  <li>Drain output before refilling the buffer</li>
+  <li>Clarify partial-write buffering behavior</li>
+  <li>Avoid shifting buffered output on partial writes</li>
+  <li>Merge pull request <a
+  href="https://redirect.github.com/rust-lang/flate2-rs/issues/567">#567</a>
+  from ndossche/more-asserts</li>
+  <li>Merge pull request <a
+  href="https://redirect.github.com/rust-lang/flate2-rs/issues/566">#566</a>
+  from HDauven/reject-incomplete-write-decoder-streams</li>
+  <li>Fix encoder writes hanging after try_finish (<a
+  href="https://redirect.github.com/rust-lang/flate2-rs/pull/576">#576</a>)</li>
+  <li>Avoid panicking when dropping unfinished compressors</li>
+  <li>Merge pull request <a
+  href="https://redirect.github.com/rust-lang/flate2-rs/issues/565">#565</a>
+  from HDauven/zlib-rs-uninit-output</li>
+  <li>still allow resetting incomplete write decoders</li>
+  <li>Assert return result of reset calls</li>
+  <li>Reject incomplete streams in write decoders</li>
+  <li>Merge pull request <a
+  href="https://redirect.github.com/rust-lang/flate2-rs/issues/573">#573</a>
+  from NUAAwqy/taiyi/fix-gzip-read-error-header</li>
+  <li>review</li>
+  <li>Reject incomplete streams when finishing write-side decoders</li>
+  <li>Preserve window size and gzip mode across Decompress::reset</li>
+  <li>preserve runtime detection in backend examples (<a
+  href="https://redirect.github.com/rust-lang/flate2-rs/pull/570">#570</a>)</li>
+  <li>Make miniz_oxide dictionary clearing explicit on reset</li>
+  <li>Harden miniz_oxide decompressor reset</li>
+  <li>Deduplicate zlib-rs flush conversions</li>
+  <li>Use native zlib-rs uninitialized output</li>
+  </ul>
+  </blockquote>
+  </details>
+  <details>
+  <summary>Commits</summary>
+  <ul>
+  <li><a
+  href="https://github.com/rust-lang/flate2-rs/commit/cd06529164c5447958f309e649ffe6c9d6329865"><code>cd06529</code></a>
+  chore: release v1.1.11</li>
+  <li><a
+  href="https://github.com/rust-lang/flate2-rs/commit/6ff40985e5623187abd999105e3a3283cc9660d9"><code>6ff4098</code></a>
+  Merge pull request <a
+  href="https://redirect.github.com/rust-lang/flate2-rs/issues/582">#582</a>
+  from rust-lang/fix-lacking-buffer-drain</li>
+  <li><a
+  href="https://github.com/rust-lang/flate2-rs/commit/5f689134a7dbd42833d4dc16d9e242aa5caf94e9"><code>5f68913</code></a>
+  Merge pull request <a
+  href="https://redirect.github.com/rust-lang/flate2-rs/issues/574">#574</a>
+  from Sharadhi-v98/decompress-reset-window-bits</li>
+  <li><a
+  href="https://github.com/rust-lang/flate2-rs/commit/5582d951c1f50ceca448ec540b62043fe4220d86"><code>5582d95</code></a>
+  fixup! Complete sync flushes across output buffer boundaries (<a
+  href="https://redirect.github.com/rust-lang/flate2-rs/issues/581">#581</a>)</li>
+  <li><a
+  href="https://github.com/rust-lang/flate2-rs/commit/d05c7c4af2879369e4cdc72827ee71216f868eb7"><code>d05c7c4</code></a>
+  Merge pull request <a
+  href="https://redirect.github.com/rust-lang/flate2-rs/issues/577">#577</a>
+  from rust-lang/fix-loop</li>
+  <li><a
+  href="https://github.com/rust-lang/flate2-rs/commit/5c7ee7a17b025a1fb4b94d4a929b71ab8f29a199"><code>5c7ee7a</code></a>
+  Merge pull request <a
+  href="https://redirect.github.com/rust-lang/flate2-rs/issues/583">#583</a>
+  from Kobzol/trusted-publishing</li>
+  <li><a
+  href="https://github.com/rust-lang/flate2-rs/commit/cc527c6b69c323e3073e2663307d5b810107c741"><code>cc527c6</code></a>
+  Setup trusted publishing for the flate2 crate</li>
+  <li><a
+  href="https://github.com/rust-lang/flate2-rs/commit/54f49cd9f4c36774f68cc6ab95edf62a3b6c506e"><code>54f49cd</code></a>
+  Merge pull request <a
+  href="https://redirect.github.com/rust-lang/flate2-rs/issues/580">#580</a>
+  from NUAAwqy/fix/can-by-extended-typo</li>
+  <li><a
+  href="https://github.com/rust-lang/flate2-rs/commit/491df15a631ae05859245175943d518d3b03c126"><code>491df15</code></a>
+  Complete sync flushes across output buffer boundaries (<a
+  href="https://redirect.github.com/rust-lang/flate2-rs/issues/581">#581</a>)</li>
+  <li><a
+  href="https://github.com/rust-lang/flate2-rs/commit/a7a1161296ef71297abd51bc14941826db750e05"><code>a7a1161</code></a>
+  Fix &quot;can by extended&quot; typos in deflate and zlib write
+  docs</li>
+  <li>Additional commits viewable in <a
+  href="https://github.com/rust-lang/flate2-rs/compare/1.1.10...v1.1.11">compare
+  view</a></li>
+  </ul>
+  </details>
+  <br />
+
+  Updates `clap_complete` from 4.6.11 to 4.6.12
+  <details>
+  <summary>Commits</summary>
+  <ul>
+  <li><a
+  href="https://github.com/clap-rs/clap/commit/db86ef6eccb2ed5ae16d3035982907692ecb10ef"><code>db86ef6</code></a>
+  chore: Release</li>
+  <li><a
+  href="https://github.com/clap-rs/clap/commit/416d0b0e606841d7d5f23d9bd92fd5a83562961f"><code>416d0b0</code></a>
+  docs: Update changelog</li>
+  <li><a
+  href="https://github.com/clap-rs/clap/commit/bebd2fdf6d3b826642e29d890695e370cfceb620"><code>bebd2fd</code></a>
+  Merge pull request <a
+  href="https://redirect.github.com/clap-rs/clap/issues/6569">#6569</a>
+  from kpreid/derive-stack-usage</li>
+  <li><a
+  href="https://github.com/clap-rs/clap/commit/552461024b3d668dedda4087f8b67102f3ac6b46"><code>5524610</code></a>
+  chore(deps): Update Rust Stable to v1.100 (<a
+  href="https://redirect.github.com/clap-rs/clap/issues/6572">#6572</a>)</li>
+  <li><a
+  href="https://github.com/clap-rs/clap/commit/61d7b6f190f4dbb05dbda1c4dd8b2c9487795148"><code>61d7b6f</code></a>
+  Merge pull request <a
+  href="https://redirect.github.com/clap-rs/clap/issues/6574">#6574</a>
+  from epage/lints</li>
+  <li><a
+  href="https://github.com/clap-rs/clap/commit/0a2145b2fd6e96f83e6366ebbc4462934572fd12"><code>0a2145b</code></a>
+  style: Make linters happy</li>
+  <li><a
+  href="https://github.com/clap-rs/clap/commit/12a654c77aa675efe05e7c330cb0b72d269aff31"><code>12a654c</code></a>
+  perf(derive): Reduce unoptimized stack usage</li>
+  <li><a
+  href="https://github.com/clap-rs/clap/commit/54605ceeee4d932f169546a708444062f2b7cf4b"><code>54605ce</code></a>
+  Merge pull request <a
+  href="https://redirect.github.com/clap-rs/clap/issues/6570">#6570</a>
+  from epage/ci</li>
+  <li><a
+  href="https://github.com/clap-rs/clap/commit/35fbd1ab3ffd62c5c5f9b9e36626fd94f238f453"><code>35fbd1a</code></a>
+  chore: Ugrade compatible</li>
+  <li><a
+  href="https://github.com/clap-rs/clap/commit/ec93e71255c0b833a34f50662a3fdb22f53f6ded"><code>ec93e71</code></a>
+  Merge pull request <a
+  href="https://redirect.github.com/clap-rs/clap/issues/6558">#6558</a>
+  from clap-rs/renovate/crate-ci-typos-1.x</li>
+  <li>Additional commits viewable in <a
+  href="https://github.com/clap-rs/clap/compare/clap_complete-v4.6.11...clap_complete-v4.6.12">compare
+  view</a></li>
+  </ul>
+  </details>
+  <br />
+
+  Updates `clap_mangen` from 0.3.3 to 0.3.4
+  <details>
+  <summary>Commits</summary>
+  <ul>
+  <li><a
+  href="https://github.com/clap-rs/clap/commit/db86ef6eccb2ed5ae16d3035982907692ecb10ef"><code>db86ef6</code></a>
+  chore: Release</li>
+  <li><a
+  href="https://github.com/clap-rs/clap/commit/416d0b0e606841d7d5f23d9bd92fd5a83562961f"><code>416d0b0</code></a>
+  docs: Update changelog</li>
+  <li><a
+  href="https://github.com/clap-rs/clap/commit/bebd2fdf6d3b826642e29d890695e370cfceb620"><code>bebd2fd</code></a>
+  Merge pull request <a
+  href="https://redirect.github.com/clap-rs/clap/issues/6569">#6569</a>
+  from kpreid/derive-stack-usage</li>
+  <li><a
+  href="https://github.com/clap-rs/clap/commit/552461024b3d668dedda4087f8b67102f3ac6b46"><code>5524610</code></a>
+  chore(deps): Update Rust Stable to v1.100 (<a
+  href="https://redirect.github.com/clap-rs/clap/issues/6572">#6572</a>)</li>
+  <li><a
+  href="https://github.com/clap-rs/clap/commit/61d7b6f190f4dbb05dbda1c4dd8b2c9487795148"><code>61d7b6f</code></a>
+  Merge pull request <a
+  href="https://redirect.github.com/clap-rs/clap/issues/6574">#6574</a>
+  from epage/lints</li>
+  <li><a
+  href="https://github.com/clap-rs/clap/commit/0a2145b2fd6e96f83e6366ebbc4462934572fd12"><code>0a2145b</code></a>
+  style: Make linters happy</li>
+  <li><a
+  href="https://github.com/clap-rs/clap/commit/12a654c77aa675efe05e7c330cb0b72d269aff31"><code>12a654c</code></a>
+  perf(derive): Reduce unoptimized stack usage</li>
+  <li><a
+  href="https://github.com/clap-rs/clap/commit/54605ceeee4d932f169546a708444062f2b7cf4b"><code>54605ce</code></a>
+  Merge pull request <a
+  href="https://redirect.github.com/clap-rs/clap/issues/6570">#6570</a>
+  from epage/ci</li>
+  <li><a
+  href="https://github.com/clap-rs/clap/commit/35fbd1ab3ffd62c5c5f9b9e36626fd94f238f453"><code>35fbd1a</code></a>
+  chore: Ugrade compatible</li>
+  <li><a
+  href="https://github.com/clap-rs/clap/commit/ec93e71255c0b833a34f50662a3fdb22f53f6ded"><code>ec93e71</code></a>
+  Merge pull request <a
+  href="https://redirect.github.com/clap-rs/clap/issues/6558">#6558</a>
+  from clap-rs/renovate/crate-ci-typos-1.x</li>
+  <li>Additional commits viewable in <a
+  href="https://github.com/clap-rs/clap/compare/clap_mangen-v0.3.3...clap_mangen-v0.3.4">compare
+  view</a></li>
+  </ul>
+  </details>
+  <br />
+
+
+
+### Other
+
+- bump cachix/install-nix-action from 31 to 32 in the github-actions group across 1 directory ([#248](https://github.com/omarmhaimdat/pepe/pull/248))
+
+  Bumps the github-actions group with 1 update in the / directory:
+  [cachix/install-nix-action](https://github.com/cachix/install-nix-action).
+
+  Updates `cachix/install-nix-action` from 31 to 32
+  <details>
+  <summary>Release notes</summary>
+  <p><em>Sourced from <a
+  href="https://github.com/cachix/install-nix-action/releases">cachix/install-nix-action's
+  releases</a>.</em></p>
+  <blockquote>
+  <h2>v32</h2>
+  <h2>Breaking changes</h2>
+  <ul>
+  <li>Drop support for <code>x86_64-darwin</code> (Intel Macs).
+  Nix no longer provides installers and binaries for this platform.
+  Older Nix releases (&lt; 2.36) can still be installed by setting
+  <code>install_url</code>, but this action no longer tests against the
+  platform.</li>
+  </ul>
+  <h2>What's Changed</h2>
+  <ul>
+  <li>nix: 2.35.6 -&gt; 2.36.0 by <a
+  href="https://github.com/github-actions"><code>@​github-actions</code></a>[bot]
+  in <a
+  href="https://redirect.github.com/cachix/install-nix-action/pull/288">cachix/install-nix-action#288</a>
+  Release notes: <a
+  href="https://discourse.nixos.org/t/nix-2-36-0-released/81345">https://discourse.nixos.org/t/nix-2-36-0-released/81345</a>
+  <a
+  href="https://github.com/NixOS/nix/compare/2.35.6...2.36.0">https://github.com/NixOS/nix/compare/2.35.6...2.36.0</a></li>
+  <li>feat: add <code>install_sha256</code> to allow validating the
+  installer's hash by <a
+  href="https://github.com/Fumesover"><code>@​Fumesover</code></a> in <a
+  href="https://redirect.github.com/cachix/install-nix-action/pull/287">cachix/install-nix-action#287</a>
+  The action can now verify the SHA-256 hash of the installer before it
+  runs it. This is already enabled for the default installer.
+  When using a custom <code>install_url</code>, set
+  <code>install_sha256</code> to the hash of that installer to have it
+  verified. This step is optional, but recommended.</li>
+  </ul>
+  <p><strong>Full Changelog</strong>: <a
+  href="https://github.com/cachix/install-nix-action/compare/v31...v32">https://github.com/cachix/install-nix-action/compare/v31...v32</a></p>
+  <h2>v31.11.5</h2>
+  <h2>What's Changed</h2>
+  <ul>
+  <li>nix: 2.35.5 -&gt; 2.35.6 by <a
+  href="https://github.com/github-actions"><code>@​github-actions</code></a>[bot]
+  in <a
+  href="https://redirect.github.com/cachix/install-nix-action/pull/286">cachix/install-nix-action#286</a>
+  <a
+  href="https://github.com/NixOS/nix/compare/2.35.5...2.35.6">https://github.com/NixOS/nix/compare/2.35.5...2.35.6</a></li>
+  </ul>
+  <p><strong>Full Changelog</strong>: <a
+  href="https://github.com/cachix/install-nix-action/compare/v31.11.4...v31.11.5">https://github.com/cachix/install-nix-action/compare/v31.11.4...v31.11.5</a></p>
+  <h2>v31.11.4</h2>
+  <h2>What's Changed</h2>
+  <ul>
+  <li>nix: 2.35.4 -&gt; 2.35.5 by <a
+  href="https://github.com/github-actions"><code>@​github-actions</code></a>[bot]
+  in <a
+  href="https://redirect.github.com/cachix/install-nix-action/pull/285">cachix/install-nix-action#285</a>
+  <a
+  href="https://github.com/NixOS/nix/compare/2.35.4...2.35.5">https://github.com/NixOS/nix/compare/2.35.4...2.35.5</a></li>
+  <li>fix: prevent <code>extra-experimental-flags</code> from overriding
+  the default <code>experimental-flags</code> <a
+  href="https://redirect.github.com/cachix/install-nix-action/issues/280">cachix/install-nix-action#280</a></li>
+  </ul>
+  <p><strong>Full Changelog</strong>: <a
+  href="https://github.com/cachix/install-nix-action/compare/31.11.3...v31.11.4">https://github.com/cachix/install-nix-action/compare/31.11.3...v31.11.4</a></p>
+  <h2>31.11.3</h2>
+  <p><em>This tag was incorrectly named. Prefer <a
+  href="https://github.com/cachix/install-nix-action/releases/tag/v31.11.3">v31.11.3</a>.</em></p>
+  <h2>What's Changed</h2>
+  <ul>
+  <li>nix: 2.35.3 -&gt; 2.35.4 by <a
+  href="https://github.com/xokdvium"><code>@​xokdvium</code></a> in <a
+  href="https://redirect.github.com/cachix/install-nix-action/pull/283">cachix/install-nix-action#283</a>
+  <strong>Security</strong>: Updates the bundled certificates shipped with
+  the installer to remove the compromised eMudhra certificates.</li>
+  </ul>
+  <p><strong>Full Changelog</strong>: <a
+  href="https://github.com/cachix/install-nix-action/compare/v31.11.2...31.11.3">https://github.com/cachix/install-nix-action/compare/v31.11.2...31.11.3</a></p>
+  <h2>v31.11.3</h2>
+  <h2>What's Changed</h2>
+  <ul>
+  <li>nix: 2.35.3 -&gt; 2.35.4 by <a
+  href="https://github.com/xokdvium"><code>@​xokdvium</code></a> in <a
+  href="https://redirect.github.com/cachix/install-nix-action/pull/283">cachix/install-nix-action#283</a>
+  <strong>Security</strong>: Updates the bundled certificates shipped with
+  the installer to remove the compromised eMudhra certificates.</li>
+  </ul>
+  <p><em>Re-release of <a
+  href="https://github.com/cachix/install-nix-action/releases/tag/31.11.3">31.11.3</a>,
+  which was tagged incorrectly.</em></p>
+  <p><strong>Full Changelog</strong>: <a
+  href="https://github.com/cachix/install-nix-action/compare/v31.11.2...v31.11.3">https://github.com/cachix/install-nix-action/compare/v31.11.2...v31.11.3</a></p>
+  <!-- raw HTML omitted -->
+  </blockquote>
+  <p>... (truncated)</p>
+  </details>
+  <details>
+  <summary>Changelog</summary>
+  <p><em>Sourced from <a
+  href="https://github.com/cachix/install-nix-action/blob/master/RELEASE.md">cachix/install-nix-action's
+  changelog</a>.</em></p>
+  <blockquote>
+  <h1>Release</h1>
+  <p>As of v31, releases of this action follow Semantic Versioning.</p>
+  <h3>Publishing a new release</h3>
+  <h4>Publish the release</h4>
+  <p>Draft <a
+  href="https://github.com/cachix/install-nix-action/releases">a new
+  release on GitHub</a>:</p>
+  <ul>
+  <li>In <code>Choose a tag</code>, create a new tag, like
+  <code>v32.0.0</code>, following semver.</li>
+  <li>Click <code>Generate release notes</code>.</li>
+  <li><code>Set as the latest release</code> should be selected
+  automatically.</li>
+  <li>Publish release</li>
+  </ul>
+  <h4>Update the major tag</h4>
+  <p>The major tag, like <code>v32</code>, allows downstream users to
+  opt-in to automatic non-breaking updates.</p>
+  <p>This process follows GitHub's own guidelines:
+  <a
+  href="https://github.com/actions/toolkit/blob/main/docs/action-versioning.md">https://github.com/actions/toolkit/blob/main/docs/action-versioning.md</a></p>
+  <h5>Fetch the latest tags</h5>
+  <pre><code>git pull --tags --force
+  </code></pre>
+  <h5>Move the tag</h5>
+  <pre><code>git tag -fa v32
+  </code></pre>
+  <pre><code>git push origin v32 --force
+  </code></pre>
+  <h4>Update the release notes for the major tag</h4>
+  <p>Find the release on GitHub: <a
+  href="https://github.com/cachix/install-nix-action/releases">https://github.com/cachix/install-nix-action/releases</a></p>
+  <p>Edit the release and click <code>Generate release notes</code>.
+  Edit the formatting and publish.</p>
+  </blockquote>
+  </details>
+  <details>
+  <summary>Commits</summary>
+  <ul>
+  <li><a
+  href="https://github.com/cachix/install-nix-action/commit/382a9ed9481c7c1f94f68b72ef105b3417c73877"><code>382a9ed</code></a>
+  refact: simplify the install_sha256 option handling</li>
+  <li><a
+  href="https://github.com/cachix/install-nix-action/commit/e19f2024ad696b1d492050eeccb646839d3f00c9"><code>e19f202</code></a>
+  docs: reword comments and docs</li>
+  <li><a
+  href="https://github.com/cachix/install-nix-action/commit/73a9ecf65956d9fd71e10717a92f7c6060cb9b04"><code>73a9ecf</code></a>
+  Merge pull request <a
+  href="https://redirect.github.com/cachix/install-nix-action/issues/287">#287</a>
+  from Fumesover/master</li>
+  <li><a
+  href="https://github.com/cachix/install-nix-action/commit/3affbe43c94284c01f1c04cd010dc56a5982b3e2"><code>3affbe4</code></a>
+  docs: recommend install_sha256 and explain what it does</li>
+  <li><a
+  href="https://github.com/cachix/install-nix-action/commit/a7bc07bff241dda491476cd64104318d61552869"><code>a7bc07b</code></a>
+  ci: test that a SHA-256 mismatch aborts the install</li>
+  <li><a
+  href="https://github.com/cachix/install-nix-action/commit/788d88a082f294f8a32334ef386308cd4458c784"><code>788d88a</code></a>
+  install-nix: rename install_hash to install_sha256</li>
+  <li><a
+  href="https://github.com/cachix/install-nix-action/commit/1616c9a22c95a0a54ff91c98d2642eb8c13df1f5"><code>1616c9a</code></a>
+  install-nix: make install_hash optional</li>
+  <li><a
+  href="https://github.com/cachix/install-nix-action/commit/f4c81564be6a9591afc5e4de78481282819419b2"><code>f4c8156</code></a>
+  install-nix: validate installer's hash</li>
+  <li><a
+  href="https://github.com/cachix/install-nix-action/commit/bb0495a1086c46893eee56f32fd192dfe4a15bb9"><code>bb0495a</code></a>
+  docs: bump v31 -&gt; v32</li>
+  <li><a
+  href="https://github.com/cachix/install-nix-action/commit/48ee3e5ae067ae2bb929cce004084bc74e1edfc7"><code>48ee3e5</code></a>
+  ci: bump pinned actions</li>
+  <li>Additional commits viewable in <a
+  href="https://github.com/cachix/install-nix-action/compare/v31...v32">compare
+  view</a></li>
+  </ul>
+  </details>
+  <br />
+
+
+- *(nix)* update flake.lock ([#244](https://github.com/omarmhaimdat/pepe/pull/244))
+
+  Automated changes by the
+  [update-flake-lock](https://github.com/DeterminateSystems/update-flake-lock)
+  GitHub Action.
+
+  ```
+  Flake lock file updates:
+
+  • Updated input 'nixpkgs':
+      'github:NixOS/nixpkgs/3ec636362e1816bc2f0888fa0fa2c69f1bc9e504?narHash=sha256-rZLrzrC6i%2BjnTAlvPZHogKDulY7WWDEv9hJeHieO7Zw%3D' (2026-10-23)
+    → 'github:NixOS/nixpkgs/2786a2a72088ecf32aea5b3ec52099e6a7cff78f?narHash=sha256-f/VVvxf5RsQgWVhUtefoca5ktVg0DA2bnkMOcmSnozo%3D' (2026-11-21)
+  ```
+
+  ### Running GitHub Actions on this PR
+
+  GitHub Actions will not run workflows on pull requests which are opened
+  by a GitHub Action.
+
+  **To run GitHub Actions workflows on this PR, close and re-open this
+  pull request.**
+
+
 ## [0.58.1](https://github.com/omarmhaimdat/pepe/compare/v0.58.0...v0.58.1) - 2026-11-27
 
 ### Fixed
