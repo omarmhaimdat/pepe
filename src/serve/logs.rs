@@ -780,6 +780,111 @@ pub fn link(addr: SocketAddr, token: &str) -> String {
     format!("http://{host}:{}/#token={token}", addr.port())
 }
 
+/// A way to the page: its link, and where it is reached from
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Way {
+    pub link: String,
+    /// "this machine", or the interface's name
+    pub from: String,
+}
+
+/// Every link that opens the page: listening on every interface
+/// (`0.0.0.0`, `[::]`), one an address this machine has, loopback first;
+/// else the one it listens on
+pub fn links(addr: SocketAddr, token: &str) -> Vec<Way> {
+    let way = |ip: std::net::IpAddr, from: &str| Way {
+        link: link(SocketAddr::new(ip, addr.port()), token),
+        from: from.to_string(),
+    };
+    if !addr.ip().is_unspecified() {
+        let from = if addr.ip().is_loopback() {
+            "this machine"
+        } else {
+            ""
+        };
+        return vec![way(addr.ip(), from)];
+    }
+    let v6 = addr.is_ipv6();
+    let loopback: std::net::IpAddr = if v6 {
+        std::net::Ipv6Addr::LOCALHOST.into()
+    } else {
+        std::net::Ipv4Addr::LOCALHOST.into()
+    };
+    let mut ways = vec![way(loopback, "this machine")];
+    for (name, ip) in interfaces() {
+        // A link-local v6 address needs its zone in the link, which a
+        // browser won't take
+        let reachable = match ip {
+            std::net::IpAddr::V4(ip) => !v6 && !ip.is_loopback() && !ip.is_link_local(),
+            std::net::IpAddr::V6(ip) => {
+                v6 && !ip.is_loopback() && (ip.segments()[0] & 0xffc0) != 0xfe80
+            }
+        };
+        if reachable && !ways.iter().any(|w| w.link == way(ip, "").link) {
+            ways.push(way(ip, &name));
+        }
+    }
+    ways
+}
+
+/// This machine's addresses, each with its interface's name, up ones only
+#[cfg(unix)]
+fn interfaces() -> Vec<(String, std::net::IpAddr)> {
+    let mut found = Vec::new();
+    // SAFETY: getifaddrs fills a list it owns until freeifaddrs; each entry
+    // is read while the list lives, its address by its family's own type
+    unsafe {
+        let mut list: *mut libc::ifaddrs = std::ptr::null_mut();
+        if libc::getifaddrs(&mut list) != 0 {
+            return found;
+        }
+        let mut at = list;
+        while !at.is_null() {
+            let entry = &*at;
+            at = entry.ifa_next;
+            let up = entry.ifa_flags & (libc::IFF_UP as libc::c_uint) != 0;
+            if entry.ifa_addr.is_null() || !up {
+                continue;
+            }
+            let name = std::ffi::CStr::from_ptr(entry.ifa_name)
+                .to_string_lossy()
+                .into_owned();
+            let ip: std::net::IpAddr = match i32::from((*entry.ifa_addr).sa_family) {
+                libc::AF_INET => {
+                    let a = &*(entry.ifa_addr as *const libc::sockaddr_in);
+                    std::net::Ipv4Addr::from(u32::from_be(a.sin_addr.s_addr)).into()
+                }
+                libc::AF_INET6 => {
+                    let a = &*(entry.ifa_addr as *const libc::sockaddr_in6);
+                    std::net::Ipv6Addr::from(a.sin6_addr.s6_addr).into()
+                }
+                _ => continue,
+            };
+            found.push((name, ip));
+        }
+        libc::freeifaddrs(list);
+    }
+    found
+}
+
+/// Where there is no getifaddrs: the address the way out leaves from,
+/// found by pointing a UDP socket out, which sends nothing
+#[cfg(not(unix))]
+fn interfaces() -> Vec<(String, std::net::IpAddr)> {
+    let out = |bind: &str, to: &str| {
+        let socket = std::net::UdpSocket::bind(bind).ok()?;
+        socket.connect(to).ok()?;
+        Some(("network".to_string(), socket.local_addr().ok()?.ip()))
+    };
+    [
+        out("0.0.0.0:0", "192.0.2.1:80"),
+        out("[::]:0", "[2001:db8::1]:80"),
+    ]
+    .into_iter()
+    .flatten()
+    .collect()
+}
+
 const PAGE: &str = include_str!("ui/logs.html");
 const SCRIPT: &str = include_str!("ui/logs.js");
 const STYLE: &str = include_str!("ui/logs.css");
@@ -1161,6 +1266,34 @@ mod tests {
         assert_eq!(link(addr, "t0k"), "http://127.0.0.1:7880/#token=t0k");
         let addr: SocketAddr = "[::1]:80".parse().unwrap();
         assert_eq!(link(addr, "t"), "http://[::1]:80/#token=t");
+    }
+
+    #[test]
+    fn every_interface_has_a_link_loopback_first() {
+        let one: SocketAddr = "127.0.0.1:7880".parse().unwrap();
+        assert_eq!(
+            links(one, "t"),
+            vec![Way {
+                link: "http://127.0.0.1:7880/#token=t".into(),
+                from: "this machine".into()
+            }]
+        );
+        let every: SocketAddr = "0.0.0.0:7880".parse().unwrap();
+        let ways = links(every, "t");
+        assert_eq!(ways[0].link, "http://127.0.0.1:7880/#token=t");
+        for way in &ways[1..] {
+            assert!(
+                !way.link.contains('['),
+                "a v4 listener lists v4: {}",
+                way.link
+            );
+            assert!(way.link.ends_with(":7880/#token=t"));
+            assert!(!way.from.is_empty());
+        }
+        let every6: SocketAddr = "[::]:7880".parse().unwrap();
+        let ways = links(every6, "t");
+        assert_eq!(ways[0].link, "http://[::1]:7880/#token=t");
+        assert!(ways.iter().all(|w| w.link.starts_with("http://[")));
     }
 
     #[test]
