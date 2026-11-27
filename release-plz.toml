@@ -24,7 +24,11 @@ pr_labels = ["release"]
 [changelog]
 # Each entry is the commit's subject followed by its body, indented under
 # it, so the explanation written with the commit is what the release notes
-# say. The hidden comments order the groups.
+# say. The hidden comments order the groups. A dependency bump's body is
+# Dependabot's copy of every upstream changelog: it is left out, and any
+# other body is cut at 4000 characters, because cargo-dist hands the
+# release notes to each publish job in one environment variable and Linux
+# refuses one over 128 KiB ("Argument list too long", v0.58.2).
 body = """
 ## [{{ version | trim_start_matches(pat="v") }}]\
 {%- if release_link -%}({{ release_link }}){% endif %} \
@@ -34,9 +38,9 @@ body = """
 {% for commit in commits %}
 - {% if commit.scope %}*({{ commit.scope }})* {% endif %}\
 {% if commit.breaking %}[**breaking**] {% endif %}{{ commit.message | trim }}
-{%- if commit.body %}
+{%- if commit.body and not commit.message is starting_with("bump ") %}
 
-{{ commit.body | trim | indent(prefix="  ", first=true) }}
+{{ commit.body | trim | truncate(length=4000) | indent(prefix="  ", first=true) }}
 {% endif %}
 {% endfor %}
 {% endfor %}
