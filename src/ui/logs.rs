@@ -142,6 +142,10 @@ pub struct LogsScreen {
     watch: Watch,
     /// The finding picked on the dashboard
     finding: usize,
+    /// The links to the page, under `--serve`
+    page: Vec<crate::serve::logs::Way>,
+    /// The links are shown
+    show_page: bool,
 }
 
 /// Picking a path by typing a part of it
@@ -235,7 +239,15 @@ impl LogsScreen {
             picker: None,
             watch: Watch::new(Vec::new(), window),
             finding: 0,
+            page: Vec::new(),
+            show_page: false,
         }
+    }
+
+    /// The page is served at these links: `w` shows them
+    pub fn serving(mut self, page: Vec<crate::serve::logs::Way>) -> Self {
+        self.page = page;
+        self
     }
 
     /// Hold the logs to these limits, and say what goes wrong
@@ -405,9 +417,10 @@ impl LogsScreen {
         if settings::is_open() {
             return false;
         }
-        if self.show_help {
+        if self.show_help || self.show_page {
             if kit::pressed(&event) {
                 self.show_help = false;
+                self.show_page = false;
             }
             return false;
         }
@@ -465,6 +478,18 @@ impl LogsScreen {
             self.show_help = !matches!(key.code, KeyCode::Char('?') | KeyCode::Esc | KeyCode::F(1));
             return false;
         }
+        if self.show_page {
+            match key.code {
+                KeyCode::Char('o') => {
+                    if let Some(way) = self.page.first() {
+                        crate::slack::open_browser(&way.link);
+                    }
+                }
+                KeyCode::Char('q') => return true,
+                _ => self.show_page = false,
+            }
+            return false;
+        }
         if self.inspecting && matches!(key.code, KeyCode::Esc | KeyCode::Enter) {
             self.inspecting = false;
             return false;
@@ -473,6 +498,7 @@ impl LogsScreen {
         match key.code {
             KeyCode::Char('q') | KeyCode::Char('Q') => return true,
             KeyCode::Char('?') | KeyCode::F(1) => self.show_help = true,
+            KeyCode::Char('w') if !self.page.is_empty() => self.show_page = true,
             KeyCode::Tab | KeyCode::Right => self.tab = TABS[(at + 1) % TABS.len()],
             KeyCode::BackTab | KeyCode::Left => self.tab = TABS[(at + TABS.len() - 1) % TABS.len()],
             KeyCode::Char(c @ '1'..='5') => self.tab = TABS[c as usize - '1' as usize],
@@ -701,7 +727,7 @@ impl LogsScreen {
             }
         }
 
-        let keys: Vec<(&str, &str)> = match self.tab {
+        let mut keys: Vec<(&str, &str)> = match self.tab {
             _ if self.searching => vec![("enter", "keep"), ("esc", "clear")],
             Tab::Dashboard if !self.watch.findings.is_empty() => vec![
                 ("↑↓", "pick a finding"),
@@ -760,6 +786,9 @@ impl LogsScreen {
                 ("q", "quit"),
             ],
         };
+        if !self.page.is_empty() && self.tab == Tab::Dashboard && !self.searching {
+            keys.insert(keys.len().saturating_sub(2), ("w", "web page"));
+        }
         kit::footer(f, footer, &keys);
 
         if self.inspecting {
@@ -768,30 +797,37 @@ impl LogsScreen {
         if self.picker.is_some() {
             self.render_picker(f, area, &stats);
         }
+        if self.show_page {
+            self.render_page(f, area);
+        }
         if self.show_help {
+            let mut rows = vec![
+                ("tab ← →", "next or previous view; 1-5 pick one"),
+                ("m h d", "traffic per minute, hour or day; g goes round"),
+                ("↑ ↓ / j k", "pick a slot, a message or a line"),
+                ("PgUp PgDn", "ten at a time; home and end, the ends"),
+                (
+                    "↑ ↓ enter",
+                    "dashboard: pick a finding and open what it is about",
+                ),
+                ("s", "paths: most requested, most 5xx, most 4xx, slowest"),
+                ("p", "hold the traffic and the log to one path"),
+                ("l", "traffic: the held path's lines"),
+                ("c", "let go of the path and the log's filters"),
+                ("x", "log: only failed requests and error log lines"),
+                ("/", "log: search the lines; c clears the filters"),
+                ("enter", "log: everything read from the picked line"),
+                ("esc", "let go of the pick, then quit"),
+                ("?", "close this help"),
+                ("q", "quit"),
+            ];
+            if !self.page.is_empty() {
+                rows.insert(rows.len() - 2, ("w", "the web page's links; o opens it"));
+            }
             help(
                 f,
                 area,
-                &[
-                    ("tab ← →", "next or previous view; 1-5 pick one"),
-                    ("m h d", "traffic per minute, hour or day; g goes round"),
-                    ("↑ ↓ / j k", "pick a slot, a message or a line"),
-                    ("PgUp PgDn", "ten at a time; home and end, the ends"),
-                    (
-                        "↑ ↓ enter",
-                        "dashboard: pick a finding and open what it is about",
-                    ),
-                    ("s", "paths: most requested, most 5xx, most 4xx, slowest"),
-                    ("p", "hold the traffic and the log to one path"),
-                    ("l", "traffic: the held path's lines"),
-                    ("c", "let go of the path and the log's filters"),
-                    ("x", "log: only failed requests and error log lines"),
-                    ("/", "log: search the lines; c clears the filters"),
-                    ("enter", "log: everything read from the picked line"),
-                    ("esc", "let go of the pick, then quit"),
-                    ("?", "close this help"),
-                    ("q", "quit"),
-                ],
+                &rows,
                 &[
                     format!(
                         "Now is the last {} of the log's own times.",
@@ -802,6 +838,46 @@ impl LogsScreen {
                 ],
             );
         }
+    }
+
+    /// The links the page is served at, each with where it is reached from
+    fn render_page(&self, f: &mut Frame, area: Rect) {
+        let mut lines = vec![Line::raw("")];
+        for way in &self.page {
+            lines.push(Line::from(vec![
+                Span::raw("  "),
+                value(way.link.clone(), ACCENT),
+                label(format!("  {}", way.from)),
+            ]));
+        }
+        lines.push(Line::raw(""));
+        lines.push(Line::from(label(
+            "  The token after # is what opens it: share the link only with who may read the logs.",
+        )));
+        lines.push(Line::from(label(
+            "  o opens the first in the browser · any key closes",
+        )));
+        let widest = lines.iter().map(|l| l.width()).max().unwrap_or(0) as u16 + 4;
+        let width = widest.min(area.width);
+        let height = (lines.len() as u16 + 3).min(area.height);
+        let [popup] = Layout::horizontal([Constraint::Length(width)])
+            .flex(Flex::Center)
+            .areas(area);
+        let [popup] = Layout::vertical([Constraint::Length(height)])
+            .flex(Flex::Center)
+            .areas(popup);
+        f.render_widget(Clear, popup);
+        f.render_widget(
+            Paragraph::new(lines)
+                .wrap(ratatui::widgets::Wrap { trim: false })
+                .block(
+                    Block::bordered()
+                        .border_type(BorderType::Plain)
+                        .border_style(Style::new().fg(ACCENT))
+                        .title(tag("web page")),
+                ),
+            popup,
+        );
     }
 
     /// What the reader couldn't do, said above the tabs
