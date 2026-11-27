@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+## [0.60.0](https://github.com/omarmhaimdat/pepe/compare/v0.59.0...v0.60.0) - 2026-11-27
+
+### Added
+
+- *(logs)* --serve lists every interface's link, waits for enter, w shows them again ([#256](https://github.com/omarmhaimdat/pepe/pull/256))
+
 ## [0.59.0](https://github.com/omarmhaimdat/pepe/compare/v0.58.2...v0.59.0) - 2026-11-27
 
 ### Added
