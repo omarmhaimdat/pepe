@@ -41,3 +41,5 @@ allow-dirty = ["ci"]
 [dist.github-custom-runners]
 # Native ARM runner: builds the aarch64 musl binary without cross-compiling
 aarch64-unknown-linux-musl = "ubuntu-24.04-arm"
+# dist 0.33 picks macos-14 for Apple Silicon, an image GitHub has retired
+aarch64-apple-darwin = "macos-15"
