@@ -6,6 +6,103 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+## [0.59.0](https://github.com/omarmhaimdat/pepe/compare/v0.58.2...v0.59.0) - 2026-11-27
+
+### Added
+
+- *(logs)* --serve, the logs screen as a live web page ([#249](https://github.com/omarmhaimdat/pepe/pull/249))
+
+  `pepe logs --serve [ADDR]` serves the logs screen in a browser, live, in
+  the front page's look.
+
+  ```bash
+  pepe logs /var/log/nginx/access.log /var/log/nginx/error.log --serve              # 127.0.0.1:7880
+  pepe logs /var/log/nginx/access.log --serve 0.0.0.0:7880 --fail-if '5xx > 2%'     # from elsewhere
+  ```
+
+  **The page**
+  - The server in a word (`nginx is busy`) as the front page's selected
+  word, gold when degraded and red when failing, with Pepe's face for it,
+  plus a sentence: the rate, against a usual minute, 5xx and p99.
+  - The screen's cards (now, a usual minute, the busiest, failing now,
+  request time, in all), with sparklines.
+  - The findings and each `--fail-if`, held or crossed. A finding about a
+  path holds the page to it.
+  - The same five tabs and keys (`1`–`5`, `/`, `esc`):
+  - **Dashboard:** requests a second over 5 minutes, status codes, busiest
+  paths, the error log.
+  - **Traffic:** by minute, hour or day; a held path's minutes and codes.
+    - **Paths:** every path, sortable and filterable.
+    - **Errors:** what the error log says, and which paths answer 5xx.
+    - **Log:** the lines, filtered by 4xx, 5xx, the error log or words.
+  - Light and dark, the front page's tokens, Geist. No script from
+  anywhere else, and text is never set as markup.
+
+  **Running it**
+  - At a terminal the screen runs as well and the page is opened in the
+  browser.
+  - Without a terminal (a service, a container) the logs are followed
+  until stopped, then the report is printed.
+  - The link carries a token after `#`, made at start, and every API call
+  needs it, since logs hold addresses and paths. Off loopback, pepe says
+  the page can be reached from other machines.
+
+  **Cost** (`bench/logs-serve.sh`, M4 Pro, release build)
+
+  | | req/s | CPU | a page gets |
+  | --- | ---: | ---: | ---: |
+  | nobody looking | 400 | 1.0 ms/s | |
+  | one page | 400 | 1.7 ms/s | 2.0 KB/s |
+  | ten pages | 400 | 1.7 ms/s | 2.0 KB/s each |
+  | one, on the log tab | 400 | 2.0 ms/s | 7.3 KB/s |
+  | nobody looking | 4,000 | 3.0 ms/s | |
+  | ten pages | 4,000 | 4.7 ms/s | 1.6 KB/s each |
+
+  - **Nobody looking:** no tick runs at all.
+  - **While someone looks:** one tick a second takes what the page shows
+  and sends only the parts that changed, about 860 bytes in a steady
+  second. The 30 s averages above reach 2 KB/s because they include
+  outages.
+  - **Ten pages cost what one does:** the step is written once, and the
+  same bytes go to every page that is up to date. A page that fell behind
+  gets what it missed, so nothing queues.
+  - **Paths, slots, causes and a held path:** built when asked, at most
+  once a tick however many pages ask.
+  - **Log lines:** read from the reader only while a page shows the Log
+  tab, filtered on the server, and gzip'd: 36 KB/s as plain JSON, 7 KB/s
+  as sent.
+
+  **The verdict, every second.** Most of the tick was
+  `logs_verdict::findings`, which the terminal screen also runs every
+  second. On a three-day log (1.96M lines, 41,656 clients), the tick's
+  time under the lock went from 7.45 ms to 3.24 ms (median of nine):
+  - A path's minutes are now `Counts`, without the 176 latency buckets a
+  `Row` carries.
+  - `path_rows` and `path_counts` read the minute keys without copying
+  every minute's `Slot`.
+  - `Top::top` finds the n-th largest count before gathering names.
+
+  The JSON report is the same to the byte before and after, on the log cut
+  at four points. Two of those points are inside the outage, where the
+  per-path 5xx findings fire.
+
+  **Checked**
+  - `cargo test` passes: 465.
+  - `cargo +1.98 clippy --all-targets -D warnings` and `cargo fmt --check`
+  are clean.
+  - Driven in a browser against a live generated log: every tab, the 5xx
+  filter, and an outage appearing as a finding live.
+
+
+
+### Fixed
+
+- *(release)* keep Dependabot's upstream changelogs out of the release notes ([#254](https://github.com/omarmhaimdat/pepe/pull/254))
+
+  The v0.58.2 release failed to publish to Docker, Homebrew, PyPI and npm:
+  https://github.com/omarmhaimdat/pepe/actions/runs/45973091177
+
+
 ## [0.58.2](https://github.com/omarmhaimdat/pepe/compare/v0.58.1...v0.58.2) - 2026-11-27
 
 ### Fixed
