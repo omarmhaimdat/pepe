@@ -226,32 +226,6 @@ pub(crate) async fn run_logs(
             tokio::time::sleep(std::time::Duration::from_secs(3)).await;
         }
     }
-    if !screen {
-        // Followed until stopped, the page the only thing shown
-        let _ = tokio::signal::ctrl_c().await;
-        shared.stop();
-        let stats = shared.lock();
-        let wall = crate::logs::wall();
-        let clock = stats.clock(wall);
-        let findings = crate::logs_verdict::findings(&stats, clock, window);
-        let checks: Vec<crate::webhook::Check> = conditions
-            .iter()
-            .map(|c| c.check(&stats, clock, window, crate::logs_verdict::Scope::Window))
-            .collect();
-        print!(
-            "{}",
-            with_verdict(
-                crate::logs::report(&stats, &name, wall, window, what.rows),
-                &findings,
-                &checks
-            )
-        );
-        drop(stats);
-        if checks.iter().any(|c| !c.held) {
-            std::process::exit(4);
-        }
-        return Ok(());
-    }
     // --metrics: the page is rendered again every second while it follows
     if exporter::address().is_some() {
         let shared = shared.clone();
@@ -269,20 +243,30 @@ pub(crate) async fn run_logs(
         crate::webhook::begin(run(format!("following {name}")), &hooks);
     }
     let watch = crate::logs_verdict::Watch::new(conditions, window);
-    let (outcome, watch) = {
-        let _watchdog = CtrlCWatchdog::arm();
-        let _terminal = TerminalGuard::enter()?;
-        let mut screen =
-            ui::LogsScreen::new(shared.clone(), job.parser.clone(), name.clone(), window)
-                .watching(watch);
-        let outcome = screen.run().await;
-        (outcome, screen.into_watch())
+    let (outcome, watch) = match screen {
+        true => {
+            let _watchdog = CtrlCWatchdog::arm();
+            let _terminal = TerminalGuard::enter()?;
+            let mut screen =
+                ui::LogsScreen::new(shared.clone(), job.parser.clone(), name.clone(), window)
+                    .watching(watch);
+            let outcome = screen.run().await;
+            (outcome, screen.into_watch())
+        }
+        // Followed until stopped, the page the only thing shown: the limits
+        // are watched as the screen watches them, a crossing kept
+        false => (Ok(()), followed(&shared, watch).await),
     };
     shared.stop();
     outcome?;
     let checks = watch.checks();
     {
         let stats = shared.lock();
+        if !screen {
+            if let Some(trouble) = &stats.trouble {
+                eprintln!("error: {trouble}");
+            }
+        }
         let wall = crate::logs::wall();
         let findings = crate::logs_verdict::findings(&stats, stats.clock(wall), window);
         print_report(&with_verdict(
@@ -307,6 +291,39 @@ pub(crate) async fn run_logs(
         std::process::exit(4);
     }
     Ok(())
+}
+
+/// Follow the logs with no screen until stopped, by Ctrl-C or, as a
+/// service or a container is stopped, SIGTERM: the limits ticked each second
+async fn followed(
+    shared: &crate::logs::Shared,
+    mut watch: crate::logs_verdict::Watch,
+) -> crate::logs_verdict::Watch {
+    let stop = stopped();
+    tokio::pin!(stop);
+    let mut every = tokio::time::interval(std::time::Duration::from_secs(1));
+    loop {
+        tokio::select! {
+            _ = &mut stop => return watch,
+            _ = every.tick() => watch.tick(&shared.lock(), crate::logs::wall()),
+        }
+    }
+}
+
+/// Resolves on Ctrl-C, or SIGTERM where there is one
+async fn stopped() {
+    #[cfg(unix)]
+    {
+        use tokio::signal::unix::{signal, SignalKind};
+        if let Ok(mut term) = signal(SignalKind::terminate()) {
+            tokio::select! {
+                _ = tokio::signal::ctrl_c() => {}
+                _ = term.recv() => {}
+            }
+            return;
+        }
+    }
+    let _ = tokio::signal::ctrl_c().await;
 }
 
 /// The JSON report, with the verdict and each limit
