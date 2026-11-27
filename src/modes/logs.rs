@@ -203,6 +203,8 @@ pub(crate) async fn run_logs(
         None => None,
     };
     let shared = crate::logs::start(job.clone());
+    // The links to the page, for the screen to show again
+    let mut page = Vec::new();
     if let Some(listener) = listener {
         let token = crate::serve::new_token();
         let addr = listener.local_addr()?;
@@ -216,14 +218,26 @@ pub(crate) async fn run_logs(
             token.clone(),
         );
         tokio::spawn(crate::serve::logs::serve(hub, listener));
-        let link = crate::serve::logs::link(addr, &token);
+        let ways = crate::serve::logs::links(addr, &token);
         eprintln!("pepe logs · {name}");
-        eprintln!("  page   {link}");
-        // The screen is about to take the terminal, and the link with it:
-        // the page is opened rather than left for the user to find
-        if screen && !crate::slack::open_browser(&link) {
-            eprintln!("  (open the link above; the screen starts in 3 seconds)");
-            tokio::time::sleep(std::time::Duration::from_secs(3)).await;
+        let wide = ways.iter().map(|w| w.link.len()).max().unwrap_or(0);
+        for (i, way) in ways.iter().enumerate() {
+            let head = if i == 0 { "  page   " } else { "         " };
+            eprintln!("{head}{:<wide$}   {}", way.link, way.from);
+        }
+        if screen {
+            // The screen is about to take the terminal: the links stay
+            // until enter is pressed, and `w` on the screen shows them again
+            if crate::slack::open_browser(&ways[0].link) {
+                eprintln!("  opened in the browser; w on the screen shows these links again");
+            } else {
+                eprintln!("  open a link above; w on the screen shows them again");
+            }
+            if !until_enter(START_WAIT).await {
+                shared.stop();
+                std::process::exit(130);
+            }
+            page = ways;
         }
     }
     // --metrics: the page is rendered again every second while it follows
@@ -249,7 +263,8 @@ pub(crate) async fn run_logs(
             let _terminal = TerminalGuard::enter()?;
             let mut screen =
                 ui::LogsScreen::new(shared.clone(), job.parser.clone(), name.clone(), window)
-                    .watching(watch);
+                    .watching(watch)
+                    .serving(page);
             let outcome = screen.run().await;
             (outcome, screen.into_watch())
         }
@@ -291,6 +306,56 @@ pub(crate) async fn run_logs(
         std::process::exit(4);
     }
     Ok(())
+}
+
+/// How long the links are left on the terminal before the screen starts
+/// on its own
+const START_WAIT: std::time::Duration = std::time::Duration::from_secs(60);
+
+/// Wait for enter, or `wait`, counting down on one line; false when asked
+/// to quit (q, esc, Ctrl-C). The page is served all the while: the wait is
+/// on a thread of its own
+async fn until_enter(wait: std::time::Duration) -> bool {
+    use crossterm::event::{self, Event, KeyCode, KeyEventKind, KeyModifiers};
+    use std::io::Write as _;
+    let waited = tokio::task::spawn_blocking(move || {
+        if crossterm::terminal::enable_raw_mode().is_err() {
+            return true;
+        }
+        let end = std::time::Instant::now() + wait;
+        let mut shown = u64::MAX;
+        let go = loop {
+            let left = end.saturating_duration_since(std::time::Instant::now());
+            if left.is_zero() {
+                break true;
+            }
+            let secs = left.as_secs() + 1;
+            if secs != shown {
+                shown = secs;
+                eprint!("\r  enter starts the screen · q quits · on its own in {secs} s \x1b[K");
+                let _ = std::io::stderr().flush();
+            }
+            if !event::poll(left.min(std::time::Duration::from_millis(250))).unwrap_or(false) {
+                continue;
+            }
+            match event::read() {
+                Ok(Event::Key(key)) if key.kind == KeyEventKind::Press => match key.code {
+                    KeyCode::Enter | KeyCode::Char(' ') => break true,
+                    KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                        break false
+                    }
+                    KeyCode::Char('q') | KeyCode::Esc => break false,
+                    _ => {}
+                },
+                Ok(_) => {}
+                Err(_) => break true,
+            }
+        };
+        let _ = crossterm::terminal::disable_raw_mode();
+        eprint!("\r\x1b[K");
+        go
+    });
+    waited.await.unwrap_or(true)
 }
 
 /// Follow the logs with no screen until stopped, by Ctrl-C or, as a
