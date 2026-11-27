@@ -18,10 +18,11 @@ const GEIST: &[u8] = include_bytes!("ui/fonts/geist.woff2");
 const GEIST_MONO: &[u8] = include_bytes!("ui/fonts/geist-mono.woff2");
 
 /// The faces the page shows, by name
-const FACES: [(&str, &[u8]); 6] = [
+const FACES: [(&str, &[u8]); 7] = [
     ("icon", include_bytes!("../../site/img/pepe-icon.png")),
     ("waiting", include_bytes!("../../site/img/pepe-waiting.png")),
     ("proud", include_bytes!("../../site/img/pepe-proud.png")),
+    ("happy", include_bytes!("../../site/img/pepe-happy.png")),
     ("worried", include_bytes!("../../site/img/pepe-worried.png")),
     ("on-fire", include_bytes!("../../site/img/pepe-on-fire.png")),
     (
@@ -36,7 +37,7 @@ const POLICY: &str = "default-src 'self'; script-src 'self'; style-src 'self' 'u
     img-src 'self' data: blob:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; \
     form-action 'self'";
 
-fn asset(content_type: &str, body: impl Into<bytes::Bytes>) -> Reply {
+pub(super) fn asset(content_type: &str, body: impl Into<bytes::Bytes>) -> Reply {
     // A font never changes within a version; the page's own files may
     let cache = match content_type.starts_with("font/") {
         true => "public, max-age=604800, immutable",

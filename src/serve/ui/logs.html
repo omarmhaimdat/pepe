@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<title>pepe logs</title>
+<link rel="icon" href="/ui/img/pepe-icon.png">
+<link rel="stylesheet" href="/ui/logs.css">
+<script src="/ui/logs.js" defer></script>
+</head>
+<body>
+
+<header class="top">
+  <div class="wide">
+    <span class="brand"><img src="/ui/img/pepe-icon.png" alt="">pepe <small>logs</small></span>
+    <span class="file" data-title></span>
+    <span class="badge off" data-badge>…</span>
+    <button class="theme" type="button" data-themebtn aria-label="Switch between light and dark">◐</button>
+  </div>
+</header>
+
+<div class="wide">
+  <section class="hero">
+    <div>
+      <span class="tag" data-tag>pepe logs</span>
+      <h1 data-headline>nginx is <span class="sel" data-state>…</span></h1>
+      <p class="lede" data-lede></p>
+    </div>
+    <img class="face" data-face src="/ui/img/pepe-waiting.png" alt="">
+  </section>
+
+  <div class="cards" data-cards></div>
+  <div class="findings" data-findings></div>
+  <div class="limits" data-limits></div>
+</div>
+
+<div class="steps" style="--a:var(--bg);--b:var(--band)"></div>
+<div class="tabs-band">
+  <div class="wide tabs" role="tablist" data-tabs>
+    <button role="tab" data-tab="dashboard" aria-selected="true"><kbd>1</kbd>Dashboard</button>
+    <button role="tab" data-tab="traffic"><kbd>2</kbd>Traffic</button>
+    <button role="tab" data-tab="paths"><kbd>3</kbd>Paths</button>
+    <button role="tab" data-tab="errors"><kbd>4</kbd>Errors</button>
+    <button role="tab" data-tab="log"><kbd>5</kbd>Log</button>
+    <span class="held" data-held>held to <b data-heldpath></b><span data-heldnums></span><button type="button" data-unhold>esc · all</button></span>
+  </div>
+</div>
+
+<main class="wide view">
+  <!-- Dashboard -->
+  <section data-view="dashboard" class="grid">
+    <div class="box">
+      <header><span>Requests a second</span><span class="sub">the last 5 minutes</span>
+        <span class="right key"><span><i style="background:var(--bar)"></i>2xx·3xx</span><span><i style="background:var(--c4)"></i>4xx</span><span><i style="background:var(--c5)"></i>5xx</span></span></header>
+      <div class="body"><canvas data-chart="seconds" height="260"></canvas></div>
+    </div>
+    <div class="stack">
+      <div class="box">
+        <header><span>Status codes</span><span class="right" data-codes-total></span></header>
+        <div class="body"><div class="codes" data-codes></div><div class="legend" data-codes-legend></div></div>
+      </div>
+      <div class="box">
+        <header><span>Busiest paths</span><span class="right">req/s · 5xx</span></header>
+        <div class="body"><div class="rows" data-toppaths></div></div>
+      </div>
+    </div>
+    <div class="box" style="grid-column:1/-1">
+      <header><span>The error log</span><span class="sub" data-faults-sub></span></header>
+      <div class="body"><div class="causes" data-causes-short></div></div>
+    </div>
+  </section>
+
+  <!-- Traffic -->
+  <section data-view="traffic" class="stack" hidden>
+    <div class="box">
+      <header><span>Traffic</span><span class="sub" data-traffic-sub></span>
+        <span class="right"><span class="grain" data-grain><button aria-pressed="true" data-g="minute">minute</button><button data-g="hour">hour</button><button data-g="day">day</button></span></span></header>
+      <div class="body"><canvas data-chart="slots" height="320"></canvas></div>
+    </div>
+    <div class="box" data-heldbox hidden>
+      <header><span>Held to</span><span class="sub" data-heldtitle></span><span class="right">its minutes, requests a second</span></header>
+      <div class="body"><canvas data-chart="held" height="220"></canvas><div class="legend" data-heldcodes></div></div>
+    </div>
+  </section>
+
+  <!-- Paths -->
+  <section data-view="paths" class="stack" hidden>
+    <div class="filter"><input data-pathfilter placeholder="/api/*  —  a path, or part of one" spellcheck="false"></div>
+    <div class="box">
+      <table><thead><tr>
+        <th data-sort="path">Path</th><th data-sort="n" aria-sort="descending">Requests</th><th data-sort="rate">Req/s now</th>
+        <th data-sort="s5xx">5xx</th><th data-sort="s4xx">4xx</th><th data-sort="p50">p50</th><th data-sort="p99">p99</th><th data-sort="up" title="the share of the request time spent waiting on the upstream">Upstream</th>
+      </tr></thead><tbody data-pathrows></tbody></table>
+    </div>
+  </section>
+
+  <!-- Errors -->
+  <section data-view="errors" class="grid" hidden>
+    <div class="box">
+      <header><span>What the error log says</span><span class="sub" data-faults-sub2></span></header>
+      <div class="body"><div class="causes" data-causes></div></div>
+    </div>
+    <div class="box">
+      <header><span>Paths answering 5xx</span><span class="right">5xx · share</span></header>
+      <div class="body"><div class="rows" data-badpaths></div></div>
+    </div>
+  </section>
+
+  <!-- Log -->
+  <section data-view="log" class="stack" hidden>
+    <div class="filter">
+      <input data-logfilter placeholder="filter the lines: a path, an address, a word" spellcheck="false">
+      <span class="chips" data-logchips><button aria-pressed="true" data-k="all">all</button><button data-k="4xx">4xx</button><button data-k="5xx">5xx</button><button data-k="error">error log</button></span>
+    </div>
+    <div class="tail" data-tail></div>
+    <p class="note" data-lognote></p>
+  </section>
+</main>
+
+<footer><div class="wide" data-foot></div></footer>
+<div class="tip" data-tipbox></div>
+
+</body>
+</html>

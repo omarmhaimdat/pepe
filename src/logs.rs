@@ -1229,6 +1229,17 @@ impl<V: Default> Rolling<V> {
     }
 }
 
+impl<V> Rolling<V> {
+    /// Every key, oldest first: what `all` has, without copying a count
+    fn keys(&self) -> Vec<i64> {
+        let mut keys: Vec<i64> = self.map.keys().copied().collect();
+        if let Some((key, _)) = &self.open {
+            keys.insert(keys.partition_point(|k| k < key), *key);
+        }
+        keys
+    }
+}
+
 impl<V: Default + Copy> Rolling<V> {
     /// Every count, oldest first
     fn all(&self) -> Vec<(i64, V)> {
@@ -1387,6 +1398,73 @@ impl PathSlots {
     }
 }
 
+/// What the verdict reads of a slot: its counts, without its request
+/// times. A `Row` carries those (176 buckets); a path's minutes, looked at
+/// for dozens of paths every second, are `Counts` and don't.
+pub trait Counted {
+    fn start(&self) -> i64;
+    fn requests(&self) -> u64;
+    fn c4xx(&self) -> u64;
+    fn c5xx(&self) -> u64;
+    fn rate(&self) -> f64;
+    fn partial(&self) -> bool;
+}
+
+impl Counted for Row {
+    fn start(&self) -> i64 {
+        self.start
+    }
+    fn requests(&self) -> u64 {
+        self.slot.requests
+    }
+    fn c4xx(&self) -> u64 {
+        self.slot.c4xx
+    }
+    fn c5xx(&self) -> u64 {
+        self.slot.c5xx
+    }
+    fn rate(&self) -> f64 {
+        self.rate
+    }
+    fn partial(&self) -> bool {
+        self.partial
+    }
+}
+
+/// A path's slot, counted: a `Row` but for its request times
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
+pub struct Counts {
+    pub start: i64,
+    pub requests: u64,
+    pub c4xx: u64,
+    pub c5xx: u64,
+    pub time_us: u64,
+    pub timed: u64,
+    pub rate: f64,
+    pub partial: bool,
+}
+
+impl Counted for Counts {
+    fn start(&self) -> i64 {
+        self.start
+    }
+    fn requests(&self) -> u64 {
+        self.requests
+    }
+    fn c4xx(&self) -> u64 {
+        self.c4xx
+    }
+    fn c5xx(&self) -> u64 {
+        self.c5xx
+    }
+    fn rate(&self) -> f64 {
+        self.rate
+    }
+    fn partial(&self) -> bool {
+        self.partial
+    }
+}
+
 /// A slot as the screens and reports show it
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Row {
@@ -1502,11 +1580,36 @@ impl<V: Tally> Top<V> {
 
     /// The `n` names with the most of `by`, most first
     pub fn top(&self, n: usize, by: impl Fn(&V) -> u64) -> Vec<(&str, &V)> {
+        // The n-th largest, read from the counts alone (a run along a
+        // vector): only the names at or over it are gathered and sorted,
+        // not the 40,000 addresses a busy log has
+        let least = match self.counts.len() > n.saturating_mul(4) && n > 0 {
+            true => {
+                let mut best = std::collections::BinaryHeap::with_capacity(n + 1);
+                for v in &self.counts {
+                    let k = by(v);
+                    if k == 0 {
+                        continue;
+                    }
+                    if best.len() < n {
+                        best.push(std::cmp::Reverse(k));
+                    } else if best.peek().is_some_and(|least| k > least.0) {
+                        best.pop();
+                        best.push(std::cmp::Reverse(k));
+                    }
+                }
+                match best.len() == n {
+                    true => best.peek().map_or(1, |least| least.0),
+                    false => 1,
+                }
+            }
+            false => 1,
+        };
         let mut all: Vec<(&str, &V)> = self
             .places
             .iter()
             .map(|(name, place)| (name.as_str(), &self.counts[*place as usize]))
-            .filter(|(_, v)| by(v) > 0)
+            .filter(|(_, v)| by(v) >= least)
             .collect();
         let order = |a: &(&str, &V), b: &(&str, &V)| by(b.1).cmp(&by(a.1)).then(a.0.cmp(b.0));
         if all.len() > n && n > 0 {
@@ -2614,9 +2717,9 @@ impl Stats {
         let tables = &self.path_slots[grain as usize].slots;
         self.slots[grain as usize]
             .slots
-            .all()
+            .keys()
             .iter()
-            .map(|(key, _)| {
+            .map(|key| {
                 let count = id
                     .and_then(|id| tables.get(*key)?.rows.iter().find(|row| row.id == id))
                     .copied()
@@ -2632,6 +2735,36 @@ impl Stats {
                         timed: count.timed,
                         ..Slot::default()
                     },
+                    rate: count.requests as f64 / seconds as f64,
+                    partial,
+                }
+            })
+            .collect()
+    }
+
+    /// A path's slots as `path_rows` has them, without the request times
+    /// a `Row` carries: what the verdict reads, for every path it looks at
+    pub fn path_counts(&self, grain: Grain, clock: Clock, path: &str) -> Vec<Counts> {
+        let size = grain.seconds();
+        let id = self.paths.place(path);
+        let tables = &self.path_slots[grain as usize].slots;
+        self.slots[grain as usize]
+            .slots
+            .keys()
+            .iter()
+            .map(|key| {
+                let count = id
+                    .and_then(|id| tables.get(*key)?.rows.iter().find(|row| row.id == id))
+                    .copied()
+                    .unwrap_or_default();
+                let (seconds, partial) = self.covered(key * size, size, clock);
+                Counts {
+                    start: key * size,
+                    requests: count.requests,
+                    c4xx: u64::from(count.c4xx),
+                    c5xx: u64::from(count.c5xx),
+                    time_us: count.time_us,
+                    timed: count.timed,
                     rate: count.requests as f64 / seconds as f64,
                     partial,
                 }
@@ -2688,8 +2821,12 @@ impl Stats {
 }
 
 /// The median rate of the slots that are whole: what a slot usually sees
-pub fn typical(rows: &[Row]) -> Option<f64> {
-    let mut rates: Vec<f64> = rows.iter().filter(|r| !r.partial).map(|r| r.rate).collect();
+pub fn typical<R: Counted>(rows: &[R]) -> Option<f64> {
+    let mut rates: Vec<f64> = rows
+        .iter()
+        .filter(|r| !r.partial())
+        .map(|r| r.rate())
+        .collect();
     if rates.is_empty() {
         return None;
     }

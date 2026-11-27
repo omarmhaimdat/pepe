@@ -148,7 +148,8 @@ minute, most serious first; and `fail_if[]` (`condition`, `held`,
 `measured`). A crossed limit is exit code 4. `--webhook` sends the
 verdict, so a cron line is an alert. `--path '/api/*'`, `--status 5xx`,
 `--host .example.com` and `--until 1h` keep only those lines; rotated
-`.gz` files are read as they are.
+`.gz` files are read as they are. `--serve` shows a person the same
+screen as a live web page; the link it prints carries the page's token.
 
 ## A whole API, a journey, real traffic
 

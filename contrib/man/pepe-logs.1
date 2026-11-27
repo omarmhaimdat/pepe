@@ -4,7 +4,7 @@
 .SH NAME
 pepe\-logs \- Read nginx logs: requests per second now, against each minute, hour and day
 .SH SYNOPSIS
-\fBpepe logs\fR [\fB\-\-format\fR] [\fB\-\-window\fR] [\fB\-\-since\fR] [\fB\-\-all\fR] [\fB\-\-exact\-paths\fR] [\fB\-\-rows\fR] [\fB\-\-path\fR] [\fB\-\-status\fR] [\fB\-\-host\fR] [\fB\-\-until\fR] [\fB\-h\fR|\fB\-\-help\fR] [\fIFILES\fR] 
+\fBpepe logs\fR [\fB\-\-format\fR] [\fB\-\-window\fR] [\fB\-\-since\fR] [\fB\-\-all\fR] [\fB\-\-exact\-paths\fR] [\fB\-\-rows\fR] [\fB\-\-path\fR] [\fB\-\-status\fR] [\fB\-\-host\fR] [\fB\-\-until\fR] [\fB\-\-serve\fR] [\fB\-h\fR|\fB\-\-help\fR] [\fIFILES\fR] 
 .SH DESCRIPTION
 Read nginx logs: requests per second now, against each minute, hour and day
 .SH OPTIONS
@@ -38,6 +38,9 @@ Count only the requests to these hosts (the log\*(Aqs $host): shop.test exactly,
 .TP
 \fB\-\-until\fR \fI<TIME>\fR
 Leave out what is newer than this, e.g. 1h for up to an hour ago; with \-\-since, a stretch in the past. A log read up to a time in the past isn\*(Aqt followed
+.TP
+\fB\-\-serve\fR [\fI<ADDR>\fR]
+Serve the screen as a web page, live, at ADDR (127.0.0.1:7880 when none is given): the link printed carries the token that opens it. Without a terminal the logs are followed until stopped
 .TP
 \fB\-h\fR, \fB\-\-help\fR
 Print help

@@ -921,6 +921,59 @@ have holes (the rest are the clients' own), and the order the targets go
 out in is the rows' when they weigh the same, rather than the weighted
 round-robin, which costs the square of their number to work out.
 
+## Logs in a browser
+
+`pepe logs --serve` while a log is written: pepe's CPU a second, its
+memory, the bytes each page gets a second, and the tick (what is taken
+from the reader's counts once a second, and how much of it under their
+lock). `bench/logs-serve.sh RATE 30` writes a live nginx log
+(`bench/gen-live-logs.py`: thirty minutes of history, then RATE requests
+a second with an outage of 502s now and then), serves it, and opens no
+page, one, ten, then one on the log tab, 30 s each. M4 Pro, macOS, the
+release build, 2026-11-26:
+
+| | req/s | CPU | memory | a page gets | tick | of it locked |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| nobody looking | 400 | 1.0 ms/s | 14 MB | | none | |
+| one page | 400 | 1.7 ms/s | 14 MB | 2.0 KB/s | 0.86 ms | 0.80 ms |
+| ten pages | 400 | 1.7 ms/s | 14 MB | 2.0 KB/s each | 0.99 ms | 0.94 ms |
+| one, on the log tab | 400 | 2.0 ms/s | 16 MB | 7.3 KB/s | 1.30 ms | 1.22 ms |
+| nobody looking | 4,000 | 3.0 ms/s | 17 MB | | none | |
+| one page | 4,000 | 4.3 ms/s | 14 MB | 1.9 KB/s | 0.84 ms | 0.78 ms |
+| ten pages | 4,000 | 4.7 ms/s | 13 MB | 1.6 KB/s each | 0.71 ms | 0.66 ms |
+| one, on the log tab | 4,000 | 4.7 ms/s | 15 MB | 6.7 KB/s | 0.53 ms | 0.49 ms |
+
+The CPU is the reader's plus well under a millisecond a second, and ten
+pages cost what one does: each tick's step is written once and the same
+bytes go to every page. A steady second is about 860 bytes (the head,
+the busiest paths, the codes, the last few seconds); the 30 s averages
+above are over 2 KB/s where an outage made the findings and the error
+log's causes change every second. The log tab is lines, read from the
+reader only while a page shows them, filtered there, and gzip'd: 36 KB/s
+as plain JSON, 7 KB/s as sent. Raw CSV:
+[`results/2026-11-26-macos-logs-serve.csv`](results/2026-11-26-macos-logs-serve.csv).
+
+**The verdict, every second.** Most of the tick was the verdict's
+findings, the screen's own, which it works out every second too. On a
+three-day log (`bench/gen-logs.py access.log error.log 3`, 1.96M lines,
+41,656 clients), the tick's time under the lock, the median of nine:
+
+| | under the lock |
+| --- | ---: |
+| before | 7.45 ms |
+| a path's minutes counted without their request times | 6.1 ms |
+| and their keys read without copying every minute | 3.24 ms |
+
+Each path the verdict looks at (up to 90) had its every minute built as
+a row carrying 176 latency buckets it never read, from a copy of every
+minute's slot made only to read the minutes' keys: now a path's minute
+is its counts, and the keys are read as they are. `Top::top` gathered
+all 41,656 client addresses to find the busiest two; it now finds the
+n-th largest count first and gathers only those over it. The JSON
+report is the same to the byte before and after, on the log cut at four
+points, two of them inside its outage, where the per-path findings say
+which paths answer 502.
+
 ## Reproducing
 
 ```bash

@@ -669,6 +669,12 @@ pub struct LogsArgs {
     /// past isn't followed.
     #[arg(long, value_name = "TIME")]
     pub until: Option<String>,
+
+    /// Serve the screen as a web page, live, at ADDR (127.0.0.1:7880 when
+    /// none is given): the link printed carries the token that opens it.
+    /// Without a terminal the logs are followed until stopped.
+    #[arg(long, value_name = "ADDR", num_args = 0..=1, default_missing_value = crate::serve::logs::DEFAULT_LISTEN)]
+    pub serve: Option<String>,
 }
 
 #[derive(clap::Args, Debug, Clone, PartialEq)]

@@ -107,6 +107,19 @@ Read once (piped, `--json`, from cron) a limit is held against everything read, 
 
 `--webhook`, `--webhook-on` and `--slack` work as they do for a load test (see [webhooks](webhooks.md)). Read once, the hooks get the verdict at the end, and `fail` when a limit was crossed. While a log is followed, a finding turning bad, a limit crossed or held again, and a finding going away are `anomaly` events, and `--slack` keeps one message up to date with the rate, the 5xx and the findings; the verdict goes out when the screen is left. A plain URL is sent the end only, unless `--webhook-on anomaly,end` says more.
 
+## In a browser
+
+`--serve` serves the screen as a web page, live, in the front page's look: the server in a word with Pepe's face for it, the cards (now, a usual minute, the busiest, failing now, request time, in all), the findings and each `--fail-if`, and the same five tabs with the same keys (`1`–`5`, `/` to filter, `esc` to let go of a path): requests a second over the last five minutes, the status codes, the busiest paths and the error log; the traffic by minute, hour or day; every path, sorted and filtered; what the error log says and which paths answer 5xx; and the lines themselves, filtered by 4xx, 5xx, the error log or words. A path clicked holds the page to it: its minutes, its codes, its lines.
+
+```bash
+pepe logs /var/log/nginx/access.log /var/log/nginx/error.log --serve              # 127.0.0.1:7880
+pepe logs /var/log/nginx/access.log --serve 0.0.0.0:7880 --fail-if '5xx > 2%'     # from elsewhere
+```
+
+At a terminal the screen runs as well and the page is opened in the browser; without one (a service, `nohup`, a container) the logs are followed until stopped, and the report is printed then. The link pepe prints carries a token after `#`, made at start: the page keeps it for the tab and every call needs it, since a log has addresses and paths in it. Off loopback, pepe says the page is reachable from other machines.
+
+It is built to cost nothing while nobody looks and little while someone does. Once a second, while a page is open, pepe takes what the page shows from the counts it keeps, writes it as parts, and sends only the parts that changed: about 0.9 KB a second for a steady log. Every page that is up to date gets the same bytes, so ten cost what one does, and one that falls behind is sent what it missed, never queued. The lines are read for the log tab only while a page shows it, filtered by the server, gzip'd. The numbers are in [bench/README.md](https://github.com/omarmhaimdat/pepe/blob/master/bench/README.md#logs-in-a-browser).
+
 ## Prometheus
 
 `--metrics :9100` serves the numbers at `http://ADDR/metrics` while a log is followed, rendered again every second: `pepe_logs_requests_total{class}`, `pepe_logs_bytes_total`, `pepe_logs_error_log_lines_total{level}`, `pepe_logs_unread_lines_total`; for the last `--window`, `pepe_logs_requests_per_second`, `pepe_logs_5xx_ratio`, `pepe_logs_4xx_ratio` and `pepe_logs_live`; the histograms `pepe_logs_request_duration_seconds` and `pepe_logs_upstream_duration_seconds`; `pepe_logs_findings{level}`, what is out of the usual now; and `pepe_logs_fail_if_crossed{condition}` for each `--fail-if`.
@@ -144,5 +157,6 @@ pepe logs access.log --format '$remote_addr [$time_local] "$request" $status $bo
 | `--host <HOST>` | | Only requests to these hosts: `shop.test`, `.example.com` |
 | `--until <TIME>` | | Leave out what is newer than this: `1h` |
 | `--metrics <ADDR>` | | Serve Prometheus metrics at `/metrics` while the log is followed |
+| `--serve [ADDR]` | 127.0.0.1:7880 | Serve the screen as a live web page; the link printed carries its token |
 
 `--json` prints the report as JSON (with `schema_version`); piped, the text report. Both have the verdict: `verdict.level` (`healthy`, `degraded`, `failing`) and `verdict.findings[]`, each with `level`, `kind` (`errors`, `path_errors`, `path_refused`, `error_log`, `traffic_down`, `traffic_up`, `latency`, `client`, `unread`, `steady`), `text`, and when they apply `path`, `since`, `now`, `usual` and `against`; and `fail_if[]`, each `--fail-if` with `condition`, `held` and `measured`.
