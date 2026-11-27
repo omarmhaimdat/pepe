@@ -6,6 +6,43 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+## [0.58.1](https://github.com/omarmhaimdat/pepe/compare/v0.58.0...v0.58.1) - 2026-11-27
+
+### Fixed
+
+- *(ci)* clear the audit, build Apple Silicon on macos-15, give Windows 8 MiB of stack ([#250](https://github.com/omarmhaimdat/pepe/pull/250))
+
+  Every open PR (#248, #247, #244) fails CI for reasons that live on
+  master, plus one that #247 brings in.
+
+  **Audit.** New advisories against crates in master's `Cargo.lock`.
+  Bumped:
+  - `quinn-proto` 0.11.18 → 0.11.19 (RUSTSEC-2026-0524, -0523)
+  - `quinn-udp` 0.5.15 → 0.5.16 (RUSTSEC-2026-0538)
+  - `url` 2.5.8 → 2.5.9 (RUSTSEC-2026-0592); needs Rust 1.63, so the MSRV
+  holds
+  - `rustix` 1.1.5 → 1.1.6 (RUSTSEC-2026-0486, unsound)
+
+  `cargo audit --deny warnings` passes on `Cargo.lock` and
+  `bench/server/Cargo.lock`.
+
+  **aarch64-apple-darwin build.** Cancelled before starting: *"The
+  configuration 'macos-14-arm64-us-default' is not supported"*. dist 0.33
+  picks `macos-14`; `dist-workspace.toml` now names `macos-15`.
+  `release.yml` takes the runner from `dist plan`, so it needs no
+  regeneration.
+
+  **Windows stack overflow ([#247](https://github.com/omarmhaimdat/pepe/pull/247)).** With clap 4.6.9,
+  `target\debug\pepe.exe --version` overflows the stack. pepe runs on the
+  main thread (a current-thread runtime), which Windows gives 1 MiB. A new
+  `build.rs` asks the linker for 8 MiB, as Linux and macOS have, for the
+  binary only, on msvc and gnu. In `build.rs` rather than
+  `.cargo/config.toml` so `cargo install pepe` gets it too.
+
+  This branch keeps master's clap, so its own Windows job won't show the
+  overflow; #247 passing after a rebase is the check.
+
+
 ## [0.58.0](https://github.com/omarmhaimdat/pepe/compare/v0.57.0...v0.58.0) - 2026-10-29
 
 ### Added
